@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -20,6 +20,15 @@ type OutgoingLineItem = {
   accountId: string;
   accountName: string;
   amount: number;
+  salaryMonthYear: string;
+  remarks: string;
+};
+
+type LineDialogDraft = {
+  open: boolean;
+  type: string;
+  accountId: string;
+  amountText: string;
   salaryMonthYear: string;
   remarks: string;
 };
@@ -60,6 +69,7 @@ type OutgoingFundEntry = ApiRecord & {
           <p>Enter cash, bank, expense, salary, advance, loan and purchase payment vouchers with editable line items.</p>
         </div>
         <div class="hero-actions">
+          <a class="ghost-button" routerLink="/transactions/outgoing-funds-report">Saved Page</a>
           <a class="ghost-button" routerLink="/balance-sheet">Open Balance Sheet</a>
           <button class="ghost-button" type="button" (click)="processGlOutbox()" [disabled]="saving()">Process GL</button>
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -138,6 +148,7 @@ type OutgoingFundEntry = ApiRecord & {
             <div class="line-grid">
               <div class="line-head">
                 <span>Sno</span>
+                <span>Date</span>
                 <span>Type</span>
                 <span>Account / Particular</span>
                 <span>Amount</span>
@@ -148,6 +159,7 @@ type OutgoingFundEntry = ApiRecord & {
 
               <div class="line-row" *ngFor="let item of lineItems(); let i = index">
                 <span class="sno">{{ i + 1 }}</span>
+                <span>{{ entryForm.value.entryDate || '-' }}</span>
                 <select [ngModel]="item.type" [ngModelOptions]="{ standalone: true }" (ngModelChange)="updateLine(i, { type: $event })">
                   <option *ngFor="let type of transactionTypes" [value]="type">{{ type }}</option>
                 </select>
@@ -158,14 +170,33 @@ type OutgoingFundEntry = ApiRecord & {
                 <input type="text" inputmode="decimal" [value]="amountInput(item.amount)" (input)="updateLineAmount(i, $any($event.target).value)" />
                 <input type="month" [ngModel]="item.salaryMonthYear" [ngModelOptions]="{ standalone: true }" (ngModelChange)="updateLine(i, { salaryMonthYear: $event })" />
                 <input [ngModel]="item.remarks" [ngModelOptions]="{ standalone: true }" (ngModelChange)="updateLine(i, { remarks: $event })" />
-                <button class="icon-button danger" type="button" (click)="removeLine(i)" [disabled]="lineItems().length === 1">×</button>
+                <button class="icon-button danger" type="button" (click)="removeLine(i)">×</button>
               </div>
             </div>
 
             <div class="category-strip">
-              <button type="button" *ngFor="let type of transactionTypes" [class.active]="activeType() === type" (click)="applyType(type)">{{ type }}</button>
-              <button class="utility" type="button" (click)="addLine(activeType())">Add Row</button>
-              <button class="utility danger" type="button" (click)="removeLastLine()" [disabled]="lineItems().length === 1">Delete Row</button>
+              <button type="button" *ngFor="let type of transactionTypes" [class.active]="activeType() === type" (click)="openLineDialog(type)">{{ type }}</button>
+              <button class="utility" type="button" (click)="openLineDialog(activeType())">Add Row</button>
+              <button class="utility danger" type="button" (click)="removeLastLine()" [disabled]="!lineItems().length">Delete Row</button>
+            </div>
+
+            <div class="dialog-backdrop" *ngIf="lineDialog().open">
+              <div class="entry-dialog">
+                <div class="dialog-title">
+                  <h3>{{ dialogTitle(lineDialog().type) }}</h3>
+                  <button type="button" (click)="closeLineDialog()">Exit</button>
+                </div>
+                <label><span>Name :</span>
+                  <select [ngModel]="lineDialog().accountId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchLineDialog({ accountId: $event })">
+                    <option value="">Select name</option>
+                    <option *ngFor="let account of dialogAccounts(lineDialog().type)" [value]="account.id">{{ account.accountName }}{{ account.groupName ? ' - ' + account.groupName : '' }}</option>
+                  </select>
+                </label>
+                <label><span>Amount :</span><input type="text" inputmode="decimal" [ngModel]="lineDialog().amountText" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchLineDialog({ amountText: $event })" /></label>
+                <label *ngIf="lineDialog().type === 'Salary'"><span>Salary Month :</span><input type="month" [ngModel]="lineDialog().salaryMonthYear" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchLineDialog({ salaryMonthYear: $event })" /></label>
+                <label><span>Remarks :</span><textarea rows="3" [ngModel]="lineDialog().remarks" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchLineDialog({ remarks: $event })"></textarea></label>
+                <button class="dialog-ok" type="button" (click)="commitLineDialog()">Ok</button>
+              </div>
             </div>
 
             <div class="remarks-footer">
@@ -182,6 +213,7 @@ type OutgoingFundEntry = ApiRecord & {
             <div class="bottom-toolbar">
               <button class="tool-button" type="button" (click)="printVoucher()">Print</button>
               <button class="tool-button primary-tool" type="submit" [disabled]="entryForm.invalid || !lineTotal() || saving()">{{ saving() ? 'Saving' : 'Save' }}</button>
+              <a class="tool-button" routerLink="/transactions/outgoing-funds-report">Saved Page</a>
               <a class="tool-button" routerLink="/balance-sheet">Balance Sheet</a>
               <button class="tool-button" type="button" (click)="focusFind()">Find</button>
               <button class="tool-button danger-tool" type="button" (click)="deleteSelected()" [disabled]="!editingId() || saving()">Delete</button>
@@ -248,7 +280,7 @@ type OutgoingFundEntry = ApiRecord & {
     .voucher-head label, .remarks-footer label { display: grid; gap: 5px; color: #26364b; font-weight: 900; }
     .voucher-head span, .remarks-footer span { font-size: 13px; }
     .line-grid { border: 1px solid #8ea4aa; background: #fff; min-height: 390px; overflow: auto; }
-    .line-head, .line-row { display: grid; grid-template-columns: 48px 130px minmax(220px, 1fr) 120px 160px minmax(180px, .8fr) 46px; align-items: stretch; }
+    .line-head, .line-row { display: grid; grid-template-columns: 48px 120px 130px minmax(220px, 1fr) 120px 160px minmax(180px, .8fr) 46px; align-items: stretch; }
     .line-head { position: sticky; top: 0; z-index: 1; background: #eef3f6; color: #26364b; font-size: 12px; font-weight: 950; }
     .line-head span, .line-row > span, .line-row input, .line-row select { border-right: 1px solid #d1dce1; border-bottom: 1px solid #e2e8ec; border-radius: 0; }
     .line-head span, .line-row > span { padding: 8px; }
@@ -268,6 +300,15 @@ type OutgoingFundEntry = ApiRecord & {
     .category-strip button.active { background: #0f8f79; border-color: #0f8f79; color: #fff; }
     .category-strip .utility { margin-left: 6px; }
     .category-strip .danger, .danger-tool, .icon-button.danger { color: #b91c1c; }
+    .dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(15, 23, 42, .16); }
+    .entry-dialog { width: min(430px, calc(100vw - 28px)); border: 3px solid #5a999b; background: #cfe6e2; box-shadow: 0 18px 42px rgba(15, 23, 42, .25); }
+    .dialog-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; background: #5a999b; color: #fff; }
+    .dialog-title h3 { margin: 0; font-size: 20px; }
+    .dialog-title button { border: 1px solid #d8e2e8; background: #fff; color: #0f172a; font-weight: 900; cursor: pointer; }
+    .entry-dialog label { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center; padding: 10px 22px 0; color: #26364b; font-weight: 900; }
+    .entry-dialog input, .entry-dialog select, .entry-dialog textarea { width: 100%; border: 1px solid #8ea4aa; border-radius: 2px; padding: 7px 8px; font: inherit; background: #fff; color: #0f172a; }
+    .entry-dialog textarea { resize: vertical; }
+    .dialog-ok { display: block; min-width: 64px; margin: 16px auto 18px; border: 1px solid #8ea4aa; background: #fff; color: #0f172a; padding: 7px 14px; font-weight: 900; cursor: pointer; }
     .remarks-footer { display: grid; grid-template-columns: minmax(280px, 1fr) 220px; gap: 14px; align-items: end; justify-content: end; }
     .voucher-total { display: grid; gap: 4px; justify-items: end; color: #53657d; font-weight: 850; }
     .voucher-total strong { font-size: 28px; color: #0f172a; }
@@ -285,7 +326,7 @@ type OutgoingFundEntry = ApiRecord & {
     @media (max-width: 820px) {
       .module-hero { align-items: stretch; flex-direction: column; }
       .metric-grid, .voucher-head, .remarks-footer { grid-template-columns: 1fr; }
-      .line-head, .line-row { grid-template-columns: 42px 120px 220px 110px 140px 180px 42px; min-width: 854px; }
+      .line-head, .line-row { grid-template-columns: 42px 110px 120px 220px 110px 140px 180px 42px; min-width: 964px; }
       .bottom-toolbar { justify-content: stretch; }
       .tool-button { flex: 1 1 120px; }
     }
@@ -294,7 +335,7 @@ type OutgoingFundEntry = ApiRecord & {
 export class OutgoingFundsEntryComponent implements OnInit {
   readonly accounts = signal<LedgerAccount[]>([]);
   readonly entries = signal<OutgoingFundEntry[]>([]);
-  readonly lineItems = signal<OutgoingLineItem[]>([blankLine('Daily Exp.')]);
+  readonly lineItems = signal<OutgoingLineItem[]>([]);
   readonly selected = signal<OutgoingFundEntry | null>(null);
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -303,6 +344,7 @@ export class OutgoingFundsEntryComponent implements OnInit {
   readonly editingId = signal('');
   readonly query = signal('');
   readonly activeType = signal('Daily Exp.');
+  readonly lineDialog = signal<LineDialogDraft>(blankDialog('Daily Exp.'));
 
   readonly transactionTypes = ['Daily Exp.', 'Bank Depo.', 'Purch. Pymt', 'Misc. Pymt', 'Other Out.', 'Salary', 'Advance', 'Loan', 'Daily Inc.'];
   readonly paymentModes = ['Cash', 'Bank Transfer', 'UPI', 'Card', 'Cheque', 'NEFT', 'RTGS', 'IMPS', 'Wallet', 'Other'];
@@ -353,7 +395,7 @@ export class OutgoingFundsEntryComponent implements OnInit {
     status: ['draft', Validators.required]
   });
 
-  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder, private readonly router: Router) {}
+  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
 
   ngOnInit(): void {
     this.load();
@@ -371,7 +413,7 @@ export class OutgoingFundsEntryComponent implements OnInit {
         this.entries.set(entries || []);
         this.loading.set(false);
         const current = this.selected();
-        const nextSelected = current ? entries.find((entry) => entry.id === current.id) || null : entries[0] || null;
+        const nextSelected = current ? entries.find((entry) => entry.id === current.id) || null : null;
         if (nextSelected) this.selectEntry(nextSelected);
       },
       error: (error) => {
@@ -386,7 +428,7 @@ export class OutgoingFundsEntryComponent implements OnInit {
     this.selected.set(null);
     this.success.set('');
     this.activeType.set('Daily Exp.');
-    this.lineItems.set([blankLine('Daily Exp.')]);
+    this.lineItems.set([]);
     this.entryForm.reset(defaultEntryForm(this.api.selectedBranchId()));
   }
 
@@ -417,16 +459,45 @@ export class OutgoingFundsEntryComponent implements OnInit {
     if (name.includes('cash')) this.entryForm.patchValue({ paymentMode: 'Cash' });
   }
 
-  applyType(type: string): void {
+  openLineDialog(type: string): void {
     this.activeType.set(type);
-    const items = [...this.lineItems()];
-    const blankIndex = items.findIndex((item) => !item.accountId && !item.accountName && !moneyValue(item.amount) && !item.remarks);
-    if (blankIndex >= 0) {
-      items[blankIndex] = { ...items[blankIndex], type };
-      this.lineItems.set(this.renumber(items));
+    this.lineDialog.set(blankDialog(type, true));
+  }
+
+  closeLineDialog(): void {
+    this.lineDialog.set({ ...this.lineDialog(), open: false });
+  }
+
+  patchLineDialog(patch: Partial<LineDialogDraft>): void {
+    this.lineDialog.set({ ...this.lineDialog(), ...patch });
+  }
+
+  commitLineDialog(): void {
+    const draft = this.lineDialog();
+    const account = this.accounts().find((item) => item.id === draft.accountId);
+    const amount = moneyValue(draft.amountText.replace(/,/g, ''));
+    if (!account || amount <= 0) {
+      this.error.set('Name aur amount required hai.');
       return;
     }
-    this.addLine(type);
+    this.error.set('');
+    const items = [...this.lineItems()];
+    const blankIndex = items.findIndex((item) => !item.accountId && !item.accountName && !moneyValue(item.amount) && !item.remarks);
+    const line = {
+      ...blankLine(draft.type),
+      accountId: account.id,
+      accountName: account.accountName,
+      amount,
+      salaryMonthYear: draft.salaryMonthYear,
+      remarks: draft.remarks
+    };
+    if (blankIndex >= 0) {
+      items[blankIndex] = { ...items[blankIndex], ...line };
+      this.lineItems.set(this.renumber(items));
+    } else {
+      this.lineItems.set(this.renumber([...items, line]));
+    }
+    this.closeLineDialog();
   }
 
   addLine(type = this.activeType()): void {
@@ -435,10 +506,11 @@ export class OutgoingFundsEntryComponent implements OnInit {
 
   removeLine(index: number): void {
     const items = this.lineItems().filter((_, itemIndex) => itemIndex !== index);
-    this.lineItems.set(this.renumber(items.length ? items : [blankLine(this.activeType())]));
+    this.lineItems.set(this.renumber(items));
   }
 
   removeLastLine(): void {
+    if (!this.lineItems().length) return;
     this.removeLine(this.lineItems().length - 1);
   }
 
@@ -488,10 +560,12 @@ export class OutgoingFundsEntryComponent implements OnInit {
       next: (entry) => {
         this.saving.set(false);
         this.success.set(this.editingId() ? 'Outgoing voucher updated and linked to Balance Sheet.' : 'Outgoing voucher saved and linked to Balance Sheet.');
-        this.editingId.set(entry.id);
-        this.selected.set(entry);
+        this.editingId.set('');
+        this.selected.set(null);
+        this.activeType.set('Daily Exp.');
+        this.lineItems.set([]);
+        this.entryForm.reset(defaultEntryForm(this.api.selectedBranchId()));
         this.load();
-        this.router.navigate(['/balance-sheet']);
       },
       error: (error) => {
         this.error.set(error?.error?.error || error?.message || 'Unable to save outgoing voucher');
@@ -551,6 +625,25 @@ export class OutgoingFundsEntryComponent implements OnInit {
     return moneyValue(value);
   }
 
+  dialogTitle(type: string): string {
+    return ({
+      'Daily Exp.': 'Daily Expenses',
+      'Bank Depo.': 'Bank Deposit',
+      'Purch. Pymt': 'Payment To Vendors',
+      'Misc. Pymt': 'Misc. Purchase',
+      'Other Out.': 'Other Outgoing',
+      Salary: 'Salary',
+      Advance: 'Advance',
+      Loan: 'Loan',
+      'Daily Inc.': 'Daily Income'
+    } as Record<string, string>)[type] || type;
+  }
+
+  dialogAccounts(type: string): LedgerAccount[] {
+    if (type === 'Bank Depo.') return this.cashBankAccounts();
+    return this.accounts();
+  }
+
   amountInput(value: unknown): string {
     const amount = moneyValue(value);
     return amount ? String(amount) : '';
@@ -595,6 +688,17 @@ function blankLine(type: string): OutgoingLineItem {
     accountId: '',
     accountName: '',
     amount: 0,
+    salaryMonthYear: '',
+    remarks: ''
+  };
+}
+
+function blankDialog(type: string, open = false): LineDialogDraft {
+  return {
+    open,
+    type,
+    accountId: '',
+    amountText: '',
     salaryMonthYear: '',
     remarks: ''
   };
