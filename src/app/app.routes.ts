@@ -42,6 +42,7 @@ export const routes: Routes = [
   { path: 'account-master', loadComponent: () => import('./pages/account-master.component').then(m => m.AccountMasterComponent), title: 'Account Master' },
   { path: 'balance-sheet', loadComponent: () => import('./pages/balance-sheet.component').then(m => m.BalanceSheetComponent), title: 'Balance Sheet' },
   { path: 'transactions/outgoing-funds', loadComponent: () => import('./pages/outgoing-funds-entry.component').then(m => m.OutgoingFundsEntryComponent), title: 'Outgoing Funds Entry' },
+  { path: 'transactions/outgoing-funds-report', loadComponent: () => import('./pages/outgoing-funds-report.component').then(m => m.OutgoingFundsReportComponent), title: 'Outgoing Funds Saved Entries' },
   { path: 'billing', loadChildren: () => import('./features/billing/billing.routes').then((m) => m.BILLING_ROUTES), title: 'Enterprise Billing' },
   { path: 'customer-360', loadComponent: () => import('./pages/customer-360.component').then(m => m.Customer360Component), title: 'Customer 360' },
   { path: 'salon', pathMatch: 'full', redirectTo: 'salon-3d' },

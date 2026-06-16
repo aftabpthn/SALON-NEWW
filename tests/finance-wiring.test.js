@@ -17,6 +17,7 @@ const hardeningService = readFileSync("server/services/balance-sheet-hardening.s
 const financePage = readFileSync("src/app/pages/finance-engine.component.ts", "utf8");
 const accountLedgerPage = readFileSync("src/app/pages/account-ledger.component.ts", "utf8");
 const outgoingFundsPage = readFileSync("src/app/pages/outgoing-funds-entry.component.ts", "utf8");
+const outgoingFundsReportPage = readFileSync("src/app/pages/outgoing-funds-report.component.ts", "utf8");
 const accountMasterPage = readFileSync("src/app/pages/account-master.component.ts", "utf8");
 const balanceSheetPage = readFileSync("src/app/pages/balance-sheet.component.ts", "utf8");
 
@@ -38,13 +39,14 @@ test("Finance sidebar exposes the sale-ready finance control surface", () => {
 });
 
 test("Finance Angular routes stay wired to core finance pages", () => {
-  for (const path of ["finance", "account-master", "reports/account-ledger", "balance-sheet", "transactions/outgoing-funds", "compliance"]) {
+  for (const path of ["finance", "account-master", "reports/account-ledger", "balance-sheet", "transactions/outgoing-funds", "transactions/outgoing-funds-report", "compliance"]) {
     assert.ok(appRoutes.includes(`path: '${path}'`), `${path} route should exist`);
   }
   assert.match(appRoutes, /finance[\s\S]*FinanceEngineComponent/, "Finance route should load FinanceEngineComponent");
   assert.match(appRoutes, /reports\/account-ledger[\s\S]*AccountLedgerComponent/, "Account Ledger route should load AccountLedgerComponent");
   assert.match(appRoutes, /balance-sheet[\s\S]*BalanceSheetComponent/, "Balance Sheet route should load BalanceSheetComponent");
   assert.match(appRoutes, /transactions\/outgoing-funds[\s\S]*OutgoingFundsEntryComponent/, "Outgoing Funds route should load OutgoingFundsEntryComponent");
+  assert.match(appRoutes, /transactions\/outgoing-funds-report[\s\S]*OutgoingFundsReportComponent/, "Outgoing Funds report route should load OutgoingFundsReportComponent");
 });
 
 test("Finance backend routers are mounted for v1 and legacy clients", () => {
@@ -98,6 +100,8 @@ test("Finance pages call their backend APIs with branch-aware surfaces", () => {
   }
   assert.match(accountLedgerPage, /account-master\/ledger[\s\S]*branchId:\s*this\.api\.selectedBranchId\(\)/, "Account Ledger should load branch-scoped ledger rows");
   assert.match(outgoingFundsPage, /transactions\/outgoing-funds[\s\S]*branchId:\s*this\.api\.selectedBranchId\(\)/, "Outgoing Funds should load branch-scoped entries");
+  assert.match(outgoingFundsPage, /routerLink="\/transactions\/outgoing-funds-report"/, "Outgoing Funds entry should link to saved report");
+  assert.match(outgoingFundsReportPage, /transactions\/outgoing-funds[\s\S]*branchId:\s*this\.api\.selectedBranchId\(\)/, "Outgoing Funds report should load branch-scoped saved entries");
   assert.match(accountMasterPage, /account-master\/accounts[\s\S]*branchId:\s*this\.api\.selectedBranchId\(\)/, "Account Master should use branch-scoped account lists");
   assert.match(balanceSheetPage, /balance-sheet\/live[\s\S]*balance-sheet\/trial-balance[\s\S]*balance-sheet\/hardening/, "Balance Sheet should load live, trial, and hardening data");
 });
