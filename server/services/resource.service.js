@@ -17,13 +17,42 @@ function serviceDuration(serviceIds = []) {
   }, 0);
 }
 
+function compactClientRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    gender: row.gender,
+    birthday: row.birthday,
+    anniversary: row.anniversary,
+    tags: row.tags,
+    notes: row.notes,
+    walletBalance: row.walletBalance,
+    loyaltyPoints: row.loyaltyPoints,
+    membershipId: row.membershipId,
+    branchId: row.branchId,
+    totalSpend: row.totalSpend,
+    visitCount: row.visitCount,
+    lastVisitAt: row.lastVisitAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    tenantId: row.tenantId,
+    imported: row.imported,
+    originalSystem: row.originalSystem,
+    originalRecordId: row.originalRecordId,
+    importBatchId: row.importBatchId
+  };
+}
+
 export class ResourceService {
   list(resource, query, access) {
     if (query?.branchId) tenantService.assertBranchAccess(access, query.branchId);
     const listQuery = resource === "clients" && !query?.limit ? { ...query, limit: 10000 } : query;
     const rows = this.repository(resource).list(listQuery, this.listScope(resource, listQuery, access));
     if (resource === "clients" && !truthy(query?.includeDeleted)) {
-      return rows.filter((row) => !row.deletedAt);
+      const activeRows = rows.filter((row) => !row.deletedAt);
+      return truthy(query?.compact) ? activeRows.map(compactClientRow) : activeRows;
     }
     return rows;
   }
