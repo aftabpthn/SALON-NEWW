@@ -656,7 +656,7 @@ type ClientPersonalDetailsForm = {
           </section>
         </div>
 
-        <div class="client-ledger-layout" [hidden]="activeHistoryTab() !== 'sales' && activeHistoryTab() !== 'wallet'">
+        <div class="client-ledger-layout" [hidden]="activeHistoryTab() !== 'sales' && activeHistoryTab() !== 'products' && activeHistoryTab() !== 'wallet'">
           <section class="panel" [hidden]="activeHistoryTab() !== 'sales'">
             <div class="section-title">
               <div>
@@ -743,6 +743,38 @@ type ClientPersonalDetailsForm = {
               <div class="empty-state">
                 <strong>No invoices yet</strong>
                 <span>Invoices saved from POS will appear here automatically.</span>
+              </div>
+            </ng-template>
+          </section>
+
+          <section class="panel" [hidden]="activeHistoryTab() !== 'products'">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">Product intelligence</span>
+                <h2>Product purchase profile</h2>
+              </div>
+              <span class="badge">{{ clientProductRows().length }} product(s)</span>
+            </div>
+            <div class="product-profile-grid" *ngIf="clientProductRows().length; else noClientProducts">
+              <article class="product-profile-card" *ngFor="let product of clientProductRows(); trackBy: trackHistoryRow">
+                <div>
+                  <span class="eyebrow">Product</span>
+                  <h3>{{ product.name }}</h3>
+                  <p>{{ product.invoice }} · {{ product.lastBought }}</p>
+                </div>
+                <div class="product-profile-metrics">
+                  <div><span>Qty</span><strong>{{ product.qty }}</strong></div>
+                  <div><span>Total</span><strong>{{ product.total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                  <div><span>Staff</span><strong>{{ product.staff }}</strong></div>
+                  <div><span>SKU</span><strong>{{ product.sku }}</strong></div>
+                </div>
+              </article>
+            </div>
+            <ng-template #noClientProducts>
+              <div class="empty-state">
+                <strong>No product purchases yet</strong>
+                <span>Retail product bills from POS will appear here automatically.</span>
+                <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }">Open POS</a>
               </div>
             </ng-template>
           </section>
@@ -2098,6 +2130,67 @@ type ClientPersonalDetailsForm = {
       grid-column: 1 / -1;
     }
 
+    .product-profile-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .product-profile-card {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      border: 1px solid #d9e3ec;
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+    }
+
+    .product-profile-card h3 {
+      margin: 4px 0;
+      color: #0f172a;
+      font-size: 1.08rem;
+      overflow-wrap: anywhere;
+    }
+
+    .product-profile-card p {
+      margin: 0;
+      color: #64748b;
+      font-size: 0.86rem;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .product-profile-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .product-profile-metrics div {
+      min-width: 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+    }
+
+    .product-profile-metrics span {
+      display: block;
+      color: #64748b;
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .product-profile-metrics strong {
+      display: block;
+      margin-top: 4px;
+      color: #0f172a;
+      overflow-wrap: anywhere;
+    }
+
     .package-history-list {
       display: grid;
       gap: 14px;
@@ -2252,6 +2345,11 @@ type ClientPersonalDetailsForm = {
       }
 
       .smart-action-context {
+        grid-template-columns: 1fr;
+      }
+
+      .product-profile-grid,
+      .product-profile-metrics {
         grid-template-columns: 1fr;
       }
 
@@ -2513,6 +2611,7 @@ export class ClientDetailComponent implements OnInit {
   readonly historyTabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'sales', label: 'Sales / Bills' },
+    { id: 'products', label: 'Products' },
     { id: 'appointments', label: 'Appointments' },
     { id: 'packages', label: 'Packages' },
     { id: 'memberships', label: 'Memberships' },
@@ -2576,6 +2675,7 @@ export class ClientDetailComponent implements OnInit {
     const actions: Record<string, string> = {
       overview: 'Review next best action, health score, warnings and recent activity.',
       sales: 'Create an invoice or receive pending due from the Smart Actions panel.',
+      products: 'Review product purchase memory and open POS for product refill or follow-up.',
       appointments: 'Book Again to create the next visit for this client.',
       packages: 'Sell a prepaid package from POS to begin tracking sessions and redemptions.',
       memberships: 'Sell or assign a membership to track credits, expiry and benefits.',
@@ -2597,6 +2697,8 @@ export class ClientDetailComponent implements OnInit {
         return !!client;
       case 'sales':
         return this.filteredClientInvoices().length > 0;
+      case 'products':
+        return this.clientProductRows().length > 0;
       case 'appointments':
         return this.filteredClientAppointments().length > 0;
       case 'packages':
@@ -3562,6 +3664,50 @@ export class ClientDetailComponent implements OnInit {
     }, 0);
   }
 
+  clientProductRows(): ApiRecord[] {
+    const rows = new Map<string, ApiRecord>();
+    for (const sale of this.clientSales()) {
+      const saleDate = sale.createdAt || sale.created_at || sale.date || sale.updatedAt;
+      const invoice = this.invoiceForSale(sale);
+      for (const item of this.saleItems(sale).filter((entry) => this.itemKind(entry) === 'product')) {
+        const name = String(item.productName || item.name || item.itemName || 'Product').trim();
+        const sku = String(item.sku || item.barcode || item.productCode || item.code || '-');
+        const key = `${name}|${sku}`;
+        const existing = rows.get(key);
+        const quantity = this.moneyValue(item.quantity ?? item.qty ?? 1) || 1;
+        const total = this.itemAmount(item);
+        const current = existing || {
+          id: key,
+          name,
+          sku,
+          qty: 0,
+          total: 0,
+          lastBought: '-',
+          lastBoughtMs: 0,
+          invoice: 'POS sale',
+          staff: 'Unassigned'
+        };
+        current['qty'] = this.moneyValue(current['qty']) + quantity;
+        current['total'] = this.moneyValue(current['total']) + total;
+        const time = this.dateMs(saleDate);
+        if (time >= Number(current['lastBoughtMs'] || 0)) {
+          current['lastBoughtMs'] = time;
+          current['lastBought'] = this.dateLabel(saleDate);
+          current['invoice'] = invoice ? this.invoiceNumber(invoice) : String(sale.invoiceNumber || sale.invoice_no || sale.id || 'POS sale');
+          current['staff'] = String(item.staffName || item.staff_name || sale.staffName || sale.staff_name || this.staffName(item.staffId || item.staff_id || sale.staffId || sale.staff_id || ''));
+        }
+        rows.set(key, current);
+      }
+    }
+    return [...rows.values()]
+      .map((row) => ({
+        ...row,
+        qty: this.moneyValue(row['qty']),
+        total: this.moneyValue(row['total'])
+      }))
+      .sort((a, b) => Number(b['lastBoughtMs'] || 0) - Number(a['lastBoughtMs'] || 0));
+  }
+
   packageSalesTotal(): number {
     return this.clientSales().reduce((sum, sale) => {
       return sum + this.saleItems(sale)
@@ -4211,6 +4357,13 @@ export class ClientDetailComponent implements OnInit {
     const saleId = String(invoice.saleId || invoice.sale_id || '');
     if (saleId) return this.sales().find((sale) => String(sale.id) === saleId);
     return this.sales().find((sale) => String(sale.invoiceId || sale.invoice_id || sale.invoiceNumber || '') === String(invoice.id || invoice.invoiceNumber || ''));
+  }
+
+  private invoiceForSale(sale: ApiRecord): ApiRecord | undefined {
+    const saleId = String(sale.id || '');
+    return this.clientInvoices().find((invoice) => String(invoice.saleId || invoice.sale_id || '') === saleId ||
+      String(invoice.id || '') === String(sale.invoiceId || sale.invoice_id || '') ||
+      String(invoice.invoiceNumber || invoice.invoice_no || '') === String(sale.invoiceNumber || sale.invoice_no || ''));
   }
 
   private invoiceItemNames(invoice: ApiRecord): string[] {
