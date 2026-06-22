@@ -846,7 +846,7 @@ interface PolicyRow {
                 <article
                   *ngFor="let alert of filteredAlerts(); trackBy: trackById"
                   class="alert-card"
-                  [class.selected]="selectedAlert()?.id === alert.id"
+                  [class.selected]="selectedAlert().id === alert.id"
                   [ngClass]="riskTone(alert.riskLevel || alert.severity)"
                   (click)="selectAlert(alert)"
                 >
@@ -1204,7 +1204,7 @@ interface PolicyRow {
                   <article
                     *ngFor="let template of marketplaceRows(); trackBy: trackByTemplate"
                     class="marketplace-card"
-                    [class.selected]="selectedTemplate()?.templateKey === template.templateKey"
+                    [class.selected]="selectedTemplate().templateKey === template.templateKey"
                     (click)="selectTemplate(template)"
                   >
                     <div class="marketplace-card-head">
@@ -1297,7 +1297,7 @@ interface PolicyRow {
                   *ngFor="let prompt of promptStudioRows(); trackBy: trackByPrompt"
                   class="prompt-version-card"
                   type="button"
-                  [class.selected-row]="selectedPrompt()?.id === prompt.id"
+                  [class.selected-row]="selectedPrompt().id === prompt.id"
                   (click)="selectPrompt(prompt)"
                 >
                   <span class="prompt-version-main">
@@ -1461,7 +1461,7 @@ interface PolicyRow {
                 <div class="section-title compact">
                   <div>
                     <span class="eyebrow">Selected agent</span>
-                    <h3>{{ selectedAgent()?.agentName || selectedAgent()?.agentKey || 'No agent selected' }}</h3>
+                    <h3>{{ selectedAgent().agentName || selectedAgent().agentKey || 'No agent selected' }}</h3>
                   </div>
                   <span class="badge" [ngClass]="selectedAgentRoiTone()">{{ selectedAgentRoiLabel() }}</span>
                 </div>
