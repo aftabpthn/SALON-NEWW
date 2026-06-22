@@ -288,13 +288,24 @@ export class AppComponent {
       items: [
         { path: '/dashboard', label: 'Dashboard', icon: 'D', keywords: 'home overview kpi owner' },
         { path: '/apps', label: 'All Apps', icon: 'AP', keywords: 'launchpad modules full suite salon apps' },
-        { path: '/command-center', label: 'Command Center', icon: 'CC', keywords: 'control tower enterprise' },
-        { path: '/command-center/engagement', label: 'Engagement', icon: 'EC', keywords: 'hyperconnect unified inbox whatsapp client engagement' },
+        {
+          path: '/command-center',
+          label: 'Command Center',
+          icon: 'CC',
+          keywords: 'control tower enterprise ai workforce owner command approval data warehouse',
+          children: [
+            { path: '/command-center/ai-workforce-dashboard', label: 'AI Workforce', icon: 'AW', keywords: 'ai workforce dashboard' },
+            { path: '/command-center/owner-command-center', label: 'Owner Command', icon: 'OC', keywords: 'owner command center' },
+            { path: '/command-center/ai-ceo-daily-brief', label: 'CEO Brief', icon: 'CB', keywords: 'ceo daily brief ai' },
+            { path: '/command-center/approval-hub', label: 'Approval Hub', icon: 'AH', keywords: 'approval hub command center' },
+            { path: '/command-center/engagement', label: 'Engagement', icon: 'EC', keywords: 'hyperconnect unified inbox whatsapp client engagement' },
+            { path: '/command-center/data-warehouse', label: 'Data Warehouse', icon: 'DW', keywords: 'data warehouse snapshots command center' }
+          ]
+        },
         { path: '/analytics', label: 'Analytics', icon: 'AN', keywords: 'metrics insight kpi' },
         { path: '/reports', label: 'Reports', icon: 'R', keywords: 'sales business reports' },
         { path: '/reports/invoices', label: 'Invoice Reports', icon: 'IR', keywords: 'invoice staff discount gst product membership wallet due audit reports' },
         { path: '/kpi-monitoring', label: 'KPI Monitor', icon: 'KM', keywords: 'monitor alerts targets' },
-        { path: '/data-warehouse', label: 'Warehouse', icon: 'DW', keywords: 'data warehouse snapshots' },
         { path: '/predictive-forecasting', label: 'Forecast AI', icon: 'PF', keywords: 'forecast prediction revenue' }
       ]
     },
@@ -323,7 +334,16 @@ export class AppComponent {
       primaryPath: '/pos',
       items: [
         { path: '/pos', label: 'POS Billing', icon: 'P', keywords: 'checkout bill billing' },
-        { path: '/pos/invoices', label: 'POS Invoices', icon: 'IN', keywords: 'invoice paid due received' },
+        {
+          path: '/pos/invoices',
+          label: 'Invoices & Billing',
+          icon: 'IN',
+          keywords: 'invoice paid due received billing refunds reconciliation daily closing',
+          children: [
+            { path: '/pos/invoices', label: 'POS Invoices', icon: 'PI', keywords: 'invoice paid due received' },
+            { path: '/billing', label: 'Enterprise Billing', icon: 'EB', keywords: 'billing refunds reconciliation daily closing enterprise' }
+          ]
+        },
         { path: '/pos/holds', label: 'Hold Invoices', icon: 'HI', keywords: 'hold pending invoice' },
         { path: '/pos/tips', label: 'Tip Register', icon: 'TP', keywords: 'tips staff tip' },
         { path: '/pos/payment-modes', label: 'Payment Modes', icon: 'PM', keywords: 'cash card upi payment' },
@@ -358,42 +378,94 @@ export class AppComponent {
       icon: 'ST',
       primaryPath: '/staff-os/staff-list',
       items: [
-        { path: '/staff-os/staff-list', label: 'Staff List', icon: 'SL', keywords: 'employee list staff directory active inactive' },
-        { path: '/staff-os/staff-categories', label: 'Staff Categories', icon: 'SC', keywords: 'staff category designation role operator admin' },
-        { path: '/staff-os/staff-profile', label: 'Staff Profile', icon: 'SP', keywords: 'staff profile documents skills login' },
-        { path: '/staff-os/bulk-employee-update', label: 'Bulk Employee Update', icon: 'BU', keywords: 'bulk master update employee pan aadhar statutory flexi' },
-        { path: '/staff-os/attendance-dashboard', label: 'Attendance', icon: 'AT', keywords: 'attendance dashboard biometric present absent late' },
-        { path: '/staff-os/face-punch', label: 'Face Punch', icon: 'FP', keywords: 'face punch camera attendance check in checkout' },
-        { path: '/staff-os/attendance-master', label: 'Attendance Master', icon: 'AM', keywords: 'attendance master absent present holiday day count paid unpaid' },
-        { path: '/staff-os/attendance-category', label: 'Attendance Category', icon: 'AC', keywords: 'attendance category late mark overtime shift slabs' },
-        { path: '/staff-os/shift-master', label: 'Shift Master', icon: 'SM', keywords: 'shift master start time end time weekly off holiday leave' },
-        { path: '/staff-os/roster-calendar', label: 'Roster Calendar', icon: 'RC', keywords: 'roster schedule shift calendar availability' },
-        { path: '/staff-os/leave-management', label: 'Leave Management', icon: 'LM', keywords: 'leave request approval balance calendar' },
-        { path: '/staff-os/leave-master', label: 'Leave Master', icon: 'LV', keywords: 'leave master casual paid sick quota monthly yearly' },
-        { path: '/staff-os/payroll-dashboard', label: 'Payroll Dashboard', icon: 'PD', keywords: 'payroll export salary payout statutory' },
-        { path: '/staff-os/payroll-rules', label: 'Payroll Rules', icon: 'PR', keywords: 'payroll rules overtime week off salary formula' },
-        { path: '/staff-os/payroll-salary-structure', label: 'Salary Structure', icon: 'SS', keywords: 'payroll salary structure pf pt esic tds statutory flexi' },
-        { path: '/staff-os/salary-generate', label: 'Salary Generate', icon: 'SG', keywords: 'generate salary payroll preview commission attendance leave' },
-        { path: '/staff-os/fines-penalties', label: 'Fines / Penalty', icon: 'FN', keywords: 'fine penalty master payroll flexi' },
-        { path: '/staff-os/allowance-deduction', label: 'Allowance / Deduction', icon: 'AD', keywords: 'allowance deduction payroll master flexi' },
-        { path: '/staff-os/commission-dashboard', label: 'Commission Dashboard', icon: 'CD', keywords: 'commission rules payout incentive' },
-        { path: '/staff-os/target-incentives/service', label: 'Service Incentives', icon: 'SI', keywords: 'service target incentive slabs flexi commission' },
-        { path: '/staff-os/target-incentives/product', label: 'Product Incentives', icon: 'PI', keywords: 'product target incentive commission retail' },
-        { path: '/staff-os/target-incentives/membership', label: 'Membership Incentives', icon: 'MI', keywords: 'membership target incentive sales' },
-        { path: '/staff-os/target-incentives/branch-admin', label: 'Branch Incentives', icon: 'BI', keywords: 'branch admin target incentive' },
-        { path: '/staff-os/target-incentives/admin', label: 'Admin Incentives', icon: 'AI', keywords: 'admin target incentive master' },
-        { path: '/staff-os/target-incentives/all-transaction', label: 'All Transaction Incentives', icon: 'TI', keywords: 'all transaction target incentive' },
-        { path: '/staff-os/service-assignment', label: 'Service Assignment', icon: 'SA', keywords: 'employee wise service assign operator admin flexi' },
-        { path: '/staff-os/performance-dashboard', label: 'Performance Dashboard', icon: 'PF', keywords: 'performance productivity staff ranking' },
-        { path: '/staff-os/leaderboard', label: 'Leaderboard', icon: 'LB', keywords: 'leaderboard staff ranking gamification' },
-        { path: '/staff-os/training-center', label: 'Training Center', icon: 'TC', keywords: 'training staff lessons certification' },
-        { path: '/staff-os/task-board', label: 'Task Board', icon: 'TB', keywords: 'staff task board task assignment followup' },
-        { path: '/staff-os/mobile-preview', label: 'Mobile Preview', icon: 'MP', keywords: 'mobile staff dashboard preview app' },
-        { path: '/staff-os/heatmaps/roster', label: 'Roster Heatmap', icon: 'RH', keywords: 'roster heatmap coverage demand' },
-        { path: '/staff-os/heatmaps/attendance', label: 'Attendance Heatmap', icon: 'AH', keywords: 'attendance heatmap late absent present' },
-        { path: '/staff-os/heatmaps/utilization', label: 'Utilization Heatmap', icon: 'UH', keywords: 'utilization heatmap performance productivity' },
-        { path: '/staff-os/heatmaps/payroll-cost', label: 'Payroll Cost Heatmap', icon: 'PH', keywords: 'payroll cost heatmap salary overtime' },
-        { path: '/staff-os/heatmaps/leave-calendar', label: 'Leave Calendar Heatmap', icon: 'LH', keywords: 'leave calendar heatmap coverage' },
+        {
+          path: '/staff-os/staff-list',
+          label: 'Directory',
+          icon: 'DR',
+          keywords: 'employee list staff directory active inactive profile categories bulk update service assignment',
+          children: [
+            { path: '/staff-os/staff-list', label: 'Staff List', icon: 'SL', keywords: 'employee list staff directory active inactive' },
+            { path: '/staff-os/staff-categories', label: 'Staff Categories', icon: 'SC', keywords: 'staff category designation role operator admin' },
+            { path: '/staff-os/staff-profile', label: 'Staff Profile', icon: 'SP', keywords: 'staff profile documents skills login' },
+            { path: '/staff-os/bulk-employee-update', label: 'Bulk Update', icon: 'BU', keywords: 'bulk master update employee pan aadhar statutory flexi' },
+            { path: '/staff-os/service-assignment', label: 'Service Assignment', icon: 'SA', keywords: 'employee wise service assign operator admin flexi' }
+          ]
+        },
+        {
+          path: '/staff-os/attendance-dashboard',
+          label: 'Attendance & Shifts',
+          icon: 'AS',
+          keywords: 'attendance dashboard biometric face punch shift roster present absent late',
+          children: [
+            { path: '/staff-os/attendance-dashboard', label: 'Attendance', icon: 'AT', keywords: 'attendance dashboard biometric present absent late' },
+            { path: '/staff-os/face-punch', label: 'Face Punch', icon: 'FP', keywords: 'face punch camera attendance check in checkout' },
+            { path: '/staff-os/attendance-master', label: 'Attendance Master', icon: 'AM', keywords: 'attendance master absent present holiday day count paid unpaid' },
+            { path: '/staff-os/attendance-category', label: 'Attendance Category', icon: 'AC', keywords: 'attendance category late mark overtime shift slabs' },
+            { path: '/staff-os/shift-master', label: 'Shift Master', icon: 'SM', keywords: 'shift master start time end time weekly off holiday leave' },
+            { path: '/staff-os/roster-calendar', label: 'Roster Calendar', icon: 'RC', keywords: 'roster schedule shift calendar availability' }
+          ]
+        },
+        {
+          path: '/staff-os/leave-management',
+          label: 'Leave',
+          icon: 'LV',
+          keywords: 'leave request approval balance calendar master quota paid sick casual',
+          children: [
+            { path: '/staff-os/leave-management', label: 'Leave Management', icon: 'LM', keywords: 'leave request approval balance calendar' },
+            { path: '/staff-os/leave-master', label: 'Leave Master', icon: 'LV', keywords: 'leave master casual paid sick quota monthly yearly' }
+          ]
+        },
+        {
+          path: '/staff-os/payroll-dashboard',
+          label: 'Payroll',
+          icon: 'PY',
+          keywords: 'payroll salary generate rules structure fines allowance deduction export payout statutory',
+          children: [
+            { path: '/staff-os/payroll-dashboard', label: 'Payroll Dashboard', icon: 'PD', keywords: 'payroll export salary payout statutory' },
+            { path: '/staff-os/payroll-rules', label: 'Payroll Rules', icon: 'PR', keywords: 'payroll rules overtime week off salary formula' },
+            { path: '/staff-os/payroll-salary-structure', label: 'Salary Structure', icon: 'SS', keywords: 'payroll salary structure pf pt esic tds statutory flexi' },
+            { path: '/staff-os/salary-generate', label: 'Salary Generate', icon: 'SG', keywords: 'generate salary payroll preview commission attendance leave' },
+            { path: '/staff-os/fines-penalties', label: 'Fines / Penalty', icon: 'FN', keywords: 'fine penalty master payroll flexi' },
+            { path: '/staff-os/allowance-deduction', label: 'Allowance / Deduction', icon: 'AD', keywords: 'allowance deduction payroll master flexi' }
+          ]
+        },
+        {
+          path: '/staff-os/commission-dashboard',
+          label: 'Incentives',
+          icon: 'IN',
+          keywords: 'commission dashboard target incentives service product membership branch admin all transaction',
+          children: [
+            { path: '/staff-os/commission-dashboard', label: 'Commission Dashboard', icon: 'CD', keywords: 'commission rules payout incentive' },
+            { path: '/staff-os/target-incentives/service', label: 'Target Incentives', icon: 'TI', keywords: 'service product membership branch admin all transaction target incentive slabs flexi commission' }
+          ]
+        },
+        {
+          path: '/staff-os/performance-dashboard',
+          label: 'Performance & Training',
+          icon: 'PT',
+          keywords: 'performance productivity ranking leaderboard training task board mobile preview',
+          children: [
+            { path: '/staff-os/performance-dashboard', label: 'Performance Dashboard', icon: 'PF', keywords: 'performance productivity staff ranking' },
+            { path: '/staff-os/leaderboard', label: 'Leaderboard', icon: 'LB', keywords: 'leaderboard staff ranking gamification' },
+            { path: '/staff-os/training-center', label: 'Training Center', icon: 'TC', keywords: 'training staff lessons certification' },
+            { path: '/training-academy', label: 'Training Academy', icon: 'TA', keywords: 'training academy lessons quizzes certifications learning paths' },
+            { path: '/staff-os/task-board', label: 'Task Board', icon: 'TB', keywords: 'staff task board task assignment followup' },
+            { path: '/staff-os/mobile-preview', label: 'Mobile Preview', icon: 'MP', keywords: 'mobile staff dashboard preview app' }
+          ]
+        },
+        {
+          path: '/staff-os/heatmaps/roster',
+          label: 'Workforce Heatmaps',
+          icon: 'WH',
+          keywords: 'roster attendance utilization payroll cost leave calendar heatmap coverage demand productivity',
+          children: [
+            { path: '/staff-os/heatmaps/roster', label: 'Roster Heatmap', icon: 'RH', keywords: 'roster heatmap coverage demand' },
+            { path: '/staff-os/heatmaps/attendance', label: 'Attendance Heatmap', icon: 'AH', keywords: 'attendance heatmap late absent present' },
+            { path: '/staff-os/heatmaps/utilization', label: 'Utilization Heatmap', icon: 'UH', keywords: 'utilization heatmap performance productivity' },
+            { path: '/staff-os/heatmaps/payroll-cost', label: 'Payroll Cost Heatmap', icon: 'PH', keywords: 'payroll cost heatmap salary overtime' },
+            { path: '/staff-os/heatmaps/leave-calendar', label: 'Leave Calendar Heatmap', icon: 'LH', keywords: 'leave calendar heatmap coverage' }
+          ]
+        },
         { path: '/staff/my-work', label: 'My Work', icon: 'MW', keywords: 'staff login live appointments own work report' }
       ]
     },
@@ -412,17 +484,8 @@ export class AppComponent {
       ]
     },
     {
-      id: 'ai-rank-bot',
-      label: 'AI Rank Bot',
-      icon: 'RB',
-      primaryPath: '/growth-rank-bot',
-      items: [
-        { path: '/growth-rank-bot', label: 'AI Rank Bot', icon: 'RB', keywords: 'instagram facebook google rank local seo dhanda ai growth bot reviews' }
-      ]
-    },
-    {
       id: 'marketing',
-      label: 'Marketing',
+      label: 'Marketing & Growth',
       icon: 'MK',
       primaryPath: '/marketing',
       items: [
@@ -432,6 +495,22 @@ export class AppComponent {
         { path: '/message-logs', label: 'Messages', icon: 'ML', keywords: 'message logs communication' },
         { path: '/reputation', label: 'Reviews', icon: 'RV', keywords: 'reviews reputation google' },
         { path: '/growth-advisor', label: 'Growth AI', icon: 'GA', keywords: 'growth advisor ai' },
+        { path: '/growth-rank-bot', label: 'AI Rank Bot', icon: 'RB', keywords: 'instagram facebook google rank local seo dhanda ai growth bot reviews' },
+        {
+          path: '/discount-rules',
+          label: 'Offers & Discounts',
+          icon: 'OD',
+          keywords: 'discount rules happy hours coupon promotion calendar offers roi fraud approvals',
+          children: [
+            { path: '/discount-rules', label: 'Happy Hours', icon: 'HH', keywords: 'happy hours discounts offers' },
+            { path: '/discount-rules/rules', label: 'Discount Rules', icon: 'DR', keywords: 'discount rules list' },
+            { path: '/discount-rules/new', label: 'Rule Builder', icon: 'RB', keywords: 'new edit discount rule builder' },
+            { path: '/discount-rules/promotion-calendar', label: 'Promotion Calendar', icon: 'PC', keywords: 'promotion calendar offers' },
+            { path: '/discount-rules/coupon-engine', label: 'Coupon Engine', icon: 'CE', keywords: 'coupon engine discounts' },
+            { path: '/discount-rules/approvals', label: 'Approvals', icon: 'AP', keywords: 'discount rule approvals' },
+            { path: '/discount-rules/control-tower', label: 'Control Tower', icon: 'CT', keywords: 'happy hours control tower' }
+          ]
+        },
         { path: '/smart-forms', label: 'Smart Forms', icon: 'SF', keywords: 'forms consent smart' },
         { path: '/recommendation-engine', label: 'Recommend AI', icon: 'RE', keywords: 'recommendation upsell ai' },
         { path: '/notification-center', label: 'Notify Center', icon: 'NC', keywords: 'notifications alerts' }
@@ -448,13 +527,22 @@ export class AppComponent {
         { path: '/branches', label: 'Branches', icon: 'B', keywords: 'branch location' },
         { path: '/settings', label: 'Settings', icon: 'G', keywords: 'settings configuration' },
         { path: '/permissions', label: 'Permissions', icon: 'PM', keywords: 'role rbac permission' },
-        { path: '/security', label: 'Security', icon: 'SL', keywords: 'security auth sessions' },
-        { path: '/enterprise-security-shield', label: 'Security Shield', icon: 'ES', keywords: 'enterprise security shield detect alert block audit recover' },
-        { path: '/security-alerts', label: 'Security Alerts', icon: 'SA', keywords: 'security alerts intrusion threat critical warning' },
-        { path: '/security-blocklist', label: 'Security Blocklist', icon: 'BL', keywords: 'security blocklist ip block active defense' },
-        { path: '/security-policy-center', label: 'Policy Center', icon: 'PC', keywords: 'security policy center device trust pin export field audit' },
-        { path: '/two-factor', label: 'Two-Factor Auth', icon: '2F', keywords: 'security 2fa totp authenticator recovery code' },
+        {
+          path: '/security',
+          label: 'Security Center',
+          icon: 'SC',
+          keywords: 'security auth sessions shield alerts blocklist policy center two factor 2fa totp',
+          children: [
+            { path: '/security', label: 'Security', icon: 'SL', keywords: 'security auth sessions' },
+            { path: '/enterprise-security-shield', label: 'Security Shield', icon: 'ES', keywords: 'enterprise security shield detect alert block audit recover' },
+            { path: '/security-alerts', label: 'Security Alerts', icon: 'SA', keywords: 'security alerts intrusion threat critical warning' },
+            { path: '/security-blocklist', label: 'Security Blocklist', icon: 'BL', keywords: 'security blocklist ip block active defense' },
+            { path: '/security-policy-center', label: 'Policy Center', icon: 'PC', keywords: 'security policy center device trust pin export field audit' },
+            { path: '/two-factor', label: 'Two-Factor Auth', icon: '2F', keywords: 'security 2fa totp authenticator recovery code' }
+          ]
+        },
         { path: '/audit-logs', label: 'Audit Logs', icon: 'AL', keywords: 'audit logs activity' },
+        { path: '/audit-compliance', label: 'Audit Compliance', icon: 'AC', keywords: 'audit compliance controls risk' },
         { path: '/business-details', label: 'Business Details', icon: 'BD', keywords: 'business profile details' },
         { path: '/data-migration', label: 'Data Migration', icon: 'DM', keywords: 'import migration data' },
         { path: '/deployment', label: 'Deployment', icon: 'DP', keywords: 'deployment release' },
@@ -474,42 +562,64 @@ export class AppComponent {
             { path: '/offline/risk-alerts', label: 'Risk Alerts', icon: 'RA', keywords: 'offline risk alerts stale cache failed sync' }
           ]
         },
-        { path: '/offline/readiness', label: 'Offline Readiness', icon: 'RS', keywords: 'offline readiness score cache branch device risk' },
-        { path: '/offline/devices', label: 'Device Sync Health', icon: 'DH', keywords: 'offline device sync health terminal tablet' },
-        { path: '/offline/sync-queue', label: 'Smart Sync Queue', icon: 'SQ', keywords: 'offline smart sync queue retry force conflict' },
-        { path: '/offline/conflicts', label: 'Conflict Center', icon: 'CR', keywords: 'offline conflict resolution server device merge' },
-        { path: '/offline/billing', label: 'Offline Billing', icon: 'OB', keywords: 'offline billing protection invoice cash drawer duplicate' },
-        { path: '/offline/appointments', label: 'Offline Appointments', icon: 'OA', keywords: 'offline appointment protection slot staff duplicate' },
-        { path: '/offline/risk-alerts', label: 'Offline Risk Alerts', icon: 'RA', keywords: 'offline risk alerts stale cache failed sync' },
         { path: '/white-label', label: 'White Label', icon: 'WL', keywords: 'brand theme white label' },
-        { path: '/quality', label: 'Quality', icon: 'QA', keywords: 'quality checks qa' }
+        { path: '/quality', label: 'Quality', icon: 'QA', keywords: 'quality checks qa' },
+        {
+          path: '/developer-api',
+          label: 'Developer Platform',
+          icon: 'DP',
+          keywords: 'developer api webhooks plugins marketplace localization design system prd',
+          children: [
+            { path: '/developer-api', label: 'API Platform', icon: 'API', keywords: 'api platform developer' },
+            { path: '/webhooks', label: 'Webhooks', icon: 'WH', keywords: 'webhooks api events' },
+            { path: '/plugins', label: 'Plugins', icon: 'PL', keywords: 'plugins extension' },
+            { path: '/app-marketplace', label: 'Marketplace', icon: 'AM', keywords: 'marketplace apps' },
+            { path: '/localization', label: 'Countries', icon: 'LC', keywords: 'localization countries tax' },
+            { path: '/design-system', label: 'Design System', icon: 'DS', keywords: 'design system ui' },
+            { path: '/prd', label: 'PRD', icon: 'P', keywords: 'product requirements prd' }
+          ]
+        }
       ]
     },
     {
       id: 'ai-platform',
-      label: 'AI Platform',
+      label: 'AI & Automation',
       icon: 'AI',
       primaryPath: '/ai',
       items: [
         { path: '/ai', label: 'AI Assistant', icon: 'A', keywords: 'assistant ai' },
-        { path: '/future-features', label: 'Future AI', icon: 'F', keywords: 'future features ai' },
+        {
+          path: '/future-features',
+          label: 'AI Command Apps',
+          icon: 'AC',
+          keywords: 'future features ai voice franchise marketplace data warehouse financial brain inventory autopilot',
+          children: [
+            { path: '/future-features', label: 'Future AI', icon: 'F', keywords: 'future features ai' },
+            { path: '/command-center/voice-ai-receptionist', label: 'Voice AI', icon: 'VR', keywords: 'voice receptionist ai command center' },
+            { path: '/command-center/franchise-os', label: 'Franchise OS', icon: 'FR', keywords: 'franchise expansion command center' },
+            { path: '/command-center/marketplace-platform', label: 'Marketplace Platform', icon: 'MP', keywords: 'marketplace integrations apps platform' },
+            { path: '/command-center/financial-brain', label: 'Financial Brain', icon: 'FB', keywords: 'financial brain ai' },
+            { path: '/command-center/inventory-autopilot', label: 'Inventory Autopilot', icon: 'IA', keywords: 'inventory autopilot ai' }
+          ]
+        },
         { path: '/workflows', label: 'Workflows', icon: 'WF', keywords: 'workflow automation' },
-        { path: '/voice-receptionist', label: 'Voice AI', icon: 'VR', keywords: 'voice receptionist ai' },
-        { path: '/dynamic-pricing', label: 'Pricing AI', icon: 'DP', keywords: 'dynamic pricing ai' },
-        { path: '/franchise', label: 'Franchise', icon: 'FR', keywords: 'franchise expansion' },
+        {
+          path: '/dynamic-pricing',
+          label: 'Pricing AI',
+          icon: 'DP',
+          keywords: 'dynamic pricing ai incrementality market intelligence level 6',
+          children: [
+            { path: '/dynamic-pricing', label: 'Dynamic Pricing', icon: 'DP', keywords: 'dynamic pricing ai' },
+            { path: '/pricing/incrementality', label: 'Incrementality', icon: 'CI', keywords: 'causal incrementality pricing' },
+            { path: '/pricing/market-intelligence', label: 'Market Intelligence', icon: 'MI', keywords: 'competitive price intelligence market' },
+            { path: '/pricing/level6-readiness', label: 'Level 6 Readiness', icon: 'L6', keywords: 'pricing level 6 readiness center' }
+          ]
+        },
         { path: '/image-analysis', label: 'Image AI', icon: 'IA', keywords: 'image analysis ai' },
-        { path: '/marketplace-integrations', label: 'Integrations', icon: 'IN', keywords: 'integrations marketplace' },
         { path: '/gamification', label: 'Gamification', icon: 'GM', keywords: 'points badges gamification' },
         { path: '/fraud-detection', label: 'Fraud AI', icon: 'FD', keywords: 'fraud detection risk' },
         { path: '/appointment-optimization', label: 'Appt Optimize', icon: 'AO', keywords: 'appointment optimization ai' },
-        { path: '/developer-api', label: 'API Platform', icon: 'API', keywords: 'api platform developer' },
-        { path: '/webhooks', label: 'Webhooks', icon: 'WH', keywords: 'webhooks api events' },
-        { path: '/knowledge-base', label: 'Knowledge', icon: 'KB', keywords: 'knowledge base ai' },
-        { path: '/plugins', label: 'Plugins', icon: 'PL', keywords: 'plugins extension' },
-        { path: '/app-marketplace', label: 'Marketplace', icon: 'AM', keywords: 'marketplace apps' },
-        { path: '/localization', label: 'Countries', icon: 'LC', keywords: 'localization countries tax' },
-        { path: '/design-system', label: 'Design', icon: 'DS', keywords: 'design system ui' },
-        { path: '/prd', label: 'PRD', icon: 'P', keywords: 'product requirements prd' }
+        { path: '/knowledge-base', label: 'Knowledge', icon: 'KB', keywords: 'knowledge base ai' }
       ]
     }
   ];
@@ -756,7 +866,7 @@ export class AppComponent {
   }
 
   navLeafCount(items: NavItem[]): number {
-    return this.navLeaves(items).length;
+    return items.length;
   }
 
   private navLeaves(items: NavItem[]): NavItem[] {
