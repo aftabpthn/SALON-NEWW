@@ -81,6 +81,7 @@ import { bookingPortalV2Router } from "./routes/booking-portal-v2.routes.js";
 import { crmRouter } from "./routes/crm.routes.js";
 import { clientMasterRouter } from "./routes/client-master.routes.js";
 import { customer360Router } from "./routes/customer-360.routes.js";
+import { customerAuthRouter } from "./routes/customer-auth.routes.js";
 import { customerMarketplaceRouter } from "./routes/customer-marketplace.routes.js";
 import { clientReportsRouter } from "./routes/client-reports.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
@@ -250,6 +251,7 @@ export function createApp() {
   app.use("/api/v1", bookingPortalV2Router);
   app.use("/api/v1", publicBookingActionsRouter);
   app.use("/api/v1", publicBookingProfileRouter);
+  app.use("/api/v1", customerAuthRouter);
   app.use("/api/v1", customerMarketplaceRouter);
   app.use("/api/v1", bookingPaymentsPublicRouter);
   app.use("/api/v1", paymentPublicRouter);
@@ -370,6 +372,7 @@ export function createApp() {
   app.use("/api", paymentPublicRouter);
   app.use("/api", publicBookingActionsRouter);
   app.use("/api", publicBookingProfileRouter);
+  app.use("/api", customerAuthRouter);
   app.use("/api", customerMarketplaceRouter);
   app.use("/api", reputationPublicRouter);
   app.use("/api", billingHealthRouter);
