@@ -38,6 +38,11 @@ type BusinessHour = {
   note?: string;
 };
 
+type TimeOption = {
+  value: string;
+  label: string;
+};
+
 @Component({
   selector: 'app-business-details',
   standalone: true,
@@ -188,21 +193,52 @@ type BusinessHour = {
         </label>
 
         <div class="hours-editor">
-          <div class="hours-heading">
-            <div>
-              <p class="eyebrow">Customer app timings</p>
-              <h3>Business hours</h3>
-            </div>
-            <button class="ghost-button compact" type="button" (click)="copyMondayToWeek()">Copy Monday to week</button>
-          </div>
-          <div class="hours-row" *ngFor="let day of businessHourDays">
-            <label class="open-toggle">
-              <input type="checkbox" [(ngModel)]="businessHours[day.key].open" />
-              {{ day.label }}
+          <div class="hours-copy">
+            <p class="eyebrow">Customer app timings</p>
+            <h3>Business Hours</h3>
+            <p>Specify your opening closing time for your business.</p>
+            <label class="switch-row">
+              <span>Show/Hide Business Hours</span>
+              <input class="switch-input" type="checkbox" [(ngModel)]="showBusinessHours" />
+              <span class="switch-track" aria-hidden="true"></span>
             </label>
-            <input type="time" [(ngModel)]="businessHours[day.key].opensAt" [disabled]="!businessHours[day.key].open" />
-            <input type="time" [(ngModel)]="businessHours[day.key].closesAt" [disabled]="!businessHours[day.key].open" />
-            <input [(ngModel)]="businessHours[day.key].note" placeholder="Note" />
+          </div>
+
+          <div class="hours-table-wrap">
+            <table class="hours-table">
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Start Time</th>
+                  <th>End Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let day of businessHourDays">
+                  <td>{{ day.label }}</td>
+                  <td>
+                    <select [(ngModel)]="businessHours[day.key].opensAt" [disabled]="!businessHours[day.key].open">
+                      <option *ngFor="let option of timeOptions" [value]="option.value">{{ option.label }}</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select [(ngModel)]="businessHours[day.key].closesAt" [disabled]="!businessHours[day.key].open">
+                      <option *ngFor="let option of timeOptions" [value]="option.value">{{ option.label }}</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select [ngModel]="businessHours[day.key].open ? 'open' : 'closed'" (ngModelChange)="setBusinessHourStatus(day.key, $event)">
+                      <option value="open">Open</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="hours-actions">
+              <button class="ghost-button compact" type="button" (click)="copyMondayToWeek()">Copy Monday to week</button>
+            </div>
           </div>
         </div>
       </article>
@@ -435,46 +471,126 @@ type BusinessHour = {
     }
     .hours-editor {
       display: grid;
-      gap: 10px;
-      margin-top: 18px;
-      border: 1px solid #d9e3e1;
-      border-radius: 8px;
-      padding: 16px;
-      background: #fbfdfc;
+      grid-template-columns: minmax(220px, 0.36fr) minmax(520px, 1fr);
+      gap: 28px;
+      align-items: start;
+      margin-top: 28px;
+      border-top: 1px solid #d6dfdd;
+      padding-top: 26px;
+      background: #fff;
     }
-    .hours-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+    .hours-copy h3 {
+      margin: 4px 0 6px;
+      color: #071524;
+      font-size: 22px;
+      letter-spacing: 0;
     }
-    .hours-heading h3 {
-      margin: 4px 0 0;
+    .hours-copy p:not(.eyebrow) {
+      margin: 0 0 22px;
+      color: #071524;
     }
     .compact {
       padding: 8px 12px;
       min-height: 36px;
     }
-    .hours-row {
+    .switch-row {
+      position: relative;
       display: grid;
-      grid-template-columns: minmax(130px, 1fr) 120px 120px minmax(160px, 1.5fr);
-      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      gap: 14px;
       align-items: center;
-    }
-    .hours-row input {
-      min-width: 0;
-    }
-    .open-toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
       margin: 0;
+      color: #071524;
+      font-weight: 800;
+    }
+    .switch-input {
+      position: absolute;
+      right: 0;
+      width: 48px;
+      height: 26px;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .switch-track {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      border-radius: 999px;
+      background: #c7c9cc;
+      transition: background .18s ease;
+    }
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .2);
+      transition: transform .18s ease;
+    }
+    .switch-input:checked + .switch-track {
+      background: #2f9bf0;
+    }
+    .switch-input:checked + .switch-track::after {
+      transform: translateX(22px);
+    }
+    .hours-table-wrap {
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .hours-table {
+      width: 100%;
+      min-width: 640px;
+      border-collapse: collapse;
+      color: #071524;
+      background: #fff;
+      font-size: 14px;
+    }
+    .hours-table th,
+    .hours-table td {
+      border: 1px solid #cfd4d7;
+      padding: 6px 7px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .hours-table th {
+      background: #ececec;
+      color: #071524;
+      font-weight: 800;
+    }
+    .hours-table td:first-child {
+      padding-left: 20px;
+      font-weight: 500;
+    }
+    .hours-table select {
+      width: auto;
+      min-width: 92px;
+      height: 29px;
+      border: 1px solid #d6dadd;
+      border-radius: 7px;
+      padding: 3px 8px;
+      color: #1f2937;
+      background: #fff;
+      font: inherit;
+    }
+    .hours-table select:disabled {
+      color: #8792a0;
+      background: #f3f4f6;
+    }
+    .hours-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 14px;
     }
     .preview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
     @media (max-width: 980px) {
-      .settings-grid, .sms-command-grid, .form-grid.two, .form-grid.three, .preview-grid, .public-profile-grid, .hours-row { grid-template-columns: 1fr; }
+      .settings-grid, .sms-command-grid, .form-grid.two, .form-grid.three, .preview-grid, .public-profile-grid, .hours-editor { grid-template-columns: 1fr; }
       .module-hero { align-items: flex-start; flex-direction: column; }
-      .hours-heading { align-items: flex-start; flex-direction: column; }
     }
     @media (min-width: 981px) and (max-width: 1280px) {
       .sms-command-grid, .preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -496,16 +612,18 @@ export class BusinessDetailsComponent implements OnInit {
   websiteUrl = '';
   instagramUrl = '';
   mapsUrl = '';
+  showBusinessHours = true;
   businessHours: Record<string, BusinessHour> = this.defaultBusinessHours();
   readonly businessHourDays = [
+    { key: 'sunday', label: 'Sunday' },
     { key: 'monday', label: 'Monday' },
     { key: 'tuesday', label: 'Tuesday' },
     { key: 'wednesday', label: 'Wednesday' },
     { key: 'thursday', label: 'Thursday' },
     { key: 'friday', label: 'Friday' },
-    { key: 'saturday', label: 'Saturday' },
-    { key: 'sunday', label: 'Sunday' }
+    { key: 'saturday', label: 'Saturday' }
   ];
+  readonly timeOptions = this.makeTimeOptions();
 
   constructor(private readonly api: ApiService) {}
 
@@ -589,6 +707,7 @@ export class BusinessDetailsComponent implements OnInit {
     this.websiteUrl = String(links['website'] || '');
     this.instagramUrl = String(links['instagram'] || '');
     this.mapsUrl = String(links['mapsUrl'] || links['googleMaps'] || '');
+    this.showBusinessHours = links['showBusinessHours'] !== false;
     this.businessHours = this.mergeBusinessHours(profile.businessHours);
   }
 
@@ -626,6 +745,13 @@ export class BusinessDetailsComponent implements OnInit {
     });
   }
 
+  setBusinessHourStatus(dayKey: string, status: string): void {
+    this.businessHours[dayKey] = {
+      ...this.businessHours[dayKey],
+      open: status === 'open'
+    };
+  }
+
   private lines(value: string): string[] {
     return [...new Set(String(value || '').split(/[\n,;]/).map((item) => item.trim()).filter(Boolean))];
   }
@@ -641,19 +767,20 @@ export class BusinessDetailsComponent implements OnInit {
       galleryImages: this.lines(this.galleryImagesText),
       website: this.websiteUrl.trim(),
       instagram: this.instagramUrl.trim(),
-      mapsUrl: this.mapsUrl.trim()
+      mapsUrl: this.mapsUrl.trim(),
+      showBusinessHours: this.showBusinessHours
     };
   }
 
   private defaultBusinessHours(): Record<string, BusinessHour> {
     return {
-      monday: { open: true, opensAt: '10:00', closesAt: '20:00' },
-      tuesday: { open: true, opensAt: '10:00', closesAt: '20:00' },
-      wednesday: { open: true, opensAt: '10:00', closesAt: '20:00' },
-      thursday: { open: true, opensAt: '10:00', closesAt: '20:00' },
-      friday: { open: true, opensAt: '10:00', closesAt: '20:00' },
-      saturday: { open: true, opensAt: '10:00', closesAt: '20:00' },
-      sunday: { open: true, opensAt: '10:00', closesAt: '20:00' }
+      sunday: { open: true, opensAt: '07:00', closesAt: '21:00' },
+      monday: { open: true, opensAt: '11:00', closesAt: '21:00' },
+      tuesday: { open: true, opensAt: '11:00', closesAt: '21:00' },
+      wednesday: { open: true, opensAt: '11:00', closesAt: '21:00' },
+      thursday: { open: true, opensAt: '11:00', closesAt: '21:00' },
+      friday: { open: true, opensAt: '11:00', closesAt: '21:00' },
+      saturday: { open: true, opensAt: '11:00', closesAt: '21:00' }
     };
   }
 
@@ -663,8 +790,8 @@ export class BusinessDetailsComponent implements OnInit {
       const incoming = value?.[day.key];
       defaults[day.key] = {
         open: incoming?.open !== false,
-        opensAt: incoming?.opensAt || '10:00',
-        closesAt: incoming?.closesAt || '20:00',
+        opensAt: this.normalizeTimeValue(incoming?.opensAt || defaults[day.key].opensAt),
+        closesAt: this.normalizeTimeValue(incoming?.closesAt || defaults[day.key].closesAt),
         note: incoming?.note || ''
       };
     });
@@ -673,5 +800,37 @@ export class BusinessDetailsComponent implements OnInit {
 
   private normalizedBusinessHours(): Record<string, BusinessHour> {
     return this.mergeBusinessHours(this.businessHours);
+  }
+
+  private makeTimeOptions(): TimeOption[] {
+    return Array.from({ length: 96 }, (_item, index) => {
+      const minutes = index * 15;
+      return {
+        value: this.minutesToValue(minutes),
+        label: this.minutesToLabel(minutes)
+      };
+    });
+  }
+
+  private normalizeTimeValue(value = ''): string {
+    const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return '10:00';
+    const hours = Math.max(0, Math.min(Number(match[1]), 23));
+    const minutes = Math.max(0, Math.min(Math.round(Number(match[2]) / 15) * 15, 45));
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
+  private minutesToValue(minutes: number): string {
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  private minutesToLabel(minutes: number): string {
+    const hour24 = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    const suffix = hour24 >= 12 ? 'PM' : 'AM';
+    const hour = hour24 % 12 || 12;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${suffix}`;
   }
 }

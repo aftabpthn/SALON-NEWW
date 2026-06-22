@@ -327,6 +327,7 @@ function mapBusiness(row, { includeDetails = false } = {}) {
   const profile = publicProfile(row);
   const socialLinks = parseJson(profile.social_links_json, {});
   const businessHours = parseJson(profile.business_hours_json, {});
+  const publishBusinessHours = socialLinks.showBusinessHours !== false;
   const profileGallery = Array.isArray(socialLinks.galleryImages) ? socialLinks.galleryImages : String(socialLinks.galleryImages || "").split(/[\n,;]/);
   const gallery = [
     ...profileGallery,
@@ -365,12 +366,12 @@ function mapBusiness(row, { includeDetails = false } = {}) {
     ratingAverage: reviewAverage(reviews),
     ratingCount: reviews.length,
     createdAt: row.createdAt,
-    isOpen: isOpenNow(businessHours, timezone, row.onlineBookingEnabled),
-    hoursLabel: hoursLabel(businessHours, timezone) || theme.hoursLabel || "Online booking available",
+    isOpen: publishBusinessHours ? isOpenNow(businessHours, timezone, row.onlineBookingEnabled) : Number(row.onlineBookingEnabled ?? 1) === 1,
+    hoursLabel: publishBusinessHours ? hoursLabel(businessHours, timezone) || theme.hoursLabel || "Online booking available" : "",
     openingTime: currentHours(businessHours, timezone)?.opensAt || theme.openingTime || DEFAULT_OPEN,
     closingTime: currentHours(businessHours, timezone)?.closesAt || theme.closingTime || DEFAULT_CLOSE,
     timezone,
-    businessHours: businessHoursRows(businessHours),
+    businessHours: publishBusinessHours ? businessHoursRows(businessHours) : [],
     nextAvailableSlot: "",
     hasOffer: false,
     coverGradient: theme.coverGradient || "linear-gradient(135deg, #12211d, #3f7b68)",
