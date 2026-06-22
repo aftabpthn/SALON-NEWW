@@ -858,6 +858,15 @@ export class BackbarProductConsumptionService {
       ORDER BY createdAt DESC
       LIMIT @limit
     `).all(scopeParams).map(mapOverrideRequest);
+    const productIds = [...new Set([
+      ...containers.map((container) => container.productId),
+      ...entries.map((entry) => entry.productId),
+      productId
+    ].filter(Boolean))];
+    const products = productIds.length
+      ? db.prepare(`SELECT * FROM products WHERE tenantId = ? AND id IN (${placeholders(productIds)})`).all(access.tenantId, ...productIds)
+      : [];
+    const productById = new Map(products.map((product) => [product.id, product]));
 
     const clientEntries = entries.filter((entry) => entry.usageType === "client");
     const exceptionEntries = entries.filter((entry) => entry.usageType !== "client");
@@ -882,6 +891,124 @@ export class BackbarProductConsumptionService {
       usageType: entry.usageType || "manual_adjustment",
       reason: entry.reason || ""
     }));
+    const draftParams = { tenant_id: access.tenantId, limit };
+    const draftFilters = ["tenant_id = @tenant_id", "status = 'confirmed'"];
+    if (branchId) {
+      draftFilters.push("branch_id = @branch_id");
+      draftParams.branch_id = branchId;
+    }
+    if (staffId) {
+      draftFilters.push("staff_id = @staffId");
+      draftParams.staffId = staffId;
+    }
+    if (clientId) {
+      draftFilters.push("client_id = @clientId");
+      draftParams.clientId = clientId;
+    }
+    if (serviceId) {
+      draftFilters.push("service_id = @serviceId");
+      draftParams.serviceId = serviceId;
+    }
+    if (startDate) {
+      draftFilters.push("substr(updated_at, 1, 10) >= @startDate");
+      draftParams.startDate = startDate;
+    }
+    if (endDate) {
+      draftFilters.push("substr(updated_at, 1, 10) <= @endDate");
+      draftParams.endDate = endDate;
+    }
+    const draftRows = tableExists("product_consume_drafts")
+      ? db.prepare(`SELECT * FROM product_consume_drafts WHERE ${draftFilters.join(" AND ")} ORDER BY updated_at DESC LIMIT @limit`).all(draftParams)
+      : [];
+    const varianceMap = new Map();
+    for (const draft of draftRows) {
+      for (const line of parseLineItems(draft)) {
+        const lineProductId = line.productId || line.product_id || "";
+        if (productId && lineProductId !== productId) continue;
+        const actualQty = number(line.actualQty ?? line.actual_qty, 0);
+        const expectedQty = number(line.expectedQty ?? line.expected_qty, 0);
+        const maxQty = number(line.maxQty ?? line.max_qty, 0);
+        const varianceQty = money(actualQty - expectedQty);
+        const isOver = (maxQty > 0 && actualQty > maxQty) || (expectedQty > 0 && actualQty > expectedQty * 1.15);
+        if (!isOver && varianceQty <= 0) continue;
+        const key = `${lineProductId}|${draft.staff_id}|${draft.service_id}`;
+        const row = varianceMap.get(key) || {
+          productId: lineProductId,
+          productName: line.productName || line.product_name || lineProductId || "Product",
+          staffId: draft.staff_id || "",
+          staffName: draft.staff_name || "Unassigned",
+          serviceId: draft.service_id || "",
+          serviceName: draft.service_name || "Service",
+          count: 0,
+          expectedQty: 0,
+          actualQty: 0,
+          varianceQty: 0,
+          cost: 0,
+          reasonCount: 0,
+          lastUsedAt: ""
+        };
+        row.count += 1;
+        row.expectedQty = money(row.expectedQty + expectedQty);
+        row.actualQty = money(row.actualQty + actualQty);
+        row.varianceQty = money(row.actualQty - row.expectedQty);
+        row.cost = money(row.cost + number(line.actualCost ?? line.actual_cost, 0));
+        if (String(line.reason || line.overuseReason || line.overuse_reason || "").trim()) row.reasonCount += 1;
+        row.lastUsedAt = draft.updated_at || draft.created_at || row.lastUsedAt;
+        varianceMap.set(key, row);
+      }
+    }
+    const varianceRows = [...varianceMap.values()].sort((a, b) => Number(b.varianceQty || 0) - Number(a.varianceQty || 0)).slice(0, 80);
+    const containerRiskRows = containers
+      .filter((container) => container.status !== "finished")
+      .map((container) => {
+        const product = productById.get(container.productId) || {};
+        const openDays = daysOpen(container.openedAt);
+        const balancePct = container.capacityQty > 0 ? money((container.balanceQty / container.capacityQty) * 100) : 0;
+        const expiry = product.expiryDate || product.expiry_date || product.expiry || product.expiresAt || product.expires_at || "";
+        const expiryDays = expiry ? Math.ceil((new Date(expiry).getTime() - Date.now()) / 86400000) : null;
+        const riskScore = (openDays >= 14 ? 35 : 0) + (balancePct <= LOW_BALANCE_PCT && container.capacityQty > 0 ? 25 : 0) + (expiryDays !== null && expiryDays <= 30 ? 40 : 0);
+        return {
+          productId: container.productId,
+          productName: container.productName,
+          containerId: container.id,
+          containerNo: container.containerNo,
+          status: container.status,
+          openDays,
+          balanceQty: container.balanceQty,
+          balancePct,
+          measureUnit: container.measureUnit,
+          expiry,
+          expiryDays,
+          riskScore,
+          riskLevel: riskScore >= 60 ? "high" : riskScore >= 25 ? "medium" : "watch"
+        };
+      })
+      .filter((row) => row.riskScore > 0)
+      .sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0))
+      .slice(0, 80);
+    const leakageRows = productRows.map((row) => {
+      const productContainers = containers.filter((container) => container.productId === row.productId);
+      const productExceptions = exceptionEntries.filter((entry) => entry.productId === row.productId);
+      const productClientEntries = clientEntries.filter((entry) => entry.productId === row.productId);
+      const exceptionCost = money(productExceptions.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
+      const clientCost = money(productClientEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
+      const exceptionRatio = row.cost > 0 ? money((exceptionCost / row.cost) * 100) : 0;
+      const openOldCount = productContainers.filter((container) => container.status !== "finished" && daysOpen(container.openedAt) >= 14).length;
+      const riskScore = Math.min(100, Math.round(exceptionRatio + openOldCount * 15 + Math.max(0, number(row.exceptionCount, 0) - productClientEntries.length) * 10));
+      return {
+        productId: row.productId,
+        productName: row.productName,
+        totalUsedText: row.totalUsedText,
+        clientEntries: productClientEntries.length,
+        exceptionEntries: productExceptions.length,
+        clientCost,
+        exceptionCost,
+        exceptionRatio,
+        openOldCount,
+        riskScore,
+        riskLevel: riskScore >= 60 ? "high" : riskScore >= 25 ? "medium" : "watch"
+      };
+    }).filter((row) => row.riskScore > 0).sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0)).slice(0, 80);
     const entityLedger = [
       ...entries.map((entry) => ({
         entityType: entry.usageType === "client" ? "client_usage" : "exception_usage",
@@ -924,13 +1051,19 @@ export class BackbarProductConsumptionService {
         usageCost: money(entries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
         exceptionCost: money(exceptionEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
         alerts: alerts.filter((alert) => alert.status === "open").length,
-        pendingApprovals: approvals.filter((request) => request.status === "pending").length
+        pendingApprovals: approvals.filter((request) => request.status === "pending").length,
+        varianceRows: varianceRows.length,
+        containerRisks: containerRiskRows.length,
+        leakageRisks: leakageRows.length
       },
       productRows,
       staffRows,
       serviceRows,
       clientRows,
       wasteRows,
+      varianceRows,
+      containerRiskRows,
+      leakageRows,
       approvals,
       alerts,
       recentEntries: entries,

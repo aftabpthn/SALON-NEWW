@@ -187,6 +187,13 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
           <article><span>Usage cost</span><strong>{{ money(report['summary']?.usageCost || 0) }}</strong><small>client + exceptions</small></article>
           <article><span>Waste cost</span><strong>{{ money(report['summary']?.exceptionCost || 0) }}</strong><small>waste/adjustment</small></article>
         </div>
+        <div class="owner-metrics">
+          <article><span>Variance</span><strong>{{ report['summary']?.varianceRows || 0 }}</strong><small>expected vs actual</small></article>
+          <article><span>Open-age risk</span><strong>{{ report['summary']?.containerRisks || 0 }}</strong><small>old/low/expiry</small></article>
+          <article><span>Leakage risk</span><strong>{{ report['summary']?.leakageRisks || 0 }}</strong><small>stock mismatch</small></article>
+          <article><span>Approvals</span><strong>{{ report['summary']?.pendingApprovals || 0 }}</strong><small>pending</small></article>
+          <article><span>Alerts</span><strong>{{ report['summary']?.alerts || 0 }}</strong><small>open</small></article>
+        </div>
         <div class="report-grid">
           <div class="report-table">
             <h4>Product-wise usage</h4>
@@ -216,6 +223,35 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
               <small *ngIf="!ledgerWasteRows().length">No waste rows</small>
             </article>
           </div>
+        </div>
+        <div class="risk-grid">
+          <article>
+            <h4>Recipe variance</h4>
+            <div class="risk-row" *ngFor="let row of ledgerVarianceRows().slice(0, 5)">
+              <strong>{{ row['productName'] }}</strong>
+              <span>{{ row['staffName'] || 'Unassigned' }} · {{ row['serviceName'] || 'Service' }}</span>
+              <small>Expected {{ row['expectedQty'] || 0 }}, actual {{ row['actualQty'] || 0 }}, variance {{ row['varianceQty'] || 0 }}</small>
+            </div>
+            <small *ngIf="!ledgerVarianceRows().length">No recipe variance risk.</small>
+          </article>
+          <article>
+            <h4>Container aging / expiry</h4>
+            <div class="risk-row" *ngFor="let row of ledgerContainerRisks().slice(0, 5)" [class.high]="row['riskLevel'] === 'high'">
+              <strong>{{ row['productName'] }} #{{ row['containerNo'] }}</strong>
+              <span>{{ row['openDays'] || 0 }} days open · {{ row['balanceQty'] || 0 }} {{ row['measureUnit'] }} left</span>
+              <small>{{ row['riskLevel'] }} risk · expiry {{ row['expiry'] || 'not set' }}</small>
+            </div>
+            <small *ngIf="!ledgerContainerRisks().length">No container aging risk.</small>
+          </article>
+          <article>
+            <h4>Stock mismatch / leakage</h4>
+            <div class="risk-row" *ngFor="let row of ledgerLeakageRows().slice(0, 5)" [class.high]="row['riskLevel'] === 'high'">
+              <strong>{{ row['productName'] }}</strong>
+              <span>{{ row['totalUsedText'] || '0' }} · exception {{ row['exceptionRatio'] || 0 }}%</span>
+              <small>{{ row['riskLevel'] }} risk · score {{ row['riskScore'] || 0 }}</small>
+            </div>
+            <small *ngIf="!ledgerLeakageRows().length">No leakage signal.</small>
+          </article>
         </div>
         <div class="report-feed">
           <article *ngFor="let event of ledgerEvents().slice(0, 8)">
@@ -554,6 +590,12 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .report-side article, .report-feed article { border: 1px solid #dcebea; border-radius: 12px; padding: 10px; display: grid; gap: 4px; background: #f8fbfa; }
     .report-side span, .report-side small, .report-feed span, .report-feed small { color: #64748b; }
     .report-feed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .risk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .risk-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
+    .risk-grid h4 { margin: 0; }
+    .risk-row { border: 1px solid #edf4f3; border-radius: 10px; padding: 9px; display: grid; gap: 3px; background: #f8fbfa; }
+    .risk-row.high { background: #fff1f2; border-color: #fecdd3; }
+    .risk-row span, .risk-row small, .risk-grid > article > small { color: #64748b; }
     .ledger-head, .ledger-summary, .active-container { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .ledger-head h3 { margin: 2px 0 0; }
     .ledger-head small, .ledger-product small, .ledger-summary span, .history-row span { color: #64748b; }
@@ -588,7 +630,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     @media (max-width: 900px) {
       .module-hero, .workspace { display: grid; }
       .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed { grid-template-columns: 1fr; }
+      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid { grid-template-columns: 1fr; }
       .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
@@ -999,6 +1041,18 @@ export class ProductConsumeComponent {
 
   ledgerWasteRows(): ApiRecord[] {
     return (this.controlLedgerReport()?.['wasteRows'] || []) as ApiRecord[];
+  }
+
+  ledgerVarianceRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['varianceRows'] || []) as ApiRecord[];
+  }
+
+  ledgerContainerRisks(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['containerRiskRows'] || []) as ApiRecord[];
+  }
+
+  ledgerLeakageRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['leakageRows'] || []) as ApiRecord[];
   }
 
   ledgerEvents(): ApiRecord[] {
