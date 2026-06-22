@@ -27,27 +27,27 @@ export class ApiService {
   ) {}
 
   list<T = ApiRecord[]>(resource: string, params: ApiRecord = {}): Observable<T> {
-    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, { headers, params: this.toParams(this.withBranchScope(resource, params)) }));
+    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, { headers, params: this.toParams(this.withBranchScope(resource, params)) }), this.timeoutFor(resource));
   }
 
   get<T = ApiRecord>(resource: string, id: string): Observable<T> {
-    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, { headers }));
+    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, { headers }), this.timeoutFor(resource));
   }
 
   create<T = ApiRecord>(resource: string, payload: ApiRecord): Observable<T> {
-    return this.withAuth((headers) => this.http.post<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, this.withBranchScope(resource, payload), { headers: this.headersForMutation(resource, headers) }));
+    return this.withAuth((headers) => this.http.post<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, this.withBranchScope(resource, payload), { headers: this.headersForMutation(resource, headers) }), this.timeoutFor(resource));
   }
 
   update<T = ApiRecord>(resource: string, id: string, payload: ApiRecord): Observable<T> {
-    return this.withAuth((headers) => this.http.patch<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, payload, { headers }));
+    return this.withAuth((headers) => this.http.patch<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, payload, { headers }), this.timeoutFor(resource));
   }
 
   delete<T = ApiRecord>(resource: string, id: string): Observable<T> {
-    return this.withAuth((headers) => this.http.delete<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, { headers }));
+    return this.withAuth((headers) => this.http.delete<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, { headers }), this.timeoutFor(resource));
   }
 
   post<T = ApiRecord>(path: string, payload: ApiRecord = {}): Observable<T> {
-    return this.withAuth((headers) => this.http.post<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, this.withBranchScope(path, payload), { headers: this.headersForMutation(path, headers) }));
+    return this.withAuth((headers) => this.http.post<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, this.withBranchScope(path, payload), { headers: this.headersForMutation(path, headers) }), this.timeoutFor(path));
   }
 
   postWithHeaders<T = ApiRecord>(path: string, payload: ApiRecord = {}, extraHeaders: Record<string, string> = {}): Observable<T> {
@@ -61,15 +61,15 @@ export class ApiService {
   }
 
   put<T = ApiRecord>(path: string, payload: ApiRecord = {}): Observable<T> {
-    return this.withAuth((headers) => this.http.put<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, payload, { headers }));
+    return this.withAuth((headers) => this.http.put<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, payload, { headers }), this.timeoutFor(path));
   }
 
   patch<T = ApiRecord>(path: string, payload: ApiRecord = {}): Observable<T> {
-    return this.withAuth((headers) => this.http.patch<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, payload, { headers }));
+    return this.withAuth((headers) => this.http.patch<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, payload, { headers }), this.timeoutFor(path));
   }
 
   report<T = ApiRecord>(path: string, params: ApiRecord = {}): Observable<T> {
-    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/reports/${path}`, { headers, params: this.toParams(this.withBranchScope(`reports/${path}`, params)) }));
+    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/reports/${path}`, { headers, params: this.toParams(this.withBranchScope(`reports/${path}`, params)) }), this.timeoutFor(`reports/${path}`));
   }
 
   errorText(error: unknown, fallback = 'Request failed'): string {
@@ -83,13 +83,13 @@ export class ApiService {
     return err?.status === 401 ? 'Session expired. Please sign in again.' : fallback;
   }
 
-  private withAuth<T>(request: (headers: HttpHeaders) => Observable<ApiEnvelope<T> | T>): Observable<T> {
+  private withAuth<T>(request: (headers: HttpHeaders) => Observable<ApiEnvelope<T> | T>, timeoutMs = 15000): Observable<T> {
     return this.readyHeaders().pipe(
-      switchMap((headers) => this.unwrap(request(headers)).pipe(
+      switchMap((headers) => this.unwrap(request(headers), timeoutMs).pipe(
         catchError((error) => {
           if (!this.isAuthExpired(error)) return throwError(() => error);
           return this.authSession.refreshSession().pipe(
-            switchMap(() => this.unwrap(request(this.headers()))),
+            switchMap(() => this.unwrap(request(this.headers()), timeoutMs)),
             catchError((refreshError) => {
               this.authSession.clearSession();
               return throwError(() => refreshError);
@@ -109,9 +109,9 @@ export class ApiService {
     return this.authSession.refreshSession().pipe(map(() => this.headers()));
   }
 
-  private unwrap<T>(request: Observable<ApiEnvelope<T> | T>): Observable<T> {
+  private unwrap<T>(request: Observable<ApiEnvelope<T> | T>, timeoutMs = 15000): Observable<T> {
     return request.pipe(
-      timeout({ each: 15000 }),
+      timeout({ each: timeoutMs }),
       map((response) => {
         if (response && typeof response === 'object' && 'success' in response) {
           const envelope = response as ApiEnvelope<T>;
@@ -137,6 +137,11 @@ export class ApiService {
       headers = headers.set('x-user-role', this.appState.userRole());
     }
     return headers;
+  }
+
+  private timeoutFor(resource: string): number {
+    const normalized = resource.replace(/^\/+/, '').split(/[?#]/)[0];
+    return normalized.startsWith('migration/') ? 180000 : 15000;
   }
 
   private headersForMutation(resource: string, headers = this.headers()): HttpHeaders {

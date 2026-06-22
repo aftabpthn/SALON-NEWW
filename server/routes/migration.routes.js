@@ -4,10 +4,11 @@ import { requirePermission } from "../middleware/rbac.js";
 import { migrationService } from "../services/migration.service.js";
 
 export const migrationRouter = Router();
+const migrationResource = () => "migration";
 
 migrationRouter.get(
   "/migration/adapters",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((_req, res) => {
     res.json(migrationService.adapters());
   })
@@ -15,7 +16,7 @@ migrationRouter.get(
 
 migrationRouter.get(
   "/migration/templates",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((_req, res) => {
     res.json(migrationService.templates());
   })
@@ -23,7 +24,7 @@ migrationRouter.get(
 
 migrationRouter.get(
   "/migration/templates/:resource",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.templates(req.params.resource));
   })
@@ -31,7 +32,7 @@ migrationRouter.get(
 
 migrationRouter.get(
   "/migration/mappings",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.mappings(req.access));
   })
@@ -39,7 +40,7 @@ migrationRouter.get(
 
 migrationRouter.post(
   "/migration/mappings",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.status(201).json(migrationService.saveMapping(req.body, req.access));
   })
@@ -47,7 +48,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/suggest-mapping",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.suggestMapping(req.body, req.access));
   })
@@ -55,7 +56,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/reconcile",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.reconcile(req.body, req.access));
   })
@@ -63,7 +64,7 @@ migrationRouter.post(
 
 migrationRouter.get(
   "/migration/approvals",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.approvals(req.query, req.access));
   })
@@ -71,7 +72,7 @@ migrationRouter.get(
 
 migrationRouter.post(
   "/migration/approvals",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.status(201).json(migrationService.submitApproval(req.body, req.access));
   })
@@ -80,7 +81,7 @@ migrationRouter.post(
 // Frontend uses /decide. Keep this canonical endpoint.
 migrationRouter.post(
   "/migration/approvals/:id/decide",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.decideApproval(req.params.id, req.body, req.access));
   })
@@ -89,7 +90,7 @@ migrationRouter.post(
 // Backward-compatible alias in case older frontend calls /decision.
 migrationRouter.post(
   "/migration/approvals/:id/decision",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.decideApproval(req.params.id, req.body, req.access));
   })
@@ -97,7 +98,7 @@ migrationRouter.post(
 
 migrationRouter.get(
   "/migration/onboarding",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.onboarding(req.access));
   })
@@ -105,7 +106,7 @@ migrationRouter.get(
 
 migrationRouter.get(
   "/migration/jobs",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.jobs(req.access));
   })
@@ -113,7 +114,7 @@ migrationRouter.get(
 
 migrationRouter.get(
   "/migration/jobs/:id",
-  requirePermission("read"),
+  requirePermission("read", migrationResource),
   asyncHandler((req, res) => {
     const job = migrationService.job(req.params.id, req.access);
     if (!job) {
@@ -126,7 +127,7 @@ migrationRouter.get(
 
 migrationRouter.post(
   "/migration/analyze",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.analyze(req.body, req.access));
   })
@@ -134,7 +135,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/dry-run",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.status(201).json(migrationService.dryRun(req.body, req.access));
   })
@@ -142,7 +143,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/import",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.status(201).json(migrationService.import(req.body, req.access));
   })
@@ -150,7 +151,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/jobs/:id/rollback",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.rollback(req.params.id, req.access, req.body || {}));
   })
@@ -158,7 +159,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/rollback",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.rollbackByFilter(req.access, req.body || {}));
   })
@@ -166,7 +167,7 @@ migrationRouter.post(
 
 migrationRouter.post(
   "/migration/rollback/last",
-  requirePermission("write"),
+  requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
     res.json(migrationService.rollbackLast(req.access, req.body || {}));
   })

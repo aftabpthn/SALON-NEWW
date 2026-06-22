@@ -45,7 +45,9 @@ const permissions = {
     "read:quality",
     "write:quality",
     "read:deployment",
-    "write:deployment"
+    "write:deployment",
+    "read:migration",
+    "write:migration"
   ],
   receptionist: [
     "read:*",
@@ -139,7 +141,24 @@ const permissions = {
     "read:branches",
     "write:branches"
   ],
-  staff: ["read:appointments", "read:clients", "read:services", "read:ai", "read:whatsapp", "write:appointments", "write:ai", "write:whatsapp", "read:smart-booking", "read:customer-360", "read:booking-portal"],
+  staff: [
+    "read:appointments",
+    "read:clients",
+    "read:services",
+    "read:products",
+    "read:suppliers",
+    "read:branches",
+    "read:inventory",
+    "write:inventory",
+    "read:ai",
+    "read:whatsapp",
+    "write:appointments",
+    "write:ai",
+    "write:whatsapp",
+    "read:smart-booking",
+    "read:customer-360",
+    "read:booking-portal"
+  ],
   analyst: ["read:*", "read:reports", "read:analytics", "write:analytics", "read:ai", "read:whatsapp", "write:ai", "read:security", "read:quality", "read:deployment", "read:future-features", "write:future-features", "read:finance", "read:customer-360", "read:workflows"]
 };
 
@@ -176,7 +195,8 @@ export function can(role, action, resource, access = {}) {
 export function requirePermission(action, resourceResolver = (req) => req.params.resource || "system") {
   return (req, _res, next) => {
     const resource = resourceResolver(req);
-    if (!can(req.user?.role || "staff", action, resource, req.access || {})) {
+    const role = req.access?.role || req.user?.role || "staff";
+    if (!can(role, action, resource, req.access || {})) {
       next(forbidden());
       return;
     }

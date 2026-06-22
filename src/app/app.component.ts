@@ -257,7 +257,7 @@ export class AppComponent {
   readonly navQuery = signal('');
   readonly activeRoute = signal('');
   readonly previousRoute = signal('');
-  readonly sidebarCompact = signal(localStorage.getItem('aura.sidebarCompact') === '1');
+  readonly sidebarCompact = signal(this.readInitialSidebarCompact());
   readonly expandedGroupIds = signal<string[]>(this.readExpandedGroups());
   private loadedLocalizationTenantId = '';
 
@@ -275,7 +275,7 @@ export class AppComponent {
     { path: '/memberships', label: 'Memberships', icon: 'MB', keywords: 'membership loyalty packages credits renewal' },
     { path: '/suppliers', label: 'Suppliers', icon: 'SP', keywords: 'vendor purchase gst' },
     { path: '/reports', label: 'Reports', icon: 'R', keywords: 'analytics sales report' },
-    { path: '/staff-os/employee-masters', label: 'Staff', icon: 'T', keywords: 'employee team payroll' },
+    { path: '/staff-os/staff-list', label: 'Staff', icon: 'T', keywords: 'employee team payroll' },
     { path: '/staff/my-work', label: 'My Work', icon: 'MW', keywords: 'staff own report live appointments' }
   ];
 
@@ -356,109 +356,45 @@ export class AppComponent {
       id: 'staff',
       label: 'Staff',
       icon: 'ST',
-      primaryPath: '/staff-os/employee-masters',
+      primaryPath: '/staff-os/staff-list',
       items: [
-        {
-          path: '/staff-enterprise',
-          label: 'Command Center',
-          icon: 'CC',
-          keywords: 'staff enterprise command center staff os connected modules my work',
-          children: [
-            { path: '/staff-enterprise', label: 'Staff Enterprise', icon: 'SE', keywords: 'enterprise staff profile documents leave transfer reviews' },
-            { path: '/staff-os', label: 'Staff OS', icon: 'SO', keywords: 'hr operating system attendance payroll' },
-            { path: '/staff', label: 'Staff', icon: 'T', keywords: 'employee staff team' },
-            { path: '/staff/my-work', label: 'My Work', icon: 'MW', keywords: 'staff login live appointments own work report' },
-            { path: '/staff/connected-modules', label: 'Connected Modules', icon: 'CM', keywords: 'staff connected modules reports appointment pos payroll' }
-          ]
-        },
-        {
-          path: '/staff-os/employee-masters',
-          label: 'Masters',
-          icon: 'MS',
-          keywords: 'employee masters category shift leave service assignment bulk update',
-          children: [
-            { path: '/staff-os/staff-list', label: 'Staff List', icon: 'SL', keywords: 'employee list staff directory active inactive' },
-            { path: '/staff-os/staff-categories', label: 'Staff Categories', icon: 'SC', keywords: 'staff category designation role operator admin' },
-            { path: '/staff-os/staff-profile', label: 'Staff Profile', icon: 'SP', keywords: 'staff profile documents skills login' },
-            { path: '/staff-os/employee-masters', label: 'Employee Masters', icon: 'EM', keywords: 'flexi employee masters category attendance leave shift payroll' },
-            { path: '/staff-os/attendance-master', label: 'Attendance Master', icon: 'AM', keywords: 'attendance master absent present holiday day count paid unpaid' },
-            { path: '/staff-os/leave-master', label: 'Leave Master', icon: 'LM', keywords: 'leave master casual paid sick quota monthly yearly' },
-            { path: '/staff-os/shift-master', label: 'Shift Master', icon: 'SM', keywords: 'shift master start time end time weekly off holiday leave' },
-            { path: '/staff-os/attendance-category', label: 'Attendance Category', icon: 'AC', keywords: 'attendance category late mark overtime shift slabs' },
-            { path: '/staff-os/service-assignment', label: 'Service Assign', icon: 'SA', keywords: 'employee wise service assign operator admin flexi' },
-            { path: '/staff-os/bulk-employee-update', label: 'Bulk Employee Update', icon: 'BU', keywords: 'bulk master update employee pan aadhar statutory flexi' }
-          ]
-        },
-        {
-          path: '/staff-os/attendance-dashboard',
-          label: 'Attendance',
-          icon: 'AT',
-          keywords: 'attendance roster leave biometric shift present absent late',
-          children: [
-            { path: '/staff-os/attendance-dashboard', label: 'Attendance Dash', icon: 'AD', keywords: 'attendance dashboard biometric present absent late' },
-            { path: '/staff-os/roster-calendar', label: 'Roster Calendar', icon: 'RC', keywords: 'roster schedule shift calendar availability' },
-            { path: '/staff-os/leave-management', label: 'Leave Mgmt', icon: 'LV', keywords: 'leave request approval balance calendar' },
-            { path: '/staff-os/heatmaps/roster', label: 'Roster Heatmap', icon: 'RH', keywords: 'roster heatmap coverage demand' },
-            { path: '/staff-os/heatmaps/attendance', label: 'Attendance Heatmap', icon: 'AH', keywords: 'attendance heatmap late absent present' },
-            { path: '/staff-os/heatmaps/leave-calendar', label: 'Leave Heatmap', icon: 'LH', keywords: 'leave calendar heatmap coverage' }
-          ]
-        },
-        {
-          path: '/staff-os/payroll-dashboard',
-          label: 'Payroll',
-          icon: 'PY',
-          keywords: 'payroll salary fines allowance deduction statutory tips',
-          children: [
-            { path: '/staff-os/payroll-dashboard', label: 'Payroll Dash', icon: 'PD', keywords: 'payroll export salary payout statutory' },
-            { path: '/staff-os/fines-penalties', label: 'Fines Penalty', icon: 'FP', keywords: 'fine penalty master payroll flexi' },
-            { path: '/staff-os/allowance-deduction', label: 'Allowance Deduction', icon: 'AD', keywords: 'allowance deduction payroll master flexi' },
-            { path: '/staff-os/payroll-salary-structure', label: 'Salary Structure', icon: 'PF', keywords: 'payroll salary structure pf pt esic tds statutory flexi' },
-            { path: '/staff-os/heatmaps/payroll-cost', label: 'Payroll Heatmap', icon: 'PH', keywords: 'payroll cost heatmap salary overtime' },
-            { path: '/pos/tips', label: 'Tips Register', icon: 'TP', keywords: 'tips payout staff pos' }
-          ]
-        },
-        {
-          path: '/commissions',
-          label: 'Commission',
-          icon: 'CO',
-          keywords: 'commission incentives target preview payout',
-          children: [
-            { path: '/commissions', label: 'Commissions', icon: 'CM', keywords: 'commission incentives payout' },
-            { path: '/staff-os/commission-dashboard', label: 'Commission Dash', icon: 'CD', keywords: 'commission rules payout incentive' },
-            { path: '/staff-os/target-incentives/service', label: 'Target Incentives', icon: 'TI', keywords: 'service product membership admin target incentive slabs flexi' },
-            { path: '/staff-os/target-incentives/product', label: 'Product Incentive', icon: 'PI', keywords: 'product target incentive commission retail' },
-            { path: '/staff-os/target-incentives/membership', label: 'Membership Incentive', icon: 'MI', keywords: 'membership target incentive sales' },
-            { path: '/staff-os/target-incentives/branch-admin', label: 'Branch Incentive', icon: 'BI', keywords: 'branch admin target incentive' },
-            { path: '/staff-os/target-incentives/admin', label: 'Admin Incentive', icon: 'AI', keywords: 'admin target incentive master' },
-            { path: '/staff-os/target-incentives/all-transaction', label: 'All Transaction', icon: 'AT', keywords: 'all transaction target incentive' },
-            { path: '/reports/commission-preview', label: 'Commission Preview', icon: 'CP', keywords: 'commission preview payroll' }
-          ]
-        },
-        {
-          path: '/reports/staff-sales',
-          label: 'Reports',
-          icon: 'RP',
-          keywords: 'staff sales invoice reports audit',
-          children: [
-            { path: '/reports/staff-sales', label: 'Staff Sales', icon: 'SSR', keywords: 'staff sales performance' },
-            { path: '/reports/invoices', label: 'Invoice Reports', icon: 'IR', keywords: 'invoice reports service product membership gst due wallet discount audit' }
-          ]
-        },
-        {
-          path: '/staff-os/performance-dashboard',
-          label: 'Training / Performance',
-          icon: 'TP',
-          keywords: 'performance leaderboard training academy score',
-          children: [
-            { path: '/staff-os/performance-dashboard', label: 'Performance', icon: 'PR', keywords: 'performance productivity staff ranking' },
-            { path: '/staff-os/heatmaps/utilization', label: 'Utilization Heatmap', icon: 'UH', keywords: 'utilization heatmap performance productivity' },
-            { path: '/staff-os/leaderboard', label: 'Leaderboard', icon: 'LB', keywords: 'leaderboard staff ranking gamification' },
-            { path: '/staff-os/training-center', label: 'Training Center', icon: 'TC', keywords: 'training staff lessons certification' },
-            { path: '/staff-os/task-board', label: 'Task Board', icon: 'TB', keywords: 'staff task board task assignment followup' },
-            { path: '/staff-os/mobile-preview', label: 'Mobile Preview', icon: 'MP', keywords: 'mobile staff dashboard preview app' },
-            { path: '/training-academy', label: 'Academy', icon: 'TA', keywords: 'training lessons academy' }
-          ]
-        }
+        { path: '/staff-os/staff-list', label: 'Staff List', icon: 'SL', keywords: 'employee list staff directory active inactive' },
+        { path: '/staff-os/staff-categories', label: 'Staff Categories', icon: 'SC', keywords: 'staff category designation role operator admin' },
+        { path: '/staff-os/staff-profile', label: 'Staff Profile', icon: 'SP', keywords: 'staff profile documents skills login' },
+        { path: '/staff-os/bulk-employee-update', label: 'Bulk Employee Update', icon: 'BU', keywords: 'bulk master update employee pan aadhar statutory flexi' },
+        { path: '/staff-os/attendance-dashboard', label: 'Attendance', icon: 'AT', keywords: 'attendance dashboard biometric present absent late' },
+        { path: '/staff-os/face-punch', label: 'Face Punch', icon: 'FP', keywords: 'face punch camera attendance check in checkout' },
+        { path: '/staff-os/attendance-master', label: 'Attendance Master', icon: 'AM', keywords: 'attendance master absent present holiday day count paid unpaid' },
+        { path: '/staff-os/attendance-category', label: 'Attendance Category', icon: 'AC', keywords: 'attendance category late mark overtime shift slabs' },
+        { path: '/staff-os/shift-master', label: 'Shift Master', icon: 'SM', keywords: 'shift master start time end time weekly off holiday leave' },
+        { path: '/staff-os/roster-calendar', label: 'Roster Calendar', icon: 'RC', keywords: 'roster schedule shift calendar availability' },
+        { path: '/staff-os/leave-management', label: 'Leave Management', icon: 'LM', keywords: 'leave request approval balance calendar' },
+        { path: '/staff-os/leave-master', label: 'Leave Master', icon: 'LV', keywords: 'leave master casual paid sick quota monthly yearly' },
+        { path: '/staff-os/payroll-dashboard', label: 'Payroll Dashboard', icon: 'PD', keywords: 'payroll export salary payout statutory' },
+        { path: '/staff-os/payroll-rules', label: 'Payroll Rules', icon: 'PR', keywords: 'payroll rules overtime week off salary formula' },
+        { path: '/staff-os/payroll-salary-structure', label: 'Salary Structure', icon: 'SS', keywords: 'payroll salary structure pf pt esic tds statutory flexi' },
+        { path: '/staff-os/salary-generate', label: 'Salary Generate', icon: 'SG', keywords: 'generate salary payroll preview commission attendance leave' },
+        { path: '/staff-os/fines-penalties', label: 'Fines / Penalty', icon: 'FN', keywords: 'fine penalty master payroll flexi' },
+        { path: '/staff-os/allowance-deduction', label: 'Allowance / Deduction', icon: 'AD', keywords: 'allowance deduction payroll master flexi' },
+        { path: '/staff-os/commission-dashboard', label: 'Commission Dashboard', icon: 'CD', keywords: 'commission rules payout incentive' },
+        { path: '/staff-os/target-incentives/service', label: 'Service Incentives', icon: 'SI', keywords: 'service target incentive slabs flexi commission' },
+        { path: '/staff-os/target-incentives/product', label: 'Product Incentives', icon: 'PI', keywords: 'product target incentive commission retail' },
+        { path: '/staff-os/target-incentives/membership', label: 'Membership Incentives', icon: 'MI', keywords: 'membership target incentive sales' },
+        { path: '/staff-os/target-incentives/branch-admin', label: 'Branch Incentives', icon: 'BI', keywords: 'branch admin target incentive' },
+        { path: '/staff-os/target-incentives/admin', label: 'Admin Incentives', icon: 'AI', keywords: 'admin target incentive master' },
+        { path: '/staff-os/target-incentives/all-transaction', label: 'All Transaction Incentives', icon: 'TI', keywords: 'all transaction target incentive' },
+        { path: '/staff-os/service-assignment', label: 'Service Assignment', icon: 'SA', keywords: 'employee wise service assign operator admin flexi' },
+        { path: '/staff-os/performance-dashboard', label: 'Performance Dashboard', icon: 'PF', keywords: 'performance productivity staff ranking' },
+        { path: '/staff-os/leaderboard', label: 'Leaderboard', icon: 'LB', keywords: 'leaderboard staff ranking gamification' },
+        { path: '/staff-os/training-center', label: 'Training Center', icon: 'TC', keywords: 'training staff lessons certification' },
+        { path: '/staff-os/task-board', label: 'Task Board', icon: 'TB', keywords: 'staff task board task assignment followup' },
+        { path: '/staff-os/mobile-preview', label: 'Mobile Preview', icon: 'MP', keywords: 'mobile staff dashboard preview app' },
+        { path: '/staff-os/heatmaps/roster', label: 'Roster Heatmap', icon: 'RH', keywords: 'roster heatmap coverage demand' },
+        { path: '/staff-os/heatmaps/attendance', label: 'Attendance Heatmap', icon: 'AH', keywords: 'attendance heatmap late absent present' },
+        { path: '/staff-os/heatmaps/utilization', label: 'Utilization Heatmap', icon: 'UH', keywords: 'utilization heatmap performance productivity' },
+        { path: '/staff-os/heatmaps/payroll-cost', label: 'Payroll Cost Heatmap', icon: 'PH', keywords: 'payroll cost heatmap salary overtime' },
+        { path: '/staff-os/heatmaps/leave-calendar', label: 'Leave Calendar Heatmap', icon: 'LH', keywords: 'leave calendar heatmap coverage' },
+        { path: '/staff/my-work', label: 'My Work', icon: 'MW', keywords: 'staff login live appointments own work report' }
       ]
     },
     {
@@ -856,7 +792,7 @@ export class AppComponent {
 
   private isPortalUrl(url: string): boolean {
     const path = this.routePath(url);
-    return path.startsWith('/book') || path.startsWith('/salon-3d');
+    return path.startsWith('/book') || path.startsWith('/salon-3d') || path.startsWith('/cash-drawer-approval');
   }
 
   private isGeneratedTestTenant(tenantId: unknown): boolean {
@@ -870,6 +806,20 @@ export class AppComponent {
       return groups.includes('command') ? groups : ['command', ...groups];
     } catch {
       return ['command', 'frontdesk', 'pos', 'inventory'];
+    }
+  }
+
+  private readInitialSidebarCompact(): boolean {
+    try {
+      const restoreKey = 'aura.sidebarMorningRestore.v1';
+      if (localStorage.getItem(restoreKey) !== '1') {
+        localStorage.setItem(restoreKey, '1');
+        localStorage.setItem('aura.sidebarCompact', '1');
+        return true;
+      }
+      return localStorage.getItem('aura.sidebarCompact') !== '0';
+    } catch {
+      return true;
     }
   }
 
