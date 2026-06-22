@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requirePermission } from "../middleware/rbac.js";
+import { validateBody } from "../validators/request-validator.js";
 import { slotReservationService } from "../services/slot-reservation.service.js";
 
 export const slotReservationRouter = Router();
@@ -8,6 +9,7 @@ export const slotReservationRouter = Router();
 slotReservationRouter.post(
   "/slot-holds",
   requirePermission("write", () => "appointments"),
+  validateBody({ required: ["startTime", "endTime"] }),
   asyncHandler((req, res) => {
     res.status(201).json(slotReservationService.createHold(req.body, req.access));
   })
