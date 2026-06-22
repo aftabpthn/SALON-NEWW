@@ -3079,7 +3079,7 @@ export class ClientDetailComponent implements OnInit {
   clientSales(): ApiRecord[] {
     const id = this.client()?.id;
     if (!id) return [];
-    return this.sales().filter((sale) => String(sale.clientId || sale.customerId || '') === String(id));
+    return this.sales().filter((sale) => String(sale.clientId || sale.client_id || sale.customerId || sale.customer_id || '') === String(id));
   }
 
   clientInvoices(): ApiRecord[] {
@@ -3087,7 +3087,7 @@ export class ClientDetailComponent implements OnInit {
     if (!id) return [];
     const saleIds = new Set(this.clientSales().map((sale) => String(sale.id)));
     return this.invoices()
-      .filter((invoice) => String(invoice.clientId || invoice.customerId || '') === String(id) || saleIds.has(String(invoice.saleId || '')))
+      .filter((invoice) => String(invoice.clientId || invoice.client_id || invoice.customerId || invoice.customer_id || '') === String(id) || saleIds.has(String(invoice.saleId || invoice.sale_id || '')))
       .sort((a, b) => this.dateMs(b.createdAt || b.date) - this.dateMs(a.createdAt || a.date));
   }
 
@@ -3657,19 +3657,13 @@ export class ClientDetailComponent implements OnInit {
   }
 
   productSalesTotal(): number {
-    return this.clientSales().reduce((sum, sale) => {
-      return sum + this.saleItems(sale)
-        .filter((item) => this.itemKind(item) === 'product')
-        .reduce((itemSum, item) => itemSum + this.itemAmount(item), 0);
-    }, 0);
+    return this.clientProductRows().reduce((sum, row) => sum + this.moneyValue(row['total']), 0);
   }
 
   clientProductRows(): ApiRecord[] {
     const rows = new Map<string, ApiRecord>();
-    for (const sale of this.clientSales()) {
-      const saleDate = sale.createdAt || sale.created_at || sale.date || sale.updatedAt;
-      const invoice = this.invoiceForSale(sale);
-      for (const item of this.saleItems(sale).filter((entry) => this.itemKind(entry) === 'product')) {
+    for (const entry of this.clientProductLineItems()) {
+      for (const item of [entry['item'] as ApiRecord].filter((record) => this.itemKind(record) === 'product')) {
         const name = String(item.productName || item.name || item.itemName || 'Product').trim();
         const sku = String(item.sku || item.barcode || item.productCode || item.code || '-');
         const key = `${name}|${sku}`;
@@ -3689,12 +3683,12 @@ export class ClientDetailComponent implements OnInit {
         };
         current['qty'] = this.moneyValue(current['qty']) + quantity;
         current['total'] = this.moneyValue(current['total']) + total;
-        const time = this.dateMs(saleDate);
+        const time = this.dateMs(entry['date']);
         if (time >= Number(current['lastBoughtMs'] || 0)) {
           current['lastBoughtMs'] = time;
-          current['lastBought'] = this.dateLabel(saleDate);
-          current['invoice'] = invoice ? this.invoiceNumber(invoice) : String(sale.invoiceNumber || sale.invoice_no || sale.id || 'POS sale');
-          current['staff'] = String(item.staffName || item.staff_name || sale.staffName || sale.staff_name || this.staffName(item.staffId || item.staff_id || sale.staffId || sale.staff_id || ''));
+          current['lastBought'] = this.dateLabel(entry['date']);
+          current['invoice'] = entry['invoice'];
+          current['staff'] = entry['staff'];
         }
         rows.set(key, current);
       }
@@ -4346,6 +4340,36 @@ export class ClientDetailComponent implements OnInit {
     return [];
   }
 
+  private clientProductLineItems(): ApiRecord[] {
+    const rows: ApiRecord[] = [];
+    const invoicesWithSaleItems = new Set<string>();
+    for (const sale of this.clientSales()) {
+      const invoice = this.invoiceForSale(sale);
+      const productItems = this.saleItems(sale).filter((item) => this.itemKind(item) === 'product');
+      if (invoice && productItems.length) invoicesWithSaleItems.add(String(invoice.id || ''));
+      for (const item of productItems) {
+        rows.push({
+          item,
+          date: sale.createdAt || sale.created_at || sale.date || sale.updatedAt,
+          invoice: invoice ? this.invoiceNumber(invoice) : String(sale.invoiceNumber || sale.invoice_no || sale.id || 'POS sale'),
+          staff: String(item.staffName || item.staff_name || sale.staffName || sale.staff_name || this.staffName(item.staffId || item.staff_id || sale.staffId || sale.staff_id || ''))
+        });
+      }
+    }
+    for (const invoice of this.clientInvoices()) {
+      if (invoicesWithSaleItems.has(String(invoice.id || ''))) continue;
+      for (const item of this.invoiceItems(invoice).filter((entry) => this.itemKind(entry) === 'product')) {
+        rows.push({
+          item,
+          date: invoice.createdAt || invoice.created_at || invoice.date || invoice.updatedAt,
+          invoice: this.invoiceNumber(invoice),
+          staff: String(item.staffName || item.staff_name || invoice.staffName || invoice.staff_name || this.staffName(item.staffId || item.staff_id || this.invoiceStaffId(invoice)))
+        });
+      }
+    }
+    return rows;
+  }
+
   saleSummary(saleId: unknown): string {
     const sale = this.sales().find((item) => String(item.id) === String(saleId));
     if (!sale) return 'POS sale';
@@ -4369,14 +4393,33 @@ export class ClientDetailComponent implements OnInit {
   private invoiceItemNames(invoice: ApiRecord): string[] {
     const sale = this.saleForInvoice(invoice);
     const saleItems = sale ? this.saleItems(sale) : [];
-    const direct = invoice.items || invoice.lineItems;
-    const invoiceItems = Array.isArray(direct) ? direct : this.readJson(direct).items;
-    const items = saleItems.length ? saleItems : (Array.isArray(invoiceItems) ? invoiceItems : []);
+    const items = saleItems.length ? saleItems : this.invoiceItems(invoice);
     const names = items
       .map((item: ApiRecord) => item.name || item.serviceName || item.productName || item.packageName || item.membershipName)
       .filter(Boolean)
       .map((item: unknown) => String(item));
     return names.length ? names : [this.invoiceSummary(invoice)].filter((item) => item && item !== 'POS sale');
+  }
+
+  private invoiceItems(invoice: ApiRecord): ApiRecord[] {
+    const direct = invoice.items || invoice.lineItems || invoice.line_items || invoice.itemLines || invoice.item_lines;
+    if (Array.isArray(direct)) return direct as ApiRecord[];
+    if (typeof direct === 'string') {
+      try {
+        const parsed = JSON.parse(direct);
+        if (Array.isArray(parsed)) return parsed as ApiRecord[];
+        if (parsed && typeof parsed === 'object') {
+          return this.readRecordList((parsed as ApiRecord)['items'] || (parsed as ApiRecord)['lineItems'] || (parsed as ApiRecord)['line_items']);
+        }
+      } catch {
+        return [];
+      }
+    }
+    if (direct && typeof direct === 'object') {
+      const record = direct as ApiRecord;
+      return this.readRecordList(record['items'] || record['lineItems'] || record['line_items']);
+    }
+    return [];
   }
 
   private invoiceStaffId(invoice: ApiRecord): string {
@@ -4424,7 +4467,11 @@ export class ClientDetailComponent implements OnInit {
   }
 
   private itemAmount(item: ApiRecord): number {
-    return this.moneyValue(item.total ?? item.amount ?? item.netAmount ?? item.price ?? item.rate ?? 0);
+    const direct = item.total ?? item.lineTotal ?? item.line_total ?? item.finalAmount ?? item.final_amount ?? item.amount ?? item.netAmount ?? item.net_amount ?? item.subtotal;
+    if (direct !== undefined && direct !== null && direct !== '') return this.moneyValue(direct);
+    const unit = this.moneyValue(item.price ?? item.rate ?? item.unitPrice ?? item.unit_price ?? item.sellingPrice ?? item.selling_price ?? 0);
+    const qty = this.moneyValue(item.quantity ?? item.qty ?? 1) || 1;
+    return this.moneyValue(unit * qty);
   }
 
   private packageBelongsToClient(item: ApiRecord): boolean {
