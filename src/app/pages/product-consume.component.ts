@@ -704,6 +704,38 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
               </div>
               <small>Tube, bottle, jar aur can pehle zero honge, phir next container open hoga.</small>
             </div>
+            <div class="container-scan">
+              <div>
+                <span class="eyebrow">QR / barcode scan</span>
+                <strong>Container instant history</strong>
+              </div>
+              <input [(ngModel)]="containerScanCode" placeholder="Scan or paste container QR / barcode">
+              <button type="button" class="ghost" (click)="scanContainer()">Scan</button>
+            </div>
+            <article class="scan-result" *ngIf="scannedContainer() as scan">
+              <div>
+                <strong>{{ scan['product']?.name || scan['container']?.productName }}</strong>
+                <span>{{ scan['container']?.containerCode }} · {{ scan['container']?.qrCode }}</span>
+              </div>
+              <div>
+                <span>Status</span>
+                <strong>{{ scan['summary']?.status || scan['container']?.status }}</strong>
+              </div>
+              <div>
+                <span>Balance</span>
+                <strong>{{ scan['summary']?.balanceText }}</strong>
+              </div>
+              <div>
+                <span>Used</span>
+                <strong>{{ scan['summary']?.usedText }}</strong>
+              </div>
+              <div class="scan-history">
+                <small *ngFor="let entry of scanEntries().slice(0, 4)">
+                  {{ entry['clientName'] || entry['usageType'] || 'Usage' }} · {{ entry['usedQty'] || 0 }} {{ entry['unit'] }} · {{ entry['balanceAfter'] || 0 }} left
+                </small>
+                <small *ngIf="!scanEntries().length">No usage entry yet.</small>
+              </div>
+            </article>
             <article class="ledger-product" *ngFor="let product of ledgerProducts()">
               <div class="ledger-summary">
                 <div>
@@ -718,6 +750,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
                 <div>
                   <span>{{ product['stockUnit'] }} #{{ container['containerNo'] }}</span>
                   <strong>{{ qty(container['balanceQty'], product['measureUnit']) }} left</strong>
+                  <small>QR {{ container['qrCode'] || container['barcode'] }}</small>
                 </div>
                 <div class="progress"><i [style.width.%]="containerProgress(container)"></i></div>
                 <small>{{ qty(container['usedQty'], product['measureUnit']) }} used from {{ qty(container['capacityQty'], product['measureUnit']) }}</small>
@@ -914,6 +947,13 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .ledger-head, .ledger-summary, .active-container { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .ledger-head h3 { margin: 2px 0 0; }
     .ledger-head small, .ledger-product small, .ledger-summary span, .history-row span { color: #64748b; }
+    .container-scan { display: grid; grid-template-columns: 1.1fr 1.4fr auto; gap: 10px; align-items: end; border: 1px solid #dcebea; border-radius: 14px; padding: 12px; background: white; }
+    .container-scan div { display: grid; gap: 3px; }
+    .scan-result { border: 1px solid #9bd8cf; border-radius: 14px; padding: 12px; background: #ecfdf5; display: grid; grid-template-columns: 1.4fr repeat(3, .7fr); gap: 10px; align-items: start; }
+    .scan-result div { display: grid; gap: 4px; }
+    .scan-result span, .scan-result small { color: #0f766e; }
+    .scan-history { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+    .scan-history small { border: 1px solid #9bd8cf; border-radius: 999px; padding: 5px 8px; background: white; }
     .ledger-product { background: white; border: 1px solid #dcebea; border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
     .ledger-summary { display: grid; grid-template-columns: 1.6fr repeat(3, minmax(90px, .5fr)); }
     .ledger-summary div { display: grid; gap: 4px; }
@@ -946,7 +986,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
       .module-hero, .workspace { display: grid; }
       .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid, .next-control-grid, .deep-control-grid, .owner-control-grid { grid-template-columns: 1fr; }
-      .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override { grid-template-columns: 1fr 1fr; }
+      .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override, .container-scan, .scan-result { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
       .draft-list { border-right: 0; border-bottom: 1px solid #dcebea; max-height: 360px; }
@@ -969,6 +1009,7 @@ export class ProductConsumeComponent {
   readonly statusFilter = signal('');
   readonly products = signal<ProductRow[]>([]);
   readonly backbarLedger = signal<ApiRecord | null>(null);
+  readonly scannedContainer = signal<ApiRecord | null>(null);
   readonly backbarReport = signal<ApiRecord | null>(null);
   readonly backbarDashboard = signal<ApiRecord | null>(null);
   readonly controlLedgerReport = signal<ApiRecord | null>(null);
@@ -979,6 +1020,7 @@ export class ProductConsumeComponent {
   auditFilters = { branchId: '', staffId: '', startDate: '', endDate: '' };
   ledgerFilters = { branchId: '', productId: '', staffId: '', usageType: '', startDate: '', endDate: '' };
   overrideReason = '';
+  containerScanCode = '';
   dashboardPeriod = 'daily';
   productQuery = '';
   productPickerOpen = false;
@@ -1163,6 +1205,24 @@ export class ProductConsumeComponent {
     });
   }
 
+  scanContainer(): void {
+    const code = this.containerScanCode.trim();
+    if (!code) {
+      this.error.set('Container QR/barcode scan karo.');
+      return;
+    }
+    this.api.list<ApiRecord>('inventory-intelligence/backbar-container-scan', {
+      code,
+      branchId: this.api.selectedBranchId()
+    }).subscribe({
+      next: (scan) => {
+        this.scannedContainer.set(scan || null);
+        this.message.set('Container history loaded.');
+      },
+      error: (err) => this.error.set(err?.error?.error || err?.message || 'Container QR/barcode not found.')
+    });
+  }
+
   loadBackbarReport(): void {
     this.api.list<ApiRecord>('inventory-intelligence/backbar-owner-report', { branchId: this.api.selectedBranchId(), limit: 100 }).subscribe({
       next: (report) => this.backbarReport.set(report || null),
@@ -1304,6 +1364,10 @@ export class ProductConsumeComponent {
 
   ledgerProducts(): ApiRecord[] {
     return (this.backbarLedger()?.['products'] || []) as ApiRecord[];
+  }
+
+  scanEntries(): ApiRecord[] {
+    return (this.scannedContainer()?.['entries'] || []) as ApiRecord[];
   }
 
   ledgerAlerts(product: ApiRecord): ApiRecord[] {

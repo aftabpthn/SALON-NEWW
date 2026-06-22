@@ -39,6 +39,8 @@ function ensureBackbarSchema() {
       usedQty REAL NOT NULL DEFAULT 0,
       balanceQty REAL NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'open',
+      qrCode TEXT NOT NULL DEFAULT '',
+      barcode TEXT NOT NULL DEFAULT '',
       openedFromDraftId TEXT NOT NULL DEFAULT '',
       openedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       finishedAt TEXT NOT NULL DEFAULT '',
@@ -124,7 +126,16 @@ function ensureBackbarSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_backbar_override_requests_scope ON backbar_override_requests(tenant_id, branch_id, status, createdAt);
   `);
+  ensureContainerTrackingColumns();
   schemaReady = true;
+}
+
+function ensureContainerTrackingColumns() {
+  const columns = db.prepare("PRAGMA table_info(backbar_product_containers)").all().map((column) => column.name);
+  if (!columns.includes("qrCode")) db.prepare("ALTER TABLE backbar_product_containers ADD COLUMN qrCode TEXT DEFAULT ''").run();
+  if (!columns.includes("barcode")) db.prepare("ALTER TABLE backbar_product_containers ADD COLUMN barcode TEXT DEFAULT ''").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_backbar_containers_qr ON backbar_product_containers(tenant_id, qrCode)").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_backbar_containers_barcode ON backbar_product_containers(tenant_id, barcode)").run();
 }
 
 function ensureProductUnitColumns() {
@@ -216,10 +227,13 @@ function mapContainer(row = {}) {
   const mapped = camel(row);
   const containerNo = Number(mapped.containerNo || 0);
   const stockUnit = mapped.stockUnit || "pcs";
+  const trackingCode = mapped.qrCode || mapped.barcode || containerTrackingCode(mapped.branchId || mapped.branch_id || "", mapped.productId || "", containerNo || 1);
   return {
     ...mapped,
     containerNo,
     containerCode: `${stockUnit} #${containerNo || 1}`,
+    qrCode: trackingCode,
+    barcode: mapped.barcode || trackingCode,
     capacityQty: money(mapped.capacityQty),
     usedQty: money(mapped.usedQty),
     usedQuantity: money(mapped.usedQty),
@@ -298,6 +312,10 @@ function daysOpen(dateText = "") {
   const opened = new Date(dateText || 0).getTime();
   if (!opened) return 0;
   return Math.max(0, Math.floor((Date.now() - opened) / 86400000));
+}
+
+function containerTrackingCode(branchId = "", productId = "", containerNo = 0) {
+  return `BB-${String(branchId || "BR").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "BR"}-${String(productId || "PRODUCT").replace(/[^a-z0-9]/gi, "").slice(0, 12) || "PRODUCT"}-${containerNo}`;
 }
 
 export class BackbarProductConsumptionService {
@@ -506,13 +524,14 @@ export class BackbarProductConsumptionService {
     `).get(access.tenantId, branchId, product.id).maxNo, 0) + 1;
     const id = makeId("bbpc");
     const createdAt = now();
+    const trackingCode = containerTrackingCode(branchId, product.id, nextNo);
     db.prepare(`
       INSERT INTO backbar_product_containers (
         id, tenant_id, branch_id, productId, productName, containerNo, stockUnit, measureUnit,
-        capacityQty, usedQty, balanceQty, status, openedFromDraftId, openedAt, createdBy, updatedBy, createdAt, updatedAt
+        capacityQty, usedQty, balanceQty, status, qrCode, barcode, openedFromDraftId, openedAt, createdBy, updatedBy, createdAt, updatedAt
       ) VALUES (
         @id, @tenant_id, @branch_id, @productId, @productName, @containerNo, @stockUnit, @measureUnit,
-        @capacityQty, 0, @capacityQty, 'open', @openedFromDraftId, @openedAt, @createdBy, @updatedBy, @createdAt, @updatedAt
+        @capacityQty, 0, @capacityQty, 'open', @qrCode, @barcode, @openedFromDraftId, @openedAt, @createdBy, @updatedBy, @createdAt, @updatedAt
       )
     `).run({
       id,
@@ -524,6 +543,8 @@ export class BackbarProductConsumptionService {
       stockUnit,
       measureUnit,
       capacityQty,
+      qrCode: trackingCode,
+      barcode: trackingCode,
       openedFromDraftId: draftId,
       openedAt: createdAt,
       createdBy: access.userId || "",
@@ -2169,6 +2190,84 @@ export class BackbarProductConsumptionService {
       `).run(now(), transactionId, access.userId || "", now(), container.id, access.tenantId);
     }
     return { container: mapContainer(db.prepare("SELECT * FROM backbar_product_containers WHERE id = ? AND tenant_id = ?").get(container.id, access.tenantId)), entry, alerts, deduction };
+  }
+
+  scanContainer(query = {}, access = {}) {
+    ensureBackbarSchema();
+    const rawCode = String(query.code || query.qrCode || query.qr_code || query.barcode || query.id || "").trim();
+    if (!rawCode) throw conflict("Container QR/barcode is required");
+    const branchId = query.branchId || query.branch_id || access.requestedBranchId || access.branchId || "";
+    if (branchId) assertBranch(access, branchId);
+    const params = { tenant_id: access.tenantId, code: rawCode };
+    const filters = ["tenant_id = @tenant_id", "(id = @code OR qrCode = @code OR barcode = @code)"];
+    if (branchId) {
+      filters.push("branch_id = @branch_id");
+      params.branch_id = branchId;
+    }
+    let container = db.prepare(`
+      SELECT * FROM backbar_product_containers
+      WHERE ${filters.join(" AND ")}
+      LIMIT 1
+    `).get(params);
+    if (!container && rawCode.toUpperCase().startsWith("BB-")) {
+      const parts = rawCode.split("-");
+      const containerNo = number(parts[parts.length - 1], 0);
+      const productPart = parts.length >= 4 ? parts[parts.length - 2] : "";
+      if (containerNo > 0 && productPart) {
+        container = db.prepare(`
+          SELECT * FROM backbar_product_containers
+          WHERE tenant_id = @tenant_id
+            ${branchId ? "AND branch_id = @branch_id" : ""}
+            AND containerNo = @containerNo
+            AND replace(productId, '-', '') LIKE @productLike
+          ORDER BY updatedAt DESC
+          LIMIT 1
+        `).get({ ...params, containerNo, productLike: `%${productPart}%` });
+      }
+    }
+    if (!container) throw notFound("Backbar container not found for this QR/barcode");
+    if (container.branch_id) assertBranch(access, container.branch_id);
+    const mapped = mapContainer(container);
+    const product = db.prepare("SELECT * FROM products WHERE id = ? AND tenantId = ?").get(container.productId, access.tenantId) || {};
+    const entries = db.prepare(`
+      SELECT * FROM backbar_product_usage_entries
+      WHERE tenant_id = ? AND containerId = ?
+      ORDER BY createdAt DESC
+      LIMIT 100
+    `).all(access.tenantId, container.id).map(mapUsage);
+    const alerts = db.prepare(`
+      SELECT * FROM backbar_product_alerts
+      WHERE tenant_id = ? AND containerId = ?
+      ORDER BY createdAt DESC
+      LIMIT 50
+    `).all(access.tenantId, container.id).map(mapAlert);
+    const approvals = db.prepare(`
+      SELECT * FROM backbar_override_requests
+      WHERE tenant_id = ? AND activeContainerId = ?
+      ORDER BY createdAt DESC
+      LIMIT 20
+    `).all(access.tenantId, container.id).map(mapOverrideRequest);
+    return {
+      code: rawCode,
+      product: {
+        id: product.id || container.productId,
+        name: product.name || container.productName,
+        stock: number(product.stock, 0),
+        unit: product.unit || container.stockUnit
+      },
+      container: mapped,
+      summary: {
+        usedText: `${mapped.usedQty} ${mapped.measureUnit}`,
+        balanceText: `${mapped.balanceQty} ${mapped.measureUnit}`,
+        entries: entries.length,
+        alerts: alerts.filter((alert) => alert.status === "open").length,
+        approvals: approvals.length,
+        status: mapped.status
+      },
+      entries,
+      alerts,
+      approvals
+    };
   }
 
   listOverrideRequests(query = {}, access = {}) {

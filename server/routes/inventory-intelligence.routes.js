@@ -386,6 +386,14 @@ inventoryIntelligenceRouter.post(
   })
 );
 
+inventoryIntelligenceRouter.get(
+  "/inventory-intelligence/backbar-container-scan",
+  requirePermission("read", () => "inventory"),
+  asyncHandler((req, res) => {
+    res.json(backbarProductConsumptionService.scanContainer(req.query, req.access));
+  })
+);
+
 inventoryIntelligenceRouter.post(
   "/inventory-intelligence/backbar-products/:productId/override-open",
   requirePermission("write", () => "inventory"),
