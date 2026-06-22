@@ -265,7 +265,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="table-toolbar">
           <label class="search-field">
             <span>Search/filter</span>
-            <input [(ngModel)]="query" placeholder="Name, phone, tag, membership" />
+            <input [ngModel]="query" (ngModelChange)="onClientQueryChange($event)" placeholder="Name, phone, tag, membership" />
           </label>
           <div class="segmented">
             <button type="button" *ngFor="let tag of ['', 'VIP', 'new', 'inactive', 'high spender']" [class.active]="tagFilter() === tag" (click)="tagFilter.set(tag)">
@@ -350,6 +350,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </tr>
             </tbody>
           </table>
+          <div class="client-list-footer">
+            <span>{{ clients().length }} clients loaded</span>
+            <button class="ghost-button mini" type="button" (click)="loadMoreClients()" [disabled]="!clientListHasMore() || clientListLoadingMore()">
+              {{ clientListLoadingMore() ? 'Loading...' : (clientListHasMore() ? 'Load more' : 'All loaded') }}
+            </button>
+          </div>
         </div>
       </section>
     </section>
@@ -952,6 +958,10 @@ export class ClientsComponent implements OnInit {
   readonly selectedMetricCategory = signal('All');
   readonly reportLoading = signal(true);
   readonly reportError = signal('');
+  readonly clientListHasMore = signal(false);
+  readonly clientListLoadingMore = signal(false);
+  private readonly clientListPageSize = 150;
+  private clientQueryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly usefulMetricCardIds = new Set([
     'last-visit',
     'favorite-service',
@@ -1019,27 +1029,55 @@ export class ClientsComponent implements OnInit {
     return visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
   }
 
-  load(): void {
-    this.loading.set(true);
+  load(options: { append?: boolean } = {}): void {
+    const append = options.append === true;
+    if (append) {
+      this.clientListLoadingMore.set(true);
+    } else {
+      this.loading.set(true);
+      this.clientListHasMore.set(false);
+    }
     this.error.set('');
     const branchId = this.api.selectedBranchId();
     forkJoin({
-      clients: this.api.list<ApiRecord[]>('clients', { limit: 10000, compact: 1, branchId }),
+      clients: this.api.list<ApiRecord[]>('clients', {
+        limit: this.clientListPageSize,
+        offset: append ? this.clients().length : 0,
+        compact: 1,
+        q: this.query.trim(),
+        branchId
+      }),
       invoices: this.api.list<ApiRecord[]>('invoices', { limit: 1000, branchId }),
       walletTransactions: this.api.list<ApiRecord[]>('walletTransactions', { limit: 5000, branchId })
     }).subscribe({
       next: ({ clients, invoices, walletTransactions }) => {
-        const linkedWalletClients = this.withWalletBalances(clients || [], walletTransactions || []);
-        this.clients.set(this.withUnpaidBalances(linkedWalletClients, invoices || []));
+        const rows = clients || [];
+        const linkedWalletClients = this.withWalletBalances(rows, walletTransactions || []);
+        const hydratedClients = this.withUnpaidBalances(linkedWalletClients, invoices || []);
+        this.clients.set(append ? [...this.clients(), ...hydratedClients] : hydratedClients);
+        this.clientListHasMore.set(rows.length === this.clientListPageSize);
         this.selectedClientIds.set(this.selectedClientIds().filter((id) => this.clients().some((client) => client.id === id)));
         this.openPendingEditClient();
         this.loading.set(false);
+        this.clientListLoadingMore.set(false);
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to load clients');
         this.loading.set(false);
+        this.clientListLoadingMore.set(false);
       }
     });
+  }
+
+  onClientQueryChange(value: string): void {
+    this.query = value || '';
+    if (this.clientQueryTimer) clearTimeout(this.clientQueryTimer);
+    this.clientQueryTimer = setTimeout(() => this.load(), 250);
+  }
+
+  loadMoreClients(): void {
+    if (!this.clientListHasMore() || this.clientListLoadingMore()) return;
+    this.load({ append: true });
   }
 
   loadReports(): void {

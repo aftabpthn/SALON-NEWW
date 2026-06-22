@@ -1,4 +1,4 @@
-import { columnsFor, db, resources, serialize } from "../db.js";
+import { columnsFor, db, deserialize, resources, serialize } from "../db.js";
 import { AppError, conflict, notFound } from "../utils/app-error.js";
 import { repositoryForResource, repositories } from "../repositories/repository-registry.js";
 import { availabilityAugmentService } from "./availability-augment.service.js";
@@ -45,16 +45,54 @@ function compactClientRow(row) {
   };
 }
 
+function clientListNumber(value, fallback, max) {
+  const next = Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(next) || next <= 0) return fallback;
+  return Math.min(next, max);
+}
+
 export class ResourceService {
   list(resource, query, access) {
     if (query?.branchId) tenantService.assertBranchAccess(access, query.branchId);
     const listQuery = resource === "clients" && !query?.limit ? { ...query, limit: 10000 } : query;
+    if (resource === "clients" && truthy(listQuery?.compact)) {
+      return this.listCompactClients(listQuery, access);
+    }
     const rows = this.repository(resource).list(listQuery, this.listScope(resource, listQuery, access));
     if (resource === "clients" && !truthy(query?.includeDeleted)) {
       const activeRows = rows.filter((row) => !row.deletedAt);
       return truthy(query?.compact) ? activeRows.map(compactClientRow) : activeRows;
     }
     return rows;
+  }
+
+  listCompactClients(query = {}, access = {}) {
+    const scope = this.listScope("clients", query, access);
+    const where = ["tenantId = @tenantId"];
+    const params = {
+      tenantId: scope.tenantId || access.tenantId,
+      limit: clientListNumber(query.limit, 150, 1000),
+      offset: Math.max(0, Number.parseInt(String(query.offset || 0), 10) || 0)
+    };
+    const branchId = query.branchId || scope.branchId || "";
+    if (branchId) {
+      where.push("branchId = @branchId");
+      params.branchId = branchId;
+    }
+    if (!truthy(query.includeDeleted)) {
+      where.push("(deletedAt IS NULL OR deletedAt = '')");
+    }
+    const search = String(query.q || query.search || "").trim();
+    if (search) {
+      where.push("(name LIKE @q OR phone LIKE @q OR email LIKE @q OR tags LIKE @q OR notes LIKE @q OR originalRecordId LIKE @q)");
+      params.q = `%${search}%`;
+    }
+    return db.prepare(`
+      SELECT * FROM clients
+      WHERE ${where.join(" AND ")}
+      ORDER BY createdAt DESC
+      LIMIT @limit OFFSET @offset
+    `).all(params).map((row) => compactClientRow(deserialize("clients", row)));
   }
 
   get(resource, id, access) {
