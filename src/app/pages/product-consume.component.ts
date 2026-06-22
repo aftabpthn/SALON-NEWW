@@ -194,6 +194,13 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
           <article><span>Approvals</span><strong>{{ report['summary']?.pendingApprovals || 0 }}</strong><small>pending</small></article>
           <article><span>Alerts</span><strong>{{ report['summary']?.alerts || 0 }}</strong><small>open</small></article>
         </div>
+        <div class="owner-metrics">
+          <article><span>Pending consume</span><strong>{{ report['summary']?.pendingConsumes || 0 }}</strong><small>invoice gap</small></article>
+          <article><span>Reason gaps</span><strong>{{ report['summary']?.reasonComplianceIssues || 0 }}</strong><small>audit missing</small></article>
+          <article><span>Categories</span><strong>{{ report['summary']?.usageCategories || 0 }}</strong><small>client/waste split</small></article>
+          <article><span>Efficiency rows</span><strong>{{ report['summary']?.containerEfficiencyRows || 0 }}</strong><small>container ROI</small></article>
+          <article><span>Control score</span><strong>{{ report['summary']?.productControlScores || 0 }}</strong><small>product risk</small></article>
+        </div>
         <div class="report-grid">
           <div class="report-table">
             <h4>Product-wise usage</h4>
@@ -336,6 +343,62 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
               <small>{{ row['daysToStockout'] || 'NA' }} days left · reorder {{ row['reorderQty'] || 0 }}</small>
             </div>
             <small *ngIf="!ledgerReorderRows().length">No reorder signal.</small>
+          </article>
+        </div>
+        <div class="owner-control-grid">
+          <article>
+            <h4>Pending consume drafts</h4>
+            <div class="risk-row" *ngFor="let row of ledgerPendingConsumeRows().slice(0, 5)" [class.high]="(row['ageHours'] || 0) >= 24">
+              <strong>{{ row['invoiceNumber'] || row['draftId'] }}</strong>
+              <span>{{ row['clientName'] || 'Walk-in client' }} · {{ row['serviceName'] || 'Service' }}</span>
+              <small>{{ row['lineCount'] || 0 }} lines · {{ row['ageHours'] || 0 }}h pending · {{ money(row['actualCost'] || 0) }}</small>
+            </div>
+            <small *ngIf="!ledgerPendingConsumeRows().length">No pending consume drafts.</small>
+          </article>
+          <article>
+            <h4>Reason compliance</h4>
+            <div class="risk-row" *ngFor="let row of ledgerReasonComplianceRows().slice(0, 5)" [class.high]="row['severity'] === 'high'">
+              <strong>{{ row['productName'] || 'Product' }}</strong>
+              <span>{{ row['staffName'] || 'Unassigned' }} · {{ row['entityType'] || 'usage' }}</span>
+              <small>{{ row['missingReasons'] || 0 }}/{{ row['totalLines'] || 0 }} missing · {{ money(row['cost'] || 0) }}</small>
+            </div>
+            <small *ngIf="!ledgerReasonComplianceRows().length">No missing reason issue.</small>
+          </article>
+          <article>
+            <h4>Usage category cost</h4>
+            <div class="risk-row" *ngFor="let row of ledgerUsageCategoryRows().slice(0, 5)" [class.high]="row['riskLevel'] === 'high'">
+              <strong>{{ row['categoryName'] || row['usageType'] || 'Usage' }}</strong>
+              <span>{{ row['totalUsedText'] || '0' }} · {{ row['count'] || 0 }} entries</span>
+              <small>{{ money(row['cost'] || 0) }} · exceptions {{ row['exceptionCount'] || 0 }}</small>
+            </div>
+            <small *ngIf="!ledgerUsageCategoryRows().length">No usage category rows.</small>
+          </article>
+          <article>
+            <h4>Container efficiency</h4>
+            <div class="risk-row" *ngFor="let row of ledgerContainerEfficiencyRows().slice(0, 5)" [class.high]="row['riskLevel'] === 'high'">
+              <strong>{{ row['productName'] }} #{{ row['containerNo'] }}</strong>
+              <span>{{ row['efficiencyPct'] || 0 }}% client use · {{ row['balanceQty'] || 0 }} {{ row['measureUnit'] }} left</span>
+              <small>Client {{ money(row['clientCost'] || 0) }} · exception {{ money(row['exceptionCost'] || 0) }}</small>
+            </div>
+            <small *ngIf="!ledgerContainerEfficiencyRows().length">No container efficiency rows.</small>
+          </article>
+          <article>
+            <h4>Client product profit</h4>
+            <div class="risk-row" *ngFor="let row of ledgerClientProfitRows().slice(0, 5)" [class.high]="(row['marginPct'] || 0) < 35">
+              <strong>{{ row['clientName'] || 'Walk-in client' }}</strong>
+              <span>Revenue {{ money(row['revenue'] || 0) }} · product {{ money(row['productCost'] || 0) }}</span>
+              <small>Profit {{ money(row['grossAfterProduct'] || 0) }} · {{ row['marginPct'] || 0 }}% · {{ row['invoices'] || 0 }} invoices</small>
+            </div>
+            <small *ngIf="!ledgerClientProfitRows().length">No client profit rows.</small>
+          </article>
+          <article>
+            <h4>Product control score</h4>
+            <div class="risk-row" *ngFor="let row of ledgerProductControlScoreRows().slice(0, 5)" [class.high]="row['riskLevel'] === 'high'">
+              <strong>{{ row['productName'] || 'Product' }}</strong>
+              <span>Score {{ row['score'] || 0 }} · {{ row['riskLevel'] || 'watch' }}</span>
+              <small>{{ row['reasonText'] || 'clean' }}</small>
+            </div>
+            <small *ngIf="!ledgerProductControlScoreRows().length">No product control score rows.</small>
           </article>
         </div>
         <div class="report-feed">
@@ -678,15 +741,18 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .risk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .next-control-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .deep-control-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .owner-control-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .risk-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
     .next-control-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
     .deep-control-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
+    .owner-control-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
     .risk-grid h4 { margin: 0; }
     .next-control-grid h4 { margin: 0; }
     .deep-control-grid h4 { margin: 0; }
+    .owner-control-grid h4 { margin: 0; }
     .risk-row { border: 1px solid #edf4f3; border-radius: 10px; padding: 9px; display: grid; gap: 3px; background: #f8fbfa; }
     .risk-row.high { background: #fff1f2; border-color: #fecdd3; }
-    .risk-row span, .risk-row small, .risk-grid > article > small, .next-control-grid > article > small, .deep-control-grid > article > small { color: #64748b; }
+    .risk-row span, .risk-row small, .risk-grid > article > small, .next-control-grid > article > small, .deep-control-grid > article > small, .owner-control-grid > article > small { color: #64748b; }
     .ledger-head, .ledger-summary, .active-container { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .ledger-head h3 { margin: 2px 0 0; }
     .ledger-head small, .ledger-product small, .ledger-summary span, .history-row span { color: #64748b; }
@@ -721,7 +787,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     @media (max-width: 900px) {
       .module-hero, .workspace { display: grid; }
       .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid, .next-control-grid, .deep-control-grid { grid-template-columns: 1fr; }
+      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid, .next-control-grid, .deep-control-grid, .owner-control-grid { grid-template-columns: 1fr; }
       .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
@@ -1168,6 +1234,30 @@ export class ProductConsumeComponent {
 
   ledgerReorderRows(): ApiRecord[] {
     return (this.controlLedgerReport()?.['reorderRows'] || []) as ApiRecord[];
+  }
+
+  ledgerPendingConsumeRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['pendingConsumeRows'] || []) as ApiRecord[];
+  }
+
+  ledgerReasonComplianceRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['reasonComplianceRows'] || []) as ApiRecord[];
+  }
+
+  ledgerUsageCategoryRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['usageCategoryRows'] || []) as ApiRecord[];
+  }
+
+  ledgerContainerEfficiencyRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['containerEfficiencyRows'] || []) as ApiRecord[];
+  }
+
+  ledgerClientProfitRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['clientProfitRows'] || []) as ApiRecord[];
+  }
+
+  ledgerProductControlScoreRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['productControlScoreRows'] || []) as ApiRecord[];
   }
 
   ledgerVarianceRows(): ApiRecord[] {

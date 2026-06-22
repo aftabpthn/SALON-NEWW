@@ -920,6 +920,34 @@ export class BackbarProductConsumptionService {
     const draftRows = tableExists("product_consume_drafts")
       ? db.prepare(`SELECT * FROM product_consume_drafts WHERE ${draftFilters.join(" AND ")} ORDER BY updated_at DESC LIMIT @limit`).all(draftParams)
       : [];
+    const pendingDraftFilters = draftFilters.map((filter) => filter === "status = 'confirmed'" ? "COALESCE(status, '') <> 'confirmed'" : filter);
+    const pendingDraftRows = tableExists("product_consume_drafts")
+      ? db.prepare(`SELECT * FROM product_consume_drafts WHERE ${pendingDraftFilters.join(" AND ")} ORDER BY updated_at DESC LIMIT @limit`).all(draftParams)
+      : [];
+    const pendingConsumeRows = pendingDraftRows.map((draft) => {
+      const lines = parseLineItems(draft).filter((line) => {
+        const lineProductId = line.productId || line.product_id || "";
+        return !productId || lineProductId === productId;
+      });
+      const updatedAt = draft.updated_at || draft.created_at || "";
+      return {
+        draftId: draft.id,
+        invoiceId: draft.invoice_id || "",
+        invoiceNumber: draft.invoice_number || draft.invoice_no || draft.invoice_id || "",
+        status: draft.status || "draft",
+        serviceId: draft.service_id || "",
+        serviceName: draft.service_name || "Service",
+        clientId: draft.client_id || "",
+        clientName: draft.client_name || "Walk-in client",
+        staffId: draft.staff_id || "",
+        staffName: draft.staff_name || "Unassigned",
+        lineCount: lines.length,
+        expectedCost: money(lines.reduce((sum, line) => sum + number(line.expectedCost ?? line.expected_cost, 0), 0)),
+        actualCost: money(lines.reduce((sum, line) => sum + number(line.actualCost ?? line.actual_cost, 0), 0)),
+        ageHours: updatedAt ? Math.max(0, Math.round((Date.now() - new Date(updatedAt).getTime()) / 3600000)) : 0,
+        updatedAt
+      };
+    }).filter((row) => row.lineCount > 0).slice(0, 80);
     const draftInvoiceIds = [...new Set(draftRows.map((draft) => draft.invoice_id).filter(Boolean))];
     const invoiceItems = tableExists("invoice_items") && draftInvoiceIds.length
       ? db.prepare(`SELECT * FROM invoice_items WHERE tenant_id = ? AND invoice_id IN (${placeholders(draftInvoiceIds)})`).all(access.tenantId, ...draftInvoiceIds)
@@ -997,6 +1025,112 @@ export class BackbarProductConsumptionService {
       }
     }
     const varianceRows = [...varianceMap.values()].sort((a, b) => Number(b.varianceQty || 0) - Number(a.varianceQty || 0)).slice(0, 80);
+    const clientProfitMap = new Map();
+    for (const draft of draftRows) {
+      const lines = parseLineItems(draft).filter((line) => {
+        const lineProductId = line.productId || line.product_id || "";
+        return !productId || lineProductId === productId;
+      });
+      const productCost = money(lines.reduce((sum, line) => sum + number(line.actualCost ?? line.actual_cost, 0), 0));
+      if (!lines.length && productId) continue;
+      const serviceItems = (itemsByInvoice.get(draft.invoice_id) || []).filter((item) => item.item_type === "service");
+      const matched = serviceItems.find((item) => item.item_id === draft.service_id || item.appointment_service_id === draft.service_id)
+        || (serviceItems.length === 1 ? serviceItems[0] : null);
+      const revenue = money(matched?.total_amount || 0);
+      const key = draft.client_id || draft.client_name || draft.invoice_id || "walk-in";
+      const row = clientProfitMap.get(key) || {
+        clientId: draft.client_id || "",
+        clientName: draft.client_name || "Walk-in client",
+        invoices: 0,
+        revenue: 0,
+        productCost: 0,
+        grossAfterProduct: 0,
+        marginPct: 0,
+        revenueLinked: 0,
+        lastUsedAt: ""
+      };
+      row.invoices += 1;
+      row.revenue = money(row.revenue + revenue);
+      row.productCost = money(row.productCost + productCost);
+      row.grossAfterProduct = money(row.revenue - row.productCost);
+      row.marginPct = row.revenue > 0 ? money((row.grossAfterProduct / row.revenue) * 100) : 0;
+      if (revenue > 0) row.revenueLinked += 1;
+      row.lastUsedAt = draft.updated_at || draft.created_at || row.lastUsedAt;
+      clientProfitMap.set(key, row);
+    }
+    const clientProfitRows = [...clientProfitMap.values()]
+      .sort((a, b) => Number(a.marginPct || 0) - Number(b.marginPct || 0) || Number(b.productCost || 0) - Number(a.productCost || 0))
+      .slice(0, 80);
+    const missingAdjustmentReasonRows = groupUsageRows(
+      exceptionEntries.filter((entry) => !String(entry.reason || "").trim()),
+      (entry) => `${entry.productId || entry.productName || "product"}|${entry.usageType || "adjustment"}|${entry.staffId || entry.staffName || "unassigned"}`,
+      (entry) => ({
+        entityType: "adjustment",
+        productId: entry.productId || "",
+        productName: entry.productName || "Product",
+        staffId: entry.staffId || "",
+        staffName: entry.staffName || "Unassigned",
+        usageType: entry.usageType || "manual_adjustment"
+      })
+    ).map((row) => ({
+      ...row,
+      missingReasons: row.count,
+      totalLines: row.count,
+      severity: row.count >= 3 || number(row.cost, 0) >= 1000 ? "high" : "medium"
+    }));
+    const reasonComplianceRows = [
+      ...varianceRows.filter((row) => number(row.reasonCount, 0) < number(row.count, 0)).map((row) => ({
+        entityType: "overuse",
+        productId: row.productId || "",
+        productName: row.productName || "Product",
+        staffId: row.staffId || "",
+        staffName: row.staffName || "Unassigned",
+        serviceId: row.serviceId || "",
+        serviceName: row.serviceName || "Service",
+        missingReasons: Math.max(0, number(row.count, 0) - number(row.reasonCount, 0)),
+        totalLines: number(row.count, 0),
+        cost: row.cost || 0,
+        lastUsedAt: row.lastUsedAt || "",
+        severity: number(row.count, 0) - number(row.reasonCount, 0) >= 3 ? "high" : "medium"
+      })),
+      ...missingAdjustmentReasonRows
+    ].sort((a, b) => Number(b.missingReasons || 0) - Number(a.missingReasons || 0) || Number(b.cost || 0) - Number(a.cost || 0)).slice(0, 80);
+    const usageCategoryRows = groupUsageRows(entries, (entry) => entry.usageType || "client", (entry) => ({
+      usageType: entry.usageType || "client",
+      categoryName: entry.usageType === "client" ? "Client use" : String(entry.usageType || "manual_adjustment").replace(/_/g, " ")
+    })).map((row) => ({
+      ...row,
+      exceptionCount: row.usageType === "client" ? 0 : row.count,
+      riskLevel: row.usageType !== "client" && number(row.cost, 0) >= 1000 ? "high" : row.usageType !== "client" ? "medium" : "watch"
+    })).sort((a, b) => Number(b.cost || 0) - Number(a.cost || 0));
+    const containerEfficiencyRows = containers.map((container) => {
+      const containerEntries = entries.filter((entry) => entry.containerId === container.id);
+      const containerClientEntries = containerEntries.filter((entry) => entry.usageType === "client");
+      const containerExceptionEntries = containerEntries.filter((entry) => entry.usageType !== "client");
+      const clientCost = money(containerClientEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
+      const exceptionCost = money(containerExceptionEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
+      const totalCost = money(clientCost + exceptionCost);
+      const clientQty = money(containerClientEntries.reduce((sum, entry) => sum + number(entry.usedQty, 0), 0));
+      const exceptionQty = money(containerExceptionEntries.reduce((sum, entry) => sum + number(entry.usedQty, 0), 0));
+      const totalQty = money(clientQty + exceptionQty);
+      const efficiencyPct = totalCost > 0 ? money((clientCost / totalCost) * 100) : totalQty > 0 ? money((clientQty / totalQty) * 100) : 0;
+      return {
+        productId: container.productId,
+        productName: container.productName,
+        containerId: container.id,
+        containerNo: container.containerNo,
+        status: container.status,
+        measureUnit: container.measureUnit,
+        clientQty,
+        exceptionQty,
+        balanceQty: container.balanceQty,
+        clientCost,
+        exceptionCost,
+        efficiencyPct,
+        riskLevel: exceptionCost > clientCost && totalCost > 0 ? "high" : efficiencyPct < 80 && totalQty > 0 ? "medium" : "watch",
+        lastUsedAt: containerEntries[0]?.createdAt || ""
+      };
+    }).filter((row) => row.clientQty > 0 || row.exceptionQty > 0 || row.status !== "finished").sort((a, b) => Number(a.efficiencyPct || 0) - Number(b.efficiencyPct || 0)).slice(0, 80);
     const staffOveruseRows = groupUsageRows(varianceRows, (row) => row.staffId || row.staffName || "unassigned", (row) => ({
       staffId: row.staffId || "",
       staffName: row.staffName || "Unassigned"
@@ -1130,6 +1264,42 @@ export class BackbarProductConsumptionService {
         riskLevel: daysToStockout !== null && daysToStockout <= 7 ? "high" : daysToStockout !== null && daysToStockout <= 21 ? "medium" : stock <= lowStockThreshold ? "medium" : "watch"
       };
     }).filter((row) => row.reorderQty > 0 || row.riskLevel !== "watch").sort((a, b) => number(a.daysToStockout, 9999) - number(b.daysToStockout, 9999)).slice(0, 80);
+    const productControlScoreRows = productRows.map((row) => {
+      const leakage = leakageRows.find((item) => item.productId === row.productId);
+      const varianceCount = varianceRows.filter((item) => item.productId === row.productId).reduce((sum, item) => sum + number(item.count, 0), 0);
+      const riskContainers = containerRiskRows.filter((item) => item.productId === row.productId).length;
+      const expiringBatches = batchExpiryRows.filter((item) => item.productId === row.productId).length;
+      const reorder = reorderRows.find((item) => item.productId === row.productId);
+      const slowContainers = slowMovingRows.filter((item) => item.productId === row.productId).length;
+      const penalties = Math.min(45, number(leakage?.riskScore, 0))
+        + Math.min(20, varianceCount * 4)
+        + Math.min(15, riskContainers * 5)
+        + Math.min(10, expiringBatches * 5)
+        + (reorder ? 10 : 0)
+        + Math.min(10, slowContainers * 3);
+      const score = Math.max(0, Math.round(100 - penalties));
+      const reasons = [
+        leakage ? "leakage" : "",
+        varianceCount ? `${varianceCount} overuse` : "",
+        riskContainers ? `${riskContainers} container risk` : "",
+        expiringBatches ? `${expiringBatches} expiry batch` : "",
+        reorder ? "reorder" : "",
+        slowContainers ? `${slowContainers} slow container` : ""
+      ].filter(Boolean);
+      return {
+        productId: row.productId,
+        productName: row.productName,
+        score,
+        riskLevel: score < 60 ? "high" : score < 80 ? "medium" : "watch",
+        leakageScore: number(leakage?.riskScore, 0),
+        varianceCount,
+        riskContainers,
+        expiringBatches,
+        slowContainers,
+        reorderQty: reorder?.reorderQty || 0,
+        reasonText: reasons.join(", ") || "clean"
+      };
+    }).sort((a, b) => Number(a.score || 0) - Number(b.score || 0)).slice(0, 80);
     const branchRows = groupUsageRows(entries, (entry) => entry.branchId || "all", (entry) => ({
       branchId: entry.branchId || "",
       branchName: entry.branchId || "All branches"
@@ -1238,7 +1408,13 @@ export class BackbarProductConsumptionService {
         staffOveruse: staffOveruseRows.length,
         lowMarginServices: serviceMarginRows.filter((row) => number(row.marginPct, 0) < 50 || number(row.grossAfterProduct, 0) < 0).length,
         slowMovingContainers: slowMovingRows.length,
-        reorderSignals: reorderRows.length
+        reorderSignals: reorderRows.length,
+        pendingConsumes: pendingConsumeRows.length,
+        reasonComplianceIssues: reasonComplianceRows.length,
+        usageCategories: usageCategoryRows.length,
+        containerEfficiencyRows: containerEfficiencyRows.length,
+        clientProfitRows: clientProfitRows.length,
+        productControlScores: productControlScoreRows.length
       },
       productRows,
       staffRows,
@@ -1256,6 +1432,12 @@ export class BackbarProductConsumptionService {
       serviceMarginRows,
       slowMovingRows,
       reorderRows,
+      pendingConsumeRows,
+      reasonComplianceRows,
+      usageCategoryRows,
+      containerEfficiencyRows,
+      clientProfitRows,
+      productControlScoreRows,
       approvals,
       alerts,
       recentEntries: entries,
