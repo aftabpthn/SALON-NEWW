@@ -249,12 +249,12 @@ type BusinessMediaUploadResponse = {
                 <tr *ngFor="let day of businessHourDays">
                   <td>{{ day.label }}</td>
                   <td>
-                    <select [(ngModel)]="businessHours[day.key].opensAt" [disabled]="!businessHours[day.key].open">
+                    <select [ngModel]="businessHours[day.key].opensAt" (ngModelChange)="setBusinessHourTime(day.key, 'opensAt', $event)" [disabled]="!businessHours[day.key].open">
                       <option *ngFor="let option of timeOptions" [value]="option.value">{{ option.label }}</option>
                     </select>
                   </td>
                   <td>
-                    <select [(ngModel)]="businessHours[day.key].closesAt" [disabled]="!businessHours[day.key].open">
+                    <select [ngModel]="businessHours[day.key].closesAt" (ngModelChange)="setBusinessHourTime(day.key, 'closesAt', $event)" [disabled]="!businessHours[day.key].open">
                       <option *ngFor="let option of timeOptions" [value]="option.value">{{ option.label }}</option>
                     </select>
                   </td>
@@ -268,7 +268,11 @@ type BusinessMediaUploadResponse = {
               </tbody>
             </table>
             <div class="hours-actions">
-              <button class="ghost-button compact" type="button" (click)="copyMondayToWeek()">Copy Monday to week</button>
+              <label class="apply-all-row">
+                <input type="checkbox" [(ngModel)]="applyTimingsToAll" />
+                <span>Automatically apply timings to all days</span>
+              </label>
+              <button class="ghost-button compact" type="button" (click)="copyMondayToWeek()">Apply Monday to all</button>
             </div>
           </div>
         </div>
@@ -688,8 +692,25 @@ type BusinessMediaUploadResponse = {
     }
     .hours-actions {
       display: flex;
+      align-items: center;
+      gap: 12px;
       justify-content: flex-end;
+      flex-wrap: wrap;
       margin-top: 14px;
+    }
+    .apply-all-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 auto 0 0;
+      color: #071524;
+      font-weight: 800;
+    }
+    .apply-all-row input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: #2f9bf0;
     }
     .preview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
     @media (max-width: 980px) {
@@ -720,6 +741,7 @@ export class BusinessDetailsComponent implements OnInit {
   instagramUrl = '';
   mapsUrl = '';
   showBusinessHours = true;
+  applyTimingsToAll = false;
   businessHours: Record<string, BusinessHour> = this.defaultBusinessHours();
   readonly imageAccept = 'image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,image/bmp,image/tiff';
   private readonly maxImageBytes = 5 * 1024 * 1024;
@@ -905,11 +927,31 @@ export class BusinessDetailsComponent implements OnInit {
     });
   }
 
+  setBusinessHourTime(dayKey: string, field: 'opensAt' | 'closesAt', value: string): void {
+    this.businessHours[dayKey] = {
+      ...this.businessHours[dayKey],
+      [field]: value
+    };
+    if (this.applyTimingsToAll) {
+      this.applyBusinessHourToAll(dayKey);
+    }
+  }
+
   setBusinessHourStatus(dayKey: string, status: string): void {
     this.businessHours[dayKey] = {
       ...this.businessHours[dayKey],
       open: status === 'open'
     };
+    if (this.applyTimingsToAll) {
+      this.applyBusinessHourToAll(dayKey);
+    }
+  }
+
+  private applyBusinessHourToAll(sourceDayKey: string): void {
+    const source = { ...this.businessHours[sourceDayKey] };
+    this.businessHourDays.forEach((day) => {
+      this.businessHours[day.key] = { ...source };
+    });
   }
 
   private async uploadProfileImage(file: File, kind: 'cover' | 'gallery'): Promise<string> {
