@@ -366,7 +366,7 @@ export class InvoiceReportsComponent implements OnInit {
       { key: 'mode', label: 'Mode' }, { key: 'amount', label: 'Collected', type: 'currency' }, { key: 'invoices', label: 'Invoices', type: 'number' }, { key: 'splitCount', label: 'Split usage', type: 'number' }, { key: 'risk', label: 'Reconcile risk', type: 'badge' }
     ],
     'due-aging': [
-      { key: 'invoiceNumber', label: 'Invoice' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'date', label: 'Date', type: 'date' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'ageDays', label: 'Age days', type: 'number' }, { key: 'bucket', label: 'Bucket', type: 'badge' }
+      { key: 'invoiceNumber', label: 'Invoice' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'date', label: 'Date', type: 'date' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'paid', label: 'Paid', type: 'currency' }, { key: 'lastPaymentDate', label: 'Last payment', type: 'date' }, { key: 'unpaidSinceDays', label: 'Unpaid since', type: 'number' }, { key: 'invoiceAgeDays', label: 'Invoice age', type: 'number' }, { key: 'lastRecoveryTouchDate', label: 'Last touch', type: 'date' }, { key: 'lastRecoveryTouchDays', label: 'Touch age' }, { key: 'bucket', label: 'Bucket', type: 'badge' }, { key: 'recoveryAction', label: 'Recovery action', type: 'badge' }
     ],
     wallet: [
       { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'walletUsed', label: 'Wallet used', type: 'currency' }, { key: 'walletBalance', label: 'Wallet balance', type: 'currency' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'lastActivity', label: 'Last activity', type: 'date' }, { key: 'source', label: 'Source', type: 'badge' }
@@ -666,7 +666,11 @@ export class InvoiceReportsComponent implements OnInit {
   private dueRows(): ApiRecord[] {
     const invoiceRows = this.uniqueInvoiceRows().filter((line) => line.due > 0);
     return invoiceRows.map((line) => {
-      const age = this.ageDays(line.date);
+      const lastPaymentDate = this.lastPaymentDate(line.invoiceId);
+      const unpaidSinceDate = lastPaymentDate || line.date;
+      const unpaidSinceDays = this.ageDays(unpaidSinceDate);
+      const invoiceAgeDays = this.ageDays(line.date);
+      const lastRecoveryTouchDate = this.lastRecoveryTouchDate(line.invoiceId, line.invoiceNumber, line.clientId);
       return {
         invoiceNumber: line.invoiceNumber,
         clientName: line.clientName,
@@ -674,8 +678,15 @@ export class InvoiceReportsComponent implements OnInit {
         staffName: line.staffName,
         date: line.date,
         due: line.due,
-        ageDays: age,
-        bucket: age > 30 ? '30+ days' : age > 7 ? '8-30 days' : '0-7 days'
+        paid: line.paid,
+        lastPaymentDate,
+        unpaidSinceDays,
+        invoiceAgeDays,
+        lastRecoveryTouchDate,
+        lastRecoveryTouchDays: lastRecoveryTouchDate ? this.ageDays(lastRecoveryTouchDate) : '',
+        ageDays: unpaidSinceDays,
+        bucket: this.unpaidBucket(unpaidSinceDays),
+        recoveryAction: this.recoveryAction(unpaidSinceDays)
       };
     }).sort((a, b) => Number(b['due']) - Number(a['due']));
   }
@@ -927,6 +938,45 @@ export class InvoiceReportsComponent implements OnInit {
   private paymentsForFilteredInvoices(): ApiRecord[] {
     const ids = new Set(this.filteredLines().map((line) => line.invoiceId));
     return this.payments().filter((payment) => ids.has(String(payment.invoiceId || payment.invoice_id || '')));
+  }
+
+  private lastPaymentDate(invoiceId: string): string {
+    return this.payments()
+      .filter((payment) => String(payment.invoiceId || payment.invoice_id || '') === String(invoiceId))
+      .filter((payment) => Number(payment.amount || payment.paidAmount || payment.paid_amount || 0) > 0)
+      .map((payment) => String(payment.paidAt || payment.paid_at || payment.paymentDate || payment.payment_date || payment.createdAt || payment.created_at || payment.date || ''))
+      .filter((value) => this.dateMs(value) > 0)
+      .sort((a, b) => this.dateMs(b) - this.dateMs(a))[0] || '';
+  }
+
+  private lastRecoveryTouchDate(invoiceId: string, invoiceNumber: string, clientId: string): string {
+    return this.auditLogs()
+      .filter((log) => {
+        const action = String(log.action || log.event || log.type || log.activity || '').toLowerCase();
+        const text = `${log.entityType || log.entity_type || ''} ${log.entityId || log.entity_id || ''} ${log.invoiceId || log.invoice_id || ''} ${log.clientId || log.client_id || ''} ${log.reference || ''} ${log.message || ''} ${log.details || ''}`.toLowerCase();
+        const isRecoveryTouch = ['recovery', 'reminder', 'whatsapp', 'payment_link', 'call', 'follow'].some((token) => action.includes(token) || text.includes(token));
+        const matchesInvoice = text.includes(String(invoiceId).toLowerCase()) || text.includes(String(invoiceNumber).toLowerCase()) || text.includes(String(clientId).toLowerCase());
+        return isRecoveryTouch && matchesInvoice;
+      })
+      .map((log) => String(log.createdAt || log.created_at || log.updatedAt || log.updated_at || log.date || log.timestamp || ''))
+      .filter((value) => this.dateMs(value) > 0)
+      .sort((a, b) => this.dateMs(b) - this.dateMs(a))[0] || '';
+  }
+
+  private unpaidBucket(days: number): string {
+    if (days > 30) return '30+ days';
+    if (days >= 16) return '16-30 days';
+    if (days >= 8) return '8-15 days';
+    if (days >= 4) return '4-7 days';
+    return '0-3 days';
+  }
+
+  private recoveryAction(days: number): string {
+    if (days > 30) return 'High risk / credit block';
+    if (days >= 16) return 'Owner recovery queue';
+    if (days >= 8) return 'Manager follow-up';
+    if (days >= 4) return 'WhatsApp payment link';
+    return 'Soft reminder';
   }
 
   private uniqueInvoiceRows(): InvoiceLine[] {
