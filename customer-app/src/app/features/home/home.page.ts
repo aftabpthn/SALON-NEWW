@@ -90,19 +90,6 @@ interface HomeSearchSuggestion {
               <p class="location-notice">{{ locationNotice() }}</p>
             }
           </div>
-          @if (featured(); as featuredBusiness) {
-            <aside class="hero-visual" aria-label="Featured appointment">
-              <img [src]="featuredBusiness.coverImage || 'assets/icons/icon.svg'" [alt]="featuredBusiness.businessName + ' featured cover'" />
-              <div class="hero-floating-card">
-                <span class="rating-pill">Star {{ featuredBusiness.ratingAverage }}</span>
-                <h2>{{ featuredBusiness.businessName }}</h2>
-                <p>{{ featuredBusiness.popularService }} from {{ money(featuredBusiness.startingPricePaise) }}</p>
-                @if (featuredBusiness.nextAvailableSlot) {
-                  <strong>{{ featuredBusiness.nextAvailableSlot }}</strong>
-                }
-              </div>
-            </aside>
-          }
         </section>
 
         <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
@@ -425,47 +412,6 @@ interface HomeSearchSuggestion {
       color: var(--muted);
       font-size: 0.8rem;
       font-weight: 800;
-    }
-
-    .hero-visual {
-      position: relative;
-      display: none;
-      min-height: 100%;
-      overflow: hidden;
-      border-radius: 34px;
-      background: var(--surface-soft);
-    }
-
-    .hero-visual img {
-      width: 100%;
-      height: 100%;
-      min-height: 390px;
-      display: block;
-      object-fit: cover;
-    }
-
-    .hero-floating-card {
-      position: absolute;
-      right: 20px;
-      bottom: 20px;
-      left: 20px;
-      padding: 18px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
-      border-radius: 26px;
-      background: rgba(255, 249, 236, 0.9);
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.18);
-      backdrop-filter: blur(18px);
-    }
-
-    .hero-floating-card h2 {
-      margin: 12px 0 6px;
-      font-size: 1.45rem;
-      letter-spacing: -0.04em;
-    }
-
-    .hero-floating-card p {
-      margin: 0 0 8px;
-      color: var(--muted);
     }
 
     .category-strip {
@@ -802,12 +748,7 @@ interface HomeSearchSuggestion {
         display: none;
       }
 
-      .hero-visual {
-        display: flex;
-      }
-
       .hero {
-        grid-template-columns: minmax(0, 1.15fr) minmax(420px, 500px);
         padding: 34px;
       }
 
@@ -840,7 +781,6 @@ export class HomePage implements OnInit {
   readonly locating = signal(false);
   readonly locationNotice = signal("");
   readonly skeletons = [1, 2, 3, 4, 5, 6];
-  readonly featured = computed(() => this.marketplace.businesses()[0] ?? null);
   readonly searchActive = computed(() => !!this.activeQuery().trim());
   readonly homeResults = computed(() => this.filterBusinesses(this.marketplace.businesses()));
   readonly recommendations = computed(() => this.recommendedBusinesses().slice(0, 4));
