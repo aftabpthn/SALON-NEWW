@@ -20,7 +20,8 @@ function serviceDuration(serviceIds = []) {
 export class ResourceService {
   list(resource, query, access) {
     if (query?.branchId) tenantService.assertBranchAccess(access, query.branchId);
-    const rows = this.repository(resource).list(query, this.listScope(resource, query, access));
+    const listQuery = resource === "clients" && !query?.limit ? { ...query, limit: 10000 } : query;
+    const rows = this.repository(resource).list(listQuery, this.listScope(resource, listQuery, access));
     if (resource === "clients" && !truthy(query?.includeDeleted)) {
       return rows.filter((row) => !row.deletedAt);
     }

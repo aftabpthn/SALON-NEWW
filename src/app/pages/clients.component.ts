@@ -1024,7 +1024,7 @@ export class ClientsComponent implements OnInit {
     this.error.set('');
     const branchId = this.api.selectedBranchId();
     forkJoin({
-      clients: this.api.list<ApiRecord[]>('clients', { branchId }),
+      clients: this.api.list<ApiRecord[]>('clients', { limit: 10000, branchId }),
       invoices: this.api.list<ApiRecord[]>('invoices', { limit: 1000, branchId }),
       walletTransactions: this.api.list<ApiRecord[]>('walletTransactions', { limit: 5000, branchId })
     }).subscribe({
