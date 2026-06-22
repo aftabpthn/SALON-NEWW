@@ -196,13 +196,13 @@ type NavGroup = {
             <label class="select-label tenant-scope">
               <span>{{ i18n.t('shell.tenant', 'Tenant') }}</span>
               <select [ngModel]="state.selectedTenantId()" (ngModelChange)="selectTenant($event)">
-                <option *ngFor="let tenant of tenants()" [value]="tenant.id">{{ tenant.name }}</option>
+                <option *ngFor="let tenant of tenants()" [value]="tenant.id">{{ tenant.name || tenant.id }}</option>
               </select>
             </label>
             <label class="select-label branch-scope">
               <span>{{ i18n.t('shell.branch', 'Branch') }}</span>
               <select [ngModel]="state.selectedBranchId()" (ngModelChange)="selectBranch($event)">
-                <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
+                <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name || branch.id }}</option>
               </select>
             </label>
             <label class="select-label role-scope">
@@ -689,7 +689,7 @@ export class AppComponent {
   loadBranches(): void {
     this.api.list<ApiRecord[]>('branches').subscribe({
       next: (branches) => {
-        const rows = branches || [];
+        const rows = (branches || []).filter((branch) => branch && branch.id);
         this.branches.set(rows);
         const selectedBranchId = this.state.selectedBranchId();
         const selectedExists = rows.some((branch) => branch.id === selectedBranchId);
@@ -704,8 +704,9 @@ export class AppComponent {
   loadTenants(): void {
     this.api.list<ApiRecord[]>('tenants', { limit: 1000 }).subscribe({
       next: (tenants) => {
-        const businessTenants = tenants.filter((tenant) => !this.isGeneratedTestTenant(tenant.id));
-        const tenantOptions = businessTenants.length ? businessTenants : tenants;
+        const safeTenants = (tenants || []).filter((tenant) => tenant && tenant.id);
+        const businessTenants = safeTenants.filter((tenant) => !this.isGeneratedTestTenant(tenant.id));
+        const tenantOptions = businessTenants.length ? businessTenants : safeTenants;
         const orderedTenants = [...tenantOptions].sort((left, right) => {
           if (left.id === 'tenant_aura') return -1;
           if (right.id === 'tenant_aura') return 1;

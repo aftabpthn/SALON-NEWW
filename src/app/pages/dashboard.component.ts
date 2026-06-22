@@ -304,13 +304,17 @@ export class DashboardComponent implements OnInit {
       newClients: Number(report['newClients'] || 0),
       pendingPayments: Number(report['pendingPayments'] || 0),
       receivedDue: Number(report['receivedDue'] || 0),
-      lowStockAlerts: Array.isArray(report['lowStockAlerts']) ? report['lowStockAlerts'] : [],
-      staffPerformance: Array.isArray(report['staffPerformance']) ? report['staffPerformance'] : [],
+      lowStockAlerts: this.safeRows(report['lowStockAlerts']),
+      staffPerformance: this.safeRows(report['staffPerformance']),
       membershipRevenue: Number(report['membershipRevenue'] || 0),
       repeatCustomerRate: Number(report['repeatCustomerRate'] || 0),
       clientRetention: Number(report['clientRetention'] || 0),
-      quickActions: Array.isArray(report['quickActions']) ? report['quickActions'] : []
+      quickActions: this.safeRows(report['quickActions'])
     };
+  }
+
+  private safeRows(value: unknown): ApiRecord[] {
+    return Array.isArray(value) ? value.filter((row): row is ApiRecord => Boolean(row && typeof row === 'object')) : [];
   }
 
   private readError(error: any, fallback: string): string {
