@@ -764,7 +764,9 @@ type ClientPersonalDetailsForm = {
                 </div>
                 <div class="product-profile-metrics">
                   <div><span>Qty</span><strong>{{ product.qty }}</strong></div>
-                  <div><span>Total</span><strong>{{ product.total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                  <div><span>Gross</span><strong>{{ product.gross | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                  <div><span>Discount</span><strong>{{ product.discount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                  <div><span>Net</span><strong>{{ product.total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
                   <div><span>Staff</span><strong>{{ product.staff }}</strong></div>
                   <div><span>SKU</span><strong>{{ product.sku }}</strong></div>
                 </div>
@@ -3669,12 +3671,16 @@ export class ClientDetailComponent implements OnInit {
         const key = `${name}|${sku}`;
         const existing = rows.get(key);
         const quantity = this.moneyValue(item.quantity ?? item.qty ?? 1) || 1;
-        const total = this.itemAmount(item);
+        const gross = this.moneyValue(entry['gross'] || this.itemGross(item));
+        const discount = this.moneyValue(entry['discount']);
+        const total = Math.max(0, this.moneyValue(gross - discount));
         const current = existing || {
           id: key,
           name,
           sku,
           qty: 0,
+          gross: 0,
+          discount: 0,
           total: 0,
           lastBought: '-',
           lastBoughtMs: 0,
@@ -3682,6 +3688,8 @@ export class ClientDetailComponent implements OnInit {
           staff: 'Unassigned'
         };
         current['qty'] = this.moneyValue(current['qty']) + quantity;
+        current['gross'] = this.moneyValue(current['gross']) + gross;
+        current['discount'] = this.moneyValue(current['discount']) + discount;
         current['total'] = this.moneyValue(current['total']) + total;
         const time = this.dateMs(entry['date']);
         if (time >= Number(current['lastBoughtMs'] || 0)) {
@@ -3697,6 +3705,8 @@ export class ClientDetailComponent implements OnInit {
       .map((row): ApiRecord => ({
         ...row,
         qty: this.moneyValue(row['qty']),
+        gross: this.moneyValue(row['gross']),
+        discount: this.moneyValue(row['discount']),
         total: this.moneyValue(row['total'])
       }))
       .sort((a, b) => Number(b['lastBoughtMs'] || 0) - Number(a['lastBoughtMs'] || 0));
@@ -4345,11 +4355,17 @@ export class ClientDetailComponent implements OnInit {
     const invoicesWithSaleItems = new Set<string>();
     for (const sale of this.clientSales()) {
       const invoice = this.invoiceForSale(sale);
-      const productItems = this.saleItems(sale).filter((item) => this.itemKind(item) === 'product');
+      const saleItems = this.saleItems(sale);
+      const productItems = saleItems.filter((item) => this.itemKind(item) === 'product');
+      const grossTotal = this.itemGrossTotal(saleItems);
+      const discountTotal = this.recordDiscount(sale);
       if (invoice && productItems.length) invoicesWithSaleItems.add(String(invoice.id || ''));
       for (const item of productItems) {
+        const gross = this.itemGross(item);
         rows.push({
           item,
+          gross,
+          discount: this.itemDiscount(item, gross, grossTotal, discountTotal),
           date: sale.createdAt || sale.created_at || sale.date || sale.updatedAt,
           invoice: invoice ? this.invoiceNumber(invoice) : String(sale.invoiceNumber || sale.invoice_no || sale.id || 'POS sale'),
           staff: String(item.staffName || item.staff_name || sale.staffName || sale.staff_name || this.staffName(item.staffId || item.staff_id || sale.staffId || sale.staff_id || ''))
@@ -4358,9 +4374,15 @@ export class ClientDetailComponent implements OnInit {
     }
     for (const invoice of this.clientInvoices()) {
       if (invoicesWithSaleItems.has(String(invoice.id || ''))) continue;
-      for (const item of this.invoiceItems(invoice).filter((entry) => this.itemKind(entry) === 'product')) {
+      const invoiceItems = this.invoiceItems(invoice);
+      const grossTotal = this.itemGrossTotal(invoiceItems);
+      const discountTotal = this.recordDiscount(invoice);
+      for (const item of invoiceItems.filter((entry) => this.itemKind(entry) === 'product')) {
+        const gross = this.itemGross(item);
         rows.push({
           item,
+          gross,
+          discount: this.itemDiscount(item, gross, grossTotal, discountTotal),
           date: invoice.createdAt || invoice.created_at || invoice.date || invoice.updatedAt,
           invoice: this.invoiceNumber(invoice),
           staff: String(item.staffName || item.staff_name || invoice.staffName || invoice.staff_name || this.staffName(item.staffId || item.staff_id || this.invoiceStaffId(invoice)))
@@ -4472,6 +4494,29 @@ export class ClientDetailComponent implements OnInit {
     const unit = this.moneyValue(item.price ?? item.rate ?? item.unitPrice ?? item.unit_price ?? item.sellingPrice ?? item.selling_price ?? 0);
     const qty = this.moneyValue(item.quantity ?? item.qty ?? 1) || 1;
     return this.moneyValue(unit * qty);
+  }
+
+  private itemGross(item: ApiRecord): number {
+    const direct = item.gross ?? item.grossAmount ?? item.gross_amount ?? item.subtotal ?? item.lineSubtotal ?? item.line_subtotal;
+    if (direct !== undefined && direct !== null && direct !== '') return this.moneyValue(direct);
+    const unit = this.moneyValue(item.price ?? item.rate ?? item.unitPrice ?? item.unit_price ?? item.sellingPrice ?? item.selling_price ?? item.mrp ?? 0);
+    const qty = this.moneyValue(item.quantity ?? item.qty ?? 1) || 1;
+    return this.moneyValue(unit * qty);
+  }
+
+  private itemGrossTotal(items: ApiRecord[]): number {
+    return this.moneyValue(items.reduce((sum, item) => sum + this.itemGross(item), 0));
+  }
+
+  private itemDiscount(item: ApiRecord, gross: number, sourceGross: number, sourceDiscount: number): number {
+    const direct = item.discount ?? item.discountAmount ?? item.discount_amount ?? item.manualDiscount ?? item.manual_discount ?? item.lineDiscount ?? item.line_discount;
+    if (direct !== undefined && direct !== null && direct !== '') return this.moneyValue(direct);
+    if (sourceDiscount <= 0 || sourceGross <= 0 || gross <= 0) return 0;
+    return this.moneyValue((gross / sourceGross) * sourceDiscount);
+  }
+
+  private recordDiscount(record: ApiRecord): number {
+    return this.moneyValue(record.discount ?? record.discountAmount ?? record.discount_amount ?? record.discountTotal ?? record.discount_total ?? record.totalDiscount ?? record.total_discount ?? record.manualDiscount ?? record.manual_discount ?? 0);
   }
 
   private packageBelongsToClient(item: ApiRecord): boolean {
