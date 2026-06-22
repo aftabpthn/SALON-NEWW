@@ -156,7 +156,19 @@ import { staffSalesReportRouter } from "./routes/staff-sales-report.routes.js";
 import { staffManagementRouter } from "./routes/staff-management.routes.js";
 import { staffOsRouter } from "./routes/staff-os.routes.js";
 import { staffEnterpriseRouter } from "./routes/staff-enterprise.routes.js";
+import { staffCoachRouter } from "./routes/staff-coach.routes.js";
 import { staffSelfRouter } from "./routes/staff-self.routes.js";
+import { autonomousEnterpriseRouter } from "./routes/autonomous-enterprise.routes.js";
+import { clientMemoryGraphRouter } from "./routes/client-memory-graph.routes.js";
+import { dataWarehouseRouter } from "./routes/data-warehouse.routes.js";
+import { digitalTwinRouter } from "./routes/digital-twin.routes.js";
+import { inventoryAutopilotRouter } from "./routes/inventory-autopilot.routes.js";
+import { observabilityCenterRouter } from "./routes/observability-center.routes.js";
+import { ownerCommandCenterRouter } from "./routes/owner-command-center.routes.js";
+import { paymentFraudIntelligenceRouter } from "./routes/payment-fraud-intelligence.routes.js";
+import { revenueLeakRouter } from "./routes/revenue-leak.routes.js";
+import { securityHardeningRouter } from "./routes/security-hardening.routes.js";
+import { whatsappCampaignPlannerRouter } from "./routes/whatsapp-campaign-planner.routes.js";
 import { superAdminRouter } from "./routes/super-admin.routes.js";
 import { terminalRouter } from "./routes/terminal.routes.js";
 import { whatsappRouter } from "./routes/whatsapp.routes.js";
@@ -496,6 +508,18 @@ export function createApp() {
   app.use("/api", appointmentSafetyRouter);
   app.use("/api", reputationRouter);
   app.use("/api", resourceRouter);
+  app.use("/api", autonomousEnterpriseRouter);
+  app.use("/api", clientMemoryGraphRouter);
+  app.use("/api", dataWarehouseRouter);
+  app.use("/api", digitalTwinRouter);
+  app.use("/api", inventoryAutopilotRouter);
+  app.use("/api", observabilityCenterRouter);
+  app.use("/api", ownerCommandCenterRouter);
+  app.use("/api", paymentFraudIntelligenceRouter);
+  app.use("/api", revenueLeakRouter);
+  app.use("/api", securityHardeningRouter);
+  app.use("/api", whatsappCampaignPlannerRouter);
+  app.use("/api", staffCoachRouter);
 
   const clientDist = resolveClientDist();
   if (clientDist) {
