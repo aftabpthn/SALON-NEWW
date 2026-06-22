@@ -1009,6 +1009,61 @@ export class BackbarProductConsumptionService {
         riskLevel: riskScore >= 60 ? "high" : riskScore >= 25 ? "medium" : "watch"
       };
     }).filter((row) => row.riskScore > 0).sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0)).slice(0, 80);
+    const branchRows = groupUsageRows(entries, (entry) => entry.branchId || "all", (entry) => ({
+      branchId: entry.branchId || "",
+      branchName: entry.branchId || "All branches"
+    })).map((row) => {
+      const branchEntries = entries.filter((entry) => (entry.branchId || "all") === (row.branchId || "all"));
+      const branchExceptions = branchEntries.filter((entry) => entry.usageType !== "client");
+      return {
+        ...row,
+        clientEntries: branchEntries.filter((entry) => entry.usageType === "client").length,
+        exceptionEntries: branchExceptions.length,
+        exceptionCost: money(branchExceptions.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
+        exceptionRatio: row.cost > 0 ? money((branchExceptions.reduce((sum, entry) => sum + number(entry.productCost, 0), 0) / row.cost) * 100) : 0
+      };
+    });
+    const supplierMap = new Map();
+    for (const entry of entries) {
+      const product = productById.get(entry.productId) || {};
+      const supplierId = product.supplierId || product.supplier_id || product.supplier || "unlinked";
+      const supplierName = product.supplierName || product.supplier_name || product.supplier || supplierId || "Unlinked supplier";
+      const row = supplierMap.get(supplierId) || {
+        supplierId,
+        supplierName,
+        products: new Set(),
+        entries: 0,
+        exceptionEntries: 0,
+        usageCost: 0,
+        exceptionCost: 0,
+        qualityScore: 100,
+        lastUsedAt: ""
+      };
+      row.products.add(entry.productId);
+      row.entries += 1;
+      row.usageCost = money(row.usageCost + number(entry.productCost, 0));
+      if (entry.usageType !== "client") {
+        row.exceptionEntries += 1;
+        row.exceptionCost = money(row.exceptionCost + number(entry.productCost, 0));
+      }
+      row.lastUsedAt = String(entry.createdAt || "").localeCompare(String(row.lastUsedAt || "")) > 0 ? entry.createdAt : row.lastUsedAt;
+      supplierMap.set(supplierId, row);
+    }
+    const supplierRows = [...supplierMap.values()].map((row) => {
+      const exceptionRatio = row.usageCost > 0 ? money((row.exceptionCost / row.usageCost) * 100) : 0;
+      return {
+        ...row,
+        productCount: row.products.size,
+        products: undefined,
+        exceptionRatio,
+        qualityScore: Math.max(0, Math.round(100 - exceptionRatio))
+      };
+    }).sort((a, b) => Number(a.qualityScore || 0) - Number(b.qualityScore || 0) || Number(b.exceptionCost || 0) - Number(a.exceptionCost || 0)).slice(0, 80);
+    const approvalRows = approvals.map((request) => ({
+      ...request,
+      ageHours: request.status === "pending" && request.createdAt ? Math.max(0, Math.round((Date.now() - new Date(request.createdAt).getTime()) / 3600000)) : 0,
+      activeBalanceText: `${request.activeBalanceQty || 0} ${request.measureUnit || ""}`.trim()
+    })).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 80);
     const entityLedger = [
       ...entries.map((entry) => ({
         entityType: entry.usageType === "client" ? "client_usage" : "exception_usage",
@@ -1054,7 +1109,10 @@ export class BackbarProductConsumptionService {
         pendingApprovals: approvals.filter((request) => request.status === "pending").length,
         varianceRows: varianceRows.length,
         containerRisks: containerRiskRows.length,
-        leakageRisks: leakageRows.length
+        leakageRisks: leakageRows.length,
+        branches: branchRows.length,
+        suppliers: supplierRows.length,
+        approvalHistory: approvalRows.length
       },
       productRows,
       staffRows,
@@ -1064,6 +1122,9 @@ export class BackbarProductConsumptionService {
       varianceRows,
       containerRiskRows,
       leakageRows,
+      branchRows,
+      supplierRows,
+      approvalRows,
       approvals,
       alerts,
       recentEntries: entries,

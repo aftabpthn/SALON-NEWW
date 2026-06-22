@@ -253,6 +253,44 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
             <small *ngIf="!ledgerLeakageRows().length">No leakage signal.</small>
           </article>
         </div>
+        <div class="next-control-grid">
+          <article>
+            <h4>Client-wise report</h4>
+            <div class="risk-row" *ngFor="let row of ledgerClientRows().slice(0, 5)">
+              <strong>{{ row['clientName'] || 'Walk-in client' }}</strong>
+              <span>{{ row['invoiceNumber'] || 'invoice' }} · {{ row['totalUsedText'] || '0' }}</span>
+              <small>{{ money(row['cost'] || 0) }} · last {{ row['lastUsedAt'] | date:'short' }}</small>
+            </div>
+            <small *ngIf="!ledgerClientRows().length">No client rows.</small>
+          </article>
+          <article>
+            <h4>Approval workflow</h4>
+            <div class="risk-row" *ngFor="let row of ledgerApprovalRows().slice(0, 5)" [class.high]="row['status'] === 'pending' && (row['ageHours'] || 0) > 24">
+              <strong>{{ row['productName'] }}</strong>
+              <span>{{ row['status'] }} · {{ row['activeBalanceText'] || 'balance pending' }}</span>
+              <small>{{ row['reason'] || 'No reason' }} · {{ row['ageHours'] || 0 }}h</small>
+            </div>
+            <small *ngIf="!ledgerApprovalRows().length">No approval rows.</small>
+          </article>
+          <article>
+            <h4>Branch comparison</h4>
+            <div class="risk-row" *ngFor="let row of ledgerBranchRows().slice(0, 5)">
+              <strong>{{ row['branchName'] || row['branchId'] || 'All branches' }}</strong>
+              <span>{{ row['totalUsedText'] || '0' }} · {{ money(row['cost'] || 0) }}</span>
+              <small>{{ row['exceptionEntries'] || 0 }} exceptions · {{ row['exceptionRatio'] || 0 }}%</small>
+            </div>
+            <small *ngIf="!ledgerBranchRows().length">No branch rows.</small>
+          </article>
+          <article>
+            <h4>Supplier quality</h4>
+            <div class="risk-row" *ngFor="let row of ledgerSupplierRows().slice(0, 5)" [class.high]="(row['qualityScore'] || 100) < 70">
+              <strong>{{ row['supplierName'] || 'Unlinked supplier' }}</strong>
+              <span>{{ row['productCount'] || 0 }} products · waste {{ money(row['exceptionCost'] || 0) }}</span>
+              <small>Quality score {{ row['qualityScore'] || 0 }} · exception {{ row['exceptionRatio'] || 0 }}%</small>
+            </div>
+            <small *ngIf="!ledgerSupplierRows().length">No supplier rows.</small>
+          </article>
+        </div>
         <div class="report-feed">
           <article *ngFor="let event of ledgerEvents().slice(0, 8)">
             <strong>{{ event['title'] || event['entityType'] }}</strong>
@@ -591,11 +629,14 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .report-side span, .report-side small, .report-feed span, .report-feed small { color: #64748b; }
     .report-feed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .risk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .next-control-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .risk-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
+    .next-control-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
     .risk-grid h4 { margin: 0; }
+    .next-control-grid h4 { margin: 0; }
     .risk-row { border: 1px solid #edf4f3; border-radius: 10px; padding: 9px; display: grid; gap: 3px; background: #f8fbfa; }
     .risk-row.high { background: #fff1f2; border-color: #fecdd3; }
-    .risk-row span, .risk-row small, .risk-grid > article > small { color: #64748b; }
+    .risk-row span, .risk-row small, .risk-grid > article > small, .next-control-grid > article > small { color: #64748b; }
     .ledger-head, .ledger-summary, .active-container { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .ledger-head h3 { margin: 2px 0 0; }
     .ledger-head small, .ledger-product small, .ledger-summary span, .history-row span { color: #64748b; }
@@ -630,7 +671,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     @media (max-width: 900px) {
       .module-hero, .workspace { display: grid; }
       .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid { grid-template-columns: 1fr; }
+      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid, .next-control-grid { grid-template-columns: 1fr; }
       .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
@@ -1041,6 +1082,22 @@ export class ProductConsumeComponent {
 
   ledgerWasteRows(): ApiRecord[] {
     return (this.controlLedgerReport()?.['wasteRows'] || []) as ApiRecord[];
+  }
+
+  ledgerClientRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['clientRows'] || []) as ApiRecord[];
+  }
+
+  ledgerApprovalRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['approvalRows'] || []) as ApiRecord[];
+  }
+
+  ledgerBranchRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['branchRows'] || []) as ApiRecord[];
+  }
+
+  ledgerSupplierRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['supplierRows'] || []) as ApiRecord[];
   }
 
   ledgerVarianceRows(): ApiRecord[] {
