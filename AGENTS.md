@@ -1,135 +1,123 @@
-# AGENTS.md
+# AGENTS.md — Aura Salon CRM/POS
 
-## Profit Intelligence
+> Goal: kaam minimum files me, minimum tokens/credits me ho. Servers ek baar
+> start ho ke poore session chalein. Code kabhi waste/overwrite na ho.
 
-Read `docs/profit-intelligence.md` only for:
+---
 
-* balance sheet
-* accounting
-* profitability
-* expenses
-* cashflow
-* service recipes
-* CEO dashboard
-
-## Rules
-
-* Reuse existing architecture
-* No protected files
-* JavaScript ESM only
-* tenantId required
-* Money = integer paise
-* IST business dates
-* camelCase columns
-
-## Accounting
-
-* journalEntryLines = source of truth
-* balanceSheetSnapshots = archival only
-* Debit == Credit
-* WMA inventory costing
-* Idempotent schedulers
-
-## Workflow
-
-1. Open minimum files
-2. Read profit-intelligence.md only if needed
-3. Build one stage at a time
-4. Run smallest verification
-
-## Runtime
-
-Do NOT start/restart backend or frontend unless explicitly requested.
-Do NOT run any `npm run ...` command unless explicitly requested; the user will run npm commands.
-
-Backend:
-`npm run api`
-
-Frontend:
-`npm run client`
-
-Both:
-`npm run api && npm run client`
-
-Verify health/url only when asked.
-
-## Balance Sheet Scope
-
-Keep:
-
-* Balance Sheet
-* Ledger Engine
-* Auto Ledger Grouping
-* Tally Drill Down
-* Working Capital
-* Fixed Assets
-* Deferred Revenue
-* Cost Centers
-* Hardening Controls
-* AI Ledger Suggestions
-
-Do NOT build:
-
-* Trading Account
-* Purchase Account Screen
-* Sales Account Screen
-* Profit & Loss Report
-* Trial Balance Tab
-* Cash Flow Tab
-* Forecast Tab
-* Dashboard Tab
-<!--
-  DROP-IN: paste this whole block into `.github/copilot-instructions.md`
-  (or append to AGENTS.md) for the Aura Salon CRM/POS repo.
-  Goal: cut Copilot/Codex premium-request + token usage without losing quality.
--->
-
-# ⚡ Token / Credit Discipline (Codex · GitHub Copilot)
-
-These rules exist to reduce credit burn. Follow them on **every** request.
-
-## 1. Scope the context — never the whole repo
-- Work only on the file(s) named in the prompt. Reference them with `#file:` — do **not** pull in the full workspace.
-- Do **not** open, read, or re-summarise large files unless explicitly asked. Trust the invariants in §5 instead of re-reading to "confirm".
-- If a file is already in context this turn, do not re-read it.
-- For logs / stack traces: use only the relevant lines the user pasted. Never expand or re-fetch the whole log.
-
-## 2. Output minimal diffs, not rewrites
-- Return a **patch / diff or the single changed function** — never re-emit a whole file unless the user says "rewrite the file".
-- No speculative refactors, no renaming, no reformatting untouched code, no "while I'm here" cleanups.
-- One prompt = one focused change. Don't bundle audit + plan + implement into a mega-response; if planning is needed, give a 3–5 line plan, then stop and wait.
-
-## 3. Don't re-explain or echo
-- No restating the request, no summarising files back, no recapping what you already wrote earlier in the thread.
-- Skip preamble/postamble. Code first, one line of why if needed.
-
-## 4. Model & agent-mode settings
-- Use the **cheapest capable model** for the task: trivial edits (rename, format, small fix, boilerplate) → base/cheap model; only architecture/hard-debug → premium model. Don't run everything on the top model.
-- In agent mode, cap iterations: if a fix isn't converging in ~2–3 tool cycles, stop and report — don't loop.
-- Turn off auto/full-codebase context features; feed relevant files manually.
-
-## 5. Aura invariants — assume these, never re-derive or re-ask
-Baking these in saves the round-trips Copilot spends "checking".
-- **Stack is locked:** Angular (frontend) + Express JS + SQLite via `better-sqlite3` (CommonJS). **No TypeScript on backend, no MongoDB/Redis/Postgres.** Never suggest migrating. Always **enhance existing**, never rebuild.
-- **Protected files — NEVER modify:** `smart-booking.service.js`, `booking-portal.service.js`, `operations.routes.js`, `db.js`. Wrap/extend around them instead.
-- **Add-only / wrapper pattern.** Never rewrite an existing service; add a new function or wrapper.
+## 1. Aura Invariants — assume these, NEVER re-derive or re-ask
+- **Stack locked:** Angular (frontend) + Express JS + SQLite via `better-sqlite3`.
+  **ES Modules (import/export) only.** No TypeScript on backend, no Mongo/Redis/Postgres.
+  Never suggest migrating. Always **enhance existing**, never rebuild.
+- **Protected files — NEVER modify:** `smart-booking.service.js`,
+  `booking-portal.service.js`, `operations.routes.js`, `db.js`.
+  Wrap/extend around them instead.
+- **Add-only / wrapper pattern.** Never rewrite an existing service; add a new
+  function or wrapper. Single registration line in `server/app.js`.
 - **Money = integer paise** everywhere (never floats/rupees in storage).
-- **Every table needs `tenant_id` + `branch_id`.** DB columns are **camelCase**.
-- Multi-tenancy headers: `x-tenant-id`, `x-branch-id`, `x-user-role`. JWT refresh tokens. WebSocket for realtime.
-- Paths: backend entry `server/app.js`; repositories `server/repositories/`; frontend pages `src/app/pages/`.
+- **Every table needs `tenantId` + `branchId`.** Columns are **camelCase**.
+- **Named parameters only** in better-sqlite3 (no positional `?`).
+- IST business dates. Multi-tenancy headers: `x-tenant-id`, `x-branch-id`,
+  `x-user-role`. JWT refresh tokens. WebSocket for realtime.
+- Paths: backend entry `server/app.js`; repositories `server/repositories/`;
+  frontend pages `src/app/pages/`.
 
-## 6. Definition of Done (lean — keep it lean on purpose)
-- Change compiles and does the one requested thing. That's it.
-- **Do NOT auto-run the full quality gate** (full lint + full test suite + full build) as part of every task — it's the biggest silent credit drain. Run only the targeted check relevant to the change, and only if asked.
-- Suggest tests/lint as a one-line note; don't generate them unless requested.
+---
 
-## 7. Codex environment (reference — don't re-discover)
-- Node **v24**, Universal base image, install with `npm ci`, Container Caching **ON**.
-- Client build: `npm run build:client` → `ng build`.
+## 2. Runtime — Dev Servers (START ONCE, KEEP RUNNING)
 
-## ❌ Anti-patterns (these burn credits for nothing)
-- Re-reading a large protected/service file to "understand context".
-- Re-emitting full files for a 3-line change.
-- Audit + plan + implement + test all in one giant prompt.
-- Running the whole test/build suite after a trivial edit.
-- Suggesting a TS/Mongo migration (always rejected — wasted tokens).
+Jab task ke liye app chahiye, dono servers **ek baar background me** start karo,
+fir wahi reuse karo. Baar-baar restart = token/credit waste.
+
+Start se PEHLE check karo already up hai kya (up = restart MAT karo):
+- Backend:  `http://127.0.0.1:4000/health`
+- Frontend: `http://127.0.0.1:4300`
+
+Start (sirf agar already up nahi):
+- Backend:  `npm run api`     (background me)
+- Frontend: `npm run client`  (background me)
+
+Rules:
+- Servers ko baar-baar stop/restart MAT karo. Ek baar up = poore session up.
+- Code change ke baad bhi restart mat karo — nodemon / Angular auto-reload karega.
+  Sirf reload fail ho tabhi restart karo.
+- `npm install` sirf tab jab `package.json` badla ho.
+- Dono ko `&&` se mat chalao (wo serial chalata hai). Alag background process me chalao.
+
+---
+
+## 3. Token / Credit Discipline — follow on EVERY request
+
+### Scope the context — never the whole repo
+- Sirf prompt me named file(s) pe kaam karo. `#file:` se reference do; poora
+  workspace mat khींcho.
+- Bade files dobara mat padho/summarise karo "confirm" karne ke liye — §1 ke
+  invariants pe bharosa karo. File already context me hai to dobara mat padho.
+- Logs/stack trace: sirf user ne jo lines pasted ki wahi; poora log mat fetch karo.
+
+### Output minimal diffs, not rewrites
+- Sirf **diff / changed function** do — poori file tabhi jab user "rewrite the file" bole.
+- No speculative refactor, no rename, no reformat untouched code, no "while I'm here" cleanup.
+- One prompt = one focused change. Plan chahiye to 3–5 line ka do, fir ruk jao.
+
+### Don't re-explain or echo
+- Request restate mat karo, files wapas summarise mat karo, pehle likha recap mat karo.
+- Preamble/postamble skip. Code pehle, ek line "why" agar zaroori ho.
+
+### Model & agent-mode
+- Cheapest capable model: chhote edits (rename/format/small fix/boilerplate) → base model;
+  sirf architecture/hard-debug → premium model.
+- Agent mode me ~2–3 tool cycle me converge na ho to ruk ke report karo — loop mat karo.
+
+---
+
+## 4. Verification — lean (biggest silent credit drain)
+- Change compile ho aur ek requested kaam kare — bas.
+- **Full quality gate (full lint + full test + full build) har task pe MAT chalao.**
+- Tiered: backend change = sirf related ek test; UI change = sirf build;
+  full gate sirf high-risk cross-module pe, wo bhi at most 1 baar, jab maanga jaye.
+- Tests/lint ko ek-line note ki tarah suggest karo; generate mat karo jab tak bola na jaye.
+
+---
+
+## 5. Git Safety / Backup — code kabhi waste na ho
+- Har working change ke baad: `git add -A && git commit -m "<what>" && git push origin HEAD`.
+- Codex jo bhi code/config/docs change kare, final response se pehle exact changed scope ko Git me commit + `git push origin HEAD` kare, taaki GitHub par live update ho jaye.
+- Risky kaam (3+ files / migration / rename / delete) se PEHLE checkpoint commit + push.
+- **NEVER bina explicit user permission:** `git reset --hard`, `git checkout -- .`,
+  `git clean -fd`, force push. Unsure ho to STOP karke poochho.
+- Project OneDrive path me hi rahe; OneDrive sync band mat karo.
+
+---
+
+## 6. Profit Intelligence
+`docs/profit-intelligence.md` SIRF in ke liye padho:
+balance sheet · accounting · profitability · expenses · cashflow ·
+service recipes · CEO dashboard
+
+### Accounting
+- `journalEntryLines` = source of truth
+- `balanceSheetSnapshots` = archival only
+- Debit == Credit
+- WMA inventory costing
+- Idempotent schedulers
+
+---
+
+## 7. Balance Sheet Scope
+**Keep:** Balance Sheet · Ledger Engine · Auto Ledger Grouping · Tally Drill Down ·
+Working Capital · Fixed Assets · Deferred Revenue · Cost Centers ·
+Hardening Controls · AI Ledger Suggestions
+
+**Do NOT build:** Trading Account · Purchase Account Screen · Sales Account Screen ·
+Profit & Loss Report · Trial Balance Tab · Cash Flow Tab · Forecast Tab · Dashboard Tab
+
+---
+
+## ❌ Anti-patterns (credit-burners — avoid)
+- Bade protected/service file ko "context samajhne" ke liye dobara padhna.
+- 3-line change ke liye poori file dobara emit karna.
+- Audit + plan + implement + test ek hi giant prompt me.
+- Trivial edit ke baad poora test/build suite chalana.
+- TS / Mongo migration suggest karna (hamesha reject — wasted tokens).
+- Servers baar-baar restart karna.
