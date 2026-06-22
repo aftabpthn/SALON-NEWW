@@ -214,12 +214,17 @@ function measureUnitCost(product = {}, line = {}) {
 
 function mapContainer(row = {}) {
   const mapped = camel(row);
+  const containerNo = Number(mapped.containerNo || 0);
+  const stockUnit = mapped.stockUnit || "pcs";
   return {
     ...mapped,
-    containerNo: Number(mapped.containerNo || 0),
+    containerNo,
+    containerCode: `${stockUnit} #${containerNo || 1}`,
     capacityQty: money(mapped.capacityQty),
     usedQty: money(mapped.usedQty),
-    balanceQty: money(mapped.balanceQty)
+    usedQuantity: money(mapped.usedQty),
+    balanceQty: money(mapped.balanceQty),
+    balanceQuantity: money(mapped.balanceQty)
   };
 }
 
@@ -228,8 +233,11 @@ function mapUsage(row = {}) {
   return {
     ...mapped,
     usedQty: money(mapped.usedQty),
+    usedQuantity: money(mapped.usedQty),
     productCost: money(mapped.productCost),
-    balanceAfter: money(mapped.balanceAfter)
+    cost: money(mapped.productCost),
+    balanceAfter: money(mapped.balanceAfter),
+    usedAt: mapped.createdAt || ""
   };
 }
 
@@ -259,6 +267,31 @@ function usageText(entries = []) {
   }
   const parts = Object.entries(qtyByUnit).map(([unit, qty]) => `${qty} ${unit}`);
   return parts.length ? parts.join(" + ") : "0";
+}
+
+function groupUsageRows(entries = [], keyFn, baseFn = () => ({})) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = keyFn(entry);
+    const row = groups.get(key) || {
+      ...baseFn(entry),
+      entries: 0,
+      quantityByUnit: {},
+      totalUsedText: "0",
+      cost: 0,
+      exceptionCount: 0,
+      lastUsedAt: ""
+    };
+    const unit = entry.unit || "pcs";
+    row.entries += 1;
+    row.quantityByUnit[unit] = money(number(row.quantityByUnit[unit], 0) + number(entry.usedQty, 0));
+    row.cost = money(number(row.cost, 0) + number(entry.productCost, 0));
+    if (entry.usageType !== "client") row.exceptionCount += 1;
+    row.lastUsedAt = String(entry.createdAt || "").localeCompare(String(row.lastUsedAt || "")) > 0 ? entry.createdAt : row.lastUsedAt;
+    row.totalUsedText = Object.entries(row.quantityByUnit).map(([unitName, qty]) => `${qty} ${unitName}`).join(" + ");
+    groups.set(key, row);
+  }
+  return [...groups.values()].sort((a, b) => Number(b.cost || 0) - Number(a.cost || 0) || String(b.lastUsedAt || "").localeCompare(String(a.lastUsedAt || "")));
 }
 
 function daysOpen(dateText = "") {
@@ -850,6 +883,114 @@ export class BackbarProductConsumptionService {
     const entries = db.prepare(`SELECT * FROM backbar_product_usage_entries WHERE ${where} ORDER BY createdAt DESC LIMIT @limit`).all(params).map(mapUsage);
     const alerts = db.prepare(`SELECT * FROM backbar_product_alerts WHERE ${where} ORDER BY createdAt DESC LIMIT @limit`).all(params).map(mapAlert);
     const nonFinished = containers.filter((container) => container.status !== "finished");
+    const clientEntries = entries.filter((entry) => entry.usageType === "client");
+    const adjustmentEntries = entries.filter((entry) => entry.usageType !== "client");
+    const invoiceIds = [...new Set(clientEntries.map((entry) => entry.invoiceId).filter(Boolean))];
+    const invoiceItems = tableExists("invoice_items") && invoiceIds.length
+      ? db.prepare(`SELECT * FROM invoice_items WHERE tenant_id = ? AND invoice_id IN (${placeholders(invoiceIds)})`).all(access.tenantId, ...invoiceIds)
+      : [];
+    const itemsByInvoice = new Map();
+    for (const item of invoiceItems) {
+      const rows = itemsByInvoice.get(item.invoice_id) || [];
+      rows.push(item);
+      itemsByInvoice.set(item.invoice_id, rows);
+    }
+    const serviceUsage = groupUsageRows(clientEntries, (entry) => entry.serviceId || entry.serviceName || "service", (entry) => ({
+      serviceId: entry.serviceId || "",
+      serviceName: entry.serviceName || "Service",
+      serviceRevenue: 0,
+      productCost: 0,
+      actualProfit: 0,
+      profitMarginPct: 0,
+      revenueLinked: 0
+    })).map((row) => {
+      const related = clientEntries.filter((entry) => (entry.serviceId || entry.serviceName || "service") === (row.serviceId || row.serviceName || "service"));
+      let serviceRevenue = 0;
+      let revenueLinked = 0;
+      for (const entry of related) {
+        const serviceItems = (itemsByInvoice.get(entry.invoiceId) || []).filter((item) => item.item_type === "service");
+        const matched = serviceItems.find((item) => item.item_id === entry.serviceId || item.appointment_service_id === entry.serviceId)
+          || (serviceItems.length === 1 ? serviceItems[0] : null);
+        const revenue = money(matched?.total_amount || 0);
+        serviceRevenue = money(serviceRevenue + revenue);
+        if (revenue > 0) revenueLinked += 1;
+      }
+      const productCost = money(row.cost);
+      const actualProfit = money(serviceRevenue - productCost);
+      return {
+        ...row,
+        serviceRevenue,
+        productCost,
+        actualProfit,
+        revenueLinked,
+        profitMarginPct: serviceRevenue > 0 ? money((actualProfit / serviceRevenue) * 100) : 0
+      };
+    });
+    const staffUsage = groupUsageRows(entries, (entry) => entry.staffId || entry.staffName || "unassigned", (entry) => ({
+      staffId: entry.staffId || "",
+      staffName: entry.staffName || "Unassigned"
+    }));
+    const clientUsage = groupUsageRows(clientEntries, (entry) => entry.clientId || entry.invoiceId || entry.clientName || "walk-in", (entry) => ({
+      clientId: entry.clientId || "",
+      clientName: entry.clientName || "Walk-in client",
+      invoiceNumber: entry.invoiceNumber || "",
+      serviceName: entry.serviceName || ""
+    }));
+    const wastageByType = groupUsageRows(adjustmentEntries, (entry) => entry.usageType || "manual_adjustment", (entry) => ({
+      usageType: entry.usageType || "manual_adjustment",
+      reason: entry.reason || ""
+    }));
+    const approvals = db.prepare(`
+      SELECT * FROM backbar_override_requests
+      WHERE tenant_id = @tenant_id AND productId = @productId
+        ${branchId || product.branchId ? "AND branch_id = @branch_id" : ""}
+      ORDER BY createdAt DESC
+      LIMIT @limit
+    `).all(params).map(mapOverrideRequest);
+    const entityLedger = [
+      ...containers.map((container) => ({
+        entityType: "container",
+        entityId: container.id,
+        title: `${container.containerCode} ${container.status}`,
+        detail: `${container.usedQty} ${container.measureUnit} used, ${container.balanceQty} ${container.measureUnit} left`,
+        eventAt: container.updatedAt || container.createdAt || container.openedAt || ""
+      })),
+      ...entries.map((entry) => ({
+        entityType: entry.usageType === "client" ? "client_usage" : "adjustment",
+        entityId: entry.id,
+        title: entry.usageType === "client" ? `${entry.clientName || "Walk-in client"} usage` : `${entry.usageType} entry`,
+        detail: `${entry.usedQty} ${entry.unit} · ${entry.serviceName || entry.reason || entry.invoiceNumber || "Product consume"}`,
+        eventAt: entry.createdAt || ""
+      })),
+      ...approvals.map((request) => ({
+        entityType: "approval",
+        entityId: request.id,
+        title: `${request.status} override request`,
+        detail: `${request.activeBalanceQty} ${request.measureUnit} left · ${request.reason}`,
+        eventAt: request.updatedAt || request.createdAt || ""
+      })),
+      ...alerts.map((alert) => ({
+        entityType: "alert",
+        entityId: alert.id,
+        title: alert.title || alert.alertType,
+        detail: alert.message || "",
+        eventAt: alert.createdAt || ""
+      }))
+    ].sort((a, b) => String(b.eventAt || "").localeCompare(String(a.eventAt || ""))).slice(0, 120);
+    const totalRevenue = money(serviceUsage.reduce((sum, row) => sum + number(row.serviceRevenue, 0), 0));
+    const totalProductCost = money(entries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
+    const totalWastageCost = money(adjustmentEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
+    const activeContainer = containers.find((container) => container.status === "open") || null;
+    const reportCards = [
+      { key: "container_control", label: "Container-level control", status: containers.length ? "active" : "waiting", metric: `${containers.length} containers` },
+      { key: "client_usage", label: "Per-client consumption", status: clientEntries.length ? "active" : "waiting", metric: `${clientEntries.length} client entries` },
+      { key: "recipe_control", label: "Recipe / range control", status: alerts.some((alert) => alert.alertType === "recipe_overuse") ? "attention" : "active", metric: `${alerts.filter((alert) => alert.alertType === "recipe_overuse").length} overuse alerts` },
+      { key: "wastage_control", label: "Wastage split", status: adjustmentEntries.length ? "active" : "clean", metric: `${adjustmentEntries.length} exceptions` },
+      { key: "entity_ledger", label: "Entity-level ledger", status: entityLedger.length ? "active" : "waiting", metric: `${entityLedger.length} events` },
+      { key: "alerts", label: "Alerts", status: alerts.filter((alert) => alert.status === "open").length ? "attention" : "clean", metric: `${alerts.filter((alert) => alert.status === "open").length} open` },
+      { key: "owner_reports", label: "Owner reports", status: "active", metric: `${staffUsage.length} staff rows` },
+      { key: "profit_control", label: "Profit after product cost", status: totalRevenue ? "active" : "cost-only", metric: money(totalRevenue - totalProductCost) }
+    ];
     return {
       productId,
       productName: product.name || productId,
@@ -863,15 +1004,30 @@ export class BackbarProductConsumptionService {
         pausedContainers: containers.filter((container) => container.status === "paused_override").length,
         finishedContainers: containers.filter((container) => container.status === "finished").length,
         totalUsedText: usageText(entries),
+        clientUsedText: usageText(clientEntries),
+        wastageText: usageText(adjustmentEntries),
         usageCost: money(entries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
-        openAlerts: alerts.filter((alert) => alert.status === "open").length
+        clientUsageCost: money(clientEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
+        wastageCost: totalWastageCost,
+        serviceRevenue: totalRevenue,
+        actualProfit: money(totalRevenue - totalProductCost),
+        openAlerts: alerts.filter((alert) => alert.status === "open").length,
+        pendingApprovals: approvals.filter((request) => request.status === "pending").length,
+        activeContainer
       },
       containers: containers.map((container) => ({
         ...container,
         entries: entries.filter((entry) => entry.containerId === container.id)
       })),
       entries,
-      alerts
+      alerts,
+      approvals,
+      clientUsage,
+      staffUsage,
+      serviceUsage,
+      wastageByType,
+      entityLedger,
+      reportCards
     };
   }
 

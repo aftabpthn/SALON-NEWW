@@ -148,6 +148,70 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </ng-template>
         </section>
 
+        <section class="panel control-ledger-panel">
+          <div class="section-title">
+            <div><span class="eyebrow">Product Consumption Control Ledger</span><h2>Every ml, gram, container, client and staff in one report</h2></div>
+          </div>
+          <div class="control-card-grid">
+            <article *ngFor="let card of controlCards()" [class.attention]="card['status'] === 'attention'" [class.clean]="card['status'] === 'clean'">
+              <span>{{ card['label'] }}</span>
+              <strong>{{ card['metric'] }}</strong>
+              <small>{{ card['status'] }}</small>
+            </article>
+          </div>
+          <div class="mini-metrics">
+            <div><span>Client use</span><strong>{{ backbarSummary()['clientUsedText'] || '0' }}</strong></div>
+            <div><span>Waste / adjust</span><strong>{{ backbarSummary()['wastageText'] || '0' }}</strong></div>
+            <div><span>Pending approvals</span><strong>{{ backbarSummary()['pendingApprovals'] || 0 }}</strong></div>
+            <div><span>Profit impact</span><strong>{{ (backbarSummary()['actualProfit'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
+          </div>
+          <div class="control-ledger-grid">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Service</th><th>Used</th><th>Product cost</th><th>Revenue</th><th>Profit</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of ledgerServiceUsage().slice(0, 8)">
+                    <td>{{ row['serviceName'] || 'Service' }}</td>
+                    <td>{{ row['totalUsedText'] || '0' }}</td>
+                    <td>{{ (row['productCost'] || row['cost'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
+                    <td>{{ (row['serviceRevenue'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
+                    <td>{{ (row['actualProfit'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="ledger-side">
+              <article>
+                <strong>Staff accountability</strong>
+                <span *ngFor="let row of ledgerStaffUsage().slice(0, 4)">{{ row['staffName'] || 'Unassigned' }} · {{ row['totalUsedText'] || '0' }} · {{ (row['cost'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <small *ngIf="!ledgerStaffUsage().length">No staff usage yet</small>
+              </article>
+              <article>
+                <strong>Client history</strong>
+                <span *ngFor="let row of ledgerClientUsage().slice(0, 4)">{{ row['clientName'] || 'Walk-in client' }} · {{ row['invoiceNumber'] || 'invoice' }} · {{ row['totalUsedText'] || '0' }}</span>
+                <small *ngIf="!ledgerClientUsage().length">No client usage yet</small>
+              </article>
+              <article>
+                <strong>Waste / exception split</strong>
+                <span *ngFor="let row of ledgerWastageRows().slice(0, 4)">{{ row['usageType'] || 'adjustment' }} · {{ row['totalUsedText'] || '0' }} · {{ (row['cost'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <small *ngIf="!ledgerWastageRows().length">No waste entries</small>
+              </article>
+              <article>
+                <strong>Approval queue</strong>
+                <span *ngFor="let row of ledgerApprovals().slice(0, 4)">{{ row['status'] }} · #{{ row['activeContainerNo'] }} · {{ row['activeBalanceQty'] }} {{ row['measureUnit'] }}</span>
+                <small *ngIf="!ledgerApprovals().length">No override approval history</small>
+              </article>
+            </div>
+          </div>
+          <div class="timeline mini entity-ledger">
+            <article *ngFor="let event of entityLedger().slice(0, 10)">
+              <strong>{{ event['title'] || event['entityType'] }}</strong>
+              <span>{{ event['detail'] || event['entityId'] }}</span>
+              <small>{{ event['entityType'] }} · {{ event['eventAt'] | date: 'short' }}</small>
+            </article>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="section-title"><div><span class="eyebrow">Tube-level / bulk history</span><h2>Backbar container trail</h2></div></div>
           <div class="mini-metrics">
@@ -278,6 +342,74 @@ import { StateComponent } from '../shared/ui/state/state.component';
       margin-top: 3px;
     }
 
+    .control-ledger-panel {
+      display: grid;
+      gap: 14px;
+    }
+
+    .control-card-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .control-card-grid article {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fff;
+      display: grid;
+      gap: 4px;
+    }
+
+    .control-card-grid article.attention {
+      border-color: #fecdd3;
+      background: #fff1f2;
+    }
+
+    .control-card-grid article.clean {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+    }
+
+    .control-card-grid span,
+    .control-card-grid small {
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .control-ledger-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(300px, .8fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .ledger-side {
+      display: grid;
+      gap: 8px;
+    }
+
+    .ledger-side article {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px;
+      background: #fff;
+      display: grid;
+      gap: 4px;
+    }
+
+    .ledger-side span,
+    .ledger-side small {
+      color: var(--muted);
+    }
+
+    .entity-ledger {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .recommendation-card {
       display: grid;
       gap: 8px;
@@ -362,7 +494,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
     @media (max-width: 1180px) {
       .product-kpis,
       .product-layout,
-      .product-grid {
+      .product-grid,
+      .control-card-grid,
+      .control-ledger-grid,
+      .entity-ledger {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -371,6 +506,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
       .product-kpis,
       .product-layout,
       .product-grid,
+      .control-card-grid,
+      .control-ledger-grid,
+      .entity-ledger,
       .detail-list,
       .mini-metrics {
         grid-template-columns: 1fr;
@@ -556,6 +694,34 @@ export class Product360Component implements OnInit {
 
   backbarEntries(container: ApiRecord): ApiRecord[] {
     return (container?.['entries'] || []) as ApiRecord[];
+  }
+
+  controlCards(): ApiRecord[] {
+    return (this.backbarProductReport()?.['reportCards'] || []) as ApiRecord[];
+  }
+
+  ledgerServiceUsage(): ApiRecord[] {
+    return (this.backbarProductReport()?.['serviceUsage'] || []) as ApiRecord[];
+  }
+
+  ledgerStaffUsage(): ApiRecord[] {
+    return (this.backbarProductReport()?.['staffUsage'] || []) as ApiRecord[];
+  }
+
+  ledgerClientUsage(): ApiRecord[] {
+    return (this.backbarProductReport()?.['clientUsage'] || []) as ApiRecord[];
+  }
+
+  ledgerWastageRows(): ApiRecord[] {
+    return (this.backbarProductReport()?.['wastageByType'] || []) as ApiRecord[];
+  }
+
+  ledgerApprovals(): ApiRecord[] {
+    return (this.backbarProductReport()?.['approvals'] || []) as ApiRecord[];
+  }
+
+  entityLedger(): ApiRecord[] {
+    return (this.backbarProductReport()?.['entityLedger'] || []) as ApiRecord[];
   }
 
   initials(value = ''): string {
