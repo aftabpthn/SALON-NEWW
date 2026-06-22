@@ -358,6 +358,14 @@ inventoryIntelligenceRouter.get(
 );
 
 inventoryIntelligenceRouter.get(
+  "/inventory-intelligence/product-consumption-control-ledger",
+  requirePermission("read", () => "inventory"),
+  asyncHandler((req, res) => {
+    res.json(backbarProductConsumptionService.controlLedgerReport(req.query, req.access));
+  })
+);
+
+inventoryIntelligenceRouter.get(
   "/inventory-intelligence/backbar-products/:productId/report",
   requirePermission("read", () => "inventory"),
   asyncHandler((req, res) => {

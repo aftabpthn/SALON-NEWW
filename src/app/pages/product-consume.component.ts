@@ -147,6 +147,85 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
         </div>
       </section>
 
+      <section class="control-report" *ngIf="controlLedgerReport() as report">
+        <div class="ledger-head">
+          <div>
+            <span class="eyebrow">Control ledger reports</span>
+            <h3>Every ml / gram report center</h3>
+          </div>
+          <small>Product, staff, client, service, waste, alert and approval reports.</small>
+        </div>
+        <div class="report-filters">
+          <label><span>Branch</span><input [(ngModel)]="ledgerFilters.branchId" placeholder="Branch ID"></label>
+          <label>
+            <span>Product</span>
+            <select [(ngModel)]="ledgerFilters.productId">
+              <option value="">All products</option>
+              <option *ngFor="let product of productOptions()" [value]="product.id">{{ product.name }}</option>
+            </select>
+          </label>
+          <label><span>Staff</span><input [(ngModel)]="ledgerFilters.staffId" placeholder="Staff ID"></label>
+          <label>
+            <span>Type</span>
+            <select [(ngModel)]="ledgerFilters.usageType">
+              <option value="">All usage</option>
+              <option value="client">Client use</option>
+              <option value="spillage">Spillage</option>
+              <option value="expired">Expired</option>
+              <option value="damaged">Damaged</option>
+              <option value="manual_adjustment">Manual adjustment</option>
+            </select>
+          </label>
+          <label><span>Start</span><input type="date" [(ngModel)]="ledgerFilters.startDate"></label>
+          <label><span>End</span><input type="date" [(ngModel)]="ledgerFilters.endDate"></label>
+          <button type="button" class="ghost" (click)="loadControlLedgerReport()">Run report</button>
+        </div>
+        <div class="owner-metrics">
+          <article><span>Products</span><strong>{{ report['summary']?.products || 0 }}</strong><small>tracked</small></article>
+          <article><span>Staff</span><strong>{{ report['summary']?.staff || 0 }}</strong><small>accountability</small></article>
+          <article><span>Clients</span><strong>{{ report['summary']?.clients || 0 }}</strong><small>history linked</small></article>
+          <article><span>Usage cost</span><strong>{{ money(report['summary']?.usageCost || 0) }}</strong><small>client + exceptions</small></article>
+          <article><span>Waste cost</span><strong>{{ money(report['summary']?.exceptionCost || 0) }}</strong><small>waste/adjustment</small></article>
+        </div>
+        <div class="report-grid">
+          <div class="report-table">
+            <h4>Product-wise usage</h4>
+            <div class="report-row head"><span>Product</span><span>Used</span><span>Cost</span><span>Exceptions</span><span>Last</span></div>
+            <div class="report-row" *ngFor="let row of ledgerProductRows().slice(0, 8)">
+              <strong>{{ row['productName'] || row['productId'] }}</strong>
+              <span>{{ row['totalUsedText'] || '0' }}</span>
+              <span>{{ money(row['cost'] || 0) }}</span>
+              <span>{{ row['exceptionCount'] || 0 }}</span>
+              <span>{{ row['lastUsedAt'] | date:'short' }}</span>
+            </div>
+          </div>
+          <div class="report-side">
+            <article>
+              <strong>Service report</strong>
+              <span *ngFor="let row of ledgerServiceRows().slice(0, 4)">{{ row['serviceName'] || 'Service' }} · {{ row['totalUsedText'] || '0' }} · {{ money(row['cost'] || 0) }}</span>
+              <small *ngIf="!ledgerServiceRows().length">No service rows</small>
+            </article>
+            <article>
+              <strong>Staff report</strong>
+              <span *ngFor="let row of ledgerStaffRows().slice(0, 4)">{{ row['staffName'] || 'Unassigned' }} · {{ row['totalUsedText'] || '0' }} · {{ money(row['cost'] || 0) }}</span>
+              <small *ngIf="!ledgerStaffRows().length">No staff rows</small>
+            </article>
+            <article>
+              <strong>Wastage report</strong>
+              <span *ngFor="let row of ledgerWasteRows().slice(0, 4)">{{ row['usageType'] || 'adjustment' }} · {{ row['totalUsedText'] || '0' }} · {{ money(row['cost'] || 0) }}</span>
+              <small *ngIf="!ledgerWasteRows().length">No waste rows</small>
+            </article>
+          </div>
+        </div>
+        <div class="report-feed">
+          <article *ngFor="let event of ledgerEvents().slice(0, 8)">
+            <strong>{{ event['title'] || event['entityType'] }}</strong>
+            <span>{{ event['detail'] || event['entityId'] }}</span>
+            <small>{{ event['entityType'] }} · {{ event['eventAt'] | date:'short' }}</small>
+          </article>
+        </div>
+      </section>
+
       <section class="staff-audit" *ngIf="staffUsageAudit() as audit">
         <div class="ledger-head">
           <div>
@@ -432,6 +511,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .backbar-ledger { border: 1px solid #dcebea; border-radius: 16px; padding: 14px; display: grid; gap: 12px; background: #f8fbfa; }
     .owner-report { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
     .owner-dashboard { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
+    .control-report { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
     .staff-audit { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
     .owner-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
     .owner-metrics article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 4px; background: #f8fbfa; }
@@ -461,6 +541,19 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .profit-row { min-width: 760px; display: grid; grid-template-columns: 1.5fr .7fr .9fr .9fr .9fr .7fr; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #edf4f3; }
     .profit-row:last-child { border-bottom: 0; }
     .profit-row.head { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; background: #f8fbfa; }
+    .report-filters { display: grid; grid-template-columns: .9fr 1.4fr .9fr .9fr .7fr .7fr auto; gap: 10px; align-items: end; }
+    .report-filters label { display: grid; gap: 6px; }
+    .report-filters span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .report-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, .8fr); gap: 12px; align-items: start; }
+    .report-table { border: 1px solid #dcebea; border-radius: 14px; overflow: auto; }
+    .report-table h4 { margin: 0; padding: 10px 12px; border-bottom: 1px solid #edf4f3; }
+    .report-row { min-width: 820px; display: grid; grid-template-columns: 1.5fr 1fr .8fr .7fr 1fr; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #edf4f3; }
+    .report-row:last-child { border-bottom: 0; }
+    .report-row.head { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; background: #f8fbfa; }
+    .report-side, .report-feed { display: grid; gap: 8px; }
+    .report-side article, .report-feed article { border: 1px solid #dcebea; border-radius: 12px; padding: 10px; display: grid; gap: 4px; background: #f8fbfa; }
+    .report-side span, .report-side small, .report-feed span, .report-feed small { color: #64748b; }
+    .report-feed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ledger-head, .ledger-summary, .active-container { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .ledger-head h3 { margin: 2px 0 0; }
     .ledger-head small, .ledger-product small, .ledger-summary span, .history-row span { color: #64748b; }
@@ -495,7 +588,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     @media (max-width: 900px) {
       .module-hero, .workspace { display: grid; }
       .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .audit-filters, .audit-layout, .dashboard-layout { grid-template-columns: 1fr; }
+      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed { grid-template-columns: 1fr; }
       .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
@@ -521,11 +614,13 @@ export class ProductConsumeComponent {
   readonly backbarLedger = signal<ApiRecord | null>(null);
   readonly backbarReport = signal<ApiRecord | null>(null);
   readonly backbarDashboard = signal<ApiRecord | null>(null);
+  readonly controlLedgerReport = signal<ApiRecord | null>(null);
   readonly staffUsageAudit = signal<ApiRecord | null>(null);
   readonly units = RECIPE_UNITS;
   productForm = { productId: '', qty: 1, unit: 'pcs', wastagePct: 0, minQty: 0, maxQty: 0, substitutes: '' };
   adjustForm = { quantity: 0, usageType: 'spillage', reason: '' };
   auditFilters = { branchId: '', staffId: '', startDate: '', endDate: '' };
+  ledgerFilters = { branchId: '', productId: '', staffId: '', usageType: '', startDate: '', endDate: '' };
   overrideReason = '';
   dashboardPeriod = 'daily';
   productQuery = '';
@@ -538,9 +633,11 @@ export class ProductConsumeComponent {
 
   constructor() {
     this.auditFilters.branchId = this.api.selectedBranchId();
+    this.ledgerFilters.branchId = this.api.selectedBranchId();
     this.loadProducts();
     this.loadBackbarReport();
     this.loadBackbarDashboard();
+    this.loadControlLedgerReport();
     this.loadStaffUsageAudit();
     this.load();
   }
@@ -565,6 +662,7 @@ export class ProductConsumeComponent {
         if (this.selectedId()) this.loadBackbarLedger(this.selectedId());
         this.loadBackbarReport();
         this.loadBackbarDashboard();
+        this.loadControlLedgerReport();
         this.loadStaffUsageAudit();
         this.loading.set(false);
       },
@@ -726,6 +824,21 @@ export class ProductConsumeComponent {
     });
   }
 
+  loadControlLedgerReport(): void {
+    const branchId = this.ledgerFilters.branchId || this.api.selectedBranchId();
+    this.ledgerFilters.branchId = branchId;
+    const params: ApiRecord = { branchId, limit: 300 };
+    if (this.ledgerFilters.productId) params['productId'] = this.ledgerFilters.productId;
+    if (this.ledgerFilters.staffId) params['staffId'] = this.ledgerFilters.staffId;
+    if (this.ledgerFilters.usageType) params['usageType'] = this.ledgerFilters.usageType;
+    if (this.ledgerFilters.startDate) params['startDate'] = this.ledgerFilters.startDate;
+    if (this.ledgerFilters.endDate) params['endDate'] = this.ledgerFilters.endDate;
+    this.api.list<ApiRecord>('inventory-intelligence/product-consumption-control-ledger', params).subscribe({
+      next: (report) => this.controlLedgerReport.set(report || null),
+      error: () => this.controlLedgerReport.set(null)
+    });
+  }
+
   setDashboardPeriod(period: string): void {
     this.dashboardPeriod = period || 'daily';
     this.loadBackbarDashboard();
@@ -763,6 +876,7 @@ export class ProductConsumeComponent {
         if (this.selectedId()) this.loadBackbarLedger(this.selectedId());
         this.loadBackbarReport();
         this.loadBackbarDashboard();
+        this.loadControlLedgerReport();
         this.loadStaffUsageAudit();
         this.message.set('Backbar adjustment recorded.');
       },
@@ -793,6 +907,7 @@ export class ProductConsumeComponent {
         if (this.selectedId()) this.loadBackbarLedger(this.selectedId());
         this.loadBackbarReport();
         this.loadBackbarDashboard();
+        this.loadControlLedgerReport();
         this.loadStaffUsageAudit();
         this.message.set('Manager approval request added.');
       },
@@ -815,6 +930,7 @@ export class ProductConsumeComponent {
         if (this.selectedId()) this.loadBackbarLedger(this.selectedId());
         this.loadBackbarReport();
         this.loadBackbarDashboard();
+        this.loadControlLedgerReport();
         this.loadStaffUsageAudit();
         this.message.set(decision === 'approve' ? 'Override approved and next container opened.' : 'Override request rejected.');
       },
@@ -863,6 +979,30 @@ export class ProductConsumeComponent {
 
   dashboardServiceProfit(): ApiRecord[] {
     return (this.backbarDashboard()?.['serviceProfit'] || []) as ApiRecord[];
+  }
+
+  productOptions(): ProductRow[] {
+    return this.products().slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }
+
+  ledgerProductRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['productRows'] || []) as ApiRecord[];
+  }
+
+  ledgerServiceRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['serviceRows'] || []) as ApiRecord[];
+  }
+
+  ledgerStaffRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['staffRows'] || []) as ApiRecord[];
+  }
+
+  ledgerWasteRows(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['wasteRows'] || []) as ApiRecord[];
+  }
+
+  ledgerEvents(): ApiRecord[] {
+    return (this.controlLedgerReport()?.['entityLedger'] || []) as ApiRecord[];
   }
 
   lineNeedsReason(line: ConsumeLine): boolean {
@@ -983,6 +1123,7 @@ export class ProductConsumeComponent {
         }
         this.loadBackbarReport();
         this.loadBackbarDashboard();
+        this.loadControlLedgerReport();
         this.loadStaffUsageAudit();
         this.message.set(successMessage);
         this.saving.set(false);

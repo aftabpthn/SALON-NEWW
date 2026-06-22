@@ -783,6 +783,161 @@ export class BackbarProductConsumptionService {
     };
   }
 
+  controlLedgerReport(query = {}, access = {}) {
+    ensureBackbarSchema();
+    const branchId = query.branchId || query.branch_id || access.requestedBranchId || access.branchId || "";
+    if (branchId) assertBranch(access, branchId);
+    const productId = query.productId || query.product_id || "";
+    const staffId = query.staffId || query.staff_id || "";
+    const clientId = query.clientId || query.client_id || "";
+    const serviceId = query.serviceId || query.service_id || "";
+    const usageType = query.usageType || query.usage_type || "";
+    const startDate = query.startDate || query.start_date || "";
+    const endDate = query.endDate || query.end_date || "";
+    const limit = Math.min(1000, Math.max(1, number(query.limit, 300)));
+
+    const scopeParams = { tenant_id: access.tenantId, limit };
+    const scopeFilters = ["tenant_id = @tenant_id"];
+    if (branchId) {
+      scopeFilters.push("branch_id = @branch_id");
+      scopeParams.branch_id = branchId;
+    }
+    if (productId) {
+      scopeFilters.push("productId = @productId");
+      scopeParams.productId = productId;
+    }
+
+    const entryParams = { ...scopeParams };
+    const entryFilters = [...scopeFilters];
+    if (staffId) {
+      entryFilters.push("staffId = @staffId");
+      entryParams.staffId = staffId;
+    }
+    if (clientId) {
+      entryFilters.push("clientId = @clientId");
+      entryParams.clientId = clientId;
+    }
+    if (serviceId) {
+      entryFilters.push("serviceId = @serviceId");
+      entryParams.serviceId = serviceId;
+    }
+    if (usageType) {
+      entryFilters.push("usageType = @usageType");
+      entryParams.usageType = usageType;
+    }
+    if (startDate) {
+      entryFilters.push("substr(createdAt, 1, 10) >= @startDate");
+      entryParams.startDate = startDate;
+    }
+    if (endDate) {
+      entryFilters.push("substr(createdAt, 1, 10) <= @endDate");
+      entryParams.endDate = endDate;
+    }
+
+    const containers = db.prepare(`
+      SELECT * FROM backbar_product_containers
+      WHERE ${scopeFilters.join(" AND ")}
+      ORDER BY updatedAt DESC
+      LIMIT @limit
+    `).all(scopeParams).map(mapContainer);
+    const entries = db.prepare(`
+      SELECT * FROM backbar_product_usage_entries
+      WHERE ${entryFilters.join(" AND ")}
+      ORDER BY createdAt DESC
+      LIMIT @limit
+    `).all(entryParams).map(mapUsage);
+    const alerts = db.prepare(`
+      SELECT * FROM backbar_product_alerts
+      WHERE ${scopeFilters.join(" AND ")}
+      ORDER BY createdAt DESC
+      LIMIT @limit
+    `).all(scopeParams).map(mapAlert);
+    const approvals = db.prepare(`
+      SELECT * FROM backbar_override_requests
+      WHERE ${scopeFilters.join(" AND ")}
+      ORDER BY createdAt DESC
+      LIMIT @limit
+    `).all(scopeParams).map(mapOverrideRequest);
+
+    const clientEntries = entries.filter((entry) => entry.usageType === "client");
+    const exceptionEntries = entries.filter((entry) => entry.usageType !== "client");
+    const productRows = groupUsageRows(entries, (entry) => entry.productId || entry.productName || "product", (entry) => ({
+      productId: entry.productId || "",
+      productName: entry.productName || "Product"
+    }));
+    const staffRows = groupUsageRows(entries, (entry) => entry.staffId || entry.staffName || "unassigned", (entry) => ({
+      staffId: entry.staffId || "",
+      staffName: entry.staffName || "Unassigned"
+    }));
+    const serviceRows = groupUsageRows(clientEntries, (entry) => entry.serviceId || entry.serviceName || "service", (entry) => ({
+      serviceId: entry.serviceId || "",
+      serviceName: entry.serviceName || "Service"
+    }));
+    const clientRows = groupUsageRows(clientEntries, (entry) => entry.clientId || entry.invoiceId || entry.clientName || "walk-in", (entry) => ({
+      clientId: entry.clientId || "",
+      clientName: entry.clientName || "Walk-in client",
+      invoiceNumber: entry.invoiceNumber || ""
+    }));
+    const wasteRows = groupUsageRows(exceptionEntries, (entry) => entry.usageType || "manual_adjustment", (entry) => ({
+      usageType: entry.usageType || "manual_adjustment",
+      reason: entry.reason || ""
+    }));
+    const entityLedger = [
+      ...entries.map((entry) => ({
+        entityType: entry.usageType === "client" ? "client_usage" : "exception_usage",
+        entityId: entry.id,
+        productId: entry.productId,
+        title: entry.usageType === "client" ? `${entry.clientName || "Walk-in client"} · ${entry.productName}` : `${entry.usageType} · ${entry.productName}`,
+        detail: `${entry.usedQty} ${entry.unit} · ${entry.serviceName || entry.reason || entry.invoiceNumber || "Product consume"}`,
+        eventAt: entry.createdAt || ""
+      })),
+      ...approvals.map((request) => ({
+        entityType: "approval",
+        entityId: request.id,
+        productId: request.productId,
+        title: `${request.status} override · ${request.productName}`,
+        detail: `${request.activeBalanceQty} ${request.measureUnit} left in #${request.activeContainerNo} · ${request.reason}`,
+        eventAt: request.updatedAt || request.createdAt || ""
+      })),
+      ...alerts.map((alert) => ({
+        entityType: "alert",
+        entityId: alert.id,
+        productId: alert.productId,
+        title: alert.title || alert.alertType,
+        detail: alert.message || "",
+        eventAt: alert.createdAt || ""
+      }))
+    ].sort((a, b) => String(b.eventAt || "").localeCompare(String(a.eventAt || ""))).slice(0, limit);
+
+    return {
+      branchId,
+      filters: { productId, staffId, clientId, serviceId, usageType, startDate, endDate, limit },
+      summary: {
+        products: productRows.length,
+        staff: staffRows.length,
+        clients: clientRows.length,
+        services: serviceRows.length,
+        containers: containers.length,
+        openContainers: containers.filter((container) => container.status === "open").length,
+        clientUsageText: usageText(clientEntries),
+        exceptionUsageText: usageText(exceptionEntries),
+        usageCost: money(entries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
+        exceptionCost: money(exceptionEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0)),
+        alerts: alerts.filter((alert) => alert.status === "open").length,
+        pendingApprovals: approvals.filter((request) => request.status === "pending").length
+      },
+      productRows,
+      staffRows,
+      serviceRows,
+      clientRows,
+      wasteRows,
+      approvals,
+      alerts,
+      recentEntries: entries,
+      entityLedger
+    };
+  }
+
   serviceProfitSnapshot({ branchId = "", startDate = "", endDate = "" } = {}, access = {}) {
     if (!tableExists("product_consume_drafts")) {
       return { summary: { serviceRevenue: 0, productCost: 0, actualProfit: 0 }, rows: [], overuseRows: [] };
