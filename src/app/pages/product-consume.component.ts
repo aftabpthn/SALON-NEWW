@@ -889,11 +889,25 @@ export class ProductConsumeComponent {
   }
 
   productPackSize(product: ProductRow | ApiRecord): number {
-    return Number(product?.packSize || product?.['pack_size'] || 0);
+    const configured = Number(product?.packSize || product?.['pack_size'] || 0);
+    if (configured > 0) return configured;
+    return this.productMeasureFromText(product).size;
   }
 
   productPackUnit(product: ProductRow | ApiRecord): string {
-    return String(product?.packUnit || product?.['pack_unit'] || this.productStockUnit(product)).toLowerCase();
+    const configured = String(product?.packUnit || product?.['pack_unit'] || '').toLowerCase();
+    const normalized = this.comparableUnit(configured);
+    const inferred = this.productMeasureFromText(product).unit;
+    if (normalized && !this.sameUnit(normalized, this.productStockUnit(product))) return normalized;
+    return inferred || normalized || this.productStockUnit(product);
+  }
+
+  productMeasureUnit(product: ProductRow | ApiRecord): string {
+    const explicit = String(product?.packUnit || product?.['pack_unit'] || product?.['measureUnit'] || product?.['measure_unit'] || '').toLowerCase();
+    if (explicit && !this.sameUnit(explicit, this.productStockUnit(product))) return this.comparableUnit(explicit);
+    const inferred = this.productMeasureFromText(product).unit;
+    if (inferred) return inferred;
+    return this.productStockUnit(product);
   }
 
   productPackLabel(product: ProductRow | ApiRecord): string {
@@ -910,7 +924,8 @@ export class ProductConsumeComponent {
 
   defaultConsumeUnit(product: ProductRow | ApiRecord): string {
     const packSize = this.productPackSize(product);
-    return packSize > 0 && !this.sameUnit(this.productPackUnit(product), this.productStockUnit(product)) ? this.productPackUnit(product) : this.productStockUnit(product);
+    const measureUnit = this.productMeasureUnit(product);
+    return packSize > 0 && !this.sameUnit(this.productPackUnit(product), this.productStockUnit(product)) ? this.productPackUnit(product) : measureUnit;
   }
 
   consumeUnitCost(product: ProductRow | ApiRecord, unit: string): number {
@@ -937,7 +952,16 @@ export class ProductConsumeComponent {
 
   private comparableUnit(unit: string): string {
     const normalized = String(unit || '').toLowerCase();
-    return normalized === 'gm' ? 'g' : normalized;
+    if (['gm', 'gram', 'grams'].includes(normalized)) return 'g';
+    if (['ltr', 'liter', 'litre', 'liters', 'litres'].includes(normalized)) return 'l';
+    return normalized;
+  }
+
+  private productMeasureFromText(product: ProductRow | ApiRecord): { size: number; unit: string } {
+    const text = `${product?.name || ''} ${product?.['sku'] || ''} ${product?.['category'] || ''}`.toLowerCase();
+    const match = text.match(/(\d+(?:\.\d+)?)\s*(ml|gm|gram|grams|g|kg|ltr|liter|litre|liters|litres|l)\b/);
+    if (!match) return { size: 0, unit: '' };
+    return { size: Number(match[1] || 0), unit: this.comparableUnit(match[2] || '') };
   }
 
   money(value: number | string | undefined): string {
