@@ -162,7 +162,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
           <label><span>Branch</span><input [(ngModel)]="ledgerFilters.branchId" placeholder="Branch ID"></label>
           <label>
             <span>Product</span>
-            <select [(ngModel)]="ledgerFilters.productId">
+            <select [(ngModel)]="ledgerFilters.productId" (ngModelChange)="product360Id = $event">
               <option value="">All products</option>
               <option *ngFor="let product of productOptions()" [value]="product.id">{{ product.name }}</option>
             </select>
@@ -182,6 +182,79 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
           <label><span>Start</span><input type="date" [(ngModel)]="ledgerFilters.startDate"></label>
           <label><span>End</span><input type="date" [(ngModel)]="ledgerFilters.endDate"></label>
           <button type="button" class="ghost" (click)="loadControlLedgerReport()">Run report</button>
+          <button type="button" class="ghost" (click)="loadProduct360()">Product 360</button>
+        </div>
+        <div class="product-360" *ngIf="product360() as view">
+          <div class="ledger-head">
+            <div>
+              <span class="eyebrow">Product 360</span>
+              <h3>{{ view['productName'] || view['product']?.name }}</h3>
+            </div>
+            <small>Stock, containers, client usage, staff, wastage, expiry, profit and action queue.</small>
+          </div>
+          <div class="owner-metrics">
+            <article><span>Sealed</span><strong>{{ view['summary']?.sealedStock || 0 }}</strong><small>{{ view['stockUnit'] || 'pcs' }}</small></article>
+            <article><span>Open</span><strong>{{ view['summary']?.openContainers || 0 }}</strong><small>containers</small></article>
+            <article><span>Finished</span><strong>{{ view['summary']?.finishedContainers || 0 }}</strong><small>history</small></article>
+            <article><span>Usage cost</span><strong>{{ money(view['summary']?.usageCost || 0) }}</strong><small>{{ view['summary']?.totalUsedText || '0' }}</small></article>
+            <article><span>Profit</span><strong>{{ money(view['profitSummary']?.actualProfit || 0) }}</strong><small>{{ view['profitSummary']?.profitMarginPct || 0 }}%</small></article>
+          </div>
+          <div class="product-360-grid">
+            <article>
+              <h4>Containers</h4>
+              <div class="risk-row" *ngFor="let row of product360Containers().slice(0, 5)" [class.high]="row['status'] === 'paused_override'">
+                <strong>{{ row['containerCode'] }} · {{ row['status'] }}</strong>
+                <span>{{ row['usedQty'] || 0 }} / {{ row['capacityQty'] || 0 }} {{ row['measureUnit'] }}</span>
+                <small>QR {{ row['qrCode'] || row['barcode'] }} · balance {{ row['balanceQty'] || 0 }}</small>
+              </div>
+              <small *ngIf="!product360Containers().length">No container rows.</small>
+            </article>
+            <article>
+              <h4>Clients</h4>
+              <div class="risk-row" *ngFor="let row of product360Clients().slice(0, 5)">
+                <strong>{{ row['clientName'] || 'Walk-in client' }}</strong>
+                <span>{{ row['serviceName'] || 'Service' }} · {{ row['totalUsedText'] || '0' }}</span>
+                <small>{{ money(row['cost'] || 0) }} · {{ row['entries'] || 0 }} entries</small>
+              </div>
+              <small *ngIf="!product360Clients().length">No client usage.</small>
+            </article>
+            <article>
+              <h4>Staff</h4>
+              <div class="risk-row" *ngFor="let row of product360Staff().slice(0, 5)">
+                <strong>{{ row['staffName'] || 'Unassigned' }}</strong>
+                <span>{{ row['totalUsedText'] || '0' }}</span>
+                <small>{{ money(row['cost'] || 0) }} · exceptions {{ row['exceptionCount'] || 0 }}</small>
+              </div>
+              <small *ngIf="!product360Staff().length">No staff usage.</small>
+            </article>
+            <article>
+              <h4>Waste</h4>
+              <div class="risk-row" *ngFor="let row of product360Waste().slice(0, 5)" [class.high]="(row['cost'] || 0) > 0">
+                <strong>{{ row['usageType'] || 'adjustment' }}</strong>
+                <span>{{ row['totalUsedText'] || '0' }}</span>
+                <small>{{ money(row['cost'] || 0) }} · {{ row['reason'] || 'No reason' }}</small>
+              </div>
+              <small *ngIf="!product360Waste().length">No waste rows.</small>
+            </article>
+            <article>
+              <h4>Action queue</h4>
+              <div class="risk-row" *ngFor="let row of product360Actions().slice(0, 5)" [class.high]="row['riskLevel'] === 'high'">
+                <strong>{{ row['title'] || row['actionType'] }}</strong>
+                <span>{{ row['riskLevel'] || 'watch' }}</span>
+                <small>{{ row['detail'] || 'Review required' }}</small>
+              </div>
+              <small *ngIf="!product360Actions().length">No product action pending.</small>
+            </article>
+            <article>
+              <h4>Full ledger</h4>
+              <div class="risk-row" *ngFor="let row of product360Ledger().slice(0, 5)">
+                <strong>{{ row['title'] || row['entityType'] }}</strong>
+                <span>{{ row['detail'] || row['entityId'] }}</span>
+                <small>{{ row['eventAt'] | date:'short' }}</small>
+              </div>
+              <small *ngIf="!product360Ledger().length">No ledger events.</small>
+            </article>
+          </div>
         </div>
         <div class="owner-metrics">
           <article><span>Products</span><strong>{{ report['summary']?.products || 0 }}</strong><small>tracked</small></article>
@@ -916,7 +989,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .profit-row { min-width: 760px; display: grid; grid-template-columns: 1.5fr .7fr .9fr .9fr .9fr .7fr; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #edf4f3; }
     .profit-row:last-child { border-bottom: 0; }
     .profit-row.head { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; background: #f8fbfa; }
-    .report-filters { display: grid; grid-template-columns: .9fr 1.4fr .9fr .9fr .7fr .7fr auto; gap: 10px; align-items: end; }
+    .report-filters { display: grid; grid-template-columns: .9fr 1.4fr .9fr .9fr .7fr .7fr auto auto; gap: 10px; align-items: end; }
     .report-filters label { display: grid; gap: 6px; }
     .report-filters span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     .report-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, .8fr); gap: 12px; align-items: start; }
@@ -929,6 +1002,10 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .report-side article, .report-feed article { border: 1px solid #dcebea; border-radius: 12px; padding: 10px; display: grid; gap: 4px; background: #f8fbfa; }
     .report-side span, .report-side small, .report-feed span, .report-feed small { color: #64748b; }
     .report-feed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .product-360 { border: 1px solid #dcebea; border-radius: 16px; padding: 14px; display: grid; gap: 12px; background: #f8fbfa; }
+    .product-360-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .product-360-grid > article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: white; }
+    .product-360-grid h4 { margin: 0; }
     .risk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .next-control-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .deep-control-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
@@ -985,7 +1062,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     @media (max-width: 900px) {
       .module-hero, .workspace { display: grid; }
       .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .risk-grid, .next-control-grid, .deep-control-grid, .owner-control-grid { grid-template-columns: 1fr; }
+      .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .product-360-grid, .risk-grid, .next-control-grid, .deep-control-grid, .owner-control-grid { grid-template-columns: 1fr; }
       .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override, .container-scan, .scan-result { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
@@ -1013,12 +1090,14 @@ export class ProductConsumeComponent {
   readonly backbarReport = signal<ApiRecord | null>(null);
   readonly backbarDashboard = signal<ApiRecord | null>(null);
   readonly controlLedgerReport = signal<ApiRecord | null>(null);
+  readonly product360 = signal<ApiRecord | null>(null);
   readonly staffUsageAudit = signal<ApiRecord | null>(null);
   readonly units = RECIPE_UNITS;
   productForm = { productId: '', qty: 1, unit: 'pcs', wastagePct: 0, minQty: 0, maxQty: 0, substitutes: '' };
   adjustForm = { quantity: 0, usageType: 'spillage', reason: '' };
   auditFilters = { branchId: '', staffId: '', startDate: '', endDate: '' };
   ledgerFilters = { branchId: '', productId: '', staffId: '', usageType: '', startDate: '', endDate: '' };
+  product360Id = '';
   overrideReason = '';
   containerScanCode = '';
   dashboardPeriod = 'daily';
@@ -1256,6 +1335,25 @@ export class ProductConsumeComponent {
     });
   }
 
+  loadProduct360(): void {
+    const productId = this.product360Id || this.ledgerFilters.productId;
+    if (!productId) {
+      this.error.set('Product 360 ke liye product select karo.');
+      return;
+    }
+    this.product360Id = productId;
+    this.api.list<ApiRecord>(`inventory-intelligence/backbar-products/${productId}/report`, {
+      branchId: this.ledgerFilters.branchId || this.api.selectedBranchId(),
+      limit: 300
+    }).subscribe({
+      next: (report) => {
+        this.product360.set(report || null);
+        this.message.set('Product 360 loaded.');
+      },
+      error: (err) => this.error.set(err?.error?.error || err?.message || 'Product 360 report load nahi hua.')
+    });
+  }
+
   setDashboardPeriod(period: string): void {
     this.dashboardPeriod = period || 'daily';
     this.loadBackbarDashboard();
@@ -1408,6 +1506,30 @@ export class ProductConsumeComponent {
 
   ledgerProductRows(): ApiRecord[] {
     return (this.controlLedgerReport()?.['productRows'] || []) as ApiRecord[];
+  }
+
+  product360Containers(): ApiRecord[] {
+    return (this.product360()?.['containers'] || []) as ApiRecord[];
+  }
+
+  product360Clients(): ApiRecord[] {
+    return (this.product360()?.['clientUsage'] || []) as ApiRecord[];
+  }
+
+  product360Staff(): ApiRecord[] {
+    return (this.product360()?.['staffUsage'] || []) as ApiRecord[];
+  }
+
+  product360Waste(): ApiRecord[] {
+    return (this.product360()?.['wastageByType'] || []) as ApiRecord[];
+  }
+
+  product360Actions(): ApiRecord[] {
+    return (this.product360()?.['actionQueue'] || []) as ApiRecord[];
+  }
+
+  product360Ledger(): ApiRecord[] {
+    return (this.product360()?.['entityLedger'] || []) as ApiRecord[];
   }
 
   ledgerServiceRows(): ApiRecord[] {

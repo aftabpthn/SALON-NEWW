@@ -2068,6 +2068,42 @@ export class BackbarProductConsumptionService {
     const totalProductCost = money(entries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
     const totalWastageCost = money(adjustmentEntries.reduce((sum, entry) => sum + number(entry.productCost, 0), 0));
     const activeContainer = containers.find((container) => container.status === "open") || null;
+    const expiringContainers = containers
+      .filter((container) => container.status !== "finished")
+      .map((container) => {
+        const productExpiry = product.expiryDate || product.expiry_date || product.expiry || product.expiresAt || product.expires_at || "";
+        const expiryDays = productExpiry ? Math.ceil((new Date(productExpiry).getTime() - Date.now()) / 86400000) : null;
+        return {
+          ...container,
+          expiryDate: productExpiry,
+          expiryDays,
+          riskLevel: expiryDays !== null && expiryDays <= 15 ? "high" : expiryDays !== null && expiryDays <= 45 ? "medium" : daysOpen(container.openedAt) >= 21 ? "medium" : "watch"
+        };
+      })
+      .filter((container) => container.expiryDays !== null || container.riskLevel !== "watch");
+    const actionQueue = [
+      ...approvals.filter((request) => request.status === "pending").map((request) => ({
+        actionType: "approval",
+        title: `Approve/reject ${request.productName || product.name}`,
+        detail: `${request.activeBalanceQty} ${request.measureUnit} left in #${request.activeContainerNo}`,
+        riskLevel: "high",
+        actionAt: request.createdAt || ""
+      })),
+      ...alerts.filter((alert) => alert.status === "open").map((alert) => ({
+        actionType: "alert",
+        title: alert.title || alert.alertType,
+        detail: alert.message || "",
+        riskLevel: alert.severity || "medium",
+        actionAt: alert.createdAt || ""
+      })),
+      ...containers.filter((container) => container.status === "open" && daysOpen(container.openedAt) >= 21).map((container) => ({
+        actionType: "open_age",
+        title: `${container.containerCode} open too long`,
+        detail: `${daysOpen(container.openedAt)} days open · ${container.balanceQty} ${container.measureUnit} left`,
+        riskLevel: "medium",
+        actionAt: container.openedAt || ""
+      }))
+    ].sort((a, b) => String(b.actionAt || "").localeCompare(String(a.actionAt || ""))).slice(0, 40);
     const reportCards = [
       { key: "container_control", label: "Container-level control", status: containers.length ? "active" : "waiting", metric: `${containers.length} containers` },
       { key: "client_usage", label: "Per-client consumption", status: clientEntries.length ? "active" : "waiting", metric: `${clientEntries.length} client entries` },
@@ -2081,6 +2117,14 @@ export class BackbarProductConsumptionService {
     return {
       productId,
       productName: product.name || productId,
+      product: {
+        id: product.id || productId,
+        name: product.name || productId,
+        brand: product.brand || product.brandName || "",
+        category: product.category || "",
+        stock: number(product.stock, 0),
+        unit: product.unit || "pcs"
+      },
       stockUnit: containers[0]?.stockUnit || product.unit || "pcs",
       measureUnit: containers[0]?.measureUnit || product.packUnit || product.unit || "pcs",
       capacityQty: containers[0]?.capacityQty || number(product.packSize, 0),
@@ -2102,10 +2146,21 @@ export class BackbarProductConsumptionService {
         pendingApprovals: approvals.filter((request) => request.status === "pending").length,
         activeContainer
       },
+      profitSummary: {
+        serviceRevenue: totalRevenue,
+        productCost: totalProductCost,
+        wastageCost: totalWastageCost,
+        actualProfit: money(totalRevenue - totalProductCost),
+        profitMarginPct: totalRevenue > 0 ? money(((totalRevenue - totalProductCost) / totalRevenue) * 100) : 0
+      },
       containers: containers.map((container) => ({
         ...container,
         entries: entries.filter((entry) => entry.containerId === container.id)
       })),
+      openContainers: containers.filter((container) => container.status === "open"),
+      finishedContainers: containers.filter((container) => container.status === "finished"),
+      expiringContainers,
+      actionQueue,
       entries,
       alerts,
       approvals,
