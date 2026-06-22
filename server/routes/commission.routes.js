@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requirePermission } from "../middleware/rbac.js";
+import { validateBody } from "../validators/request-validator.js";
 import { staffCommissionService } from "../services/staff-commission.service.js";
 import { tipsService } from "../services/tips.service.js";
 
@@ -14,7 +15,7 @@ commissionRouter.get("/commissions/summary", requirePermission("read", () => "fi
   res.json(staffCommissionService.summary(req.query, req.access));
 }));
 
-commissionRouter.post("/billing/invoices/:invoiceId/tips", requirePermission("write", () => "payments"), asyncHandler((req, res) => {
+commissionRouter.post("/billing/invoices/:invoiceId/tips", requirePermission("write", () => "payments"), validateBody({ required: ["amount"] }), asyncHandler((req, res) => {
   res.status(201).json(tipsService.addTip(req.params.invoiceId, req.body, req.access));
 }));
 
