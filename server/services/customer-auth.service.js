@@ -1,15 +1,22 @@
-import { createHmac, createPublicKey, randomUUID, verify as verifySignature } from "node:crypto";
+import { createHmac, createPublicKey, randomInt, randomUUID, verify as verifySignature } from "node:crypto";
 import { db, DEFAULT_TENANT_ID, tableHasColumn } from "../db.js";
 import { env } from "../config/env.js";
-import { badRequest, unauthorized } from "../utils/app-error.js";
+import { badRequest, conflict, unauthorized } from "../utils/app-error.js";
 import { authService } from "./auth.service.js";
+import { ensureCustomerAuthSchema } from "./customer-auth-schema.service.js";
+import { jobQueueService } from "./job-queue.service.js";
 import { tenantService } from "./tenant.service.js";
 import { whatsappAutomationService } from "./whatsapp-automation.service.js";
 
 const FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
+const CODE_TTL_MINUTES = 10;
+const CODE_RESEND_SECONDS = 30;
+const MAX_CODE_ATTEMPTS = 5;
 let firebaseCertCache = { expiresAt: 0, certs: {} };
+
+ensureCustomerAuthSchema();
 
 function hashToken(token) {
   return createHmac("sha256", env.jwtSecret).update(String(token || "")).digest("hex");
@@ -43,6 +50,7 @@ function splitName(name = "") {
 
 function rowToCustomer(row = {}) {
   const { firstName, lastName } = splitName(row.name || "");
+  const hasCompleteProfile = Boolean(firstName && lastName && row.email && row.phone);
   return {
     id: row.id,
     name: row.name || "",
@@ -55,7 +63,7 @@ function rowToCustomer(row = {}) {
     isLoggedIn: true,
     bookingCount: Number(row.visitCount || 0),
     loyaltyPoints: Number(row.loyaltyPoints || 0),
-    profileComplete: Boolean((row.name || "").trim() && ((row.phone || "").trim() || (row.email || "").trim())),
+    profileComplete: hasCompleteProfile,
     createdAt: row.createdAt || "",
     phoneVerifiedAt: row.phone ? row.updatedAt || row.createdAt || "" : "",
     emailVerifiedAt: row.email ? row.updatedAt || row.createdAt || "" : ""
@@ -72,6 +80,22 @@ function clientWhereClause() {
 
 function clientById(tenantId, id) {
   return db.prepare(`SELECT * FROM clients WHERE ${clientWhereClause()}id = @id`).get({ tenantId, id });
+}
+
+function branchWhereClause() {
+  return tableHasColumn("branches", "tenantId") ? "tenantId = @tenantId AND " : "";
+}
+
+function defaultBranchId(tenantId, preferredBranchId = "") {
+  if (preferredBranchId) {
+    const existing = db.prepare(`SELECT id FROM branches WHERE ${branchWhereClause()}id = @branchId LIMIT 1`).get({ tenantId, branchId: preferredBranchId });
+    if (existing) return existing.id;
+  }
+  const active = db.prepare(`SELECT id FROM branches WHERE ${branchWhereClause()}COALESCE(status, 'active') = 'active' ORDER BY createdAt ASC, id ASC LIMIT 1`).get({ tenantId });
+  if (active) return active.id;
+  const fallback = db.prepare(`SELECT id FROM branches WHERE ${branchWhereClause()}1 = 1 ORDER BY createdAt ASC, id ASC LIMIT 1`).get({ tenantId });
+  if (fallback) return fallback.id;
+  throw badRequest("Tenant branch is required before customer login can create a profile");
 }
 
 function findClient({ tenantId, firebaseUid = "", email = "", phone = "" }) {
@@ -93,7 +117,7 @@ function findClient({ tenantId, firebaseUid = "", email = "", phone = "" }) {
   return null;
 }
 
-function insertClient({ tenantId, name, email, phone, firebaseUid, provider }) {
+function insertClient({ tenantId, branchId, name, email, phone, firebaseUid, provider }) {
   const stamp = now();
   const row = {
     id: makeId("cust"),
@@ -108,7 +132,7 @@ function insertClient({ tenantId, name, email, phone, firebaseUid, provider }) {
     walletBalance: 0,
     loyaltyPoints: 0,
     membershipId: "",
-    branchId: "",
+    branchId: defaultBranchId(tenantId, branchId),
     totalSpend: 0,
     visitCount: 0,
     lastVisitAt: "",
@@ -159,6 +183,133 @@ function notificationAlreadyQueued(clientId) {
 function accountCreatedBody(customer, tenant) {
   const firstName = customer.firstName || customer.name || "there";
   return `Hi ${firstName}, your ${tenant.name || "Aura Salon"} customer account is created. You can now book appointments, view offers and manage your profile from the app.`;
+}
+
+function codeHash({ tenantId, targetType, target, purpose, code }) {
+  return createHmac("sha256", env.jwtSecret)
+    .update(`${tenantId}:${targetType}:${target}:${purpose}:${code}`)
+    .digest("hex");
+}
+
+function generateCode() {
+  return String(randomInt(100000, 1000000));
+}
+
+function expiresAt(minutes = CODE_TTL_MINUTES) {
+  return new Date(Date.now() + minutes * 60000).toISOString();
+}
+
+function resolveCustomerTenant(payload = {}, request = {}) {
+  const tenant = tenantService.resolveTenant({ tenantId: request.tenantId || payload.tenantId || DEFAULT_TENANT_ID, host: request.host || "" });
+  if (!tenant) throw badRequest("Tenant not found");
+  return tenant;
+}
+
+function assertCustomer(access = {}) {
+  if (access.role !== "customer" || !access.userId) throw unauthorized("Customer session is required");
+}
+
+function recentCodeRequestCount({ tenantId, targetType, target, purpose }) {
+  const since = new Date(Date.now() - 15 * 60000).toISOString();
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count
+      FROM customer_auth_codes
+     WHERE tenantId = @tenantId
+       AND targetType = @targetType
+       AND target = @target
+       AND purpose = @purpose
+       AND createdAt >= @since
+  `).get({ tenantId, targetType, target, purpose, since });
+  return Number(row?.count || 0);
+}
+
+function createAuthCode({ tenantId, branchId, targetType, target, purpose, requestedChannel, deliveryChannel }) {
+  if (recentCodeRequestCount({ tenantId, targetType, target, purpose }) >= MAX_CODE_ATTEMPTS) {
+    throw conflict("OTP temporarily locked. Try again after 15 minutes.");
+  }
+  const code = generateCode();
+  const stamp = now();
+  const row = {
+    id: makeId("code"),
+    tenantId,
+    branchId: defaultBranchId(tenantId, branchId),
+    targetType,
+    target,
+    purpose,
+    codeHash: codeHash({ tenantId, targetType, target, purpose, code }),
+    requestedChannel,
+    deliveryChannel,
+    attemptCount: 0,
+    maxAttempts: MAX_CODE_ATTEMPTS,
+    expiresAt: expiresAt(),
+    consumedAt: "",
+    createdAt: stamp,
+    updatedAt: stamp
+  };
+  db.prepare(`
+    INSERT INTO customer_auth_codes
+      (id, tenantId, branchId, targetType, target, purpose, codeHash, requestedChannel, deliveryChannel, attemptCount, maxAttempts, expiresAt, consumedAt, createdAt, updatedAt)
+    VALUES
+      (@id, @tenantId, @branchId, @targetType, @target, @purpose, @codeHash, @requestedChannel, @deliveryChannel, @attemptCount, @maxAttempts, @expiresAt, @consumedAt, @createdAt, @updatedAt)
+  `).run(row);
+  return { ...row, code };
+}
+
+function verifyAuthCode({ tenantId, targetType, target, purpose, code }) {
+  const row = db.prepare(`
+    SELECT *
+      FROM customer_auth_codes
+     WHERE tenantId = @tenantId
+       AND targetType = @targetType
+       AND target = @target
+       AND purpose = @purpose
+       AND COALESCE(consumedAt, '') = ''
+     ORDER BY createdAt DESC
+     LIMIT 1
+  `).get({ tenantId, targetType, target, purpose });
+  if (!row || row.expiresAt < now()) throw conflict("OTP expired");
+  if (Number(row.attemptCount || 0) >= Number(row.maxAttempts || MAX_CODE_ATTEMPTS)) throw conflict("OTP attempts exceeded");
+  const ok = row.codeHash === codeHash({ tenantId, targetType, target, purpose, code });
+  if (!ok) {
+    db.prepare(`
+      UPDATE customer_auth_codes
+         SET attemptCount = attemptCount + 1,
+             updatedAt = @updatedAt
+       WHERE id = @id
+    `).run({ id: row.id, updatedAt: now() });
+    throw conflict("Invalid OTP");
+  }
+  db.prepare(`
+    UPDATE customer_auth_codes
+       SET consumedAt = @consumedAt,
+           updatedAt = @updatedAt
+     WHERE id = @id
+  `).run({ id: row.id, consumedAt: now(), updatedAt: now() });
+  return row;
+}
+
+function devOtp(code) {
+  return process.env.NODE_ENV === "production" ? undefined : code;
+}
+
+function queueEmailCode({ tenantId, branchId, email, code }) {
+  jobQueueService.enqueue({
+    tenantId,
+    jobType: "email_send",
+    priority: 2,
+    payload: {
+      to: email,
+      branchId,
+      type: "customer_login_verification",
+      subject: "Your AuraSalon verification code",
+      message: `Your AuraSalon verification code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes.`
+    }
+  });
+}
+
+function phoneDeliveryForChannel(channel) {
+  if (channel !== "whatsapp") return { deliveryChannel: "local", deliveryWarning: "SMS delivery is not configured for this environment." };
+  return { deliveryChannel: "whatsapp", deliveryWarning: "" };
 }
 
 function queueAccountCreatedNotifications(customer, tenant, access) {
@@ -238,9 +389,111 @@ function issueCustomerSession({ tenant, customer, provider, device = {} }) {
 }
 
 export const customerAuthService = {
+  requestEmailCode(payload = {}, request = {}) {
+    const tenant = resolveCustomerTenant(payload, request);
+    const email = cleanEmail(payload.email || "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest("Valid email is required");
+    const branchId = defaultBranchId(tenant.id, payload.branchId || request.branchId || "");
+    const record = createAuthCode({
+      tenantId: tenant.id,
+      branchId,
+      targetType: "email",
+      target: email,
+      purpose: "customer_login",
+      requestedChannel: "email",
+      deliveryChannel: "email"
+    });
+    queueEmailCode({ tenantId: tenant.id, branchId, email, code: record.code });
+    return {
+      requestId: record.id,
+      expiresAt: record.expiresAt,
+      resendAfterSeconds: CODE_RESEND_SECONDS,
+      requestedChannel: "email",
+      deliveryChannel: "email",
+      devOtp: devOtp(record.code)
+    };
+  },
+
+  verifyEmailCode(payload = {}, request = {}) {
+    const tenant = resolveCustomerTenant(payload, request);
+    const email = cleanEmail(payload.email || "");
+    const code = String(payload.code || payload.otp || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest("Valid email is required");
+    if (!/^\d{6}$/.test(code)) throw badRequest("Valid verification code is required");
+    const verified = verifyAuthCode({ tenantId: tenant.id, targetType: "email", target: email, purpose: "customer_login", code });
+    const name = String(payload.name || "").trim() || email;
+    const existing = findClient({ tenantId: tenant.id, email });
+    const customer = existing
+      ? updateClient(existing, { name, email, phone: "", firebaseUid: "", provider: "email_otp" })
+      : insertClient({ tenantId: tenant.id, branchId: verified.branchId, name, email, phone: "", firebaseUid: "", provider: "email_otp" });
+    customer.isNewCustomer = !existing;
+    if (customer.isNewCustomer) {
+      queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: customer.branchId || verified.branchId, branchIds: [customer.branchId || verified.branchId] });
+    }
+    return issueCustomerSession({ tenant, customer, provider: "email_otp", device: payload.device || {} });
+  },
+
+  requestOtp(payload = {}, request = {}) {
+    const tenant = resolveCustomerTenant(payload, request);
+    const phone = normalizePhone(payload.phone || "");
+    const channel = payload.channel === "whatsapp" ? "whatsapp" : "sms";
+    if (phoneDigits(phone).length < 8) throw badRequest("Valid phone is required");
+    const branchId = defaultBranchId(tenant.id, payload.branchId || request.branchId || "");
+    const delivery = phoneDeliveryForChannel(channel);
+    const record = createAuthCode({
+      tenantId: tenant.id,
+      branchId,
+      targetType: "phone",
+      target: phone,
+      purpose: "customer_login",
+      requestedChannel: channel,
+      deliveryChannel: delivery.deliveryChannel
+    });
+    if (channel === "whatsapp") {
+      jobQueueService.enqueue({
+        tenantId: tenant.id,
+        jobType: "whatsapp_send",
+        priority: 2,
+        payload: {
+          template: "otp_send",
+          phone,
+          language: "en",
+          variables: { otp: record.code, client_name: "Guest", salon_name: "Aura Salon" }
+        }
+      });
+    }
+    return {
+      requestId: record.id,
+      expiresAt: record.expiresAt,
+      resendAfterSeconds: CODE_RESEND_SECONDS,
+      requestedChannel: channel,
+      deliveryChannel: delivery.deliveryChannel,
+      fallbackChannels: channel === "whatsapp" ? ["sms"] : ["whatsapp"],
+      deliveryWarning: delivery.deliveryWarning,
+      devOtp: devOtp(record.code)
+    };
+  },
+
+  verifyOtp(payload = {}, request = {}) {
+    const tenant = resolveCustomerTenant(payload, request);
+    const phone = normalizePhone(payload.phone || "");
+    const otp = String(payload.otp || payload.code || "").trim();
+    if (phoneDigits(phone).length < 8) throw badRequest("Valid phone is required");
+    if (!/^\d{6}$/.test(otp)) throw badRequest("Valid OTP is required");
+    const verified = verifyAuthCode({ tenantId: tenant.id, targetType: "phone", target: phone, purpose: "customer_login", code: otp });
+    const existing = findClient({ tenantId: tenant.id, phone });
+    const customer = existing
+      ? updateClient(existing, { name: "", email: "", phone, firebaseUid: "", provider: "phone_otp" })
+      : insertClient({ tenantId: tenant.id, branchId: verified.branchId, name: phone, email: "", phone, firebaseUid: "", provider: "phone_otp" });
+    customer.isNewCustomer = !existing;
+    if (customer.isNewCustomer) {
+      queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: customer.branchId || verified.branchId, branchIds: [customer.branchId || verified.branchId] });
+    }
+    return issueCustomerSession({ tenant, customer, provider: "phone_otp", device: payload.device || {} });
+  },
+
   async exchangeFirebaseToken(payload = {}, request = {}) {
-    const tenant = tenantService.resolveTenant({ tenantId: request.tenantId || payload.tenantId || DEFAULT_TENANT_ID, host: request.host || "" });
-    if (!tenant) throw badRequest("Tenant not found");
+    const tenant = resolveCustomerTenant(payload, request);
     const decoded = await verifyFirebaseIdToken(payload.idToken);
     const provider = payload.provider || decoded.firebase?.sign_in_provider || "firebase";
     const email = cleanEmail(decoded.email || "");
@@ -249,18 +502,123 @@ export const customerAuthService = {
     const existing = findClient({ tenantId: tenant.id, firebaseUid: decoded.sub, email, phone });
     const customer = existing
       ? updateClient(existing, { name, email, phone, firebaseUid: decoded.sub, provider })
-      : insertClient({ tenantId: tenant.id, name, email, phone, firebaseUid: decoded.sub, provider });
+      : insertClient({ tenantId: tenant.id, branchId: payload.branchId || request.branchId || "", name, email, phone, firebaseUid: decoded.sub, provider });
     customer.isNewCustomer = !existing;
     if (customer.isNewCustomer) {
-      queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: "", branchIds: [] });
+      queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: customer.branchId || "", branchIds: customer.branchId ? [customer.branchId] : [] });
     }
     return issueCustomerSession({ tenant, customer, provider, device: payload.device || {} });
   },
 
   me(access = {}) {
+    assertCustomer(access);
     const row = clientById(access.tenantId || DEFAULT_TENANT_ID, access.userId);
     if (!row) throw unauthorized("Customer session is invalid");
     return rowToCustomer(row);
+  },
+
+  updateMe(payload = {}, access = {}) {
+    assertCustomer(access);
+    const existing = clientById(access.tenantId || DEFAULT_TENANT_ID, access.userId);
+    if (!existing) throw unauthorized("Customer session is invalid");
+    const firstName = String(payload.firstName || "").trim();
+    const lastName = String(payload.lastName || "").trim();
+    const name = String(payload.name || `${firstName} ${lastName}`.trim() || existing.name || "").trim();
+    const email = cleanEmail(payload.email || existing.email || "");
+    const phone = normalizePhone(payload.phone || existing.phone || "");
+    const updated = updateClient(existing, {
+      name,
+      email,
+      phone,
+      firebaseUid: existing.firebaseUid || existing.firebase_uid || "",
+      provider: existing.authProvider || existing.auth_provider || "customer"
+    });
+    return rowToCustomer(updated);
+  },
+
+  requestProfilePhoneOtp(payload = {}, access = {}) {
+    assertCustomer(access);
+    const phone = normalizePhone(payload.phone || "");
+    const channel = payload.channel === "whatsapp" ? "whatsapp" : "sms";
+    if (phoneDigits(phone).length < 8) throw badRequest("Valid phone is required");
+    const branchId = defaultBranchId(access.tenantId || DEFAULT_TENANT_ID, access.branchId || "");
+    const delivery = phoneDeliveryForChannel(channel);
+    const record = createAuthCode({
+      tenantId: access.tenantId,
+      branchId,
+      targetType: "phone",
+      target: phone,
+      purpose: `profile_phone:${access.userId}`,
+      requestedChannel: channel,
+      deliveryChannel: delivery.deliveryChannel
+    });
+    if (channel === "whatsapp") {
+      jobQueueService.enqueue({
+        tenantId: access.tenantId,
+        jobType: "whatsapp_send",
+        priority: 2,
+        payload: {
+          template: "otp_send",
+          phone,
+          language: "en",
+          variables: { otp: record.code, client_name: "Guest", salon_name: "Aura Salon" }
+        }
+      });
+    }
+    return {
+      requestId: record.id,
+      expiresAt: record.expiresAt,
+      resendAfterSeconds: CODE_RESEND_SECONDS,
+      requestedChannel: channel,
+      deliveryChannel: delivery.deliveryChannel,
+      deliveryWarning: delivery.deliveryWarning,
+      devOtp: devOtp(record.code)
+    };
+  },
+
+  verifyProfilePhoneOtp(payload = {}, access = {}) {
+    assertCustomer(access);
+    const phone = normalizePhone(payload.phone || "");
+    const otp = String(payload.otp || payload.code || "").trim();
+    if (phoneDigits(phone).length < 8) throw badRequest("Valid phone is required");
+    if (!/^\d{6}$/.test(otp)) throw badRequest("Valid OTP is required");
+    verifyAuthCode({ tenantId: access.tenantId, targetType: "phone", target: phone, purpose: `profile_phone:${access.userId}`, code: otp });
+    return this.updateMe({ phone }, access);
+  },
+
+  requestProfileEmailCode(payload = {}, access = {}) {
+    assertCustomer(access);
+    const email = cleanEmail(payload.email || "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest("Valid email is required");
+    const branchId = defaultBranchId(access.tenantId || DEFAULT_TENANT_ID, access.branchId || "");
+    const record = createAuthCode({
+      tenantId: access.tenantId,
+      branchId,
+      targetType: "email",
+      target: email,
+      purpose: `profile_email:${access.userId}`,
+      requestedChannel: "email",
+      deliveryChannel: "email"
+    });
+    queueEmailCode({ tenantId: access.tenantId, branchId, email, code: record.code });
+    return {
+      requestId: record.id,
+      expiresAt: record.expiresAt,
+      resendAfterSeconds: CODE_RESEND_SECONDS,
+      requestedChannel: "email",
+      deliveryChannel: "email",
+      devOtp: devOtp(record.code)
+    };
+  },
+
+  verifyProfileEmailCode(payload = {}, access = {}) {
+    assertCustomer(access);
+    const email = cleanEmail(payload.email || "");
+    const code = String(payload.code || payload.otp || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest("Valid email is required");
+    if (!/^\d{6}$/.test(code)) throw badRequest("Valid verification code is required");
+    verifyAuthCode({ tenantId: access.tenantId, targetType: "email", target: email, purpose: `profile_email:${access.userId}`, code });
+    return this.updateMe({ email }, access);
   },
 
   refresh(refreshToken = "", device = {}) {

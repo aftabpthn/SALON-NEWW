@@ -536,7 +536,8 @@ export class LoginPage implements OnInit, OnDestroy {
       .then(() => {
         this.code = "";
         this.step = "emailCode";
-        this.notice = "Verification code sent.";
+        const response = this.auth.emailCodeRequest();
+        this.notice = `Verification code sent.${response?.devOtp ? ` Development code: ${response.devOtp}` : ""}`;
       })
       .catch(() => undefined);
   }
@@ -587,7 +588,7 @@ export class LoginPage implements OnInit, OnDestroy {
       .then((response) => {
         this.code = "";
         this.step = "mobileCode";
-        this.notice = this.otpNotice(response.deliveryChannel || response.requestedChannel || this.otpChannel);
+        this.notice = this.otpNotice(response);
       })
       .catch((error) => this.handleOtpRequestError(error));
   }
@@ -598,7 +599,7 @@ export class LoginPage implements OnInit, OnDestroy {
     await this.auth.requestOtp(this.fullPhone(), channel)
       .then((response) => {
         this.code = "";
-        this.notice = this.otpNotice(response.deliveryChannel || response.requestedChannel || channel);
+        this.notice = this.otpNotice(response);
       })
       .catch((error) => this.handleOtpRequestError(error));
   }
@@ -909,9 +910,12 @@ export class LoginPage implements OnInit, OnDestroy {
     return "";
   }
 
-  private otpNotice(channel: string): string {
-    if (channel === "whatsapp") return "OTP sent on WhatsApp.";
-    if (channel === "sms") return "OTP sent by SMS.";
-    return "OTP sent. If delivery is unavailable, use the local verification code in development.";
+  private otpNotice(response: { deliveryChannel?: string; requestedChannel?: string; deliveryWarning?: string; devOtp?: string }): string {
+    const channel = response.deliveryChannel || response.requestedChannel || "";
+    const suffix = response.devOtp ? ` Development OTP: ${response.devOtp}` : "";
+    if (response.deliveryWarning) return `${response.deliveryWarning}${suffix}`;
+    if (channel === "whatsapp") return `OTP sent on WhatsApp.${suffix}`;
+    if (channel === "sms") return `OTP sent by SMS.${suffix}`;
+    return `OTP sent. If delivery is unavailable, use the local verification code in development.${suffix}`;
   }
 }
