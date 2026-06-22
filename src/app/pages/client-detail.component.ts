@@ -133,7 +133,13 @@ type ClientPersonalDetailsForm = {
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
   template: `
     <section class="page-stack">
-      <a class="ghost-button fit" routerLink="/clients">Back to clients</a>
+      <div class="client360-toolbar">
+        <a class="ghost-button fit" routerLink="/clients">Back to clients</a>
+        <div class="client360-toolbar-copy">
+          <span class="eyebrow">Client CRM</span>
+          <strong>Enterprise 360 workspace</strong>
+        </div>
+      </div>
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="client() as client">
@@ -164,12 +170,18 @@ type ClientPersonalDetailsForm = {
             </div>
           </div>
           <div class="profile-stats client360-health-card">
-            <strong>{{ clientHealthScore() }}/100</strong>
-            <span>Health score</span>
-            <strong>{{ totalBilled() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <span>Total spend</span>
-            <strong>{{ loyaltyPoints(client) }} pts</strong>
-            <span>Loyalty</span>
+            <div class="client360-score-ring">
+              <strong>{{ clientHealthScore() }}/100</strong>
+              <span>Health score</span>
+            </div>
+            <div class="client360-health-stat">
+              <span>Total spend</span>
+              <strong>{{ totalBilled() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            </div>
+            <div class="client360-health-stat">
+              <span>Loyalty</span>
+              <strong>{{ loyaltyPoints(client) }} pts</strong>
+            </div>
           </div>
         </section>
 
@@ -1304,6 +1316,34 @@ type ClientPersonalDetailsForm = {
   `
   ,
   styles: [`
+    :host {
+      display: block;
+    }
+
+    .client360-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid #dbe5ee;
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px 12px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    }
+
+    .client360-toolbar-copy {
+      display: grid;
+      gap: 2px;
+      text-align: right;
+      color: #0f172a;
+    }
+
+    .client360-toolbar-copy strong {
+      font-size: 0.92rem;
+      font-weight: 900;
+    }
+
     .client-history-tabs {
       display: flex;
       gap: 8px;
@@ -1827,39 +1867,86 @@ type ClientPersonalDetailsForm = {
     }
 
     .client360-profile-header {
+      position: relative;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
-      gap: 18px;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+      gap: 22px;
       align-items: stretch;
+      overflow: hidden;
+      border: 1px solid #d9e3ec;
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(15, 23, 42, 0.04), transparent 34%),
+        linear-gradient(90deg, #ffffff 0%, #ffffff 66%, #f8fbff 100%);
+      padding: 28px;
+      box-shadow: 0 22px 48px rgba(15, 23, 42, 0.10);
+    }
+
+    .client360-profile-header::before {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 5px;
+      content: '';
+      background: linear-gradient(90deg, #0f766e, #2563eb, #c2410c);
     }
 
     .client360-header-body {
       display: flex;
-      gap: 16px;
+      gap: 18px;
       min-width: 0;
+      align-items: flex-start;
+    }
+
+    .client360-header-body .avatar.large {
+      width: 76px;
+      height: 76px;
+      flex: 0 0 76px;
+      border: 1px solid #c7d2fe;
+      background: #e0f2fe;
+      color: #083344;
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
     }
 
     .client360-header-main {
+      display: grid;
+      gap: 10px;
       min-width: 0;
     }
 
+    .client360-header-main h2 {
+      margin: 0;
+      color: #0f172a;
+      font-size: 2.45rem;
+      line-height: 1;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .client360-header-main p {
+      margin: 0;
+      color: #475569;
+      font-weight: 700;
+    }
+
     .client360-status-row {
-      margin-top: 8px;
+      margin-top: 0;
     }
 
     .client360-header-facts {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 14px;
+      gap: 10px;
+      margin-top: 2px;
     }
 
     .client360-header-facts div,
     .client360-summary-cards div {
-      border: 1px solid #d9ebe7;
+      border: 1px solid #d9e3ec;
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.72);
-      padding: 10px;
+      background: rgba(255, 255, 255, 0.88);
+      padding: 12px;
       min-width: 0;
     }
 
@@ -1876,20 +1963,98 @@ type ClientPersonalDetailsForm = {
     .client360-summary-cards strong {
       display: block;
       margin-top: 4px;
+      color: #0f172a;
       overflow-wrap: anywhere;
+    }
+
+    .client360-health-card {
+      display: grid;
+      gap: 12px;
+      align-content: stretch;
+      border: 1px solid #d9e3ec;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      padding: 16px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .client360-score-ring,
+    .client360-health-stat {
+      min-width: 0;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 14px;
+    }
+
+    .client360-score-ring strong {
+      display: block;
+      color: #fff;
+      font-size: 2.1rem;
+      line-height: 1;
+    }
+
+    .client360-health-card span {
+      display: block;
+      margin-top: 6px;
+      color: #cbd5e1;
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .client360-health-stat strong {
+      display: block;
+      margin-top: 6px;
+      color: #fff;
+      font-size: 1.22rem;
+    }
+
+    .client-live-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .client-live-metrics .metric-card {
+      min-height: 124px;
+      border: 1px solid #d9e3ec;
+      border-top-width: 4px;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+    }
+
+    .client-live-metrics .metric-card span {
+      color: #64748b;
+    }
+
+    .client-live-metrics .metric-card strong {
+      color: #0f172a;
+      font-size: 1.85rem;
+      line-height: 1.05;
     }
 
     .client360-summary-cards {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
     }
 
     .client360-command-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
-      gap: 16px;
+      grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+      gap: 18px;
       align-items: start;
+    }
+
+    .client360-summary-panel,
+    .client360-actions-panel {
+      border: 1px solid #d9e3ec;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
     }
 
     .client360-actions-panel {
@@ -1899,15 +2064,15 @@ type ClientPersonalDetailsForm = {
 
     .smart-action-context {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 6px;
-      margin-bottom: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
     }
 
     .smart-action-context span {
-      border: 1px solid #d9ebe7;
+      border: 1px solid #d9e3ec;
       border-radius: 8px;
-      background: #f8fcfb;
+      background: #f8fafc;
       color: #334155;
       font-size: 0.78rem;
       font-weight: 800;
@@ -1917,7 +2082,7 @@ type ClientPersonalDetailsForm = {
 
     .client360-action-buttons {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -1930,6 +2095,7 @@ type ClientPersonalDetailsForm = {
 
     .smart-action-primary {
       min-height: 42px;
+      grid-column: 1 / -1;
     }
 
     .package-history-list {
@@ -2058,6 +2224,10 @@ type ClientPersonalDetailsForm = {
         overflow-wrap: anywhere;
       }
 
+      .client360-header-main h2 {
+        font-size: 1.85rem;
+      }
+
       .profile-stats {
         width: 100%;
       }
@@ -2079,6 +2249,10 @@ type ClientPersonalDetailsForm = {
 
       .client360-summary-cards {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .smart-action-context {
+        grid-template-columns: 1fr;
       }
 
       .client-history-tabs {
