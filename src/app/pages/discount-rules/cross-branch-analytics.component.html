@@ -1,0 +1,149 @@
+<section class="page-stack cross-branch-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E8.3</span>
+      <h2>Cross-Branch Analytics</h2>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="analytics-filters">
+      <label class="field">
+        <span>From</span>
+        <input type="date" [(ngModel)]="filters.from" name="from" />
+      </label>
+      <label class="field">
+        <span>To</span>
+        <input type="date" [(ngModel)]="filters.to" name="to" />
+      </label>
+      <label class="field">
+        <span>Region</span>
+        <select [(ngModel)]="filters.regionId" name="regionId">
+          <option value="">All regions</option>
+          <option *ngFor="let region of regionOptions()" [value]="region.id">{{ region.name }}</option>
+        </select>
+      </label>
+      <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Loading...' : 'Apply' }}
+      </button>
+      <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!branches().length">
+        Export CSV
+      </button>
+    </div>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Net revenue</span>
+      <strong>{{ formatMoney(summary()?.netRevenuePaise) }}</strong>
+      <small>{{ summary()?.branchCount || 0 }} branches</small>
+    </article>
+    <article class="metric-card">
+      <span>Discount spend</span>
+      <strong>{{ formatMoney(summary()?.totalDiscountPaise) }}</strong>
+      <small>{{ pct(summary()?.discountRatePercent) }} discount rate</small>
+    </article>
+    <article class="metric-card">
+      <span>Active rules</span>
+      <strong>{{ summary()?.activeRules || 0 }}</strong>
+      <small>{{ summary()?.discountEvents || 0 }} applications</small>
+    </article>
+    <article class="metric-card danger">
+      <span>Guardrail hits</span>
+      <strong>{{ (summary()?.budgetExceededCount || 0) + (summary()?.marginBlockedCount || 0) }}</strong>
+      <small>{{ summary()?.budgetExceededCount || 0 }} budget, {{ summary()?.marginBlockedCount || 0 }} margin</small>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Branch comparison</h2>
+      <span class="muted-text">{{ branches().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th>Region</th>
+            <th>Net revenue</th>
+            <th>Discount</th>
+            <th>Rate</th>
+            <th>Events</th>
+            <th>Rules</th>
+            <th>Guardrails</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="8">Loading analytics...</td>
+          </tr>
+          <tr *ngIf="!loading() && !branches().length">
+            <td colspan="8">No cross-branch discount data for this filter.</td>
+          </tr>
+          <tr *ngFor="let branch of branches()">
+            <td>
+              <strong>{{ branch.branchName }}</strong>
+              <small>{{ branch.branchId }}</small>
+            </td>
+            <td>{{ branch.regionName }}</td>
+            <td>{{ formatMoney(branch.netRevenuePaise) }}</td>
+            <td>{{ formatMoney(branch.totalDiscountPaise) }}</td>
+            <td>{{ pct(branch.discountRatePercent) }}</td>
+            <td>{{ branch.discountEvents }}</td>
+            <td>{{ branch.activeRules }}</td>
+            <td>{{ branch.budgetExceededCount }} budget / {{ branch.marginBlockedCount }} margin</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="split-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Top rules</h2>
+        <span class="muted-text">{{ rules().length }} rules</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let rule of rules()">
+          <div>
+            <strong>{{ rule.ruleName }}</strong>
+            <small>{{ rule.branches }} branches | {{ rule.applications }} applications</small>
+          </div>
+          <span>{{ formatMoney(rule.netRevenuePaise) }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !rules().length">No applied rule rows yet.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Margin impact</h2>
+        <span class="muted-text">{{ margin()?.rows?.length || 0 }} branches</span>
+      </div>
+      <div class="impact-summary">
+        <div>
+          <span>Margin blocked</span>
+          <strong>{{ formatMoney(margin()?.marginBlockedPaise) }}</strong>
+        </div>
+        <div>
+          <span>Budget blocked</span>
+          <strong>{{ formatMoney(margin()?.budgetExceededPaise) }}</strong>
+        </div>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of marginRows()">
+          <div>
+            <strong>{{ row.branchName }}</strong>
+            <small>{{ row.regionName }}</small>
+          </div>
+          <span>{{ row.marginBlockedCount || 0 }} / {{ row.budgetExceededCount || 0 }}</span>
+        </article>
+      </div>
+    </div>
+  </section>
+</section>

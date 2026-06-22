@@ -1,0 +1,170 @@
+<section class="page-stack coupon-engine-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Coupon / Promo Code Engine</h2>
+      <p>Code-based offers with first-visit, referral, branch, service, usage-limit and per-client controls.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/offer-roi-score">ROI score</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total coupons</span>
+      <strong>{{ analytics()?.summary?.coupons || 0 }}</strong>
+      <small>{{ analytics()?.summary?.activeCoupons || 0 }} active</small>
+    </article>
+    <article class="metric-card">
+      <span>Redemptions</span>
+      <strong>{{ analytics()?.summary?.redemptions || 0 }}</strong>
+      <small>coupon usage rows</small>
+    </article>
+    <article class="metric-card">
+      <span>Net revenue</span>
+      <strong>{{ formatMoney(analytics()?.summary?.netRevenuePaise) }}</strong>
+      <small>{{ formatMoney(analytics()?.summary?.grossRevenuePaise) }} gross</small>
+    </article>
+    <article class="metric-card">
+      <span>Discount given</span>
+      <strong>{{ formatMoney(analytics()?.summary?.totalDiscountPaise) }}</strong>
+      <small>integer paise tracked</small>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Ready templates</h2>
+      <span class="muted-text">{{ templates().length }} templates</span>
+    </div>
+    <div class="template-grid">
+      <article class="template-card" *ngFor="let template of templates()">
+        <div>
+          <strong>{{ template.title }}</strong>
+          <small>{{ template.code }} · {{ pretty(template.offerType) }}</small>
+        </div>
+        <button class="ghost-button mini" type="button" (click)="applyTemplate(template)">Use</button>
+      </article>
+    </div>
+  </section>
+
+  <section class="split-grid">
+    <form class="panel form-grid" (ngSubmit)="saveCoupon()">
+      <div class="section-title">
+        <h2>Create promo code</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">Save</button>
+      </div>
+      <label class="field"><span>Code</span><input [(ngModel)]="couponForm.code" name="code" /></label>
+      <label class="field"><span>Title</span><input [(ngModel)]="couponForm.title" name="title" /></label>
+      <label class="field"><span>Offer type</span><select [(ngModel)]="couponForm.offerType" name="offerType"><option *ngFor="let type of selectableOfferTypes" [value]="type">{{ pretty(type) }}</option></select></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="couponForm.status" name="status"><option *ngFor="let status of selectableStatuses" [value]="status">{{ pretty(status) }}</option></select></label>
+      <label class="field"><span>Discount type</span><select [(ngModel)]="couponForm.discountType" name="discountType"><option value="percent">Percent</option><option value="flat">Flat paise</option></select></label>
+      <label class="field"><span>Value</span><input type="number" [(ngModel)]="couponForm.discountValue" name="discountValue" /></label>
+      <label class="field"><span>Max cap paise</span><input type="number" [(ngModel)]="couponForm.maxDiscountPaise" name="maxDiscountPaise" /></label>
+      <label class="field"><span>Min cart paise</span><input type="number" [(ngModel)]="couponForm.minCartPaise" name="minCartPaise" /></label>
+      <label class="field"><span>Usage limit</span><input type="number" [(ngModel)]="couponForm.usageLimit" name="usageLimit" /></label>
+      <label class="field"><span>Per client</span><input type="number" [(ngModel)]="couponForm.perClientLimit" name="perClientLimit" /></label>
+      <label class="field"><span>Valid from</span><input type="date" [(ngModel)]="couponForm.validFrom" name="validFrom" /></label>
+      <label class="field"><span>Valid to</span><input type="date" [(ngModel)]="couponForm.validTo" name="validTo" /></label>
+      <label class="field"><span>Branch IDs</span><input [(ngModel)]="couponForm.branchIds" name="branchIds" placeholder="branch_hyd, branch_blr" /></label>
+      <label class="field"><span>Service categories</span><input [(ngModel)]="couponForm.serviceCategories" name="serviceCategories" placeholder="hair, spa" /></label>
+      <label class="field"><span>Service IDs</span><input [(ngModel)]="couponForm.serviceIds" name="serviceIds" /></label>
+      <label class="field"><span>Client segment</span><input [(ngModel)]="couponForm.clientSegment" name="clientSegment" /></label>
+      <label class="check-field"><input type="checkbox" [(ngModel)]="couponForm.firstVisitOnly" name="firstVisitOnly" /> First visit only</label>
+      <label class="check-field"><input type="checkbox" [(ngModel)]="couponForm.referralRequired" name="referralRequired" /> Referral required</label>
+      <label class="check-field full"><input type="checkbox" [(ngModel)]="couponForm.publicVisible" name="publicVisible" /> Public booking visible</label>
+    </form>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Validate / redeem</h2>
+        <span class="muted-text">safe manual test</span>
+      </div>
+      <div class="form-grid compact">
+        <label class="field"><span>Code</span><input [(ngModel)]="testForm.code" name="testCode" /></label>
+        <label class="field"><span>Cart paise</span><input type="number" [(ngModel)]="testForm.cartTotalPaise" name="testCart" /></label>
+        <label class="field"><span>Client ID</span><input [(ngModel)]="testForm.clientId" name="testClient" /></label>
+        <label class="field"><span>Visit count</span><input type="number" [(ngModel)]="testForm.clientVisitCount" name="visitCount" /></label>
+        <label class="field"><span>Referral client</span><input [(ngModel)]="testForm.referralClientId" name="referralClient" /></label>
+        <label class="field"><span>Service category</span><input [(ngModel)]="testForm.serviceCategory" name="serviceCategory" /></label>
+        <label class="field"><span>Client segment</span><input [(ngModel)]="testForm.clientSegment" name="testSegment" /></label>
+        <label class="field"><span>Invoice ID</span><input [(ngModel)]="testForm.invoiceId" name="invoiceId" /></label>
+        <label class="check-field full"><input type="checkbox" [(ngModel)]="testForm.isFirstVisit" name="isFirstVisit" /> Confirm first visit</label>
+      </div>
+      <div class="row-actions">
+        <button class="ghost-button" type="button" (click)="validate()" [disabled]="saving()">Validate</button>
+        <button class="primary-button" type="button" (click)="redeem()" [disabled]="saving()">Redeem</button>
+      </div>
+      <article class="validation-card" *ngIf="validation() as current" [class.valid]="current.valid || current.recorded" [class.blocked]="!(current.valid || current.recorded)">
+        <span>{{ current.valid || current.recorded ? 'Valid' : 'Blocked' }}</span>
+        <strong>{{ pretty(current.reason) }}</strong>
+        <small>Discount {{ formatMoney(current.discountPaise) }} · Payable {{ formatMoney(current.payablePaise) }}</small>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Promo codes</h2>
+      <div class="filter-row">
+        <select [(ngModel)]="filters.status" name="statusFilter" (change)="load()"><option *ngFor="let status of statuses" [value]="status">{{ status ? pretty(status) : 'All statuses' }}</option></select>
+        <select [(ngModel)]="filters.offerType" name="typeFilter" (change)="load()"><option *ngFor="let type of offerTypes" [value]="type">{{ type ? pretty(type) : 'All types' }}</option></select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Type</th>
+            <th>Discount</th>
+            <th>Usage</th>
+            <th>Validity</th>
+            <th>Target</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()"><td colspan="7">Loading coupons...</td></tr>
+          <tr *ngIf="!loading() && !coupons().length"><td colspan="7">No coupons yet.</td></tr>
+          <tr *ngFor="let coupon of coupons()" (click)="useCoupon(coupon)">
+            <td><strong>{{ coupon.code }}</strong><small>{{ coupon.title }}</small></td>
+            <td>{{ pretty(coupon.target?.offerType || 'generic') }}</td>
+            <td>{{ coupon.discountType === 'flat' ? formatMoney(coupon.discountValue) : coupon.discountValue + '%' }}</td>
+            <td>{{ coupon.usedCount || 0 }} / {{ coupon.usageLimit || 'Unlimited' }}<small>per client {{ coupon.perClientLimit || 1 }}</small></td>
+            <td>{{ coupon.validFrom || '-' }} to {{ coupon.validTo || '-' }}</td>
+            <td><small>{{ pretty(coupon.target?.clientSegment) }} {{ coupon.target?.firstVisitOnly ? '· first visit' : '' }} {{ coupon.target?.referralRequired ? '· referral' : '' }}</small></td>
+            <td><span class="status-badge" [ngClass]="statusClass(coupon.status)">{{ pretty(coupon.status) }}</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Coupon analytics</h2>
+      <span class="muted-text">{{ analytics()?.rows?.length || 0 }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Redemptions</th><th>Clients</th><th>Net revenue</th><th>Discount</th><th>Return</th></tr></thead>
+        <tbody>
+          <tr *ngIf="!analyticsRows().length"><td colspan="6">No coupon usage yet.</td></tr>
+          <tr *ngFor="let row of analyticsRows()">
+            <td><strong>{{ row.code }}</strong><small>{{ row.title }}</small></td>
+            <td>{{ row.redemptionCount }}</td>
+            <td>{{ row.uniqueClients }}</td>
+            <td>{{ formatMoney(row.netRevenuePaise) }}</td>
+            <td>{{ formatMoney(row.totalDiscountPaise) }}</td>
+            <td>{{ row.returnOnDiscountPercent || 0 }}%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

@@ -1,0 +1,226 @@
+.happy-hours-workspace {
+  background: #f7f9fb;
+  color: #101828;
+  min-height: 100%;
+  padding: 24px;
+}
+
+.workspace-hero {
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 22px;
+}
+
+.workspace-hero h1,
+.workspace-hero p,
+.workspace-hero span,
+.detail-head h2,
+.detail-head p {
+  margin: 0;
+}
+
+.workspace-hero h1 {
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.workspace-hero span,
+.detail-head p,
+.category-tile small {
+  color: #667085;
+}
+
+.eyebrow,
+.kicker {
+  color: #1d4ed8;
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.workspace-shell {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
+.category-rail {
+  display: grid;
+  gap: 10px;
+  max-height: calc(100vh - 210px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.category-tile {
+  background: #ffffff;
+  border: 1px solid #dbe5ef;
+  border-left: 4px solid #10b981;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 13px 15px;
+  text-align: left;
+}
+
+.category-tile span {
+  color: #101828;
+  font-weight: 900;
+}
+
+.category-tile strong {
+  color: #101828;
+  font-size: 22px;
+}
+
+.category-tile.active {
+  background: #f1f7ff;
+  border-color: #b8cdf8;
+  border-left-color: #2563eb;
+  box-shadow: 0 10px 24px rgba(29, 78, 216, 0.12);
+}
+
+.category-tile[data-state="warn"] {
+  border-left-color: #f59e0b;
+}
+
+.category-tile[data-state="risk"] {
+  border-left-color: #ef4444;
+}
+
+.category-tile[data-state="ready"] {
+  border-left-color: #64748b;
+}
+
+.workspace-detail {
+  background: #ffffff;
+  border: 1px solid #dbe5ef;
+  border-radius: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-head {
+  align-items: center;
+  border-bottom: 1px solid #e4e7ec;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  min-width: 64px;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.status-pill[data-state="live"] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill[data-state="warn"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-pill[data-state="risk"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-pill[data-state="ready"] {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.detail-body {
+  padding: 0;
+}
+
+.detail-body > * {
+  display: block;
+}
+
+:host ::ng-deep .detail-body .page-stack,
+:host ::ng-deep .detail-body .auto-sunset-page,
+:host ::ng-deep .detail-body .campaign-audience-page,
+:host ::ng-deep .detail-body .offer-health-page,
+:host ::ng-deep .detail-body .client-return-page,
+:host ::ng-deep .detail-body .branch-leaderboard-page {
+  background: #ffffff;
+  min-height: 0;
+  padding: 18px;
+}
+
+:host ::ng-deep .detail-body > app-happy-hours-control-tower .page-stack .page-header,
+:host ::ng-deep .detail-body > app-rule-list .page-header,
+:host ::ng-deep .detail-body > app-coupon-engine .page-header,
+:host ::ng-deep .detail-body > app-promotion-calendar .page-header,
+:host ::ng-deep .detail-body > app-happy-hours-client-segments .page-header,
+:host ::ng-deep .detail-body > app-happy-hours-staff-incentives .page-header,
+:host ::ng-deep .detail-body > app-offer-lifecycle .page-header,
+:host ::ng-deep .detail-body > app-offer-roi-score .page-header,
+:host ::ng-deep .detail-body > app-happy-hours-fraud-guard .page-header,
+:host ::ng-deep .detail-body > app-rule-conflict-detector .page-header,
+:host ::ng-deep .detail-body > app-discount-audit-log .page-header,
+:host ::ng-deep .detail-body > app-discount-rule-approvals .page-header,
+:host ::ng-deep .detail-body > app-cross-branch-analytics .page-header,
+:host ::ng-deep .detail-body > app-discount-simulation-sandbox .page-header,
+:host ::ng-deep .detail-body > app-discount-anomaly-inbox .page-header,
+:host ::ng-deep .detail-body > app-white-label-rules .page-header,
+:host ::ng-deep .detail-body > app-pricing-incrementality .page-header,
+:host ::ng-deep .detail-body > app-market-intelligence .page-header,
+:host ::ng-deep .detail-body > app-level6-readiness .page-header {
+  margin-top: 0;
+}
+
+@media (max-width: 1080px) {
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .category-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .happy-hours-workspace {
+    padding: 14px;
+  }
+
+  .workspace-hero,
+  .detail-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .category-rail {
+    grid-template-columns: 1fr;
+  }
+}

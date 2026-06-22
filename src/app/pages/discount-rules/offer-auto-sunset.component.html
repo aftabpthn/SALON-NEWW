@@ -1,0 +1,146 @@
+<section class="auto-sunset-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Happy Hours</p>
+      <h1>Offer Auto-Sunset</h1>
+    </div>
+    <nav class="quick-links" aria-label="Happy Hours quick links">
+      <a routerLink="/discount-rules/control-tower">Control Tower</a>
+      <a routerLink="/discount-rules/promotion-calendar">Promo Calendar</a>
+      <a routerLink="/discount-rules/conflicts">Conflicts</a>
+    </nav>
+  </header>
+
+  <div *ngIf="error()" class="alert">{{ error() }}</div>
+
+  <section class="summary-grid" aria-label="Auto-sunset summary">
+    <article>
+      <span>Total</span>
+      <strong>{{ summary('total') }}</strong>
+    </article>
+    <article>
+      <span>Suggested</span>
+      <strong>{{ summary('suggested') }}</strong>
+    </article>
+    <article>
+      <span>Applied</span>
+      <strong>{{ summary('applied') }}</strong>
+    </article>
+    <article>
+      <span>High Risk</span>
+      <strong>{{ summary('risk') }}</strong>
+    </article>
+  </section>
+
+  <section class="workspace">
+    <aside class="policy-panel">
+      <div class="panel-title">
+        <h2>Policy</h2>
+        <select [ngModel]="policy().status" (ngModelChange)="updatePolicy('status', $event)">
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+        </select>
+      </div>
+
+      <label class="toggle-row">
+        <input type="checkbox" [ngModel]="policy().expirePastEndDate" (ngModelChange)="updatePolicy('expirePastEndDate', $event)" />
+        <span>Expire past end date</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" [ngModel]="policy().pauseCouponsAtUsageLimit" (ngModelChange)="updatePolicy('pauseCouponsAtUsageLimit', $event)" />
+        <span>Pause coupons at usage limit</span>
+      </label>
+
+      <label class="field-row">
+        <span>Review no-end-date after</span>
+        <input type="number" min="1" max="365" [ngModel]="policy().reviewNoEndDateAfterDays" (ngModelChange)="updatePolicy('reviewNoEndDateAfterDays', $event)" />
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" [ngModel]="policy().autoApplyExpired" (ngModelChange)="updatePolicy('autoApplyExpired', $event)" />
+        <span>Auto-apply expired offers</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" [ngModel]="policy().autoApplyUsageLimit" (ngModelChange)="updatePolicy('autoApplyUsageLimit', $event)" />
+        <span>Auto-pause used-up coupons</span>
+      </label>
+
+      <label class="toggle-row">
+        <input type="checkbox" [ngModel]="policy().autoApplyStale" (ngModelChange)="updatePolicy('autoApplyStale', $event)" />
+        <span>Auto-pause stale offers</span>
+      </label>
+
+      <button type="button" class="primary" (click)="savePolicy()" [disabled]="saving()">
+        {{ saving() ? 'Saving...' : 'Save Policy' }}
+      </button>
+    </aside>
+
+    <main class="decision-panel">
+      <div class="panel-toolbar">
+        <div>
+          <h2>Decision Inbox</h2>
+          <p *ngIf="scanResult()">Last scan: {{ scanResult()?.decisions?.length || 0 }} decision(s)</p>
+        </div>
+        <div class="actions">
+          <select [(ngModel)]="filters.status" (ngModelChange)="load()">
+            <option value="">All status</option>
+            <option value="suggested">Suggested</option>
+            <option value="applied">Applied</option>
+            <option value="skipped">Skipped</option>
+          </select>
+          <select [(ngModel)]="filters.severity" (ngModelChange)="load()">
+            <option value="">All severity</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <button type="button" (click)="scan(false)" [disabled]="scanning()">{{ scanning() ? 'Scanning...' : 'Scan' }}</button>
+          <button type="button" class="primary" (click)="scan(true)" [disabled]="scanning()">Apply Safe Scan</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Offer</th>
+              <th>Action</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Decided</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of decisions()">
+              <td>
+                <strong>{{ row.offerName }}</strong>
+                <small>{{ label(row.offerType) }} #{{ row.offerId }}</small>
+              </td>
+              <td>{{ label(row.action) }}</td>
+              <td><span [class]="severityClass(row.severity)">{{ label(row.severity) }}</span></td>
+              <td><span [class]="statusClass(row.status)">{{ label(row.status) }}</span></td>
+              <td>
+                {{ row.reason }}
+                <pre *ngIf="row.evidence">{{ evidenceText(row) }}</pre>
+              </td>
+              <td>{{ formatDate(row.decidedAt) }}</td>
+              <td class="row-actions">
+                <button type="button" *ngIf="canApply(row)" (click)="apply(row)" [disabled]="applyingId() === row.id">
+                  {{ applyingId() === row.id ? 'Applying...' : 'Apply' }}
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="!loading() && decisions().length === 0">
+              <td colspan="7" class="empty">No auto-sunset decisions</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </section>
+</section>

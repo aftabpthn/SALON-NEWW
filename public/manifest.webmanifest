@@ -1,0 +1,18 @@
+{
+  "name": "Aura Salon CRM POS",
+  "short_name": "Aura POS",
+  "description": "Offline-ready salon CRM, POS, appointments and staff mobile workspace.",
+  "start_url": "/offline",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7fbf9",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/aura-pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

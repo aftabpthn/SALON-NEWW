@@ -1,0 +1,180 @@
+<section class="page-stack client-segments-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Client Segment Targeting</h2>
+      <p>VIP, inactive, new, high-spend, bridal/package clients ke liye focused offer targeting.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/coupon-engine">Coupon engine</a>
+      <a class="ghost-button" routerLink="/discount-rules/promotion-calendar">Calendar</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total segments</span>
+      <strong>{{ segments().length }}</strong>
+      <small>{{ activeSegments() }} active</small>
+    </article>
+    <article class="metric-card">
+      <span>Inactive targeting</span>
+      <strong>{{ inactiveSegments() }}</strong>
+      <small>win-back ready</small>
+    </article>
+    <article class="metric-card">
+      <span>Value targeting</span>
+      <strong>{{ valueSegments() }}</strong>
+      <small>VIP/high-spend filters</small>
+    </article>
+    <article class="metric-card">
+      <span>Matched sample</span>
+      <strong>{{ evaluation()?.matches?.length || 0 }}</strong>
+      <small>from test context</small>
+    </article>
+  </section>
+
+  <section class="panel template-panel">
+    <div class="section-title">
+      <h2>Segment templates</h2>
+      <span class="muted-text">{{ templates.length }} ready templates</span>
+    </div>
+    <div class="template-grid">
+      <article *ngFor="let template of templates">
+        <strong>{{ template.name }}</strong>
+        <p>{{ template.description }}</p>
+        <small>{{ template.recommendedOffer }}</small>
+        <button class="ghost-button mini" type="button" (click)="applyTemplate(template)">Use template</button>
+      </article>
+    </div>
+  </section>
+
+  <section class="builder-grid">
+    <form class="panel form-grid" (ngSubmit)="saveSegment()">
+      <div class="section-title">
+        <h2>Build segment</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">
+          {{ saving() ? 'Saving...' : 'Save segment' }}
+        </button>
+      </div>
+
+      <label class="field">
+        <span>Name</span>
+        <input [(ngModel)]="segmentForm.name" name="segmentName" required />
+      </label>
+      <label class="field">
+        <span>Key</span>
+        <input [(ngModel)]="segmentForm.segmentKey" name="segmentKey" required />
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select [(ngModel)]="segmentForm.status" name="segmentStatus">
+          <option>active</option>
+          <option>paused</option>
+          <option>draft</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Visit count min</span>
+        <input type="number" [(ngModel)]="segmentForm.definition.criteria.visitCountGte" name="visitCountGte" />
+      </label>
+      <label class="field">
+        <span>Visit count max</span>
+        <input type="number" [(ngModel)]="segmentForm.definition.criteria.visitCountLte" name="visitCountLte" />
+      </label>
+      <label class="field">
+        <span>Inactive days min</span>
+        <input type="number" [(ngModel)]="segmentForm.definition.criteria.inactiveDaysGte" name="inactiveDaysGte" />
+      </label>
+      <label class="field">
+        <span>Total spend min paise</span>
+        <input type="number" [(ngModel)]="segmentForm.definition.criteria.totalSpendPaiseGte" name="totalSpendPaiseGte" />
+      </label>
+      <label class="field">
+        <span>Client type</span>
+        <input [(ngModel)]="segmentForm.definition.criteria.clientType" name="clientType" placeholder="new, vip, regular" />
+      </label>
+      <label class="field">
+        <span>Service category</span>
+        <input [(ngModel)]="segmentForm.definition.criteria.serviceCategory" name="serviceCategory" placeholder="bridal, hair, skin" />
+      </label>
+      <label class="field full">
+        <span>Recommended offer</span>
+        <textarea [(ngModel)]="segmentForm.definition.recommendedOffer" name="recommendedOffer"></textarea>
+      </label>
+    </form>
+
+    <article class="panel">
+      <div class="section-title">
+        <h2>Test client context</h2>
+        <button class="primary-button" type="button" (click)="evaluate()" [disabled]="saving()">Evaluate</button>
+      </div>
+      <div class="test-grid">
+        <label class="field"><span>Visits</span><input type="number" [(ngModel)]="sampleContext.visitCount" name="sampleVisits" /></label>
+        <label class="field"><span>Inactive days</span><input type="number" [(ngModel)]="sampleContext.inactiveDays" name="sampleInactive" /></label>
+        <label class="field"><span>Total spend paise</span><input type="number" [(ngModel)]="sampleContext.totalSpendPaise" name="sampleSpend" /></label>
+        <label class="field"><span>Client type</span><input [(ngModel)]="sampleContext.clientType" name="sampleType" /></label>
+        <label class="field"><span>Service category</span><input [(ngModel)]="sampleContext.serviceCategory" name="sampleCategory" /></label>
+      </div>
+      <div class="match-list" *ngIf="evaluation() as result">
+        <article *ngFor="let segment of evaluationMatches()">
+          <strong>{{ segment.name }}</strong>
+          <small>{{ recommendedOffer(segment) }}</small>
+        </article>
+        <p class="muted-text" *ngIf="!evaluationMatches().length">No segment matched this sample.</p>
+      </div>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Saved segments</h2>
+      <div class="list-actions">
+        <label class="field compact">
+          <span>Status</span>
+          <select [(ngModel)]="filters.status" name="statusFilter" (ngModelChange)="load()">
+            <option *ngFor="let status of statuses" [value]="status">{{ status || 'All' }}</option>
+          </select>
+        </label>
+        <button class="ghost-button" type="button" (click)="load()" [disabled]="loading()">
+          {{ loading() ? 'Loading...' : 'Refresh' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Segment</th>
+            <th>Criteria</th>
+            <th>Recommended offer</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="5">Loading segments...</td>
+          </tr>
+          <tr *ngIf="!loading() && !segments().length">
+            <td colspan="5">No segments yet. Start from a template.</td>
+          </tr>
+          <tr *ngFor="let row of segments()">
+            <td>
+              <strong>{{ row.name }}</strong>
+              <small>{{ row.segmentKey }}</small>
+            </td>
+            <td>{{ criteriaText(row) }}</td>
+            <td>{{ recommendedOffer(row) }}</td>
+            <td><span [class]="statusClass(row.status)">{{ row.status }}</span></td>
+            <td><button class="ghost-button mini" type="button" (click)="editSegment(row)">Edit copy</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

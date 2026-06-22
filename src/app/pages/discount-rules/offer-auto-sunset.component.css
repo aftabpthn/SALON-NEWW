@@ -1,0 +1,303 @@
+.auto-sunset-page {
+  padding: 24px;
+  color: #17202a;
+  background: #f7f9fb;
+  min-height: 100%;
+}
+
+.page-header,
+.panel-toolbar,
+.panel-title,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-header,
+.panel-toolbar {
+  justify-content: space-between;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #607385;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-links a,
+button,
+select,
+input {
+  border: 1px solid #cdd7df;
+  border-radius: 8px;
+  background: #fff;
+  color: #17202a;
+  min-height: 38px;
+}
+
+.quick-links a {
+  padding: 9px 12px;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+button {
+  padding: 0 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+select,
+input {
+  padding: 0 10px;
+}
+
+.alert {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #f4b4ad;
+  border-radius: 8px;
+  background: #fff1f0;
+  color: #9f1d16;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.summary-grid article,
+.policy-panel,
+.decision-panel {
+  border: 1px solid #dde5eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(28, 43, 56, 0.05);
+}
+
+.summary-grid article {
+  padding: 16px;
+}
+
+.summary-grid span {
+  display: block;
+  color: #66788a;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.summary-grid strong {
+  font-size: 28px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.policy-panel,
+.decision-panel {
+  padding: 18px;
+}
+
+.panel-title {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.toggle-row,
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #edf1f4;
+  font-weight: 700;
+}
+
+.toggle-row input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.field-row input {
+  width: 92px;
+}
+
+.policy-panel .primary {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.panel-toolbar {
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.panel-toolbar p {
+  color: #66788a;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+th,
+td {
+  padding: 12px;
+  border-top: 1px solid #edf1f4;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: #607385;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+td strong,
+td small {
+  display: block;
+}
+
+td small {
+  margin-top: 4px;
+  color: #66788a;
+}
+
+.status-badge,
+.severity {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.status-suggested {
+  background: #fff7ed;
+  color: #a34a08;
+}
+
+.status-applied {
+  background: #ecfdf5;
+  color: #087443;
+}
+
+.status-skipped {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.severity-critical {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.severity-high {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.severity-medium {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.severity-low {
+  background: #dcfce7;
+  color: #166534;
+}
+
+pre {
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+}
+
+.row-actions {
+  text-align: right;
+}
+
+.empty {
+  text-align: center;
+  color: #66788a;
+  padding: 28px;
+}
+
+@media (max-width: 1000px) {
+  .summary-grid,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header,
+  .panel-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+}

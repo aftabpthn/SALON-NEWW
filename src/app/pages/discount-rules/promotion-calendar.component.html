@@ -1,0 +1,209 @@
+<section class="page-stack promotion-calendar-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Promotion Calendar</h2>
+      <p>Festival offers, slow-day campaigns, birthdays, month-end pushes aur linked rules/coupons ek calendar me.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/coupon-engine">Coupon engine</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel calendar-toolbar">
+    <div class="period-actions">
+      <button class="ghost-button mini" type="button" (click)="shift(-1)" aria-label="Previous period">&lt;</button>
+      <strong>{{ currentTitle() }}</strong>
+      <button class="ghost-button mini" type="button" (click)="shift(1)" aria-label="Next period">&gt;</button>
+    </div>
+    <div class="segmented-control" aria-label="Calendar view">
+      <button type="button" [class.active]="viewMode() === 'month'" (click)="setView('month')">Month</button>
+      <button type="button" [class.active]="viewMode() === 'week'" (click)="setView('week')">Week</button>
+    </div>
+    <label class="field">
+      <span>Status</span>
+      <select [(ngModel)]="filters.status" name="status" (ngModelChange)="load()">
+        <option *ngFor="let status of statuses" [value]="status">{{ status || 'All statuses' }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Type</span>
+      <select [(ngModel)]="filters.promoType" name="promoType" (ngModelChange)="load()">
+        <option *ngFor="let type of promoTypes" [value]="type">{{ type ? promoLabel(type) : 'All types' }}</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Refresh' }}
+    </button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total visible</span>
+      <strong>{{ visibleEvents().length }}</strong>
+      <small>{{ currentTitle() }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Scheduled</span>
+      <strong>{{ scheduledCount() }}</strong>
+      <small>scheduled or active</small>
+    </article>
+    <article class="metric-card">
+      <span>Active now</span>
+      <strong>{{ activeCount() }}</strong>
+      <small>live campaigns</small>
+    </article>
+    <article class="metric-card">
+      <span>Drafts</span>
+      <strong>{{ draftCount() }}</strong>
+      <small>needs approval/planning</small>
+    </article>
+  </section>
+
+  <section class="calendar-layout">
+    <div class="panel calendar-board">
+      <div class="weekday-row">
+        <span *ngFor="let day of weekdays">{{ day }}</span>
+      </div>
+      <div class="day-grid">
+        <button
+          class="day-cell"
+          type="button"
+          *ngFor="let day of days()"
+          [class.muted]="day.muted"
+          [class.today]="day.today"
+          (click)="selectDay(day)"
+        >
+          <span class="day-number">{{ day.label }}</span>
+          <span class="event-chip" *ngFor="let event of day.previewEvents" [ngClass]="eventClass(event)">
+            {{ event.title }}
+          </span>
+          <small *ngIf="day.events.length > 3">+{{ day.events.length - 3 }} more</small>
+        </button>
+      </div>
+    </div>
+
+    <form class="panel form-grid planner-panel" (ngSubmit)="savePromotion()">
+      <div class="section-title">
+        <h2>Schedule offer</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">
+          {{ saving() ? 'Saving...' : 'Save' }}
+        </button>
+      </div>
+
+      <div class="preset-row" aria-label="Promotion presets">
+        <button class="ghost-button mini" type="button" *ngFor="let preset of presets" (click)="applyPreset(preset)">
+          {{ preset.label }}
+        </button>
+      </div>
+
+      <label class="field full">
+        <span>Title</span>
+        <input [(ngModel)]="promotionForm.title" name="title" required />
+      </label>
+      <label class="field">
+        <span>Type</span>
+        <select [(ngModel)]="promotionForm.promoType" name="promoType">
+          <option *ngFor="let type of selectablePromoTypes" [value]="type">{{ promoLabel(type) }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select [(ngModel)]="promotionForm.status" name="promotionStatus">
+          <option>draft</option>
+          <option>scheduled</option>
+          <option>active</option>
+          <option>paused</option>
+          <option>archived</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Start date</span>
+        <input type="date" [(ngModel)]="promotionForm.startDate" name="startDate" />
+      </label>
+      <label class="field">
+        <span>End date</span>
+        <input type="date" [(ngModel)]="promotionForm.endDate" name="endDate" />
+      </label>
+      <label class="field">
+        <span>Start time</span>
+        <input type="time" [(ngModel)]="promotionForm.startTime" name="startTime" />
+      </label>
+      <label class="field">
+        <span>End time</span>
+        <input type="time" [(ngModel)]="promotionForm.endTime" name="endTime" />
+      </label>
+      <label class="field">
+        <span>Linked rule</span>
+        <select [(ngModel)]="promotionForm.ruleId" name="ruleId">
+          <option value="">No rule</option>
+          <option *ngFor="let rule of activeRules()" [value]="rule.id">{{ rule.name }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Linked coupon</span>
+        <select [(ngModel)]="promotionForm.couponId" name="couponId">
+          <option value="">No coupon</option>
+          <option *ngFor="let coupon of coupons()" [value]="coupon.id">{{ coupon.code }} · {{ coupon.title }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Audience</span>
+        <input [(ngModel)]="promotionForm.audience.segment" name="audience" />
+      </label>
+      <label class="field full">
+        <span>Notes</span>
+        <textarea [(ngModel)]="promotionForm.notes" name="notes"></textarea>
+      </label>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Campaign list</h2>
+      <span class="muted-text">{{ visibleEvents().length }} events</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Promotion</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Link</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="6">Loading calendar...</td>
+          </tr>
+          <tr *ngIf="!loading() && !visibleEvents().length">
+            <td colspan="6">No promotions in this period.</td>
+          </tr>
+          <tr *ngFor="let row of visibleEvents()">
+            <td>
+              <strong>{{ row.title }}</strong>
+              <small>{{ promoLabel(row.promoType) }} · {{ row.notes || 'No notes' }}</small>
+            </td>
+            <td>{{ row.startDate }} to {{ row.endDate }}</td>
+            <td>{{ row.startTime || '-' }} - {{ row.endTime || '-' }}</td>
+            <td>{{ linkLabel(row) }}</td>
+            <td><span [class]="statusClass(row.status)">{{ row.status }}</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="ghost-button mini" type="button" (click)="updateStatus(row, 'active')" [disabled]="row.status === 'active'">Activate</button>
+                <button class="ghost-button mini" type="button" (click)="updateStatus(row, 'paused')" [disabled]="row.status === 'paused'">Pause</button>
+                <button class="ghost-button mini" type="button" (click)="deletePromotion(row)">Delete</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

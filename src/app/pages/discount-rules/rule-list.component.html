@@ -1,0 +1,84 @@
+<section class="page-stack discount-rules-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E2</span>
+      <h2>Discount Rule Builder</h2>
+      <p>Visual rules for controlled salon offers, saved through the discount-rules engine.</p>
+    </div>
+    <a class="primary-button" routerLink="/discount-rules/new">Add rule</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="rule-toolbar">
+      <label class="field compact-field">
+        <span>Status</span>
+        <select [(ngModel)]="statusFilter" (change)="load()">
+          <option *ngFor="let status of statuses" [value]="status.value">{{ status.label }}</option>
+        </select>
+      </label>
+      <button class="ghost-button" type="button" (click)="refreshActiveNow()" [disabled]="activeChecking()">
+        {{ activeChecking() ? 'Checking...' : 'Check active now' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Rules</h2>
+      <span class="muted-text">{{ rules().length }} configured</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Conditions summary</th>
+            <th>Action</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Active now</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="7">Loading discount rules...</td>
+          </tr>
+          <tr *ngIf="!loading() && !rules().length">
+            <td colspan="7">No rules yet. Add the first draft rule.</td>
+          </tr>
+          <tr *ngFor="let rule of rules()">
+            <td>
+              <strong>{{ rule.name }}</strong>
+              <small *ngIf="rule.description">{{ rule.description }}</small>
+            </td>
+            <td>{{ conditionsSummary(rule) }}</td>
+            <td>{{ actionSummary(rule) }}</td>
+            <td>{{ rule.priority || 100 }}</td>
+            <td>
+              <span class="status-badge" [ngClass]="statusClass(rule.status)">
+                {{ statusLabel(rule.status) }}
+              </span>
+            </td>
+            <td>
+              <span class="active-dot" [class.on]="isActiveNow(rule)">
+                {{ isActiveNow(rule) ? 'Matches sample' : 'No match' }}
+              </span>
+            </td>
+            <td class="row-actions">
+              <a class="ghost-button mini" [routerLink]="['/discount-rules', rule.id]">Edit</a>
+              <button class="ghost-button mini" type="button" (click)="toggle(rule)">
+                {{ toggleLabel(rule) }}
+              </button>
+              <button class="ghost-button mini" type="button" (click)="duplicate(rule)">Duplicate</button>
+              <button class="ghost-button mini danger" type="button" (click)="remove(rule)">Delete</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

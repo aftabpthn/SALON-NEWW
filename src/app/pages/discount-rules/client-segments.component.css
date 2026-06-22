@@ -1,0 +1,149 @@
+.client-segments-page {
+  gap: 18px;
+}
+
+.client-segments-page .page-header p,
+.muted-text,
+.metric-card small,
+.template-grid p,
+.template-grid small,
+.match-list small,
+.table-wrap td small {
+  color: #667085;
+}
+
+.header-actions,
+.list-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metric-grid,
+.template-grid,
+.builder-grid,
+.test-grid,
+.match-list {
+  display: grid;
+  gap: 12px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.template-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.builder-grid {
+  align-items: start;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+}
+
+.form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-grid .section-title,
+.form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.test-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-card,
+.template-grid article,
+.match-list article {
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.metric-card span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 24px;
+}
+
+.template-grid article {
+  align-content: start;
+}
+
+.template-grid p,
+.template-grid small {
+  margin: 0;
+}
+
+.compact {
+  min-width: 160px;
+}
+
+.status-badge {
+  border: 1px solid #e4e7ec;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  text-transform: capitalize;
+}
+
+.status-active {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+  color: #027a48;
+}
+
+.status-paused {
+  background: #fffaeb;
+  border-color: #fedf89;
+  color: #b54708;
+}
+
+.status-draft {
+  background: #f2f4f7;
+  border-color: #e4e7ec;
+  color: #475467;
+}
+
+.table-wrap td {
+  vertical-align: top;
+}
+
+.table-wrap td strong,
+.table-wrap td small {
+  display: block;
+}
+
+@media (max-width: 1180px) {
+  .metric-grid,
+  .template-grid,
+  .builder-grid,
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .metric-grid,
+  .template-grid,
+  .builder-grid,
+  .form-grid,
+  .test-grid {
+    grid-template-columns: 1fr;
+  }
+}

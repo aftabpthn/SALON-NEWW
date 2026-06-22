@@ -1,0 +1,92 @@
+.discount-rules-page {
+  gap: 18px;
+}
+
+.discount-rules-page .page-header p,
+.muted-text {
+  color: #667085;
+  margin: 6px 0 0;
+}
+
+.rule-toolbar {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.compact-field {
+  max-width: 220px;
+}
+
+.table-wrap td small {
+  color: #667085;
+  display: block;
+  margin-top: 4px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 250px;
+}
+
+.status-badge,
+.active-dot {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  line-height: 1;
+  padding: 7px 10px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-draft {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.status-pending_approval {
+  background: #fff7e6;
+  color: #9a5b00;
+}
+
+.status-active {
+  background: #e7f7ef;
+  color: #067647;
+}
+
+.status-paused {
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.status-expired {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.active-dot {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.active-dot.on {
+  background: #dcfae6;
+  color: #067647;
+}
+
+.danger {
+  color: #b42318;
+}
+
+@media (max-width: 760px) {
+  .row-actions {
+    min-width: 180px;
+  }
+}

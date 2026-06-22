@@ -1,0 +1,153 @@
+<section class="page-stack lifecycle-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Offer Lifecycle OS + ROI Score</h2>
+      <p>Idea se live offer tak stage control, linked rule/coupon tracking, and score-based ROI review.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules">Rules</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>From</span>
+      <input type="date" [(ngModel)]="filters.from" name="from" />
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" [(ngModel)]="filters.to" name="to" />
+    </label>
+    <label class="field">
+      <span>Stage</span>
+      <select [(ngModel)]="filters.stage" name="stageFilter">
+        <option value="">All stages</option>
+        <option *ngFor="let stage of stages" [value]="stage">{{ stageLabel(stage) }}</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Refresh' }}
+    </button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total offers</span>
+      <strong>{{ summary()?.total || 0 }}</strong>
+      <small>{{ summary()?.active || 0 }} active lifecycle items</small>
+    </article>
+    <article class="metric-card">
+      <span>Live offers</span>
+      <strong>{{ summary()?.live || 0 }}</strong>
+      <small>currently in live stage</small>
+    </article>
+    <article class="metric-card">
+      <span>Net ROI revenue</span>
+      <strong>{{ formatMoney(summary()?.netRevenuePaise) }}</strong>
+      <small>{{ summary()?.applications || 0 }} applications</small>
+    </article>
+    <article class="metric-card" [ngClass]="scoreClass(summary()?.averageScore)">
+      <span>Average ROI score</span>
+      <strong>{{ summary()?.averageScore || 0 }}</strong>
+      <small>0-100 explainable score</small>
+    </article>
+  </section>
+
+  <section class="split-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Lifecycle board</h2>
+        <span class="muted-text">{{ lifecycles().length }} offers</span>
+      </div>
+      <div class="stage-board">
+        <article class="stage-column" *ngFor="let stage of stages">
+          <header>
+            <strong>{{ stageLabel(stage) }}</strong>
+            <span>{{ stageRows(stage).length }}</span>
+          </header>
+          <div class="offer-card" *ngFor="let row of stageRows(stage)">
+            <div>
+              <strong>{{ row.title }}</strong>
+              <p>{{ row.objective || 'No objective set' }}</p>
+            </div>
+            <div class="offer-meta">
+              <span>Rule {{ row.ruleId || '-' }}</span>
+              <span>Coupon {{ row.couponId || '-' }}</span>
+              <span [ngClass]="scoreClass(row.roiScore.score)">Score {{ row.roiScore.score || 0 }}</span>
+            </div>
+            <div class="row-actions">
+              <button class="ghost-button mini" type="button" (click)="move(row, previousStage(row))" [disabled]="saving() || previousStage(row) === row.stage">
+                Back
+              </button>
+              <button class="ghost-button mini" type="button" (click)="move(row, nextStage(row))" [disabled]="saving() || nextStage(row) === row.stage">
+                Next
+              </button>
+            </div>
+          </div>
+          <p class="muted-text" *ngIf="!stageRows(stage).length">No offers</p>
+        </article>
+      </div>
+    </div>
+
+    <form class="panel form-grid" (ngSubmit)="createLifecycle()">
+      <div class="section-title">
+        <h2>Create lifecycle</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">Save</button>
+      </div>
+      <label class="field full"><span>Title</span><input [(ngModel)]="lifecycleForm.title" name="title" /></label>
+      <label class="field full"><span>Objective</span><textarea [(ngModel)]="lifecycleForm.objective" name="objective"></textarea></label>
+      <label class="field"><span>Stage</span><select [(ngModel)]="lifecycleForm.stage" name="stage"><option *ngFor="let stage of stages" [value]="stage">{{ stageLabel(stage) }}</option></select></label>
+      <label class="field"><span>Owner role</span><input [(ngModel)]="lifecycleForm.ownerRole" name="ownerRole" /></label>
+      <label class="field"><span>Rule ID</span><input [(ngModel)]="lifecycleForm.ruleId" name="ruleId" /></label>
+      <label class="field"><span>Coupon ID</span><input [(ngModel)]="lifecycleForm.couponId" name="couponId" /></label>
+      <label class="field"><span>Budget paise</span><input type="number" [(ngModel)]="lifecycleForm.budgetPaise" name="budgetPaise" /></label>
+      <label class="field"><span>Target revenue paise</span><input type="number" [(ngModel)]="lifecycleForm.targetRevenuePaise" name="targetRevenuePaise" /></label>
+      <label class="field"><span>Target apps</span><input type="number" [(ngModel)]="lifecycleForm.targetApplications" name="targetApplications" /></label>
+      <label class="field"><span>Valid from</span><input type="date" [(ngModel)]="lifecycleForm.validFrom" name="validFrom" /></label>
+      <label class="field"><span>Valid to</span><input type="date" [(ngModel)]="lifecycleForm.validTo" name="validTo" /></label>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>ROI score table</h2>
+      <span class="muted-text">Audit + manual outcome based</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Offer</th>
+            <th>Score</th>
+            <th>Revenue</th>
+            <th>Discount</th>
+            <th>Return</th>
+            <th>Repeat</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!roiScores().length">
+            <td colspan="7">No lifecycle ROI rows yet.</td>
+          </tr>
+          <tr *ngFor="let row of roiScores()">
+            <td>
+              <strong>{{ row.title }}</strong>
+              <small>{{ stageLabel(row.stage) }}</small>
+            </td>
+            <td><span class="score-pill" [ngClass]="scoreClass(row.roiScore.score)">{{ row.roiScore.score || 0 }}</span></td>
+            <td>{{ formatMoney(row.roiScore.netRevenuePaise) }}</td>
+            <td>{{ formatMoney(row.roiScore.totalDiscountPaise) }}</td>
+            <td>{{ pct(row.roiScore.returnOnDiscountPercent) }}</td>
+            <td>{{ pct(row.roiScore.repeatRatePercent) }}</td>
+            <td>{{ row.roiScore.recommendation }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

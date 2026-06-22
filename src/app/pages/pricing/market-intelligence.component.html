@@ -1,0 +1,214 @@
+<section class="page-stack market-intel-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Level 6 / F4</span>
+      <h2>Competitive Price Intelligence</h2>
+      <p>Manual market price tracking for nearby salons, service positioning, and off-peak discount guidance.</p>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules/control-tower">Back to control tower</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="market-filters">
+      <label class="field">
+        <span>Service category</span>
+        <select [(ngModel)]="positionForm.serviceCategory" name="positionService" (change)="syncServiceCategory()">
+          <option *ngFor="let category of serviceCategories" [value]="category">{{ category }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Our price</span>
+        <input type="number" min="0" [(ngModel)]="positionForm.ourPriceRupees" name="ourPrice" />
+      </label>
+      <label class="field">
+        <span>Base discount %</span>
+        <input type="number" min="0" max="100" [(ngModel)]="positionForm.baseDiscountPercent" name="baseDiscount" />
+      </label>
+      <button class="primary-button" type="button" (click)="loadPosition()">Check position</button>
+    </div>
+  </section>
+
+  <section class="kpi-grid" *ngIf="marketPosition() as position">
+    <article class="metric-card">
+      <span>Market average</span>
+      <strong>{{ formatMoney(position.avgPaise) }}</strong>
+      <small>{{ position.competitorCount }} competitors, {{ position.observationCount }} observations</small>
+    </article>
+    <article class="metric-card">
+      <span>Our effective price</span>
+      <strong>{{ formatMoney(position.ourEffectivePricePaise) }}</strong>
+      <small>{{ position.baseDiscountPercent }}% current discount</small>
+    </article>
+    <article class="metric-card" [class.warning]="position.position === 'above_market'" [class.good]="position.position === 'at_market'">
+      <span>Position</span>
+      <strong>{{ positionLabel(position.position) }}</strong>
+      <small>{{ formatGap(position.priceGapPercent) }} vs market average</small>
+    </article>
+    <article class="metric-card action">
+      <span>Off-peak guidance</span>
+      <strong>{{ position.recommendedDiscountPercent }}%</strong>
+      <small>{{ position.note }}</small>
+    </article>
+  </section>
+
+  <section class="panel suggestion-panel" *ngIf="ruleSuggestion() as suggestion">
+    <div class="section-title">
+      <div>
+        <h2>Draft rule suggestion</h2>
+        <p class="muted-text">{{ suggestion.reason }}</p>
+      </div>
+      <span class="status-pill" [class.ready]="suggestion.eligible" [class.muted]="!suggestion.eligible">
+        {{ suggestion.eligible ? 'Ready' : 'Not ready' }}
+      </span>
+    </div>
+
+    <div class="suggestion-grid">
+      <article class="suggestion-card">
+        <span>Suggested discount</span>
+        <strong>{{ suggestion.recommendedDiscountPercent }}%</strong>
+        <p>{{ suggestion.previewSentence }}</p>
+      </article>
+
+      <article class="suggestion-card" *ngIf="suggestion.rulePayload as rule">
+        <span>Draft preview</span>
+        <strong>{{ rule['name'] }}</strong>
+        <p>{{ rule['description'] }}</p>
+        <small>Low occupancy only | Priority {{ rule['priority'] }} | Status draft</small>
+      </article>
+
+      <article class="suggestion-card">
+        <span>Guardrails</span>
+        <ul>
+          <li *ngFor="let guardrail of suggestion.guardrails">{{ guardrail }}</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="suggestion-actions">
+      <button class="primary-button" type="button" (click)="createDraftRule()" [disabled]="!suggestion.eligible || creatingDraft()">
+        {{ creatingDraft() ? 'Creating...' : 'Create draft rule' }}
+      </button>
+      <a class="ghost-button" routerLink="/discount-rules">Open discount rules</a>
+      <span class="muted-text" *ngIf="suggesting()">Refreshing suggestion...</span>
+    </div>
+
+    <p class="success-text" *ngIf="draftRule() as created">
+      Draft rule #{{ created['id'] }} created: {{ created['name'] }}.
+    </p>
+  </section>
+
+  <section class="content-grid">
+    <article class="panel">
+      <div class="section-title">
+        <h2>Manual price entry</h2>
+        <span class="muted-text">Public/manual source only</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-box">
+          <h3>Add competitor</h3>
+          <label class="field">
+            <span>Name</span>
+            <input type="text" [(ngModel)]="competitorForm.competitorName" name="competitorName" />
+          </label>
+          <label class="field">
+            <span>Distance km</span>
+            <input type="number" min="0" step="0.1" [(ngModel)]="competitorForm.distance" name="distance" />
+          </label>
+          <label class="field">
+            <span>Source</span>
+            <select [(ngModel)]="competitorForm.source" name="source">
+              <option *ngFor="let source of sources" [value]="source">{{ sourceLabel(source) }}</option>
+            </select>
+          </label>
+          <button class="primary-button" type="button" (click)="createCompetitor()" [disabled]="saving()">
+            Add competitor
+          </button>
+        </div>
+
+        <div class="form-box">
+          <h3>Record price</h3>
+          <label class="field">
+            <span>Competitor</span>
+            <select [(ngModel)]="priceForm.competitorId" name="competitorId">
+              <option value="">Select competitor</option>
+              <option *ngFor="let competitor of competitors()" [value]="competitor.id">{{ competitor.competitorName }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Service</span>
+            <select [(ngModel)]="priceForm.serviceCategory" name="priceService">
+              <option *ngFor="let category of serviceCategories" [value]="category">{{ category }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Price</span>
+            <input type="number" min="0" [(ngModel)]="priceForm.priceRupees" name="priceRupees" />
+          </label>
+          <label class="field">
+            <span>Observed date</span>
+            <input type="date" [(ngModel)]="priceForm.observedDate" name="observedDate" />
+          </label>
+          <button class="primary-button" type="button" (click)="recordPrice()" [disabled]="saving() || !priceForm.competitorId">
+            Save price
+          </button>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel map-panel">
+      <div class="section-title">
+        <h2>Market map</h2>
+        <span class="muted-text">{{ competitors().length }} nearby salons</span>
+      </div>
+      <div class="map-card">
+        <div class="branch-dot">Aura</div>
+        <div class="competitor-dot" *ngFor="let competitor of competitors()">
+          <strong>{{ competitor.competitorName }}</strong>
+          <small>{{ competitor.distance || 0 }} km | {{ sourceLabel(competitor.source) }}</small>
+        </div>
+        <p class="empty-text" *ngIf="!competitors().length">Add competitors to build the branch market view.</p>
+      </div>
+      <p class="legal-note">
+        Use manual or publicly listed prices only. Do not scrape private pages, login-only portals, or sources that disallow reuse.
+      </p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Latest {{ positionForm.serviceCategory }} observations</h2>
+      <span class="muted-text">{{ prices().length }} records</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Competitor</th>
+            <th>Service</th>
+            <th>Price</th>
+            <th>Observed</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="5">Loading market data...</td>
+          </tr>
+          <tr *ngIf="!loading() && !prices().length">
+            <td colspan="5">No prices recorded for this category yet.</td>
+          </tr>
+          <tr *ngFor="let price of prices()">
+            <td>{{ price.competitorName }}</td>
+            <td>{{ price.serviceCategory }}</td>
+            <td>{{ formatMoney(price.pricePaise) }}</td>
+            <td>{{ price.observedDate }}</td>
+            <td>{{ sourceLabel(price.source || 'manual') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

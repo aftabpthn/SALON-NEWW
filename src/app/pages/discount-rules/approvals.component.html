@@ -1,0 +1,78 @@
+<section class="page-stack discount-approvals-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E3</span>
+      <h2>Discount Rule Approvals</h2>
+      <p>Review rule activation requests that exceeded the creator role limit.</p>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+  <p class="success-text" *ngIf="success()">{{ success() }}</p>
+
+  <section class="panel locked-panel" *ngIf="!canApprove()">
+    <h3>Approval inbox restricted</h3>
+    <p>Regional head, admin, or owner role is required for approving discount rules.</p>
+    <strong>Current role: {{ state.userRole() }}</strong>
+  </section>
+
+  <section class="panel" *ngIf="canApprove()">
+    <div class="section-title">
+      <h2>Pending approval inbox</h2>
+      <button class="ghost-button mini" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Requested by</th>
+            <th>Limit</th>
+            <th>Requested</th>
+            <th>Action</th>
+            <th>Note</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="7">Loading approvals...</td>
+          </tr>
+          <tr *ngIf="!loading() && !approvals().length">
+            <td colspan="7">No pending discount rule approvals.</td>
+          </tr>
+          <tr *ngFor="let approval of approvals()">
+            <td>
+              <strong>{{ ruleName(approval) }}</strong>
+              <small>Rule #{{ approval.ruleId }} | {{ createdLabel(approval) }}</small>
+            </td>
+            <td>
+              <span class="role-pill">{{ approval.requestedRole }}</span>
+              <small>{{ approval.note || 'Activation requested' }}</small>
+            </td>
+            <td>{{ approval.roleLimitPercent }}%</td>
+            <td>
+              <span class="risk-pill">{{ approval.requestedPercent }}%</span>
+            </td>
+            <td>{{ actionSummary(approval) }}</td>
+            <td>
+              <input class="decision-note" [(ngModel)]="notes[approval.id]" [name]="'note' + approval.id" placeholder="Decision note" />
+            </td>
+            <td class="decision-actions">
+              <button class="primary-button mini" type="button" (click)="approve(approval)" [disabled]="actionId() === approval.id">
+                Approve
+              </button>
+              <button class="ghost-button mini danger" type="button" (click)="reject(approval)" [disabled]="actionId() === approval.id">
+                Reject
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

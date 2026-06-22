@@ -1,0 +1,116 @@
+<section class="page-stack anomaly-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E8.6</span>
+      <h2>Discount Anomaly Inbox</h2>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="filter-grid">
+      <label class="field">
+        <span>Status</span>
+        <select [(ngModel)]="filters.status" name="status">
+          <option *ngFor="let status of statuses" [value]="status">{{ status || 'All statuses' }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Severity</span>
+        <select [(ngModel)]="filters.severity" name="severity">
+          <option *ngFor="let severity of severities" [value]="severity">{{ severity || 'All severities' }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Type</span>
+        <select [(ngModel)]="filters.anomalyType" name="anomalyType">
+          <option *ngFor="let type of anomalyTypes" [value]="type">{{ type ? label(type) : 'All types' }}</option>
+        </select>
+      </label>
+      <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Loading...' : 'Apply' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="scan-grid">
+      <label class="field">
+        <span>Scan from</span>
+        <input type="date" [(ngModel)]="filters.from" name="from" />
+      </label>
+      <label class="field">
+        <span>Scan to</span>
+        <input type="date" [(ngModel)]="filters.to" name="to" />
+      </label>
+      <button class="dark-button" type="button" (click)="scan()" [disabled]="scanning()">
+        {{ scanning() ? 'Scanning...' : 'Run scan' }}
+      </button>
+      <div class="scan-summary" *ngIf="scanSummary() as summary">
+        <strong>{{ summary.generated || 0 }}</strong>
+        <span>generated</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Anomaly inbox</h2>
+      <span class="muted-text">{{ rows().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Detected</th>
+            <th>Severity</th>
+            <th>Type</th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Review</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="6">Loading anomalies...</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="6">No anomalies match these filters.</td>
+          </tr>
+          <ng-container *ngFor="let row of rows()">
+            <tr>
+              <td>{{ formatDate(row.detectedAt) }}</td>
+              <td><span [class]="severityClass(row.severity)">{{ row.severity }}</span></td>
+              <td>{{ label(row.anomalyType) }}</td>
+              <td>
+                <strong>{{ row.title }}</strong>
+                <small>{{ row.description }}</small>
+              </td>
+              <td>{{ row.status }}</td>
+              <td>
+                <div class="review-actions">
+                  <button class="ghost-button mini" type="button" (click)="toggle(row)">
+                    {{ expandedId() === row.id ? 'Hide' : 'Evidence' }}
+                  </button>
+                  <button class="ghost-button mini" type="button" (click)="mark(row, 'reviewed')" [disabled]="row.status === 'reviewed'">Review</button>
+                  <button class="ghost-button mini" type="button" (click)="mark(row, 'dismissed')" [disabled]="row.status === 'dismissed'">Dismiss</button>
+                </div>
+              </td>
+            </tr>
+            <tr class="evidence-row" *ngIf="expandedId() === row.id">
+              <td colspan="6">
+                <label class="field">
+                  <span>Review note</span>
+                  <input [(ngModel)]="row.reviewNote" [name]="'note' + row.id" />
+                </label>
+                <pre>{{ evidenceText(row) }}</pre>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

@@ -1,0 +1,110 @@
+<section class="page-stack discount-audit-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E5</span>
+      <h2>Discount Audit Log</h2>
+      <p>Unified compliance trail for rule changes, approvals, guardrails, and applied discounts.</p>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="audit-filters">
+      <label class="field">
+        <span>From</span>
+        <input type="date" [(ngModel)]="filters.from" name="from" />
+      </label>
+      <label class="field">
+        <span>To</span>
+        <input type="date" [(ngModel)]="filters.to" name="to" />
+      </label>
+      <label class="field">
+        <span>Event</span>
+        <select [(ngModel)]="filters.eventType" name="eventType">
+          <option *ngFor="let eventType of eventTypes" [value]="eventType">
+            {{ eventType ? eventLabel(eventType) : 'All events' }}
+          </option>
+        </select>
+      </label>
+      <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Loading...' : 'Apply filters' }}
+      </button>
+      <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!rows().length">
+        Export CSV
+      </button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Log entries</h2>
+      <span class="muted-text">{{ rows().length }} records</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Event</th>
+            <th>Rule</th>
+            <th>Actor</th>
+            <th>Amount</th>
+            <th>Discount</th>
+            <th>GST impact</th>
+            <th>Note</th>
+            <th>History</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="9">Loading audit log...</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="9">No audit rows match these filters.</td>
+          </tr>
+          <ng-container *ngFor="let row of rows()">
+            <tr>
+              <td>{{ formatDate(row.createdAt) }}</td>
+              <td><span class="event-pill">{{ eventLabel(row.eventType) }}</span></td>
+              <td>{{ row.ruleId || '-' }}</td>
+              <td>
+                <strong>{{ row.actorRole || '-' }}</strong>
+                <small>{{ row.actorUserId || 'system' }}</small>
+              </td>
+              <td>{{ formatMoney(row.amountPaise) }}</td>
+              <td>{{ formatMoney(row.discountPaise) }}</td>
+              <td>
+                {{ formatMoney(row.gstImpactPaise) }}
+                <small>{{ metadataSummary(row) }}</small>
+              </td>
+              <td>{{ row.note || '-' }}</td>
+              <td>
+                <button class="ghost-button mini" type="button" (click)="toggleHistory(row)" [disabled]="!row.ruleId">
+                  {{ expandedRuleId() === row.ruleId ? 'Hide' : 'Timeline' }}
+                </button>
+              </td>
+            </tr>
+            <tr class="history-row" *ngIf="expandedRuleId() === row.ruleId">
+              <td colspan="9">
+                <div class="timeline">
+                  <strong>Rule #{{ row.ruleId }} history</strong>
+                  <span *ngIf="historyLoadingRuleId() === row.ruleId">Loading history...</span>
+                  <div class="timeline-item" *ngFor="let item of historyFor(row.ruleId)">
+                    <span class="dot"></span>
+                    <div>
+                      <strong>{{ eventLabel(item.eventType) }}</strong>
+                      <small>{{ formatDate(item.createdAt) }} | {{ item.note || metadataSummary(item) }}</small>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

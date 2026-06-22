@@ -1,0 +1,159 @@
+.hh-public-offers {
+  background: #f6fbf8;
+  border: 1px solid #b7e3d2;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.hh-public-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.hh-public-head div {
+  display: grid;
+  gap: 2px;
+}
+
+.hh-public-head strong {
+  color: #0f6e56;
+  font-size: 15px;
+}
+
+.hh-public-head span,
+.hh-public-head small {
+  color: #55736a;
+  font-size: 12px;
+}
+
+.hh-public-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.hh-public-card {
+  display: grid;
+  gap: 6px;
+  min-height: 118px;
+  padding: 12px;
+  border: 1px solid #d7eee5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hh-public-card div {
+  display: grid;
+  gap: 3px;
+}
+
+.offer-type {
+  color: #57776e;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.hh-public-card strong {
+  color: #123c34;
+  font-size: 14px;
+}
+
+.hh-public-card p {
+  margin: 0;
+  color: #0f6e56;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hh-public-card small {
+  color: #6a7b76;
+  font-size: 12px;
+}
+
+.hh-public-card code {
+  width: fit-content;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: #eaf8f2;
+  color: #0f6e56;
+  font-size: 12px;
+}
+
+.hh-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.hh-banner.active {
+  background: #e6f7f0;
+  border: 1px solid #1D9E75;
+}
+
+.hh-banner-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #0F6E56;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.hh-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hh-banner-content strong {
+  font-size: 15px;
+  color: #0F6E56;
+}
+
+.hh-banner-content span {
+  font-size: 13px;
+  color: #1D9E75;
+}
+
+.hh-upcoming {
+  background: #fafafa;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.hh-upcoming-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  margin: 0 0 8px;
+}
+
+.hh-upcoming-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.day-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.offer-label {
+  font-size: 12px;
+  color: #BA7517;
+}

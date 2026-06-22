@@ -1,0 +1,135 @@
+<section class="page-stack campaign-audience-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Campaign Audience Builder</h2>
+      <p>VIP, inactive, birthday, last-service aur package audiences se campaign draft banao.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/client-segments">Client Segments</a>
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control Tower</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="template-grid">
+    <article class="template-card" *ngFor="let template of templates()">
+      <div>
+        <strong>{{ template.name }}</strong>
+        <p>{{ template.description }}</p>
+        <small>{{ criteriaText(template.criteria) }}</small>
+      </div>
+      <button class="ghost-button" type="button" (click)="applyTemplate(template)">Use</button>
+    </article>
+  </section>
+
+  <section class="builder-grid">
+    <form class="panel form-grid" (ngSubmit)="previewAudience()">
+      <div class="section-title">
+        <h2>Audience rules</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">Preview</button>
+      </div>
+
+      <label class="field"><span>Name</span><input [(ngModel)]="form.name" name="name" /></label>
+      <label class="field"><span>Key</span><input [(ngModel)]="form.audienceKey" name="audienceKey" /></label>
+      <label class="field"><span>Channel</span><select [(ngModel)]="form.channel" name="channel"><option *ngFor="let channel of channels" [value]="channel">{{ channel }}</option></select></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="form.status" name="status"><option *ngFor="let status of statuses" [value]="status">{{ status || 'all' }}</option></select></label>
+
+      <label class="field"><span>Inactive days >=</span><input type="number" [(ngModel)]="form.criteria.inactiveDaysGte" name="inactiveDaysGte" /></label>
+      <label class="field"><span>Inactive days <=</span><input type="number" [(ngModel)]="form.criteria.inactiveDaysLte" name="inactiveDaysLte" /></label>
+      <label class="field"><span>Visits >=</span><input type="number" [(ngModel)]="form.criteria.visitCountGte" name="visitCountGte" /></label>
+      <label class="field"><span>Visits <=</span><input type="number" [(ngModel)]="form.criteria.visitCountLte" name="visitCountLte" /></label>
+      <label class="field"><span>Spend paise >=</span><input type="number" [(ngModel)]="form.criteria.totalSpendPaiseGte" name="totalSpendPaiseGte" /></label>
+      <label class="field"><span>Created within days</span><input type="number" [(ngModel)]="form.criteria.createdWithinDays" name="createdWithinDays" /></label>
+      <label class="field"><span>Birthday month</span><input [(ngModel)]="form.criteria.birthdayMonth" name="birthdayMonth" placeholder="current or 06" /></label>
+      <label class="field"><span>Client type</span><input [(ngModel)]="form.criteria.clientType" name="clientType" placeholder="new / existing" /></label>
+      <label class="field"><span>Last service</span><input [(ngModel)]="form.criteria.lastServiceCategory" name="lastServiceCategory" placeholder="hair, skin, bridal" /></label>
+      <label class="field"><span>Any service</span><input [(ngModel)]="form.criteria.serviceCategory" name="serviceCategory" placeholder="bridal, package" /></label>
+
+      <label class="field"><span>Linked rule</span><select [(ngModel)]="form.ruleId" name="ruleId"><option value="">No rule</option><option *ngFor="let rule of rules()" [value]="rule.id">{{ rule.name }} #{{ rule.id }}</option></select></label>
+      <label class="field"><span>Linked coupon</span><select [(ngModel)]="form.couponId" name="couponId"><option value="">No coupon</option><option *ngFor="let coupon of coupons()" [value]="coupon.id">{{ couponLabel(coupon) }}</option></select></label>
+      <label class="field"><span>Campaign title</span><input [(ngModel)]="form.title" name="title" /></label>
+      <label class="field"><span>Schedule</span><input [(ngModel)]="form.scheduledFor" name="scheduledFor" /></label>
+      <label class="field full"><span>Message</span><textarea rows="4" [(ngModel)]="form.message" name="message"></textarea></label>
+
+      <div class="form-actions">
+        <button class="ghost-button" type="button" (click)="saveAudience()" [disabled]="saving()">Save audience</button>
+        <button class="primary-button" type="button" (click)="createDraft()" [disabled]="saving()">Create campaign draft</button>
+      </div>
+    </form>
+
+    <aside class="panel preview-panel">
+      <div class="section-title">
+        <h2>Preview</h2>
+        <span class="muted-text">{{ preview()?.estimateCount || 0 }} clients</span>
+      </div>
+      <article class="preview-card" *ngIf="preview() as result">
+        <strong>{{ result.name }}</strong>
+        <p>{{ result.offer?.message }}</p>
+        <small>{{ criteriaText(result.definition?.criteria) }}</small>
+      </article>
+      <div class="sample-list" *ngIf="previewSample().length">
+        <article *ngFor="let client of previewSample()">
+          <div>
+            <strong>{{ client.clientName }}</strong>
+            <small>{{ client.clientId }} | {{ client.visitCount }} visits | inactive {{ client.inactiveDays }} days</small>
+          </div>
+          <span>{{ formatMoney(client.totalSpendPaise) }}</span>
+        </article>
+      </div>
+      <p class="muted-text" *ngIf="!preview()">Preview audience to see sample clients.</p>
+      <article class="preview-card success" *ngIf="draftResult() as draft">
+        <strong>Draft created</strong>
+        <p>{{ draft.draft?.campaign?.title || draft.draft?.whatsappDraft?.title || draft.draft?.smsManualDraft?.title }}</p>
+      </article>
+    </aside>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Saved audiences</h2>
+      <div class="toolbar-inline">
+        <select [(ngModel)]="filters.status" name="filterStatus" (ngModelChange)="load()">
+          <option value="">All status</option>
+          <option value="draft">Draft</option>
+          <option value="ready">Ready</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Audience</th>
+            <th>Criteria</th>
+            <th>Channel</th>
+            <th>Estimate</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="6">Loading audiences...</td>
+          </tr>
+          <tr *ngIf="!loading() && !audiences().length">
+            <td colspan="6">No saved campaign audiences yet.</td>
+          </tr>
+          <tr *ngFor="let row of audiences()">
+            <td><strong>{{ row.name }}</strong><small>{{ row.audienceKey }}</small></td>
+            <td>{{ criteriaText(row.definition?.criteria) }}</td>
+            <td>{{ row.channel }}</td>
+            <td>{{ row.estimateCount }}</td>
+            <td><span class="status-badge" [ngClass]="statusClass(row.status)">{{ row.status }}</span></td>
+            <td class="row-actions">
+              <button class="ghost-button" type="button" (click)="editAudience(row)">Edit</button>
+              <button class="ghost-button" type="button" (click)="archive(row)" [disabled]="saving()">Archive</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

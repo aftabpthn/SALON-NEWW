@@ -1,0 +1,179 @@
+.coupon-engine-page {
+  gap: 18px;
+}
+
+.coupon-engine-page .page-header p,
+.muted-text,
+.metric-card small,
+.template-card small,
+.table-wrap td small,
+.validation-card small {
+  color: #667085;
+}
+
+.header-actions,
+.row-actions,
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metric-grid,
+.template-grid,
+.split-grid,
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.template-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.split-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+}
+
+.form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid.compact {
+  margin-bottom: 12px;
+}
+
+.form-grid .section-title,
+.form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.metric-card,
+.template-card,
+.validation-card {
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.metric-card span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 24px;
+}
+
+.template-card {
+  align-content: space-between;
+}
+
+.template-card strong,
+.template-card small,
+.table-wrap td strong,
+.table-wrap td small {
+  display: block;
+}
+
+.check-field {
+  align-items: center;
+  color: #344054;
+  display: flex;
+  font-weight: 700;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.validation-card {
+  margin-top: 12px;
+}
+
+.validation-card span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.validation-card.valid {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+}
+
+.validation-card.valid span,
+.validation-card.valid strong {
+  color: #027a48;
+}
+
+.validation-card.blocked {
+  background: #fff1f3;
+  border-color: #fecdd6;
+}
+
+.validation-card.blocked span,
+.validation-card.blocked strong {
+  color: #b42318;
+}
+
+.status-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 10px;
+  text-transform: capitalize;
+}
+
+.status-active {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.status-draft {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.status-paused,
+.status-archived {
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+.status-expired {
+  background: #fff1f3;
+  color: #b42318;
+}
+
+.table-wrap tr {
+  cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .metric-grid,
+  .template-grid,
+  .split-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .metric-grid,
+  .template-grid,
+  .split-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

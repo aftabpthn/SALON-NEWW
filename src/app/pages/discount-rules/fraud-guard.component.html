@@ -1,0 +1,174 @@
+<section class="page-stack fraud-guard-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Abuse / Fraud Guard</h2>
+      <p>Repeated client discounts, staff manual override misuse, coupon abuse, approval bypass and guardrail pressure ek case queue me.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/anomalies">Anomalies</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total cases</span>
+      <strong>{{ summary()?.totalCases || 0 }}</strong>
+      <small>{{ summary()?.openCases || 0 }} open/investigating</small>
+    </article>
+    <article class="metric-card danger">
+      <span>Critical</span>
+      <strong>{{ summary()?.criticalCases || 0 }}</strong>
+      <small>{{ summary()?.highRiskCases || 0 }} high-risk cases</small>
+    </article>
+    <article class="metric-card">
+      <span>Avg risk</span>
+      <strong>{{ summary()?.averageRiskScore || 0 }}</strong>
+      <small>score out of 100</small>
+    </article>
+    <article class="metric-card">
+      <span>At-risk discount</span>
+      <strong>{{ formatMoney(summary()?.totalAtRiskDiscountPaise) }}</strong>
+      <small>from available evidence</small>
+    </article>
+  </section>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Status</span>
+      <select [(ngModel)]="filters.status" name="status">
+        <option *ngFor="let status of statuses" [value]="status">{{ status || 'All statuses' }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Severity</span>
+      <select [(ngModel)]="filters.severity" name="severity">
+        <option *ngFor="let severity of severities" [value]="severity">{{ severity || 'All severities' }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Guard type</span>
+      <select [(ngModel)]="filters.guardType" name="guardType">
+        <option *ngFor="let type of guardTypes" [value]="type">{{ type ? label(type) : 'All guard types' }}</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Apply' }}
+    </button>
+  </section>
+
+  <section class="work-grid">
+    <article class="panel">
+      <div class="section-title">
+        <h2>Run scan</h2>
+        <button class="dark-button" type="button" (click)="scan()" [disabled]="scanning()">
+          {{ scanning() ? 'Scanning...' : 'Scan now' }}
+        </button>
+      </div>
+      <div class="scan-grid">
+        <label class="field">
+          <span>From</span>
+          <input type="date" [(ngModel)]="filters.from" name="from" />
+        </label>
+        <label class="field">
+          <span>To</span>
+          <input type="date" [(ngModel)]="filters.to" name="to" />
+        </label>
+      </div>
+      <div class="scan-result" *ngIf="scanResult() as result">
+        <strong>{{ result.generated || 0 }}</strong>
+        <span>cases generated</span>
+        <small *ngIf="(result.sourceIssues || []).length">{{ result.sourceIssues.length }} source issue(s), app did not crash.</small>
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="section-title">
+        <h2>Assess discount</h2>
+        <button class="primary-button" type="button" (click)="assess()" [disabled]="saving()">Assess</button>
+      </div>
+      <div class="assess-grid">
+        <label class="field"><span>Client</span><input [(ngModel)]="assessForm.clientId" name="clientId" /></label>
+        <label class="field"><span>Staff</span><input [(ngModel)]="assessForm.staffId" name="staffId" /></label>
+        <label class="field"><span>Coupon</span><input [(ngModel)]="assessForm.couponCode" name="couponCode" /></label>
+        <label class="field"><span>Rule ID</span><input [(ngModel)]="assessForm.ruleId" name="ruleId" /></label>
+        <label class="field"><span>Cart paise</span><input type="number" [(ngModel)]="assessForm.cartTotalPaise" name="cartTotalPaise" /></label>
+        <label class="field"><span>Discount paise</span><input type="number" [(ngModel)]="assessForm.discountPaise" name="discountPaise" /></label>
+      </div>
+      <div class="assessment" *ngIf="assessment() as result">
+        <span [class]="riskClass(result.riskScore)">{{ result.riskScore }}</span>
+        <div>
+          <strong>{{ label(result.decision) }}</strong>
+          <small>{{ result.recommendation }}</small>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Fraud case queue</h2>
+      <span class="muted-text">{{ cases().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Case</th>
+            <th>Entity</th>
+            <th>Detected</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="6">Loading fraud cases...</td>
+          </tr>
+          <tr *ngIf="!loading() && !cases().length">
+            <td colspan="6">No fraud cases match these filters. Run scan if needed.</td>
+          </tr>
+          <ng-container *ngFor="let row of cases()">
+            <tr>
+              <td>
+                <span [class]="riskClass(row)">{{ row.riskScore }}</span>
+                <small>{{ row.severity }}</small>
+              </td>
+              <td>
+                <strong>{{ row.title }}</strong>
+                <small>{{ label(row.guardType) }} · {{ row.description }}</small>
+              </td>
+              <td>{{ row.entityType || '-' }} <small>{{ row.entityId || '-' }}</small></td>
+              <td>{{ formatDate(row.detectedAt) }}</td>
+              <td><span [class]="statusClass(row.status)">{{ row.status }}</span></td>
+              <td>
+                <div class="row-actions">
+                  <button class="ghost-button mini" type="button" (click)="toggle(row)">
+                    {{ expandedId() === row.id ? 'Hide' : 'Evidence' }}
+                  </button>
+                  <button class="ghost-button mini" type="button" (click)="review(row, 'investigating')">Review</button>
+                  <button class="ghost-button mini" type="button" (click)="review(row, 'escalated')">Escalate</button>
+                  <button class="ghost-button mini" type="button" (click)="review(row, 'blocked')">Block</button>
+                  <button class="ghost-button mini" type="button" (click)="review(row, 'resolved')">Resolve</button>
+                </div>
+              </td>
+            </tr>
+            <tr class="evidence-row" *ngIf="expandedId() === row.id">
+              <td colspan="6">
+                <label class="field">
+                  <span>Review note</span>
+                  <input [(ngModel)]="row.reviewNote" [name]="'note' + row.id" />
+                </label>
+                <pre>{{ evidenceText(row) }}</pre>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

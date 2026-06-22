@@ -1,0 +1,121 @@
+<section class="page-stack incrementality-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Level 6 / F2</span>
+      <h2>Causal Incrementality</h2>
+      <p>True ROI, holdout performance, wasted discount, and uplift readiness for Happy Hours offers.</p>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules/control-tower">Back to control tower</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="incrementality-filters">
+      <label class="field">
+        <span>Offer type</span>
+        <input type="text" [(ngModel)]="filters.offerType" name="offerType" />
+      </label>
+      <label class="field">
+        <span>From</span>
+        <input type="date" [(ngModel)]="filters.from" name="from" />
+      </label>
+      <label class="field">
+        <span>To</span>
+        <input type="date" [(ngModel)]="filters.to" name="to" />
+      </label>
+      <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Loading...' : 'Apply filters' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="kpi-grid" *ngIf="report() as current">
+    <article class="metric-card hero">
+      <span>True ROI</span>
+      <strong>{{ formatRoi(current.trueROI) }}</strong>
+      <small>{{ formatMoney(current.trueIncrementalRevenuePaise) }} incremental revenue</small>
+    </article>
+    <article class="metric-card">
+      <span>Apparent ROI</span>
+      <strong>{{ formatRoi(current.apparentROI) }}</strong>
+      <small>{{ formatMoney(current.discountSpentPaise) }} discount spend</small>
+    </article>
+    <article class="metric-card warning">
+      <span>Wasted discount</span>
+      <strong>{{ formatMoney(current.wastedDiscountPaise) }}</strong>
+      <small>Estimated from holdout behavior</small>
+    </article>
+    <article class="metric-card">
+      <span>Incremental lift</span>
+      <strong>{{ formatPercent(current.incrementalLift) }}</strong>
+      <small>{{ current.incrementalBookings }} incremental bookings</small>
+    </article>
+  </section>
+
+  <section class="panel" *ngIf="report() as current">
+    <div class="section-title">
+      <div>
+        <h2>Treatment vs holdout</h2>
+        <p class="muted-text">{{ current.readiness.note }}</p>
+      </div>
+      <span class="status-pill" [class.ready]="current.readiness.readyForUpliftModel">
+        {{ current.readiness.readyForUpliftModel ? 'Model-ready' : 'Collecting data' }}
+      </span>
+    </div>
+
+    <div class="comparison-grid">
+      <article class="comparison-card">
+        <span>Treatment group</span>
+        <strong>{{ formatPercent(current.treatmentBookingRate) }}</strong>
+        <small>{{ current.treatment.bookings }} bookings / {{ current.treatment.resolved }} resolved</small>
+      </article>
+      <article class="comparison-card">
+        <span>Holdout group</span>
+        <strong>{{ formatPercent(current.holdoutBookingRate) }}</strong>
+        <small>{{ current.holdout.bookings }} bookings / {{ current.holdout.resolved }} resolved</small>
+      </article>
+      <article class="comparison-card">
+        <span>Resolved outcomes</span>
+        <strong>{{ current.readiness.resolvedOutcomes }}</strong>
+        <small>
+          Need {{ current.readiness.minimumTreatmentOutcomes }} treatment and
+          {{ current.readiness.minimumHoldoutOutcomes }} holdout
+        </small>
+      </article>
+    </div>
+  </section>
+
+  <section class="content-grid" *ngIf="report() as current">
+    <article class="panel">
+      <div class="section-title">
+        <h2>Client segments</h2>
+        <span class="muted-text">{{ segmentTotal() }} scored clients</span>
+      </div>
+      <div class="segment-list" *ngIf="current.segments.length; else noSegments">
+        <div class="segment-row" *ngFor="let segment of current.segments">
+          <div>
+            <strong>{{ segmentLabel(segment.segment) }}</strong>
+            <small>{{ segment.count }} clients</small>
+          </div>
+          <div class="bar-track">
+            <span [style.width.%]="segmentPercent(segment.count)"></span>
+          </div>
+          <b>{{ segmentPercent(segment.count) }}%</b>
+        </div>
+      </div>
+      <ng-template #noSegments>
+        <p class="empty-text">No uplift scores yet.</p>
+      </ng-template>
+    </article>
+
+    <article class="panel recommendation-card">
+      <span>Recommendation</span>
+      <strong>{{ recommendation() }}</strong>
+      <p>
+        True ROI only becomes reliable after treatment and holdout outcomes are resolved.
+        Keep holdout small, consistent, and branch-scoped.
+      </p>
+    </article>
+  </section>
+</section>

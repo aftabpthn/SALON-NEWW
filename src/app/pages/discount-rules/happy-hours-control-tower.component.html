@@ -1,0 +1,466 @@
+<section class="page-stack control-tower-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Control Tower</h2>
+      <p>Rules, budgets, ROI, campaigns, fraud review and public booking offers in one workspace.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/promotion-calendar">Promotion calendar</a>
+      <a class="ghost-button" routerLink="/discount-rules/client-segments">Client segments</a>
+      <a class="ghost-button" routerLink="/discount-rules/staff-incentives">Staff incentives</a>
+      <a class="ghost-button" routerLink="/discount-rules/fraud-guard">Fraud guard</a>
+      <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="tower-toolbar">
+      <label class="field">
+        <span>From</span>
+        <input type="date" [(ngModel)]="filters.from" name="from" />
+      </label>
+      <label class="field">
+        <span>To</span>
+        <input type="date" [(ngModel)]="filters.to" name="to" />
+      </label>
+      <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Loading...' : 'Refresh' }}
+      </button>
+      <button class="ghost-button" type="button" (click)="exportRoiCsv()" [disabled]="!roiRows().length">
+        Export ROI CSV
+      </button>
+    </div>
+  </section>
+
+  <nav class="tower-tabs" aria-label="Happy Hours Control Tower sections">
+    <button
+      *ngFor="let tab of tabs"
+      type="button"
+      [class.active]="activeTab() === tab.id"
+      (click)="activeTab.set(tab.id)"
+    >
+      {{ tab.label }}
+    </button>
+  </nav>
+
+  <section class="metric-grid" *ngIf="activeTab() === 'overview'">
+    <article class="metric-card">
+      <span>Active rules</span>
+      <strong>{{ summary()?.activeRules || 0 }}</strong>
+      <small>{{ summary()?.pendingApprovals || 0 }} pending approvals</small>
+    </article>
+    <article class="metric-card">
+      <span>Budget spent</span>
+      <strong>{{ formatMoney(summary()?.budgetSpentPaise) }}</strong>
+      <small>{{ pct(summary()?.budgetUsedPercent) }} used</small>
+    </article>
+    <article class="metric-card danger">
+      <span>Risk signals</span>
+      <strong>{{ (summary()?.openAnomalies || 0) + (summary()?.openAbuseAlerts || 0) }}</strong>
+      <small>{{ summary()?.openAnomalies || 0 }} anomalies, {{ summary()?.openAbuseAlerts || 0 }} abuse</small>
+    </article>
+    <article class="metric-card">
+      <span>Net ROI revenue</span>
+      <strong>{{ formatMoney(summary()?.roi?.netRevenuePaise) }}</strong>
+      <small>{{ summary()?.roi?.applications || 0 }} applications</small>
+    </article>
+    <article class="metric-card">
+      <span>Calendar</span>
+      <strong>{{ summary()?.upcomingPromotions || 0 }}</strong>
+      <small>scheduled or active</small>
+    </article>
+    <article class="metric-card">
+      <span>Coupons</span>
+      <strong>{{ summary()?.activeCoupons || 0 }}</strong>
+      <small>active codes</small>
+    </article>
+    <article class="metric-card">
+      <span>Simulations</span>
+      <strong>{{ summary()?.savedSimulations || 0 }}</strong>
+      <small>saved scenarios</small>
+    </article>
+    <article class="metric-card">
+      <span>Budget left</span>
+      <strong>{{ formatMoney(summary()?.budgetRemainingPaise) }}</strong>
+      <small>{{ formatMoney(summary()?.budgetPaise) }} configured</small>
+    </article>
+  </section>
+
+  <section class="panel" *ngIf="activeTab() === 'overview'">
+    <div class="section-title">
+      <h2>Branch performance</h2>
+      <span class="muted-text">{{ branchPerformanceRows().length }} branches</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th>Net revenue</th>
+            <th>Discount</th>
+            <th>Rate</th>
+            <th>Guardrails</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!branchPerformanceRows().length">
+            <td colspan="5">No branch ROI signal yet.</td>
+          </tr>
+          <tr *ngFor="let row of branchPerformanceRows()">
+            <td>{{ row.branchId }}</td>
+            <td>{{ formatMoney(row.netRevenuePaise) }}</td>
+            <td>{{ formatMoney(row.totalDiscountPaise) }}</td>
+            <td>{{ pct(row.discountRatePercent) }}</td>
+            <td>{{ row.budgetExceededCount || 0 }} budget / {{ row.marginBlockedCount || 0 }} margin</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="split-grid" *ngIf="activeTab() === 'calendar'">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Promotion Calendar</h2>
+        <span class="muted-text">{{ calendar().length }} events</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Promotion</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="!calendar().length">
+              <td colspan="4">No scheduled promotions.</td>
+            </tr>
+            <tr *ngFor="let row of calendar()">
+              <td>
+                <strong>{{ row.title }}</strong>
+                <small>{{ row.promoType }}</small>
+              </td>
+              <td>{{ row.startDate }} to {{ row.endDate }}</td>
+              <td>{{ row.startTime || '-' }} - {{ row.endTime || '-' }}</td>
+              <td><span class="status-badge" [ngClass]="statusClass(row.status)">{{ row.status }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <form class="panel form-grid" (ngSubmit)="savePromotion()">
+      <div class="section-title">
+        <h2>Add schedule</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">Save</button>
+      </div>
+      <label class="field"><span>Title</span><input [(ngModel)]="promotionForm.title" name="promotionTitle" /></label>
+      <label class="field"><span>Type</span><input [(ngModel)]="promotionForm.promoType" name="promotionType" /></label>
+      <label class="field"><span>Start date</span><input type="date" [(ngModel)]="promotionForm.startDate" name="promotionStartDate" /></label>
+      <label class="field"><span>End date</span><input type="date" [(ngModel)]="promotionForm.endDate" name="promotionEndDate" /></label>
+      <label class="field"><span>Start time</span><input type="time" [(ngModel)]="promotionForm.startTime" name="promotionStartTime" /></label>
+      <label class="field"><span>End time</span><input type="time" [(ngModel)]="promotionForm.endTime" name="promotionEndTime" /></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="promotionForm.status" name="promotionStatus"><option>draft</option><option>scheduled</option><option>active</option><option>paused</option></select></label>
+      <label class="field"><span>Audience</span><input [(ngModel)]="promotionForm.audience.segment" name="promotionAudience" /></label>
+      <label class="field full"><span>Notes</span><textarea [(ngModel)]="promotionForm.notes" name="promotionNotes"></textarea></label>
+    </form>
+  </section>
+
+  <section class="split-grid" *ngIf="activeTab() === 'coupons'">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Coupon Engine</h2>
+        <span class="muted-text">{{ coupons().length }} codes</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Discount</th>
+              <th>Usage</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="!coupons().length"><td colspan="4">No coupons yet.</td></tr>
+            <tr *ngFor="let coupon of coupons()">
+              <td><strong>{{ coupon.code }}</strong><small>{{ coupon.title }}</small></td>
+              <td>{{ coupon.discountType === 'flat' ? formatMoney(coupon.discountValue) : coupon.discountValue + '%' }}</td>
+              <td>{{ coupon.usedCount || 0 }} / {{ coupon.usageLimit || 'Unlimited' }}</td>
+              <td><span class="status-badge" [ngClass]="statusClass(coupon.status)">{{ coupon.status }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="coupon-test">
+        <label class="field"><span>Code</span><input [(ngModel)]="couponTest.code" name="couponTestCode" /></label>
+        <label class="field"><span>Cart paise</span><input type="number" [(ngModel)]="couponTest.cartTotalPaise" name="couponCart" /></label>
+        <label class="field"><span>Client</span><input [(ngModel)]="couponTest.clientId" name="couponClient" /></label>
+        <button class="ghost-button" type="button" (click)="validateCoupon()">Validate</button>
+        <span class="test-result" *ngIf="couponResult()">
+          {{ couponResult()?.valid ? 'Valid' : 'Blocked' }} · {{ couponResult()?.reason }} · {{ formatMoney(couponResult()?.discountPaise) }}
+        </span>
+      </div>
+    </div>
+
+    <form class="panel form-grid" (ngSubmit)="saveCoupon()">
+      <div class="section-title">
+        <h2>Add coupon</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">Save</button>
+      </div>
+      <label class="field"><span>Code</span><input [(ngModel)]="couponForm.code" name="couponCode" /></label>
+      <label class="field"><span>Title</span><input [(ngModel)]="couponForm.title" name="couponTitle" /></label>
+      <label class="field"><span>Type</span><select [(ngModel)]="couponForm.discountType" name="couponType"><option>percent</option><option>flat</option></select></label>
+      <label class="field"><span>Value</span><input type="number" [(ngModel)]="couponForm.discountValue" name="couponValue" /></label>
+      <label class="field"><span>Max cap paise</span><input type="number" [(ngModel)]="couponForm.maxDiscountPaise" name="couponCap" /></label>
+      <label class="field"><span>Usage limit</span><input type="number" [(ngModel)]="couponForm.usageLimit" name="couponLimit" /></label>
+      <label class="field"><span>Per client</span><input type="number" [(ngModel)]="couponForm.perClientLimit" name="couponPerClient" /></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="couponForm.status" name="couponStatus"><option>draft</option><option>active</option><option>paused</option><option>expired</option></select></label>
+      <label class="field"><span>Valid from</span><input type="date" [(ngModel)]="couponForm.validFrom" name="couponFrom" /></label>
+      <label class="field"><span>Valid to</span><input type="date" [(ngModel)]="couponForm.validTo" name="couponTo" /></label>
+      <label class="check-field full"><input type="checkbox" [(ngModel)]="couponForm.target.publicVisible" name="couponPublic" /> Public booking visible</label>
+    </form>
+  </section>
+
+  <section class="split-grid" *ngIf="activeTab() === 'roi'">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Offer ROI</h2>
+        <span class="muted-text">{{ roi()?.summary?.applications || 0 }} applications</span>
+      </div>
+      <div class="metric-grid compact">
+        <article class="metric-card"><span>Gross revenue</span><strong>{{ formatMoney(roi()?.summary?.grossRevenuePaise) }}</strong></article>
+        <article class="metric-card"><span>Net revenue</span><strong>{{ formatMoney(roi()?.summary?.netRevenuePaise) }}</strong></article>
+        <article class="metric-card"><span>Discount</span><strong>{{ formatMoney(roi()?.summary?.totalDiscountPaise) }}</strong></article>
+        <article class="metric-card"><span>Return</span><strong>{{ pct(roi()?.summary?.returnOnDiscountPercent) }}</strong></article>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Offer</th><th>Apps</th><th>Net revenue</th><th>Discount</th><th>Repeat</th></tr></thead>
+          <tbody>
+            <tr *ngIf="!roiRows().length"><td colspan="5">No ROI rows yet.</td></tr>
+            <tr *ngFor="let row of roiRows()">
+              <td>{{ row.offerName }}</td>
+              <td>{{ row.applications }}</td>
+              <td>{{ formatMoney(row.netRevenuePaise) }}</td>
+              <td>{{ formatMoney(row.totalDiscountPaise) }}</td>
+              <td>{{ row.repeatClients || 0 }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <form class="panel form-grid" (ngSubmit)="recordRoi()">
+      <div class="section-title">
+        <h2>Record outcome</h2>
+        <button class="primary-button" type="submit" [disabled]="saving()">Save</button>
+      </div>
+      <label class="field"><span>Rule ID</span><input [(ngModel)]="roiForm.ruleId" name="roiRule" /></label>
+      <label class="field"><span>Coupon ID</span><input [(ngModel)]="roiForm.couponId" name="roiCoupon" /></label>
+      <label class="field"><span>Client ID</span><input [(ngModel)]="roiForm.clientId" name="roiClient" /></label>
+      <label class="field"><span>Invoice ID</span><input [(ngModel)]="roiForm.invoiceId" name="roiInvoice" /></label>
+      <label class="field"><span>Amount paise</span><input type="number" [(ngModel)]="roiForm.amountPaise" name="roiAmount" /></label>
+      <label class="field"><span>Discount paise</span><input type="number" [(ngModel)]="roiForm.discountPaise" name="roiDiscount" /></label>
+      <label class="field"><span>Margin paise</span><input type="number" [(ngModel)]="roiForm.grossMarginPaise" name="roiMargin" /></label>
+      <label class="check-field"><input type="checkbox" [(ngModel)]="roiForm.repeatClient" name="roiRepeat" /> Repeat client</label>
+    </form>
+  </section>
+
+  <section class="split-grid" *ngIf="activeTab() === 'segments'">
+    <div class="panel">
+      <div class="section-title"><h2>Client Segments</h2><span class="muted-text">{{ segments().length }} segments</span></div>
+      <div class="compact-list">
+        <article *ngFor="let segment of segments()">
+          <div><strong>{{ segment.name }}</strong><small>{{ segment.segmentKey }}</small></div>
+          <span class="status-badge" [ngClass]="statusClass(segment.status)">{{ segment.status }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!segments().length">No segments yet.</p>
+      </div>
+    </div>
+    <form class="panel form-grid" (ngSubmit)="saveSegment()">
+      <div class="section-title"><h2>Add segment</h2><button class="primary-button" type="submit" [disabled]="saving()">Save</button></div>
+      <label class="field"><span>Name</span><input [(ngModel)]="segmentForm.name" name="segmentName" /></label>
+      <label class="field"><span>Key</span><input [(ngModel)]="segmentForm.segmentKey" name="segmentKey" /></label>
+      <label class="field"><span>Min spend paise</span><input type="number" [(ngModel)]="segmentForm.definition.criteria.totalSpendPaiseGte" name="segmentSpend" /></label>
+      <label class="field"><span>Min visits</span><input type="number" [(ngModel)]="segmentForm.definition.criteria.visitCountGte" name="segmentVisits" /></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="segmentForm.status" name="segmentStatus"><option>active</option><option>paused</option></select></label>
+    </form>
+  </section>
+
+  <section class="split-grid" *ngIf="activeTab() === 'incentives'">
+    <div class="panel">
+      <div class="section-title"><h2>Staff Incentives</h2><span class="muted-text">{{ incentives().length }} rows</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Staff</th><th>Sale</th><th>Discount</th><th>Incentive</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr *ngIf="!incentives().length"><td colspan="5">No incentive rows yet.</td></tr>
+            <tr *ngFor="let row of incentives()">
+              <td>{{ row.staffId }}</td>
+              <td>{{ formatMoney(row.saleAmountPaise) }}</td>
+              <td>{{ formatMoney(row.discountPaise) }}</td>
+              <td>{{ formatMoney(row.incentivePaise) }}</td>
+              <td><span class="status-badge" [ngClass]="statusClass(row.status)">{{ row.status }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <form class="panel form-grid" (ngSubmit)="saveIncentive()">
+      <div class="section-title"><h2>Add incentive</h2><button class="primary-button" type="submit" [disabled]="saving()">Save</button></div>
+      <label class="field"><span>Staff ID</span><input [(ngModel)]="incentiveForm.staffId" name="incentiveStaff" /></label>
+      <label class="field"><span>Sale paise</span><input type="number" [(ngModel)]="incentiveForm.saleAmountPaise" name="incentiveSale" /></label>
+      <label class="field"><span>Discount paise</span><input type="number" [(ngModel)]="incentiveForm.discountPaise" name="incentiveDiscount" /></label>
+      <label class="field"><span>Incentive paise</span><input type="number" [(ngModel)]="incentiveForm.incentivePaise" name="incentiveAmount" /></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="incentiveForm.status" name="incentiveStatus"><option>pending</option><option>approved</option><option>paid</option><option>paused</option></select></label>
+      <label class="field full"><span>Notes</span><textarea [(ngModel)]="incentiveForm.notes" name="incentiveNotes"></textarea></label>
+    </form>
+  </section>
+
+  <section class="split-grid" *ngIf="activeTab() === 'whatsapp'">
+    <div class="panel">
+      <div class="section-title"><h2>Campaign-to-Rule Link</h2><span class="muted-text">{{ campaignLinks().length }} linked campaigns</span></div>
+      <div class="campaign-builder">
+        <label class="field">
+          <span>Approved rule</span>
+          <select [(ngModel)]="campaignForm.ruleId" name="campaignRule">
+            <option value="">Select active rule</option>
+            <option *ngFor="let rule of activeRules()" [value]="rule.id">{{ rule.name }} #{{ rule.id }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Channel</span>
+          <select [(ngModel)]="campaignForm.channel" name="campaignChannel">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="sms">SMS</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Target segment</span>
+          <input [(ngModel)]="campaignForm.segment" name="campaignSegment" />
+        </label>
+        <label class="field">
+          <span>Audience label</span>
+          <input [(ngModel)]="campaignForm.audienceLabel" name="campaignAudience" />
+        </label>
+        <label class="field full">
+          <span>Offer title</span>
+          <input [(ngModel)]="campaignForm.title" name="campaignTitle" />
+        </label>
+        <label class="field full">
+          <span>Offer text</span>
+          <textarea rows="4" [(ngModel)]="campaignForm.message" name="campaignMessage"></textarea>
+        </label>
+        <label class="field">
+          <span>Schedule</span>
+          <input [(ngModel)]="campaignForm.scheduledFor" name="campaignSchedule" />
+        </label>
+        <div class="campaign-actions">
+          <button class="ghost-button" type="button" (click)="previewCampaignFromRule()" [disabled]="saving()">Preview</button>
+          <button class="primary-button" type="button" (click)="createCampaignFromRule()" [disabled]="saving()">Create draft</button>
+        </div>
+      </div>
+
+      <article class="campaign-preview" *ngIf="campaignPreview() as preview">
+        <span>{{ preview.eligible ? 'Ready' : 'Blocked' }}</span>
+        <strong>{{ preview.title }}</strong>
+        <p>{{ preview.message }}</p>
+        <small>{{ preview.reason }} · {{ preview.target?.audienceLabel }} · {{ preview.target?.expiryDate || 'No expiry' }}</small>
+      </article>
+
+      <div class="section-title compact-title">
+        <h2>Linked campaign drafts</h2>
+        <span class="muted-text">{{ campaignLinks().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let campaign of campaignLinks()">
+          <div>
+            <strong>{{ campaign.title }}</strong>
+            <small>{{ campaign.channel }} · Rule {{ campaign.ruleId }} · Draft {{ campaign.whatsappDraftId || '-' }}</small>
+          </div>
+          <span class="status-badge" [ngClass]="statusClass(campaign.status)">{{ campaign.status }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!campaignLinks().length">No linked campaign drafts yet.</p>
+      </div>
+
+      <div class="section-title compact-title"><h2>WhatsApp Drafts</h2><span class="muted-text">{{ drafts().length }} drafts</span></div>
+      <div class="compact-list">
+        <article *ngFor="let draft of drafts()">
+          <div><strong>{{ draft.title }}</strong><small>{{ draft.message }}</small></div>
+          <span class="status-badge" [ngClass]="statusClass(draft.status)">{{ draft.status }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!drafts().length">No drafts yet.</p>
+      </div>
+    </div>
+    <form class="panel form-grid" (ngSubmit)="saveDraft()">
+      <div class="section-title"><h2>Add draft</h2><button class="primary-button" type="submit" [disabled]="saving()">Save</button></div>
+      <label class="field"><span>Title</span><input [(ngModel)]="draftForm.title" name="draftTitle" /></label>
+      <label class="field"><span>Target segment</span><input [(ngModel)]="draftForm.target.segment" name="draftTarget" /></label>
+      <label class="field"><span>Status</span><select [(ngModel)]="draftForm.status" name="draftStatus"><option>draft</option><option>scheduled</option><option>active</option><option>archived</option></select></label>
+      <label class="field"><span>Schedule</span><input [(ngModel)]="draftForm.scheduledFor" name="draftSchedule" /></label>
+      <label class="field full"><span>Message</span><textarea rows="5" [(ngModel)]="draftForm.message" name="draftMessage"></textarea></label>
+    </form>
+  </section>
+
+  <section class="panel" *ngIf="activeTab() === 'abuse'">
+    <div class="section-title">
+      <h2>Abuse / Fraud Controls</h2>
+      <button class="primary-button" type="button" (click)="scanAbuse()" [disabled]="saving()">Scan</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Alert</th><th>Type</th><th>Severity</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr *ngIf="!abuseAlerts().length"><td colspan="5">No abuse alerts yet.</td></tr>
+          <tr *ngFor="let alert of abuseAlerts()">
+            <td><strong>{{ alert.title }}</strong><small>{{ alert.description }}</small></td>
+            <td>{{ alert.alertType }}</td>
+            <td>{{ alert.severity }}</td>
+            <td><span class="status-badge" [ngClass]="statusClass(alert.status)">{{ alert.status }}</span></td>
+            <td class="row-actions">
+              <button class="ghost-button mini" type="button" (click)="reviewAlert(alert, 'reviewed')">Review</button>
+              <button class="ghost-button mini" type="button" (click)="reviewAlert(alert, 'dismissed')">Dismiss</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab() === 'templates'">
+    <div class="section-title"><h2>Offer Templates</h2><span class="muted-text">{{ templates().length }} templates</span></div>
+    <div class="template-grid">
+      <article class="template-card" *ngFor="let template of templates()">
+        <div>
+          <strong>{{ template.name }}</strong>
+          <p>{{ template.description }}</p>
+          <small>{{ pretty(template.action) }}</small>
+        </div>
+        <button class="ghost-button" type="button" (click)="createRuleFromTemplate(template)" [disabled]="saving()">Draft rule</button>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab() === 'public'">
+    <div class="section-title">
+      <h2>Public Booking Offers</h2>
+      <span class="muted-text">{{ visiblePublicOffers().length }} visible</span>
+    </div>
+    <div class="public-preview">
+      <article *ngFor="let offer of visiblePublicOffers()">
+        <span>{{ offer.type }}</span>
+        <strong>{{ offer.title }}</strong>
+        <small>{{ offer.discountSummary || offer.description }}</small>
+      </article>
+      <p class="muted-text" *ngIf="!visiblePublicOffers().length">No public offers active for this branch.</p>
+    </div>
+  </section>
+</section>

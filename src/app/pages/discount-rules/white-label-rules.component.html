@@ -1,0 +1,93 @@
+<section class="page-stack white-label-rules-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E8.7</span>
+      <h2>White-Label Rules</h2>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="split-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Display names</h2>
+        <span class="muted-text" *ngIf="savedAt()">Saved {{ savedAt() }}</span>
+      </div>
+
+      <div class="form-grid">
+        <label class="field">
+          <span>Program name</span>
+          <input [(ngModel)]="settings.displayName" name="displayName" />
+        </label>
+        <label class="field">
+          <span>Discount badge</span>
+          <input [(ngModel)]="settings.customerDiscountLabel" name="customerDiscountLabel" />
+        </label>
+        <label class="field">
+          <span>Applied label</span>
+          <input [(ngModel)]="settings.customerAppliedLabel" name="customerAppliedLabel" />
+        </label>
+        <label class="field">
+          <span>Bundle label</span>
+          <input [(ngModel)]="settings.customerBundleLabel" name="customerBundleLabel" />
+        </label>
+        <label class="field">
+          <span>Limited-time label</span>
+          <input [(ngModel)]="settings.customerLimitedTimeLabel" name="customerLimitedTimeLabel" />
+        </label>
+        <label class="field">
+          <span>Rule name fallback</span>
+          <input [(ngModel)]="settings.publicRuleNameFallback" name="publicRuleNameFallback" />
+        </label>
+        <label class="field">
+          <span>Status</span>
+          <select [(ngModel)]="settings.status" name="status">
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="toggle-row">
+        <input type="checkbox" [(ngModel)]="settings.hideInternalRuleNames" name="hideInternalRuleNames" />
+        <span>Hide internal rule names</span>
+      </label>
+
+      <div class="actions">
+        <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
+          {{ saving() ? 'Saving...' : 'Save settings' }}
+        </button>
+        <button class="ghost-button" type="button" (click)="load()" [disabled]="loading()">Reload</button>
+      </div>
+    </div>
+
+    <div class="panel preview-panel">
+      <div class="section-title">
+        <h2>Preview</h2>
+        <span class="status-pill">{{ settings.status }}</span>
+      </div>
+
+      <article class="offer-preview">
+        <span class="badge">{{ previewLabels().discountBadge }}</span>
+        <h3>{{ previewLabels().discountProgramName }}</h3>
+        <strong>{{ previewRuleName() }}</strong>
+        <p>{{ previewLabels().discountApplied }}</p>
+        <div class="preview-row">
+          <span>{{ previewLabels().bundlePrice }}</span>
+          <b>Rs 1,499</b>
+        </div>
+        <div class="preview-row">
+          <span>{{ previewLabels().limitedTime }}</span>
+          <b>Today</b>
+        </div>
+      </article>
+
+      <div class="safe-output">
+        <strong>Public labels</strong>
+        <pre>{{ previewLabels() | json }}</pre>
+      </div>
+    </div>
+  </section>
+</section>

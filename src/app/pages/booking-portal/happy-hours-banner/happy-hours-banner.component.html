@@ -1,0 +1,40 @@
+<div class="hh-public-offers" *ngIf="publicOffers.length">
+  <div class="hh-public-head">
+    <div>
+      <strong>Eligible offers for this booking</strong>
+      <span>Branch aur selected service ke hisaab se</span>
+    </div>
+    <small>{{ publicOffers.length }} offer(s)</small>
+  </div>
+  <div class="hh-public-grid">
+    <article class="hh-public-card" *ngFor="let offer of publicOffers">
+      <div>
+        <span class="offer-type">{{ offer.type | titlecase }}</span>
+        <strong>{{ offer.title || offer.code || 'Salon offer' }}</strong>
+      </div>
+      <p>{{ formatOffer(offer) }}</p>
+      <small *ngIf="offerWindow(offer)">{{ offerWindow(offer) }}</small>
+      <code *ngIf="offer.code">{{ offer.code }}</code>
+    </article>
+  </div>
+</div>
+
+<div class="hh-banner active" *ngIf="isActive">
+  <div class="hh-banner-icon">HH</div>
+  <div class="hh-banner-content">
+    <strong>Happy Hours Active Now</strong>
+    <span *ngFor="let offer of activeOffers">
+      {{ offer.name }} - {{ formatDiscount(offer) }} ({{ offer.startTime }}-{{ offer.endTime }})
+    </span>
+  </div>
+</div>
+
+<div class="hh-upcoming" *ngIf="!isActive && upcomingOffers.length">
+  <p class="hh-upcoming-title">Upcoming Happy Hours</p>
+  <div class="hh-upcoming-item" *ngFor="let day of upcomingOffers">
+    <span class="day-label">{{ day.dayName | titlecase }} {{ day.date }}</span>
+    <span class="offer-label" *ngFor="let offer of day.offers">
+      {{ offer.name }} - {{ formatDiscount(offer) }} ({{ offer.startTime }}-{{ offer.endTime }})
+    </span>
+  </div>
+</div>

@@ -1,0 +1,134 @@
+.roi-score-page {
+  gap: 18px;
+}
+
+.roi-score-page .page-header p,
+.muted-text,
+.metric-card small,
+.offer-list small,
+.table-wrap td small {
+  color: #667085;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar,
+.metric-grid,
+.insight-grid,
+.offer-list {
+  display: grid;
+  gap: 12px;
+}
+
+.toolbar {
+  align-items: end;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto auto;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.insight-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-card,
+.offer-list article {
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.metric-card span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 24px;
+}
+
+.offer-list article {
+  align-items: center;
+  grid-template-columns: 1fr auto;
+}
+
+.offer-list strong,
+.offer-list small,
+.table-wrap td strong,
+.table-wrap td small {
+  display: block;
+}
+
+.score-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 36px;
+  padding: 7px 10px;
+  text-transform: capitalize;
+}
+
+.score-excellent {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+  color: #027a48;
+}
+
+.score-good {
+  background: #eff8ff;
+  border-color: #b2ddff;
+  color: #175cd3;
+}
+
+.score-watch {
+  background: #fffaeb;
+  border-color: #fedf89;
+  color: #b54708;
+}
+
+.score-poor {
+  background: #fff1f3;
+  border-color: #fecdd6;
+  color: #b42318;
+}
+
+.score-no-data {
+  background: #f2f4f7;
+  border-color: #e4e7ec;
+  color: #475467;
+}
+
+.table-wrap td {
+  vertical-align: top;
+}
+
+@media (max-width: 1180px) {
+  .toolbar,
+  .metric-grid,
+  .insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .toolbar,
+  .metric-grid,
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+}

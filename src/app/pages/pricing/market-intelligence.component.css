@@ -1,0 +1,234 @@
+.market-intel-page {
+  gap: 18px;
+}
+
+.market-intel-page .page-header p,
+.muted-text,
+.metric-card small,
+.competitor-dot small,
+.legal-note,
+.empty-text {
+  color: #667085;
+  margin: 6px 0 0;
+}
+
+.market-filters,
+.form-grid,
+.kpi-grid,
+.content-grid,
+.suggestion-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.market-filters {
+  align-items: end;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(2, minmax(150px, 1fr)) auto;
+}
+
+.kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.content-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+}
+
+.suggestion-grid {
+  grid-template-columns: 1fr 1.2fr 1fr;
+}
+
+.form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-card,
+.form-box,
+.suggestion-card {
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.suggestion-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.suggestion-card span,
+.status-pill {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.suggestion-card strong {
+  color: #101828;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.suggestion-card p,
+.suggestion-card li {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.suggestion-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.suggestion-card small {
+  color: #027a48;
+  font-weight: 700;
+}
+
+.suggestion-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-pill {
+  align-self: start;
+  background: #f2f4f7;
+  border: 1px solid #e4e7ec;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+.status-pill.ready {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+  color: #027a48;
+}
+
+.status-pill.muted {
+  color: #667085;
+}
+
+.success-text {
+  background: #ecfdf3;
+  border: 1px solid #a6f4c5;
+  border-radius: 8px;
+  color: #027a48;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.metric-card {
+  min-height: 132px;
+}
+
+.metric-card span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 28px;
+  line-height: 1.1;
+  text-transform: capitalize;
+}
+
+.metric-card.warning {
+  border-color: #fedf89;
+}
+
+.metric-card.warning strong {
+  color: #b54708;
+}
+
+.metric-card.good {
+  border-color: #a6f4c5;
+}
+
+.metric-card.good strong,
+.metric-card.action strong {
+  color: #027a48;
+}
+
+.form-box h3 {
+  color: #101828;
+  font-size: 16px;
+  margin: 0;
+}
+
+.map-card {
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    #f8fafc;
+  background-size: 28px 28px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  min-height: 260px;
+  padding: 18px;
+}
+
+.branch-dot,
+.competitor-dot {
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  padding: 10px 12px;
+}
+
+.branch-dot {
+  background: #0f766e;
+  color: #ffffff;
+  font-weight: 800;
+  justify-self: center;
+}
+
+.competitor-dot {
+  display: grid;
+  gap: 2px;
+}
+
+.legal-note {
+  font-size: 12px;
+}
+
+.table-wrap td {
+  vertical-align: top;
+}
+
+@media (max-width: 1100px) {
+  .kpi-grid,
+  .content-grid,
+  .form-grid,
+  .suggestion-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .market-filters,
+  .kpi-grid,
+  .content-grid,
+  .form-grid,
+  .suggestion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-card {
+    min-height: auto;
+  }
+}

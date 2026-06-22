@@ -1,0 +1,177 @@
+<section class="page-stack">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Discount setup</span>
+      <h2>Happy Hours</h2>
+    </div>
+    <button class="primary-button" type="button" (click)="openForm()">+ Add New</button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel" *ngIf="showForm()">
+    <div class="section-title">
+      <h2>{{ editingId() ? 'Edit happy hour' : 'New happy hour' }}</h2>
+    </div>
+    <div class="form-panel inline-form">
+      <label class="field">
+        <span>Name</span>
+        <input [(ngModel)]="draft.name" placeholder="Monday Morning Special" />
+      </label>
+      <label class="field">
+        <span>Days</span>
+        <input [(ngModel)]="draft.dayOfWeek" placeholder="everyday or mon,wed,fri" />
+      </label>
+      <label class="field">
+        <span>Start</span>
+        <input type="time" [(ngModel)]="draft.startTime" />
+      </label>
+      <label class="field">
+        <span>End</span>
+        <input type="time" [(ngModel)]="draft.endTime" />
+      </label>
+      <label class="field">
+        <span>Type</span>
+        <select [(ngModel)]="draft.discountType">
+          <option value="percent">Percent</option>
+          <option value="flat">Flat</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Value</span>
+        <input type="number" min="0" [(ngModel)]="draft.discountValue" />
+      </label>
+      <label class="field">
+        <span>Scope</span>
+        <select [(ngModel)]="draft.applicableTo">
+          <option value="all">All services</option>
+          <option value="services">Selected services</option>
+          <option value="categories">Categories</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Service IDs</span>
+        <input [(ngModel)]="draft.serviceIds" placeholder="svc_haircut,svc_color" />
+      </label>
+      <label class="field">
+        <span>Max cap paise</span>
+        <input type="number" min="0" [(ngModel)]="draft.maxDiscountPaise" />
+      </label>
+      <label class="field">
+        <span>Priority</span>
+        <input type="number" min="1" [(ngModel)]="draft.priority" />
+      </label>
+      <label class="check-pill">
+        <input type="checkbox" [(ngModel)]="draft.stackable" />
+        Stackable
+      </label>
+      <button class="primary-button" type="button" (click)="save()">{{ editingId() ? 'Save' : 'Create' }}</button>
+      <button class="ghost-button" type="button" (click)="cancelForm()">Cancel</button>
+    </div>
+    <div class="form-panel inline-form" *ngIf="editingId()">
+      <label class="field">
+        <span>Min minutes</span>
+        <input type="number" min="0" [(ngModel)]="durationTierDraft.minDurationMins" />
+      </label>
+      <label class="field">
+        <span>Max minutes</span>
+        <input type="number" min="0" [(ngModel)]="durationTierDraft.maxDurationMins" />
+      </label>
+      <label class="field">
+        <span>Bonus %</span>
+        <input type="number" min="0" max="100" [(ngModel)]="durationTierDraft.bonusPercent" />
+      </label>
+      <button class="primary-button" type="button" (click)="addDurationTier()">Add duration tier</button>
+      <span class="badge muted" *ngFor="let tier of durationTiers()">
+        {{ tier.minDurationMins }}-{{ tier.maxDurationMins || '∞' }} min · +{{ tier.bonusPercent }}%
+        <button class="ghost-button mini danger" type="button" (click)="removeDurationTier(tier)">Remove</button>
+      </span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Combo bundles</h2>
+    </div>
+    <div class="form-panel inline-form">
+      <label class="field">
+        <span>Name</span>
+        <input [(ngModel)]="bundleDraft.name" placeholder="Hair + Spa Combo" />
+      </label>
+      <label class="field">
+        <span>Service IDs</span>
+        <input [(ngModel)]="bundleDraft.serviceIds" placeholder="svc_haircut,svc_spa" />
+      </label>
+      <label class="field">
+        <span>Percent off</span>
+        <input type="number" min="0" max="100" [(ngModel)]="bundleDraft.percentOff" />
+      </label>
+      <label class="field">
+        <span>Bundle price paise</span>
+        <input type="number" min="0" [(ngModel)]="bundleDraft.bundlePricePaise" />
+      </label>
+      <button class="primary-button" type="button" (click)="createBundle()">Create bundle</button>
+    </div>
+    <div class="table-wrap" *ngIf="bundles().length">
+      <table>
+        <thead><tr><th>Name</th><th>Services</th><th>Discount</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let bundle of bundles()">
+            <td>{{ bundle.name }}</td>
+            <td>{{ bundle.services?.length || 0 }}</td>
+            <td>{{ bundle.bundlePricePaise ? ('₹' + (bundle.bundlePricePaise / 100)) : (bundle.percentOff + '%') }}</td>
+            <td><button class="ghost-button mini danger" type="button" (click)="removeBundle(bundle)">Remove</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Days</th>
+            <th>Time</th>
+            <th>Discount</th>
+            <th>Scope</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let hh of happyHours()">
+            <td>
+              <strong>{{ hh.name }}</strong>
+              <span class="badge warning" *ngIf="isActiveNow(hh)">Active Now</span>
+            </td>
+            <td>{{ hh.dayOfWeek }}</td>
+            <td>{{ hh.startTime }} - {{ hh.endTime }}</td>
+            <td>{{ discountLabel(hh) }}</td>
+            <td>{{ scopeLabel(hh) }}</td>
+            <td>
+              <span class="badge" [class.success]="hh.status === 'active'" [class.muted]="hh.status !== 'active'">
+                {{ hh.status }}
+              </span>
+            </td>
+            <td class="mode-actions">
+              <button class="ghost-button mini" type="button" title="Edit" (click)="edit(hh)">Edit</button>
+              <button class="ghost-button mini" type="button" title="Toggle status" (click)="toggle(hh)">
+                {{ hh.status === 'active' ? 'Off' : 'On' }}
+              </button>
+              <button class="ghost-button mini danger" type="button" title="Delete" (click)="remove(hh)">Delete</button>
+            </td>
+          </tr>
+          <tr *ngIf="!loading() && !happyHours().length">
+            <td colspan="7">No happy hours configured.</td>
+          </tr>
+          <tr *ngIf="loading()">
+            <td colspan="7">Loading happy hours...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

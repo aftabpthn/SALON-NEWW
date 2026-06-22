@@ -1,0 +1,199 @@
+<section class="page-stack staff-incentives-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Staff Incentive Link</h2>
+      <p>Slow hours, campaign bookings aur discount conversions ko staff incentive se link karo.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/promotion-calendar">Calendar</a>
+      <a class="ghost-button" routerLink="/discount-rules/offer-roi-score">ROI score</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Total incentives</span>
+      <strong>{{ formatMoney(totalIncentivePaise()) }}</strong>
+      <small>{{ rows().length }} linked conversions</small>
+    </article>
+    <article class="metric-card">
+      <span>Pending</span>
+      <strong>{{ formatMoney(pendingPaise()) }}</strong>
+      <small>needs manager approval</small>
+    </article>
+    <article class="metric-card">
+      <span>Approved</span>
+      <strong>{{ formatMoney(approvedPaise()) }}</strong>
+      <small>ready for payout</small>
+    </article>
+    <article class="metric-card">
+      <span>Paid</span>
+      <strong>{{ formatMoney(paidPaise()) }}</strong>
+      <small>closed payouts</small>
+    </article>
+  </section>
+
+  <section class="builder-grid">
+    <form class="panel form-grid" (ngSubmit)="saveIncentive()">
+      <div class="section-title">
+        <h2>Link conversion</h2>
+        <button class="primary-button" type="submit" [disabled]="saving() || !incentiveForm.staffId">
+          {{ saving() ? 'Saving...' : 'Save incentive' }}
+        </button>
+      </div>
+
+      <label class="field">
+        <span>Staff ID</span>
+        <input [(ngModel)]="incentiveForm.staffId" name="staffId" required />
+      </label>
+      <label class="field">
+        <span>Conversion type</span>
+        <select [(ngModel)]="incentiveForm.source" name="source" (ngModelChange)="useConversionType($event)">
+          <option *ngFor="let type of conversionTypes" [value]="type.value">{{ type.label }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select [(ngModel)]="incentiveForm.status" name="status">
+          <option>pending</option>
+          <option>approved</option>
+          <option>paid</option>
+          <option>paused</option>
+          <option>rejected</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Linked rule</span>
+        <select [(ngModel)]="incentiveForm.ruleId" name="ruleId">
+          <option value="">No rule</option>
+          <option *ngFor="let rule of rules()" [value]="rule.id">{{ rule.name }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Linked coupon</span>
+        <select [(ngModel)]="incentiveForm.couponId" name="couponId">
+          <option value="">No coupon</option>
+          <option *ngFor="let coupon of coupons()" [value]="coupon.id">{{ coupon.code }} · {{ coupon.title }}</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Booking ID</span>
+        <input [(ngModel)]="incentiveForm.bookingId" name="bookingId" />
+      </label>
+      <label class="field">
+        <span>Invoice ID</span>
+        <input [(ngModel)]="incentiveForm.invoiceId" name="invoiceId" />
+      </label>
+      <label class="field">
+        <span>Sale paise</span>
+        <input type="number" [(ngModel)]="incentiveForm.saleAmountPaise" name="saleAmountPaise" (input)="recalculate()" />
+      </label>
+      <label class="field">
+        <span>Discount paise</span>
+        <input type="number" [(ngModel)]="incentiveForm.discountPaise" name="discountPaise" (input)="recalculate()" />
+      </label>
+      <label class="field">
+        <span>Rate %</span>
+        <input type="number" step="0.25" [(ngModel)]="incentiveForm.incentiveRatePercent" name="rate" (input)="recalculate()" />
+      </label>
+      <label class="field">
+        <span>Incentive paise</span>
+        <input type="number" [(ngModel)]="incentiveForm.incentivePaise" name="incentivePaise" />
+      </label>
+      <label class="field full">
+        <span>Notes</span>
+        <textarea [(ngModel)]="incentiveForm.notes" name="notes"></textarea>
+      </label>
+    </form>
+
+    <article class="panel">
+      <div class="section-title">
+        <h2>Incentive rules</h2>
+        <span class="muted-text">Suggested rates</span>
+      </div>
+      <div class="rate-list">
+        <button class="rate-card" type="button" *ngFor="let type of conversionTypes" (click)="useConversionType(type.value)">
+          <strong>{{ type.label }}</strong>
+          <span>{{ type.rate }}%</span>
+          <small>{{ type.value === 'slow_hour_conversion' ? 'Quiet slot booking' : type.value === 'low_occupancy_boost' ? 'Low occupancy sale' : type.value === 'package_upgrade' ? 'Higher ticket upsell' : 'Campaign linked conversion' }}</small>
+        </button>
+      </div>
+      <div class="payout-preview">
+        <span>Suggested payout</span>
+        <strong>{{ formatMoney(incentiveForm.incentivePaise) }}</strong>
+        <small>Sale + discount-discipline bonus, editable before save.</small>
+      </div>
+    </article>
+  </section>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Status</span>
+      <select [(ngModel)]="filters.status" name="filterStatus">
+        <option *ngFor="let status of statuses" [value]="status">{{ status || 'All statuses' }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Staff ID</span>
+      <input [(ngModel)]="filters.staffId" name="filterStaffId" />
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Apply' }}
+    </button>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Linked incentive ledger</h2>
+      <span class="muted-text">{{ rows().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Staff</th>
+            <th>Conversion</th>
+            <th>Sale</th>
+            <th>Discount</th>
+            <th>Incentive</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="7">Loading incentives...</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="7">No linked staff incentives yet.</td>
+          </tr>
+          <tr *ngFor="let row of rows()">
+            <td>
+              <strong>{{ row.staffId }}</strong>
+              <small>{{ row.bookingId || 'no booking' }} · {{ row.invoiceId || 'no invoice' }}</small>
+            </td>
+            <td>
+              <strong>{{ label(row.source) }}</strong>
+              <small>{{ ruleName(row.ruleId) }} · {{ couponName(row.couponId) }}</small>
+            </td>
+            <td>{{ formatMoney(row.saleAmountPaise) }}</td>
+            <td>{{ formatMoney(row.discountPaise) }}</td>
+            <td>{{ formatMoney(row.incentivePaise) }}</td>
+            <td><span [class]="statusClass(row.status)">{{ row.status }}</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="ghost-button mini" type="button" (click)="updateStatus(row, 'approved')" [disabled]="row.status === 'approved'">Approve</button>
+                <button class="ghost-button mini" type="button" (click)="updateStatus(row, 'paid')" [disabled]="row.status === 'paid'">Paid</button>
+                <button class="ghost-button mini" type="button" (click)="updateStatus(row, 'rejected')" [disabled]="row.status === 'rejected'">Reject</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

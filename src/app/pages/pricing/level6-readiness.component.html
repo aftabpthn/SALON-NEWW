@@ -1,0 +1,169 @@
+<section class="page-stack level6-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Level 6</span>
+      <h2>Readiness Center</h2>
+      <p>Auto roadmap engine for pricing intelligence modules, grounded in real tenant, demand, billing, and experiment data.</p>
+    </div>
+    <button class="ghost-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="hero-grid" *ngIf="report() as current">
+    <article class="readiness-score">
+      <span>Overall readiness</span>
+      <strong>{{ current.readinessScore }}%</strong>
+      <small>Generated {{ generatedAt() }}</small>
+    </article>
+
+    <article class="decision-card next">
+      <span>Next best option</span>
+      <strong>{{ current.nextBest.title }}</strong>
+      <p>{{ current.nextBest.reason }}</p>
+      <a *ngIf="current.nextBest.route" class="ghost-button mini" [routerLink]="current.nextBest.route">Open</a>
+    </article>
+
+    <article class="decision-card advanced">
+      <span>Best advanced option</span>
+      <strong>{{ current.advancedBest.title }}</strong>
+      <p>{{ current.advancedBest.reason }}</p>
+    </article>
+  </section>
+
+  <section class="status-grid" *ngIf="report()">
+    <article class="status-card ready">
+      <span>Ready</span>
+      <strong>{{ countFor('ready') }}</strong>
+    </article>
+    <article class="status-card collecting">
+      <span>Collecting</span>
+      <strong>{{ countFor('collecting') }}</strong>
+    </article>
+    <article class="status-card blocked">
+      <span>Blocked</span>
+      <strong>{{ countFor('blocked') }}</strong>
+    </article>
+    <article class="status-card premature">
+      <span>Premature</span>
+      <strong>{{ countFor('premature') }}</strong>
+    </article>
+  </section>
+
+  <section class="module-grid" *ngIf="report() as current">
+    <article [class]="moduleClass(item)" *ngFor="let item of current.modules">
+      <div class="module-head">
+        <div>
+          <span>{{ item.code }}</span>
+          <h3>{{ item.name }}</h3>
+        </div>
+        <b>{{ item.score }}%</b>
+      </div>
+      <div class="score-track">
+        <span [style.width.%]="scoreWidth(item.score)"></span>
+      </div>
+      <p class="gate">{{ item.gate }}</p>
+      <p class="evidence">{{ item.evidence }}</p>
+      <p class="next-action">{{ item.nextAction }}</p>
+      <div class="module-foot">
+        <span class="status-pill">{{ statusLabel(item.status) }}</span>
+        <a *ngIf="item.route" [routerLink]="item.route">Open module</a>
+      </div>
+    </article>
+  </section>
+
+  <section class="panel roadmap-panel" *ngIf="report() as current">
+    <div class="section-title">
+      <h2>Auto roadmap</h2>
+      <span class="muted-text">Best order after each gate completes</span>
+    </div>
+    <div class="roadmap-list">
+      <article class="roadmap-item" *ngFor="let item of current.roadmap">
+        <b>{{ item.priority }}</b>
+        <div>
+          <strong>{{ item.title }}</strong>
+          <small>{{ item.trigger }}</small>
+        </div>
+        <span [class]="statusClass(item.status)">{{ statusLabel(item.status || 'blocked') }}</span>
+        <a *ngIf="item.route" [routerLink]="item.route">Open</a>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel platform-panel" *ngIf="report() as current">
+    <div class="section-title">
+      <h2>Platform signals</h2>
+      <span class="muted-text">Real activity estimate for Level 6 gates</span>
+    </div>
+    <div class="signal-grid">
+      <div>
+        <span>Active tenants</span>
+        <strong>{{ current.platform.activeTenants || 0 }}</strong>
+      </div>
+      <div>
+        <span>Active subscriptions</span>
+        <strong>{{ current.platform.activeSubscriptionTenants || 0 }}</strong>
+      </div>
+      <div>
+        <span>Billing tenants</span>
+        <strong>{{ current.platform.billingTenants || 0 }}</strong>
+      </div>
+      <div>
+        <span>Real-active estimate</span>
+        <strong>{{ current.platform.realActiveTenantEstimate || 0 }}</strong>
+      </div>
+      <div>
+        <span>Paying estimate</span>
+        <strong>{{ current.platform.payingTenantEstimate || 0 }}</strong>
+      </div>
+      <div>
+        <span>Seeded / inactive</span>
+        <strong>{{ current.platform.seededOrInactiveTenantEstimate || 0 }}</strong>
+      </div>
+    </div>
+    <p class="muted-text">{{ current.source.note }}</p>
+  </section>
+
+  <section class="panel tenant-panel" *ngIf="report() as current">
+    <div class="section-title">
+      <h2>Per-tenant activity samples</h2>
+      <span class="muted-text">Invoices, appointments, demand signals, and paying signal</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tenant</th>
+            <th>Branches</th>
+            <th>Invoices</th>
+            <th>Appointments</th>
+            <th>Demand samples</th>
+            <th>Paying signal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!current.tenantSamples?.length">
+            <td colspan="6">No tenant activity samples found.</td>
+          </tr>
+          <tr *ngFor="let tenant of current.tenantSamples">
+            <td>
+              <strong>{{ tenant.tenantName }}</strong>
+              <small>{{ tenant.tenantId }}</small>
+            </td>
+            <td>{{ tenant.branches || 0 }}</td>
+            <td>{{ tenant.invoices || 0 }}</td>
+            <td>{{ tenant.appointments || 0 }}</td>
+            <td>{{ tenant.demandSignals || 0 }}</td>
+            <td>
+              <span class="status-pill" [class.ready]="tenant.payingSignal" [class.premature]="!tenant.payingSignal">
+                {{ tenant.payingSignal ? 'Yes' : 'No' }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

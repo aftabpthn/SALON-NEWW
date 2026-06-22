@@ -1,0 +1,120 @@
+<section class="page-stack conflict-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Control</span>
+      <h2>Rule Conflict Detector</h2>
+      <p>Overlapping rules, same priority, duplicate coverage aur risky stacking ko scan karo.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules">Rules</a>
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="filter-grid">
+      <label class="field">
+        <span>Status</span>
+        <select [(ngModel)]="filters.status" name="status">
+          <option *ngFor="let status of statuses" [value]="status">{{ status || 'All rules' }}</option>
+        </select>
+      </label>
+      <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? 'Scanning...' : 'Scan conflicts' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <article class="metric-card">
+      <span>Rules scanned</span>
+      <strong>{{ result()?.scannedRules || 0 }}</strong>
+      <small>{{ result()?.status || 'all' }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Total conflicts</span>
+      <strong>{{ result()?.conflictCount || 0 }}</strong>
+      <small>active detection</small>
+    </article>
+    <article class="metric-card" *ngFor="let severity of severities">
+      <span>{{ severity }}</span>
+      <strong>{{ severityCount(severity) }}</strong>
+      <small>severity count</small>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Conflict inbox</h2>
+      <span class="muted-text">{{ conflicts().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Type</th>
+            <th>Rules</th>
+            <th>Reason</th>
+            <th>Fix</th>
+            <th>Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()"><td colspan="6">Scanning rules...</td></tr>
+          <tr *ngIf="!loading() && !conflicts().length"><td colspan="6">No conflicts found for this filter.</td></tr>
+          <ng-container *ngFor="let row of conflicts()">
+            <tr>
+              <td><span [class]="severityClass(row.severity)">{{ row.severity }}</span></td>
+              <td>{{ label(row.type) }}</td>
+              <td>
+                <strong>{{ row.ruleNames[0] }}</strong>
+                <small>{{ row.ruleNames[1] }}</small>
+              </td>
+              <td>{{ row.reason }}</td>
+              <td>{{ row.recommendation }}</td>
+              <td><button class="ghost-button mini" type="button" (click)="toggle(row)">{{ expandedId() === row.id ? 'Hide' : 'View' }}</button></td>
+            </tr>
+            <tr class="evidence-row" *ngIf="expandedId() === row.id">
+              <td colspan="6"><pre>{{ evidenceText(row) }}</pre></td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel draft-panel">
+    <div class="section-title">
+      <h2>Draft checker</h2>
+      <span class="muted-text">{{ draftResult()?.draftConflictCount || 0 }} draft conflicts</span>
+    </div>
+    <div class="draft-grid">
+      <div class="form-grid">
+        <label class="field"><span>Name</span><input [(ngModel)]="draftRule.name" name="draftName" /></label>
+        <label class="field"><span>Priority</span><input type="number" [(ngModel)]="draftRule.priority" name="draftPriority" /></label>
+        <label class="field"><span>Status</span><select [(ngModel)]="draftRule.status" name="draftStatus"><option *ngFor="let status of statuses" [value]="status || 'draft'">{{ status || 'draft' }}</option></select></label>
+        <label class="field"><span>Valid from</span><input type="date" [(ngModel)]="draftRule.validFrom" name="draftFrom" /></label>
+        <label class="field"><span>Valid to</span><input type="date" [(ngModel)]="draftRule.validTo" name="draftTo" /></label>
+        <label class="check-field"><input type="checkbox" [(ngModel)]="draftRule.stackable" name="draftStackable" /> Stackable</label>
+        <label class="field full"><span>Conditions JSON</span><textarea [(ngModel)]="draftRule.conditionsText" name="draftConditions" rows="7"></textarea></label>
+        <label class="field full"><span>Action JSON</span><textarea [(ngModel)]="draftRule.actionText" name="draftAction" rows="6"></textarea></label>
+        <button class="dark-button" type="button" (click)="checkDraft()" [disabled]="checking()">{{ checking() ? 'Checking...' : 'Check draft' }}</button>
+      </div>
+      <div class="draft-results">
+        <article *ngIf="!draftConflicts().length">
+          <strong>No draft conflict yet</strong>
+          <span>Draft checker result yahan dikhega.</span>
+        </article>
+        <article *ngFor="let row of draftConflicts()">
+          <span [class]="severityClass(row.severity)">{{ row.severity }}</span>
+          <strong>{{ label(row.type) }}</strong>
+          <p>{{ row.reason }}</p>
+          <small>{{ row.recommendation }}</small>
+        </article>
+      </div>
+    </div>
+  </section>
+</section>

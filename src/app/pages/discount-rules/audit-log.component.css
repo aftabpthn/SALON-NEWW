@@ -1,0 +1,70 @@
+.discount-audit-page {
+  gap: 18px;
+}
+
+.discount-audit-page .page-header p,
+.muted-text,
+.table-wrap td small {
+  color: #667085;
+  margin: 6px 0 0;
+}
+
+.audit-filters {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto auto;
+}
+
+.table-wrap td small {
+  display: block;
+}
+
+.event-pill {
+  background: #eef4ff;
+  border-radius: 999px;
+  color: #175cd3;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.history-row td {
+  background: #f8fafc;
+}
+
+.timeline {
+  display: grid;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.timeline-item {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 12px 1fr;
+}
+
+.dot {
+  background: #0f766e;
+  border-radius: 999px;
+  height: 10px;
+  margin-top: 4px;
+  width: 10px;
+}
+
+@media (max-width: 980px) {
+  .audit-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .audit-filters {
+    grid-template-columns: 1fr;
+  }
+}

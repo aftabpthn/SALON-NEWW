@@ -1,0 +1,238 @@
+<section class="page-stack rule-builder-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours E2</span>
+      <h2>{{ editingId() ? 'Edit discount rule' : 'New discount rule' }}</h2>
+      <p>Build conditions visually, preview the sentence, test a sample cart, and save as draft.</p>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+  <section class="panel" *ngIf="loading()">Loading rule...</section>
+
+  <ng-container *ngIf="!loading()">
+    <section class="panel builder-grid">
+      <label class="field span-2">
+        <span>Rule name</span>
+        <input [(ngModel)]="draft.name" name="ruleName" placeholder="Monsoon hair spa lift" />
+      </label>
+      <label class="field span-2">
+        <span>Description</span>
+        <input [(ngModel)]="draft.description" name="description" placeholder="Use for low occupancy weekdays" />
+      </label>
+      <label class="field">
+        <span>Condition logic</span>
+        <select [(ngModel)]="draft.conditionLogic" name="conditionLogic">
+          <option value="AND">All conditions</option>
+          <option value="OR">Any condition</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Priority</span>
+        <input type="number" min="1" [(ngModel)]="draft.priority" name="priority" />
+      </label>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>Conditions</h2>
+        <button class="ghost-button mini" type="button" (click)="addCondition()">Add row</button>
+      </div>
+
+      <div class="condition-stack">
+        <div class="condition-row" *ngFor="let condition of draft.conditions; let i = index">
+          <label class="field">
+            <span>Field</span>
+            <select [ngModel]="condition.field" (ngModelChange)="setConditionField(condition, $event)" name="field{{ i }}">
+              <option *ngFor="let field of conditionFields" [value]="field.value">{{ field.label }}</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Operator</span>
+            <select [(ngModel)]="condition.operator" name="operator{{ i }}">
+              <option *ngFor="let operator of operatorsFor(condition.field)" [value]="operator">
+                {{ operatorLabels[operator] || operator }}
+              </option>
+            </select>
+          </label>
+
+          <ng-container [ngSwitch]="condition.field">
+            <div class="range-fields" *ngSwitchCase="'timeRange'">
+              <label class="field">
+                <span>Start</span>
+                <input type="time" [(ngModel)]="condition.start" name="start{{ i }}" />
+              </label>
+              <label class="field">
+                <span>End</span>
+                <input type="time" [(ngModel)]="condition.end" name="end{{ i }}" />
+              </label>
+            </div>
+
+            <div class="range-fields" *ngSwitchCase="'dateRange'">
+              <label class="field">
+                <span>From</span>
+                <input type="date" [(ngModel)]="condition.from" name="from{{ i }}" />
+              </label>
+              <label class="field">
+                <span>To</span>
+                <input type="date" [(ngModel)]="condition.to" name="to{{ i }}" />
+              </label>
+            </div>
+
+            <label class="field" *ngSwitchCase="'occupancyRate'">
+              <span>Occupancy %</span>
+              <input type="number" min="0" max="100" [(ngModel)]="condition.percent" name="occupancy{{ i }}" />
+            </label>
+
+            <label class="field" *ngSwitchCase="'cartTotalPaise'">
+              <span>Cart total Rs</span>
+              <input type="number" min="0" [(ngModel)]="condition.valueRupees" name="cart{{ i }}" />
+            </label>
+
+            <label class="field" *ngSwitchCase="'groupSize'">
+              <span>People</span>
+              <input type="number" min="1" [(ngModel)]="condition.value" name="group{{ i }}" />
+            </label>
+
+            <label class="field" *ngSwitchCase="'clientSegment'">
+              <span>Segment</span>
+              <select [(ngModel)]="condition.valueText" name="segment{{ i }}">
+                <option *ngFor="let segment of segmentOptions" [value]="segment">{{ segment }}</option>
+              </select>
+            </label>
+
+            <label class="field" *ngSwitchCase="'weatherCondition'">
+              <span>Weather</span>
+              <select [(ngModel)]="condition.valueText" name="weather{{ i }}">
+                <option *ngFor="let weather of weatherOptions" [value]="weather">{{ weather }}</option>
+              </select>
+            </label>
+
+            <label class="field" *ngSwitchDefault>
+              <span>Value</span>
+              <input [(ngModel)]="condition.valueText" name="value{{ i }}" placeholder="mon,tue or hair,spa" />
+            </label>
+          </ng-container>
+
+          <button class="ghost-button mini danger remove-row" type="button" (click)="removeCondition(i)" [disabled]="draft.conditions.length === 1">
+            Remove
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>Action builder</h2>
+      </div>
+      <div class="builder-grid">
+        <label class="field">
+          <span>Action type</span>
+          <select [(ngModel)]="draft.action.type" name="actionType">
+            <option value="percent">Percent off</option>
+            <option value="flat">Flat off</option>
+            <option value="bundle_price">Bundle price</option>
+          </select>
+        </label>
+        <label class="field" *ngIf="draft.action.type === 'percent'">
+          <span>{{ actionValueLabel() }}</span>
+          <input type="number" min="0" max="100" [(ngModel)]="draft.action.value" name="actionValue" />
+        </label>
+        <label class="field" *ngIf="draft.action.type !== 'percent'">
+          <span>{{ actionValueLabel() }}</span>
+          <input type="number" min="0" [(ngModel)]="draft.action.valueRupees" name="actionRupees" />
+        </label>
+        <label class="field">
+          <span>Max cap Rs</span>
+          <input type="number" min="0" [(ngModel)]="draft.action.maxCapRupees" name="maxCap" />
+        </label>
+        <label class="field">
+          <span>Apply to</span>
+          <select [(ngModel)]="draft.action.applyTo" name="applyTo">
+            <option value="cart">Whole cart</option>
+            <option value="service">Selected services</option>
+            <option value="category">Selected categories</option>
+          </select>
+        </label>
+        <label class="field span-2">
+          <span>Target IDs</span>
+          <input [(ngModel)]="draft.action.targetIdsText" name="targetIds" placeholder="svc_haircut,svc_spa or hair,spa" />
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>Settings</h2>
+      </div>
+      <div class="builder-grid">
+        <label class="check-pill">
+          <input type="checkbox" [(ngModel)]="draft.stackable" name="stackable" />
+          Stackable
+        </label>
+        <label class="field">
+          <span>Valid from</span>
+          <input type="date" [(ngModel)]="draft.validFrom" name="validFrom" />
+        </label>
+        <label class="field">
+          <span>Valid to</span>
+          <input type="date" [(ngModel)]="draft.validTo" name="validTo" />
+        </label>
+      </div>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="section-title">
+        <h2>Live preview</h2>
+      </div>
+      <p class="preview-sentence">{{ previewSentence() }}</p>
+
+      <div class="sample-grid">
+        <label class="field">
+          <span>Sample cart Rs</span>
+          <input type="number" min="0" [(ngModel)]="sample.cartTotalRupees" name="sampleCart" />
+        </label>
+        <label class="field">
+          <span>Service ID</span>
+          <input [(ngModel)]="sample.serviceId" name="sampleService" />
+        </label>
+        <label class="field">
+          <span>Category</span>
+          <input [(ngModel)]="sample.category" name="sampleCategory" />
+        </label>
+        <label class="field">
+          <span>Group size</span>
+          <input type="number" min="1" [(ngModel)]="sample.groupSize" name="sampleGroup" />
+        </label>
+        <label class="field">
+          <span>Occupancy %</span>
+          <input type="number" min="0" max="100" [(ngModel)]="sample.occupancyPercent" name="sampleOccupancy" />
+        </label>
+        <label class="field">
+          <span>Segment</span>
+          <select [(ngModel)]="sample.clientSegment" name="sampleSegment">
+            <option *ngFor="let segment of segmentOptions" [value]="segment">{{ segment }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="preview-actions">
+        <button class="ghost-button" type="button" (click)="testWithSampleCart()" [disabled]="testing()">
+          {{ testing() ? 'Testing...' : 'Test sample cart' }}
+        </button>
+        <span class="result-pill" *ngIf="testResult()">
+          Endpoint discount: {{ resultDiscountLabel() }} | Applied rules: {{ appliedRuleLabel() }}
+        </span>
+      </div>
+    </section>
+
+    <div class="sticky-actions">
+      <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
+        {{ saving() ? 'Saving...' : (editingId() ? 'Save changes' : 'Save draft') }}
+      </button>
+      <a class="ghost-button" routerLink="/discount-rules">Cancel</a>
+    </div>
+  </ng-container>
+</section>

@@ -1,0 +1,278 @@
+.control-tower-page {
+  gap: 18px;
+}
+
+.control-tower-page .page-header p,
+.muted-text,
+.compact-list small,
+.template-card small,
+.public-preview small,
+.table-wrap td small {
+  color: #667085;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tower-toolbar,
+.coupon-test {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto auto;
+}
+
+.tower-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tower-tabs button {
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #344054;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 12px;
+}
+
+.tower-tabs button.active {
+  background: #101828;
+  border-color: #101828;
+  color: #ffffff;
+}
+
+.metric-grid,
+.split-grid,
+.form-grid,
+.template-grid,
+.public-preview,
+.compact-list,
+.campaign-builder {
+  display: grid;
+  gap: 12px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.split-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid .section-title,
+.form-grid .full,
+.campaign-builder .full {
+  grid-column: 1 / -1;
+}
+
+.metric-card,
+.template-card,
+.public-preview article,
+.campaign-preview {
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+}
+
+.campaign-builder {
+  border-bottom: 1px solid #eef2f6;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+}
+
+.campaign-actions {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.campaign-preview {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+  margin-bottom: 14px;
+}
+
+.campaign-preview span {
+  color: #027a48;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.campaign-preview p {
+  color: #344054;
+  margin: 0;
+}
+
+.campaign-preview small {
+  color: #027a48;
+}
+
+.compact-title {
+  margin-top: 14px;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 24px;
+}
+
+.metric-card.danger strong {
+  color: #b42318;
+}
+
+.table-wrap td small,
+.compact-list strong,
+.compact-list small {
+  display: block;
+}
+
+.compact-list article {
+  align-items: center;
+  border: 1px solid #eef2f6;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.status-badge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 7px 10px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-active,
+.status-reviewed,
+.status-approved,
+.status-paid,
+.status-scheduled {
+  background: #e7f7ef;
+  color: #067647;
+}
+
+.status-draft,
+.status-pending {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.status-paused,
+.status-dismissed,
+.status-archived {
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.status-expired,
+.status-open {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.coupon-test {
+  border-top: 1px solid #eef2f6;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.test-result {
+  color: #344054;
+  font-weight: 700;
+}
+
+.check-field {
+  align-items: center;
+  color: #344054;
+  display: flex;
+  font-weight: 700;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.template-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.template-card {
+  align-content: space-between;
+}
+
+.template-card p {
+  color: #475467;
+  margin: 4px 0;
+}
+
+.public-preview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.public-preview span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 1100px) {
+  .metric-grid,
+  .template-grid,
+  .public-preview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .split-grid,
+  .tower-toolbar,
+  .coupon-test {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .metric-grid,
+  .metric-grid.compact,
+  .split-grid,
+  .form-grid,
+  .tower-toolbar,
+  .coupon-test,
+  .campaign-builder,
+  .template-grid,
+  .public-preview {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,272 @@
+.promotion-calendar-page {
+  gap: 18px;
+}
+
+.promotion-calendar-page .page-header p,
+.muted-text,
+.metric-card small,
+.table-wrap td small {
+  color: #667085;
+}
+
+.header-actions,
+.period-actions,
+.segmented-control,
+.preset-row,
+.row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) auto repeat(2, minmax(160px, 1fr)) auto;
+}
+
+.period-actions strong {
+  color: #101828;
+  min-width: 190px;
+  text-align: center;
+}
+
+.segmented-control {
+  background: #f2f4f7;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.segmented-control button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #475467;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 8px 12px;
+}
+
+.segmented-control button.active {
+  background: #ffffff;
+  color: #101828;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.metric-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.metric-card span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 24px;
+}
+
+.calendar-layout {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr);
+}
+
+.calendar-board {
+  min-width: 0;
+}
+
+.weekday-row,
+.day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.weekday-row span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 8px 8px;
+  text-transform: uppercase;
+}
+
+.day-grid {
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.day-cell {
+  background: #ffffff;
+  border: 0;
+  border-bottom: 1px solid #e4e7ec;
+  border-right: 1px solid #e4e7ec;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 118px;
+  padding: 10px;
+  text-align: left;
+}
+
+.day-cell:nth-child(7n) {
+  border-right: 0;
+}
+
+.day-cell.muted {
+  background: #f9fafb;
+  color: #98a2b3;
+}
+
+.day-cell.today {
+  box-shadow: inset 0 0 0 2px #175cd3;
+}
+
+.day-number {
+  color: #101828;
+  font-weight: 900;
+}
+
+.event-chip {
+  border: 1px solid #e4e7ec;
+  border-radius: 6px;
+  color: #344054;
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.event-chip.status-active,
+.status-badge.status-active {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+  color: #027a48;
+}
+
+.event-chip.status-scheduled,
+.status-badge.status-scheduled {
+  background: #eff8ff;
+  border-color: #b2ddff;
+  color: #175cd3;
+}
+
+.event-chip.status-draft,
+.status-badge.status-draft {
+  background: #f2f4f7;
+  border-color: #e4e7ec;
+  color: #475467;
+}
+
+.event-chip.status-paused,
+.status-badge.status-paused {
+  background: #fffaeb;
+  border-color: #fedf89;
+  color: #b54708;
+}
+
+.event-chip.status-expired,
+.event-chip.status-archived,
+.status-badge.status-expired,
+.status-badge.status-archived {
+  background: #fff1f3;
+  border-color: #fecdd6;
+  color: #b42318;
+}
+
+.planner-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.planner-panel .section-title,
+.planner-panel .preset-row,
+.planner-panel .full {
+  grid-column: 1 / -1;
+}
+
+.preset-row {
+  align-items: stretch;
+}
+
+.preset-row .ghost-button {
+  flex: 1 1 120px;
+}
+
+.status-badge {
+  border: 1px solid #e4e7ec;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  text-transform: capitalize;
+}
+
+.table-wrap td {
+  vertical-align: top;
+}
+
+.table-wrap td strong,
+.table-wrap td small {
+  display: block;
+}
+
+@media (max-width: 1180px) {
+  .calendar-toolbar,
+  .calendar-layout,
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-board,
+  .planner-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .calendar-toolbar,
+  .calendar-layout,
+  .metric-grid,
+  .planner-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .day-grid,
+  .weekday-row {
+    grid-template-columns: 1fr;
+  }
+
+  .weekday-row {
+    display: none;
+  }
+
+  .day-cell {
+    border-right: 0;
+    min-height: 92px;
+  }
+}

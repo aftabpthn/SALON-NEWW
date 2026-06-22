@@ -1,0 +1,160 @@
+<section class="page-stack client-return-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Client Return Tracker</h2>
+      <p>Offer ke baad client wapas aaya ya nahi, aur kitne din mein aaya.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/offer-roi-score">ROI Score</a>
+      <a class="ghost-button" routerLink="/discount-rules/branch-leaderboard">Branch Offers</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>From</span>
+      <input type="date" [(ngModel)]="filters.from" name="from" />
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" [(ngModel)]="filters.to" name="to" />
+    </label>
+    <label class="field">
+      <span>Return window</span>
+      <select [(ngModel)]="filters.returnWindowDays" name="returnWindowDays">
+        <option [ngValue]="7">7 days</option>
+        <option [ngValue]="30">30 days</option>
+        <option [ngValue]="60">60 days</option>
+        <option [ngValue]="90">90 days</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Status</span>
+      <select [(ngModel)]="filters.status" name="status">
+        <option *ngFor="let item of statuses" [value]="item.value">{{ item.label }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Offer type</span>
+      <select [(ngModel)]="filters.offerType" name="offerType">
+        <option *ngFor="let item of offerTypes" [value]="item.value">{{ item.label }}</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Apply' }}
+    </button>
+    <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!clients().length">Export CSV</button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Return rate</span>
+      <strong>{{ pct(summary()?.returnRatePercent) }}</strong>
+      <small>{{ summary()?.returnedCount || 0 }} of {{ summary()?.offerUses || 0 }} offer uses</small>
+    </article>
+    <article class="metric-card">
+      <span>Return revenue</span>
+      <strong>{{ formatMoney(summary()?.returnRevenuePaise) }}</strong>
+      <small>{{ pct(summary()?.returnRevenuePerDiscountPercent) }} vs discount spend</small>
+    </article>
+    <article class="metric-card">
+      <span>Avg days to return</span>
+      <strong>{{ summary()?.avgDaysToReturn || 0 }}</strong>
+      <small>{{ summary()?.returnedClients || 0 }} returned clients</small>
+    </article>
+    <article class="metric-card danger">
+      <span>At risk</span>
+      <strong>{{ summary()?.atRiskCount || 0 }}</strong>
+      <small>{{ summary()?.pendingCount || 0 }} still inside window</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Offer return leaders</h2>
+        <span class="muted-text">{{ offers().length }} offers</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let offer of topOffers()">
+          <div>
+            <strong>{{ offer.offerTitle }}</strong>
+            <small>{{ offer.returnedCount }}/{{ offer.offerUses }} returned | {{ offer.atRiskCount }} at risk</small>
+          </div>
+          <span>{{ pct(offer.returnRatePercent) }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !offers().length">No offer return cohorts yet.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>At-risk follow-up</h2>
+        <span class="muted-text">{{ atRiskClients().length }} clients</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of topAtRiskClients()">
+          <div>
+            <strong>{{ row.clientName || row.clientId }}</strong>
+            <small>{{ row.offerTitle }} | used {{ formatDate(row.usedAt) }}</small>
+          </div>
+          <span>{{ formatMoney(row.discountPaise) }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !atRiskClients().length">No at-risk return clients in this window.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Client return rows</h2>
+      <span class="muted-text">{{ clients().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Offer</th>
+            <th>Used</th>
+            <th>Discount</th>
+            <th>Status</th>
+            <th>Returned</th>
+            <th>Return revenue</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="8">Loading client returns...</td>
+          </tr>
+          <tr *ngIf="!loading() && !clients().length">
+            <td colspan="8">No client return data for this filter.</td>
+          </tr>
+          <tr *ngFor="let row of clients()">
+            <td>
+              <strong>{{ row.clientName || row.clientId }}</strong>
+              <small>{{ row.clientId || 'missing client id' }}</small>
+            </td>
+            <td>
+              <strong>{{ row.offerTitle }}</strong>
+              <small>{{ label(row.offerType) }}</small>
+            </td>
+            <td>{{ formatDate(row.usedAt) }}</td>
+            <td>{{ formatMoney(row.discountPaise) }}</td>
+            <td><span [class]="statusClass(row.status)">{{ label(row.status) }}</span></td>
+            <td>
+              <strong>{{ formatDate(row.returnAt) }}</strong>
+              <small *ngIf="row.daysToReturn !== null && row.daysToReturn !== undefined">{{ row.daysToReturn }} day(s)</small>
+            </td>
+            <td>{{ formatMoney(row.returnAmountPaise) }}</td>
+            <td>{{ row.recommendation }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

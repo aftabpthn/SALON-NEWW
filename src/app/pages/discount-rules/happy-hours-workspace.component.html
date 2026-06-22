@@ -1,0 +1,67 @@
+<section class="happy-hours-workspace">
+  <header class="workspace-hero">
+    <div>
+      <p class="eyebrow">Happy Hours Workspace</p>
+      <h1>Happy Hours</h1>
+      <span>Rules, coupons, campaigns, ROI, guardrails, booking visibility and intelligence in one control page.</span>
+    </div>
+    <div class="hero-actions">
+      <button type="button" class="ghost-button" (click)="loadMetrics()" [disabled]="loading()">{{ loading() ? 'Refreshing...' : 'Refresh KPI' }}</button>
+      <a class="primary-button" routerLink="/discount-rules/new">New Rule</a>
+    </div>
+  </header>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <div class="workspace-shell">
+    <aside class="category-rail" aria-label="Happy Hours modules">
+      <button *ngFor="let item of items" type="button" class="category-tile"
+        [class.active]="selected() === item.key"
+        [attr.data-state]="itemState(item)"
+        (click)="selected.set(item.key)">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value(metrics()) }}</strong>
+        <small>{{ item.note }}</small>
+      </button>
+    </aside>
+
+    <section class="workspace-detail" [ngSwitch]="selected()">
+      <header class="detail-head">
+        <div>
+          <span class="kicker">Selected KPI</span>
+          <h2>{{ selectedItem().label }}</h2>
+          <p>{{ selectedItem().source }}</p>
+        </div>
+        <span class="status-pill" [attr.data-state]="itemState(selectedItem())">{{ statusLabel(selectedItem()) }}</span>
+      </header>
+
+      <div class="detail-body">
+        <app-happy-hours-control-tower *ngSwitchCase="'control'"></app-happy-hours-control-tower>
+        <app-rule-list *ngSwitchCase="'rules'"></app-rule-list>
+        <app-promotion-calendar *ngSwitchCase="'calendar'"></app-promotion-calendar>
+        <app-coupon-engine *ngSwitchCase="'coupons'"></app-coupon-engine>
+        <app-happy-hours-client-segments *ngSwitchCase="'segments'"></app-happy-hours-client-segments>
+        <app-campaign-audience-builder *ngSwitchCase="'audience'"></app-campaign-audience-builder>
+        <app-happy-hours-staff-incentives *ngSwitchCase="'incentives'"></app-happy-hours-staff-incentives>
+        <app-offer-lifecycle *ngSwitchCase="'lifecycle'"></app-offer-lifecycle>
+        <app-offer-roi-score *ngSwitchCase="'roi'"></app-offer-roi-score>
+        <app-offer-health-score *ngSwitchCase="'health'"></app-offer-health-score>
+        <app-client-return-tracker *ngSwitchCase="'returns'"></app-client-return-tracker>
+        <app-branch-offer-leaderboard *ngSwitchCase="'leaderboard'"></app-branch-offer-leaderboard>
+        <app-happy-hours-fraud-guard *ngSwitchCase="'fraud'"></app-happy-hours-fraud-guard>
+        <app-rule-conflict-detector *ngSwitchCase="'conflicts'"></app-rule-conflict-detector>
+        <app-offer-auto-sunset *ngSwitchCase="'sunset'"></app-offer-auto-sunset>
+        <app-happy-hours-control-tower *ngSwitchCase="'public'"></app-happy-hours-control-tower>
+        <app-discount-audit-log *ngSwitchCase="'audit'"></app-discount-audit-log>
+        <app-discount-rule-approvals *ngSwitchCase="'approvals'"></app-discount-rule-approvals>
+        <app-cross-branch-analytics *ngSwitchCase="'analytics'"></app-cross-branch-analytics>
+        <app-discount-simulation-sandbox *ngSwitchCase="'simulations'"></app-discount-simulation-sandbox>
+        <app-discount-anomaly-inbox *ngSwitchCase="'anomalies'"></app-discount-anomaly-inbox>
+        <app-white-label-rules *ngSwitchCase="'labels'"></app-white-label-rules>
+        <app-pricing-incrementality *ngSwitchCase="'incrementality'"></app-pricing-incrementality>
+        <app-market-intelligence *ngSwitchCase="'market'"></app-market-intelligence>
+        <app-level6-readiness *ngSwitchCase="'readiness'"></app-level6-readiness>
+      </div>
+    </section>
+  </div>
+</section>

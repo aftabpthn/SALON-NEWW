@@ -1,0 +1,203 @@
+<section class="page-stack simulation-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Level 6 / F5</span>
+      <h2>Digital Twin Simulation Sandbox</h2>
+    </div>
+    <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel">
+    <div class="simulation-actions">
+      <label class="field">
+        <span>Simulation name</span>
+        <input [(ngModel)]="simulationName" name="simulationName" />
+      </label>
+      <button class="primary-button" type="button" (click)="run()" [disabled]="loading()">
+        {{ loading() ? 'Running...' : 'Run simulation' }}
+      </button>
+      <button class="ghost-button" type="button" (click)="save()" [disabled]="saving() || !result()">
+        {{ saving() ? 'Saving...' : 'Save simulation' }}
+      </button>
+      <button class="ghost-button" type="button" (click)="runDigitalTwin()" [disabled]="runningTwin()">
+        {{ runningTwin() ? 'Checking...' : 'Run F5 twin' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="panel twin-panel" *ngIf="digitalTwin() as twin">
+    <div class="section-title">
+      <div>
+        <h2>F5 digital twin</h2>
+        <p class="muted-text" *ngIf="twin.blocked">{{ twin.summary?.['nextAction'] || twin.blockReason }}</p>
+        <p class="muted-text" *ngIf="!twin.blocked">
+          {{ twin.dataSource?.['sampleCount'] || 0 }} historical samples | {{ twin.dataSource?.['scope'] }} scope
+        </p>
+      </div>
+      <span class="state-pill" [class.ready]="!twin.blocked" [class.blocked]="twin.blocked">
+        {{ twin.blocked ? (twin.summary?.['status'] || 'blocked') : 'ready' }}
+      </span>
+    </div>
+
+    <div class="twin-blocked" *ngIf="twin.blocked">
+      <strong>{{ twin.summary?.['evidence'] || twin.blockReason }}</strong>
+      <p *ngFor="let note of twin.notes">{{ note }}</p>
+      <a class="ghost-button mini" routerLink="/pricing/level6-readiness">Open readiness center</a>
+    </div>
+
+    <ng-container *ngIf="!twin.blocked">
+      <div class="twin-recommendation" *ngIf="twin.recommendation as recommendation">
+        <span>Recommended draft discount</span>
+        <strong>{{ recommendation['discountPct'] }}%</strong>
+        <p>
+          Expected revenue {{ formatMoney(recommendation['expectedRevenuePaise']) }},
+          profit {{ formatMoney(recommendation['expectedGrossProfitPaise']) }},
+          confidence {{ formatPercent(recommendation['confidence']) }}.
+        </p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Discount</th>
+              <th>Bookings</th>
+              <th>Revenue</th>
+              <th>Profit</th>
+              <th>Confidence</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let candidate of twin.candidates" [class.risk-row]="candidate['blocked']">
+              <td>{{ candidate['discountPct'] }}%</td>
+              <td>{{ candidate['projectedBookings'] }}</td>
+              <td>{{ formatMoney(candidate['expectedRevenuePaise']) }}</td>
+              <td>{{ formatMoney(candidate['expectedGrossProfitPaise']) }}</td>
+              <td>{{ formatPercent(candidate['confidence']) }}</td>
+              <td>{{ candidate['risk'] }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted-text" *ngFor="let note of twin.notes">{{ note }}</p>
+    </ng-container>
+  </section>
+
+  <section class="split-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Sample cart</h2>
+        <button class="ghost-button mini" type="button" (click)="addItem()">Add row</button>
+      </div>
+      <div class="cart-row header">
+        <span>Service</span>
+        <span>Category</span>
+        <span>Price paise</span>
+        <span>Cost paise</span>
+        <span>Qty</span>
+        <span></span>
+      </div>
+      <div class="cart-row" *ngFor="let item of cartItems; let i = index">
+        <input [(ngModel)]="item.name" [name]="'name' + i" />
+        <input [(ngModel)]="item.categoryId" [name]="'category' + i" />
+        <input type="number" [(ngModel)]="item.pricePaise" [name]="'price' + i" />
+        <input type="number" [(ngModel)]="item.costPaise" [name]="'cost' + i" />
+        <input type="number" [(ngModel)]="item.qty" [name]="'qty' + i" min="1" />
+        <button class="ghost-button mini" type="button" (click)="removeItem(i)" [disabled]="cartItems.length === 1">Remove</button>
+      </div>
+      <p class="muted-text">Gross: {{ formatMoney(grossPaise) }}</p>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Context</h2>
+      </div>
+      <div class="context-grid">
+        <label class="field"><span>Day of week</span><input type="number" [(ngModel)]="context.dayOfWeek" name="dayOfWeek" /></label>
+        <label class="field"><span>Hour slot</span><input type="number" [(ngModel)]="context.hourSlot" name="hourSlot" /></label>
+        <label class="field"><span>Occupancy %</span><input type="number" [(ngModel)]="context.occupancyRate" name="occupancyRate" /></label>
+        <label class="field"><span>Client segment</span><input [(ngModel)]="context.clientSegment" name="clientSegment" /></label>
+        <label class="field"><span>Weather</span><input [(ngModel)]="context.weatherCondition" name="weatherCondition" /></label>
+        <label class="field"><span>Group size</span><input type="number" [(ngModel)]="context.groupSize" name="groupSize" /></label>
+        <label class="field"><span>Min margin %</span><input type="number" [(ngModel)]="context.minMarginPercent" name="minMarginPercent" /></label>
+        <label class="field"><span>Date</span><input type="date" [(ngModel)]="context.currentDate" name="currentDate" /></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="metric-grid" *ngIf="result() as current">
+    <article class="metric-card">
+      <span>Gross</span>
+      <strong>{{ formatMoney(current.grossPaise) }}</strong>
+    </article>
+    <article class="metric-card">
+      <span>Projected discount</span>
+      <strong>{{ formatMoney(current.projectedDiscountPaise) }}</strong>
+      <small>Attempted {{ formatMoney(current.attemptedDiscountPaise) }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Payable</span>
+      <strong>{{ formatMoney(current.payablePaise) }}</strong>
+    </article>
+    <article class="metric-card danger">
+      <span>Margin impact</span>
+      <strong>{{ formatMoney(current.marginImpact.totalImpactPaise) }}</strong>
+      <small *ngIf="current.blocked">{{ current.blockReason }}</small>
+    </article>
+  </section>
+
+  <section class="panel" *ngIf="result() as current">
+    <div class="section-title">
+      <h2>Result comparison</h2>
+      <span class="muted-text">{{ current.matchedRules.length || 0 }} matched rules</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Original discount</th>
+            <th>Projected discount</th>
+            <th>Sell price</th>
+            <th>Margin guard</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!current.breakdown?.length">
+            <td colspan="5">No rule would apply for this sample cart/context.</td>
+          </tr>
+          <tr *ngFor="let item of current.breakdown">
+            <td>{{ item.label }} #{{ item.ruleId }}</td>
+            <td>{{ formatMoney(item.originalDiscountPaise) }}</td>
+            <td>{{ formatMoney(item.discountPaise) }}</td>
+            <td>{{ formatMoney(item.sellPricePaise) }}</td>
+            <td>{{ item.guardrails?.margin?.reason || '-' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Saved simulations</h2>
+      <span class="muted-text">{{ saved().length }} saved</span>
+    </div>
+    <div class="saved-list">
+      <article *ngFor="let row of saved()">
+        <div>
+          <strong>{{ row.name }}</strong>
+          <small>{{ formatMoney(row.result?.projectedDiscountPaise) }} discount | {{ row.id }}</small>
+        </div>
+        <div class="row-actions">
+          <button class="ghost-button mini" type="button" (click)="loadSimulation(row)">Load</button>
+          <button class="ghost-button mini" type="button" (click)="deleteSimulation(row)">Delete</button>
+        </div>
+      </article>
+      <p class="muted-text" *ngIf="!saved().length">No saved simulations yet.</p>
+    </div>
+  </section>
+</section>

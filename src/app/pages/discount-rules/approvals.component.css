@@ -1,0 +1,72 @@
+.discount-approvals-page {
+  gap: 18px;
+}
+
+.discount-approvals-page .page-header p,
+.locked-panel p,
+.table-wrap td small {
+  color: #667085;
+  margin: 6px 0 0;
+}
+
+.success-text {
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+  border-radius: 8px;
+  color: #067647;
+  font-weight: 700;
+  padding: 10px 12px;
+}
+
+.locked-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.locked-panel h3 {
+  margin: 0;
+}
+
+.table-wrap td small {
+  display: block;
+}
+
+.role-pill,
+.risk-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+
+.role-pill {
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.risk-pill {
+  background: #fff1f3;
+  color: #c01048;
+}
+
+.decision-note {
+  min-width: 190px;
+}
+
+.decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.danger {
+  color: #b42318;
+}
+
+@media (max-width: 760px) {
+  .decision-note {
+    min-width: 140px;
+  }
+}

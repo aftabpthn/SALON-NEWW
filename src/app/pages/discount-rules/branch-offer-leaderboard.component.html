@@ -1,0 +1,158 @@
+<section class="page-stack branch-leaderboard-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Branch Offer Leaderboard</h2>
+      <p>Rank branches by offer revenue, margin, repeat pull, and guardrail discipline.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control Tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/cross-branch-analytics">Branch Analytics</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>From</span>
+      <input type="date" [(ngModel)]="filters.from" name="from" />
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" [(ngModel)]="filters.to" name="to" />
+    </label>
+    <label class="field">
+      <span>Region</span>
+      <select [(ngModel)]="filters.regionId" name="regionId">
+        <option value="">All regions</option>
+        <option *ngFor="let region of regionOptions()" [value]="region.id">{{ region.name }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Sort</span>
+      <select [(ngModel)]="filters.sort" name="sort">
+        <option *ngFor="let option of sortOptions" [value]="option.value">{{ option.label }}</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Apply' }}
+    </button>
+    <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!rows().length">Export CSV</button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Average score</span>
+      <strong>{{ summary()?.averageScore || 0 }}</strong>
+      <small>{{ summary()?.withData || 0 }} branches with data</small>
+    </article>
+    <article class="metric-card">
+      <span>Net revenue</span>
+      <strong>{{ formatMoney(summary()?.netRevenuePaise) }}</strong>
+      <small>{{ summary()?.applications || 0 }} offer applications</small>
+    </article>
+    <article class="metric-card">
+      <span>Return on discount</span>
+      <strong>{{ pct(summary()?.returnOnDiscountPercent) }}</strong>
+      <small>{{ formatMoney(summary()?.totalDiscountPaise) }} discount spend</small>
+    </article>
+    <article class="metric-card danger">
+      <span>Guardrail hits</span>
+      <strong>{{ summary()?.guardrailHits || 0 }}</strong>
+      <small>Budget and margin pressure</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Top branches</h2>
+        <span class="muted-text">{{ topBranches().length }} winners</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of topBranches()">
+          <div>
+            <strong>#{{ row.rank }} {{ row.branchName }}</strong>
+            <small>{{ row.topOffer.title || 'No top offer' }}</small>
+          </div>
+          <span [class]="'score-pill ' + scoreClass(row.leaderboardGrade)">{{ row.leaderboardScore }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !topBranches().length">No winning branch data yet.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Watchlist</h2>
+        <span class="muted-text">{{ watchlist().length }} branches</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of watchlist()">
+          <div>
+            <strong>{{ row.branchName }}</strong>
+            <small>{{ row.recommendation }}</small>
+          </div>
+          <span>{{ gradeLabel(row.leaderboardGrade) }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !watchlist().length">No weak ROI branches in this window.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Leaderboard</h2>
+      <span class="muted-text">{{ rows().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Branch</th>
+            <th>Score</th>
+            <th>Net revenue</th>
+            <th>ROD</th>
+            <th>Margin</th>
+            <th>Repeat</th>
+            <th>Apps</th>
+            <th>Active offers</th>
+            <th>Guardrails</th>
+            <th>Top offer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="11">Loading leaderboard...</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="11">No branch offer leaderboard data for this filter.</td>
+          </tr>
+          <tr *ngFor="let row of rows()">
+            <td class="rank-cell">#{{ row.rank }}</td>
+            <td>
+              <strong>{{ row.branchName }}</strong>
+              <small>{{ row.regionName }} | {{ row.branchId }}</small>
+            </td>
+            <td>
+              <span [class]="'score-pill ' + scoreClass(row.leaderboardGrade)">{{ row.leaderboardScore }}</span>
+              <small>{{ gradeLabel(row.leaderboardGrade) }}</small>
+            </td>
+            <td>{{ formatMoney(row.netRevenuePaise) }}</td>
+            <td>{{ pct(row.returnOnDiscountPercent) }}</td>
+            <td>{{ pct(row.marginPercent) }}</td>
+            <td>{{ pct(row.repeatRatePercent) }}</td>
+            <td>{{ row.applications }}</td>
+            <td>{{ row.activeOffers }}</td>
+            <td>{{ row.guardrailHits }}</td>
+            <td>
+              <strong>{{ row.topOffer.title || 'No applied offer yet' }}</strong>
+              <small>{{ row.recommendation }}</small>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

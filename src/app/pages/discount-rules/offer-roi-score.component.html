@@ -1,0 +1,164 @@
+<section class="page-stack roi-score-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Offer ROI Score</h2>
+      <p>Har discount offer ka revenue, discount, margin, repeat, campaign link aur guardrail impact ek score me.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/control-tower">Control tower</a>
+      <a class="ghost-button" routerLink="/discount-rules/offer-lifecycle">Lifecycle</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>From</span>
+      <input type="date" [(ngModel)]="filters.from" name="from" />
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" [(ngModel)]="filters.to" name="to" />
+    </label>
+    <label class="field">
+      <span>Grade</span>
+      <select [(ngModel)]="filters.grade" name="grade">
+        <option *ngFor="let grade of grades" [value]="grade.value">{{ grade.label }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Type</span>
+      <select [(ngModel)]="filters.offerType" name="offerType">
+        <option *ngFor="let type of offerTypes" [value]="type.value">{{ type.label }}</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Refresh' }}
+    </button>
+    <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!offers().length">CSV</button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Offers tracked</span>
+      <strong>{{ summary()?.offers || 0 }}</strong>
+      <small>{{ summary()?.applications || 0 }} applications</small>
+    </article>
+    <article class="metric-card">
+      <span>Net revenue</span>
+      <strong>{{ formatMoney(summary()?.netRevenuePaise) }}</strong>
+      <small>{{ pct(summary()?.returnOnDiscountPercent) }} return on discount</small>
+    </article>
+    <article class="metric-card">
+      <span>Total discount</span>
+      <strong>{{ formatMoney(summary()?.totalDiscountPaise) }}</strong>
+      <small>{{ pct(summary()?.discountRatePercent) }} discount rate</small>
+    </article>
+    <article class="metric-card" [ngClass]="scoreClass((summary()?.averageScoredOfferScore || 0) >= 80 ? 'excellent' : (summary()?.averageScoredOfferScore || 0) >= 60 ? 'good' : (summary()?.averageScoredOfferScore || 0) >= 40 ? 'watch' : 'poor')">
+      <span>Avg scored offer</span>
+      <strong>{{ summary()?.averageScoredOfferScore || 0 }}</strong>
+      <small>{{ summary()?.campaignDrafts || 0 }} campaign drafts linked</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <article class="panel">
+      <div class="section-title">
+        <h2>Top ROI offers</h2>
+        <span class="muted-text">{{ topOffers().length }} rows</span>
+      </div>
+      <div class="offer-list">
+        <article *ngFor="let offer of topOffers()">
+          <div>
+            <strong>{{ offer.title }}</strong>
+            <small>{{ offer.offerType }} · {{ offer.applications }} apps · {{ formatMoney(offer.netRevenuePaise) }}</small>
+          </div>
+          <span class="score-pill" [ngClass]="scoreClass(offer.roiScore.grade)">{{ offer.roiScore.score }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!topOffers().length">No scored winners yet.</p>
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="section-title">
+        <h2>Watchlist</h2>
+        <span class="muted-text">{{ watchlist().length }} rows</span>
+      </div>
+      <div class="offer-list">
+        <article *ngFor="let offer of watchlist()">
+          <div>
+            <strong>{{ offer.title }}</strong>
+            <small>{{ gradeLabel(offer.roiScore.grade) }} · {{ offer.roiScore.recommendation }}</small>
+          </div>
+          <span class="score-pill" [ngClass]="scoreClass(offer.roiScore.grade)">{{ offer.roiScore.score }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!watchlist().length">No weak offers flagged.</p>
+      </div>
+    </article>
+
+    <article class="panel">
+      <div class="section-title">
+        <h2>Needs data</h2>
+        <span class="muted-text">{{ noData().length }} rows</span>
+      </div>
+      <div class="offer-list">
+        <article *ngFor="let offer of noData()">
+          <div>
+            <strong>{{ offer.title }}</strong>
+            <small>{{ offer.offerType }} · no applied outcome yet</small>
+          </div>
+          <span class="score-pill score-no-data">0</span>
+        </article>
+        <p class="muted-text" *ngIf="!noData().length">All offers have outcome signal.</p>
+      </div>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Offer score table</h2>
+      <span class="muted-text">{{ offers().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Offer</th>
+            <th>Score</th>
+            <th>Revenue</th>
+            <th>Discount</th>
+            <th>Return</th>
+            <th>Margin</th>
+            <th>Repeat</th>
+            <th>Guardrails</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="!offers().length">
+            <td colspan="9">No offer ROI rows yet.</td>
+          </tr>
+          <tr *ngFor="let offer of offers()">
+            <td>
+              <strong>{{ offer.title }}</strong>
+              <small>{{ offer.offerType }} · {{ offer.lifecycleStage || 'no lifecycle' }} · {{ offer.campaignDrafts || 0 }} campaigns</small>
+            </td>
+            <td>
+              <span class="score-pill" [ngClass]="scoreClass(offer.roiScore.grade)">{{ offer.roiScore.score }}</span>
+              <small>{{ gradeLabel(offer.roiScore.grade) }}</small>
+            </td>
+            <td>{{ formatMoney(offer.netRevenuePaise) }}</td>
+            <td>{{ formatMoney(offer.totalDiscountPaise) }}</td>
+            <td>{{ pct(offer.returnOnDiscountPercent) }}</td>
+            <td>{{ pct(offer.marginPercent) }}</td>
+            <td>{{ pct(offer.repeatRatePercent) }}</td>
+            <td>{{ offer.budgetBlockedCount || 0 }} budget / {{ offer.marginBlockedCount || 0 }} margin</td>
+            <td>{{ offer.roiScore.recommendation }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

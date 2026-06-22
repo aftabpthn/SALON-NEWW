@@ -1,0 +1,163 @@
+<section class="page-stack offer-health-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Advanced</span>
+      <h2>Offer Health Score</h2>
+      <p>ROI, margin, client return, guardrails aur expiry signals ka single health view.</p>
+    </div>
+    <div class="header-actions">
+      <a class="ghost-button" routerLink="/discount-rules/offer-roi-score">ROI Score</a>
+      <a class="ghost-button" routerLink="/discount-rules/client-return-tracker">Client Returns</a>
+    </div>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>From</span>
+      <input type="date" [(ngModel)]="filters.from" name="from" />
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" [(ngModel)]="filters.to" name="to" />
+    </label>
+    <label class="field">
+      <span>Health</span>
+      <select [(ngModel)]="filters.healthStatus" name="healthStatus">
+        <option *ngFor="let item of statuses" [value]="item.value">{{ item.label }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Type</span>
+      <select [(ngModel)]="filters.offerType" name="offerType">
+        <option *ngFor="let item of offerTypes" [value]="item.value">{{ item.label }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Return window</span>
+      <select [(ngModel)]="filters.returnWindowDays" name="returnWindowDays">
+        <option [ngValue]="7">7 days</option>
+        <option [ngValue]="30">30 days</option>
+        <option [ngValue]="60">60 days</option>
+        <option [ngValue]="90">90 days</option>
+      </select>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Apply' }}
+    </button>
+    <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!offers().length">Export CSV</button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Average health</span>
+      <strong>{{ summary()?.averageHealthScore || 0 }}</strong>
+      <small>{{ summary()?.offers || 0 }} offers tracked</small>
+    </article>
+    <article class="metric-card">
+      <span>Healthy</span>
+      <strong>{{ summary()?.byStatus?.healthy || 0 }}</strong>
+      <small>{{ summary()?.applications || 0 }} applications</small>
+    </article>
+    <article class="metric-card danger">
+      <span>At risk</span>
+      <strong>{{ summary()?.byStatus?.at_risk || 0 }}</strong>
+      <small>{{ summary()?.byStatus?.monitor || 0 }} monitor</small>
+    </article>
+    <article class="metric-card">
+      <span>Net revenue</span>
+      <strong>{{ formatMoney(summary()?.netRevenuePaise) }}</strong>
+      <small>{{ pct(summary()?.marginPercent) }} margin</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Healthy offers</h2>
+        <span class="muted-text">{{ healthy().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of healthy()">
+          <div>
+            <strong>{{ row.title }}</strong>
+            <small>{{ formatMoney(row.netRevenuePaise) }} | {{ pct(row.returnRatePercent) }} return</small>
+          </div>
+          <span [class]="healthClass(row.healthStatus)">{{ row.healthScore }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !healthy().length">No healthy offers yet.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Watchlist</h2>
+        <span class="muted-text">{{ watchlist().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of watchlist()">
+          <div>
+            <strong>{{ row.title }}</strong>
+            <small>{{ row.recommendation }}</small>
+          </div>
+          <span [class]="healthClass(row.healthStatus)">{{ row.healthScore }}</span>
+        </article>
+        <p class="muted-text" *ngIf="!loading() && !watchlist().length">No watchlist rows.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Offer health table</h2>
+      <span class="muted-text">{{ offers().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Offer</th>
+            <th>Health</th>
+            <th>Revenue</th>
+            <th>ROD</th>
+            <th>Margin</th>
+            <th>Return</th>
+            <th>Guardrails</th>
+            <th>Signals</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="loading()">
+            <td colspan="9">Loading offer health...</td>
+          </tr>
+          <tr *ngIf="!loading() && !offers().length">
+            <td colspan="9">No offer health rows for this filter.</td>
+          </tr>
+          <tr *ngFor="let row of offers()">
+            <td>
+              <strong>{{ row.title }}</strong>
+              <small>{{ label(row.offerType) }} | {{ row.lifecycleStage || 'no lifecycle' }} | {{ row.status || 'unknown' }}</small>
+            </td>
+            <td>
+              <span [class]="healthClass(row.healthStatus)">{{ row.healthScore }}</span>
+              <small>{{ label(row.healthStatus) }}</small>
+            </td>
+            <td>{{ formatMoney(row.netRevenuePaise) }}</td>
+            <td>{{ pct(row.returnOnDiscountPercent) }}</td>
+            <td>{{ pct(row.marginPercent) }}</td>
+            <td>{{ pct(row.returnRatePercent) }}</td>
+            <td>{{ row.budgetBlockedCount || 0 }} budget / {{ row.marginBlockedCount || 0 }} margin</td>
+            <td>
+              <div class="component-bar"><span [style.width]="componentWidth(row.components.roi)"></span></div>
+              <small>ROI {{ row.components.roi || 0 }} | Ret {{ row.components.retention || 0 }} | Fresh {{ row.components.freshness || 0 }}</small>
+              <small *ngIf="row.autoSunsetAction">{{ label(row.autoSunsetAction) }}</small>
+            </td>
+            <td>{{ row.recommendation }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
