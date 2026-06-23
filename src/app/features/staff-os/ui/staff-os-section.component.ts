@@ -45,7 +45,11 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink],
   template: `
-    <section class="staff-os" [class.staff-list-mode]="section === 'staff-list' || section === 'staff-profile'">
+    <section
+      class="staff-os"
+      [class.staff-list-mode]="section === 'staff-list' || section === 'staff-profile'"
+      [class.staff-attendance-mode]="section === 'attendance-dashboard'"
+    >
       <header class="topbar">
         <div>
           <p class="eyebrow">Staff Operating System</p>
@@ -1620,24 +1624,46 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
         </article>
       </section>
 
-      <section class="panel" *ngIf="section === 'attendance-dashboard'">
-        <div class="panel-heading">
-          <h2>Live Attendance Evidence</h2>
+      <section class="panel attendance-register-panel" *ngIf="section === 'attendance-dashboard'">
+        <div class="panel-heading attendance-register-heading">
+          <div>
+            <p class="eyebrow">Attendance register</p>
+            <h2>Live Attendance Evidence</h2>
+          </div>
           <span>{{ attendanceRows().length }} attendance rows</span>
         </div>
-        <div class="table compact evidence-table">
-          <div class="row header"><span>Staff</span><span>Source</span><span>Clock</span><span>Status</span></div>
-          <div class="row" *ngFor="let row of attendanceRows()">
-            <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['businessDate'] || row['business_date'] }}</small></span>
-            <span>{{ row['source'] || 'manual' }}</span>
-            <span>{{ timeOnly(row['clockInAt'] || row['clock_in_at']) }} - {{ timeOnly(row['clockOutAt'] || row['clock_out_at']) || 'open' }}</span>
-            <span class="badge">{{ row['status'] }}</span>
-          </div>
+        <div class="attendance-register-scroll">
+          <table class="attendance-register-table">
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Business date</th>
+                <th>Source</th>
+                <th>Clock in</th>
+                <th>Clock out</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of attendanceRows()">
+                <td><strong>{{ displayStaffName(row) }}</strong></td>
+                <td>{{ row['businessDate'] || row['business_date'] }}</td>
+                <td>{{ row['source'] || 'manual' }}</td>
+                <td>{{ timeOnly(row['clockInAt'] || row['clock_in_at']) || '-' }}</td>
+                <td>{{ timeOnly(row['clockOutAt'] || row['clock_out_at']) || 'open' }}</td>
+                <td><span class="badge">{{ row['status'] }}</span></td>
+              </tr>
+            </tbody>
+          </table>
           <div *ngIf="!attendanceRows().length && !store.loading()" class="empty action-empty">
             <strong>No attendance events for selected date.</strong>
             <span>Use physical entry, camera punch or biometric queue to create live attendance.</span>
             <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Attendance master</a>
           </div>
+        </div>
+        <div class="staff-register-footer">
+          <span>{{ attendanceRows().length ? 1 : 0 }} to {{ attendanceRows().length }} of {{ attendanceRows().length }}</span>
+          <span>Page 1 of 1</span>
         </div>
       </section>
 
@@ -2042,6 +2068,41 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .success { color: #0f766e; border-color: #b6d8cf; background: #f0fbf7; }
     .attendance-command .panel-heading { align-items: end; }
     .attendance-command .panel-heading span { color: #60766d; display: block; margin-top: 4px; }
+    .staff-attendance-mode { gap: 10px; }
+    .staff-attendance-mode .topbar,
+    .staff-attendance-mode .staff-shell-nav,
+    .staff-attendance-mode .staff-control-room,
+    .staff-attendance-mode .metrics,
+    .staff-attendance-mode .attendance-command,
+    .staff-attendance-mode .attendance-workspace .panel,
+    .staff-attendance-mode .attendance-register-panel { border-radius: 0; box-shadow: none; }
+    .staff-attendance-mode .topbar { background: #fff; border: 1px solid #d8e1ea; padding: 13px 16px; }
+    .staff-attendance-mode .refresh,
+    .staff-attendance-mode .primary,
+    .staff-attendance-mode .row-action { border-radius: 3px; min-height: 32px; padding: 7px 11px; }
+    .staff-attendance-mode .primary { background: #0b72b5; border-color: #0b72b5; }
+    .staff-attendance-mode .staff-shell-nav { background: #fff; border-color: #d8e1ea; padding: 7px; }
+    .staff-attendance-mode .staff-shell-nav a { border-radius: 3px; min-height: 44px; }
+    .staff-attendance-mode .staff-control-room { border-color: #d8e1ea; padding: 12px 16px; }
+    .staff-attendance-mode .control-card { border-radius: 3px; min-height: 76px; padding: 10px 12px; }
+    .staff-attendance-mode .metrics { gap: 0; border: 1px solid #d8e1ea; background: #fff; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .staff-attendance-mode .metric { border: 0; border-right: 1px solid #e5edf4; border-radius: 0; min-height: 62px; padding: 10px 14px; }
+    .staff-attendance-mode .metric:last-child { border-right: 0; }
+    .staff-attendance-mode .attendance-command { border-color: #d8e1ea; padding: 0; overflow: hidden; }
+    .staff-attendance-mode .attendance-command .panel-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
+    .staff-attendance-mode .attendance-stats { gap: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .staff-attendance-mode .attendance-stats article { border: 0; border-right: 1px solid #e5edf4; border-bottom: 1px solid #e5edf4; border-radius: 0; min-height: 64px; padding: 10px 16px; }
+    .staff-attendance-mode .attendance-stats article:nth-child(4n) { border-right: 0; }
+    .staff-attendance-mode .attendance-workspace { gap: 10px; }
+    .staff-attendance-mode .attendance-workspace .panel { border-color: #d8e1ea; padding: 13px; }
+    .staff-attendance-mode .attendance-register-panel { border-color: #d8e1ea; overflow: hidden; padding: 0; }
+    .attendance-register-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
+    .attendance-register-scroll { max-width: 100%; overflow: auto; }
+    .attendance-register-table { border-collapse: collapse; min-width: 960px; width: 100%; }
+    .attendance-register-table th,
+    .attendance-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
+    .attendance-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
+    .attendance-register-table tbody tr:hover { background: #eef7fc; }
     .attendance-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .attendance-controls input { width: 170px; min-height: 38px; }
     .attendance-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
@@ -2197,7 +2258,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .live-panel-links a { border: 1px solid #cbd8d2; border-radius: 4px; color: #0f6eb3; font-size: 12px; font-weight: 900; min-height: 32px; padding: 8px 9px; text-align: center; text-decoration: none; }
     .drawer-action-buttons { display: grid; gap: 10px; }
     .drawer-action-buttons .refresh, .drawer-action-buttons .primary { width: 100%; }
-    @media (max-width: 900px) { .metrics, .task-grid, .split, .attendance-stats, .workspace-kpi-grid { grid-template-columns: 1fr 1fr; } .staff-workspace-shell, .commission-setup, .attendance-workspace, .attendance-wide { grid-template-columns: 1fr; } .commission-actions { justify-content: flex-start; } .staff-category-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .attendance-workspace .device-form, .attendance-workspace .gateway-form, .attendance-workspace .mapping-form, .attendance-workspace .consent-form, .attendance-workspace .payroll-form, .attendance-workspace .camera-form, .attendance-workspace .camera-form.staff-form, .workspace-manual-form.staff-form { grid-template-columns: 1fr; } .attendance-workspace .camera-form .drawer-actions { grid-template-columns: 1fr; } .login-provision { grid-column: 1 / -1; } .drawer-actions { position: static; grid-column: 1 / -1; grid-row: auto; border-left: 0; border-top: 1px solid #edf2ef; padding: 10px 0 0; } .live-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .live-panel-title, .catalog-mini-grid, .live-panel-links, .drawer-action-buttons { grid-column: 1 / -1; } }
+    @media (max-width: 900px) { .metrics, .task-grid, .split, .attendance-stats, .workspace-kpi-grid { grid-template-columns: 1fr 1fr; } .staff-attendance-mode .attendance-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-attendance-mode .attendance-stats article:nth-child(2n) { border-right: 0; } .staff-workspace-shell, .commission-setup, .attendance-workspace, .attendance-wide { grid-template-columns: 1fr; } .commission-actions { justify-content: flex-start; } .staff-category-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .attendance-workspace .device-form, .attendance-workspace .gateway-form, .attendance-workspace .mapping-form, .attendance-workspace .consent-form, .attendance-workspace .payroll-form, .attendance-workspace .camera-form, .attendance-workspace .camera-form.staff-form, .workspace-manual-form.staff-form { grid-template-columns: 1fr; } .attendance-workspace .camera-form .drawer-actions { grid-template-columns: 1fr; } .login-provision { grid-column: 1 / -1; } .drawer-actions { position: static; grid-column: 1 / -1; grid-row: auto; border-left: 0; border-top: 1px solid #edf2ef; padding: 10px 0 0; } .live-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .live-panel-title, .catalog-mini-grid, .live-panel-links, .drawer-action-buttons { grid-column: 1 / -1; } }
     @media (max-width: 640px) {
       .staff-os { gap: 12px; padding: 0; }
       .drawer-shell { padding: 0; }
@@ -2215,6 +2276,8 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
       .control-card { min-height: 86px; padding: 11px; }
       .control-card strong { font-size: 22px; }
       .metrics, .task-grid, .split, .attendance-stats, .staff-category-rail, .workspace-kpi-grid, .attendance-workspace, .attendance-wide, .camera-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: 1fr; }
+      .staff-attendance-mode .attendance-stats { grid-template-columns: 1fr; }
+      .staff-attendance-mode .attendance-stats article { border-right: 0; }
       .metrics { gap: 9px; }
       .metric, .panel, .state { border-radius: 8px; }
       .panel { padding: 13px; }
