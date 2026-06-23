@@ -7,6 +7,10 @@ import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
 
+type TenantFilter = 'all' | 'active' | 'trial' | 'suspended' | 'risk' | 'paymentDue';
+type AdminFormTab = 'subscription' | 'limits' | 'security' | 'sso' | 'exports' | 'features' | 'impersonation' | 'plans';
+type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audit' | 'support' | 'impersonation';
+
 @Component({
   selector: 'app-super-admin',
   standalone: true,
@@ -33,6 +37,62 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <aura-kpi-card tone="amber" target="/kpi-details/super-admin/trials"><span>Trials</span><strong>{{ overview.metrics.trialSalons }}</strong><small>Trial system</small></aura-kpi-card>
           <aura-kpi-card tone="violet" target="/kpi-details/super-admin/health"><span>Health</span><strong>{{ overview.metrics.averageHealth | number: '1.0-1' }}</strong><small>Average score</small></aura-kpi-card>
         </div>
+
+        <section class="super-admin-command" *ngIf="commandMetrics(overview) as command">
+          <div class="command-heading">
+            <div>
+              <span class="eyebrow">Executive command center</span>
+              <h2>Revenue, tenant risk and platform control</h2>
+            </div>
+            <div class="command-live">
+              <span class="badge">{{ filteredTenants(overview.tenants).length }} visible</span>
+              <span class="badge">{{ selectedTenantIds().length }} selected</span>
+            </div>
+          </div>
+          <div class="command-kpi-grid">
+            <article class="command-kpi accent">
+              <span>MRR</span>
+              <strong>{{ command.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <small>{{ command.activeSalons }} active salons</small>
+            </article>
+            <article class="command-kpi danger">
+              <span>Churn risk</span>
+              <strong>{{ command.churnRisk }}</strong>
+              <small>{{ command.mrrAtRisk | currency: 'INR':'symbol':'1.0-0' }} MRR at risk</small>
+            </article>
+            <article class="command-kpi warning">
+              <span>Unpaid amount</span>
+              <strong>{{ command.unpaid | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <small>{{ command.paymentDue }} payment due</small>
+            </article>
+            <article class="command-kpi success">
+              <span>Trials expiring</span>
+              <strong>{{ command.trialsExpiring }}</strong>
+              <small>{{ command.trials }} total trials</small>
+            </article>
+            <article class="command-kpi neutral">
+              <span>Health score</span>
+              <strong>{{ command.health | number: '1.0-1' }}</strong>
+              <small>{{ command.highRisk }} high-risk tenants</small>
+            </article>
+            <article class="command-kpi security">
+              <span>Security alerts</span>
+              <strong>{{ command.securityAlerts }}</strong>
+              <small>{{ command.securityGaps }} setup gaps</small>
+            </article>
+          </div>
+        </section>
+
+        <section class="ops-intel-grid">
+          <article class="ops-intel-card" *ngFor="let item of operationalIntelligence(overview)">
+            <div>
+              <span class="eyebrow">{{ item.kind }}</span>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.detail }}</small>
+            </div>
+            <span class="ops-count" [class.is-danger]="item.tone === 'danger'" [class.is-warning]="item.tone === 'warning'">{{ item.count }}</span>
+          </article>
+        </section>
 
         <section class="panel" *ngIf="overview.saasHealthEngine as health">
           <div class="section-title">
@@ -901,9 +961,27 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <div class="section-title">
             <div>
               <span class="eyebrow">Bulk actions</span>
-              <h2>All salons</h2>
+              <h2>Tenant Command Table 2.0</h2>
             </div>
             <span class="badge">{{ selectedTenantIds().length }} selected</span>
+          </div>
+          <div class="tenant-command-toolbar">
+            <label class="tenant-search">
+              <span>Search tenant</span>
+              <input
+                [ngModel]="tenantSearch()"
+                (ngModelChange)="tenantSearch.set($event)"
+                [ngModelOptions]="{ standalone: true }"
+                placeholder="Salon, domain, email, plan" />
+            </label>
+            <div class="filter-strip" role="group" aria-label="Tenant filters">
+              <button type="button" [class.active]="tenantFilter() === 'all'" (click)="tenantFilter.set('all')">All <span>{{ tenantFilterCount(overview.tenants, 'all') }}</span></button>
+              <button type="button" [class.active]="tenantFilter() === 'active'" (click)="tenantFilter.set('active')">Active <span>{{ tenantFilterCount(overview.tenants, 'active') }}</span></button>
+              <button type="button" [class.active]="tenantFilter() === 'trial'" (click)="tenantFilter.set('trial')">Trial <span>{{ tenantFilterCount(overview.tenants, 'trial') }}</span></button>
+              <button type="button" [class.active]="tenantFilter() === 'suspended'" (click)="tenantFilter.set('suspended')">Suspended <span>{{ tenantFilterCount(overview.tenants, 'suspended') }}</span></button>
+              <button type="button" [class.active]="tenantFilter() === 'risk'" (click)="tenantFilter.set('risk')">High Risk <span>{{ tenantFilterCount(overview.tenants, 'risk') }}</span></button>
+              <button type="button" [class.active]="tenantFilter() === 'paymentDue'" (click)="tenantFilter.set('paymentDue')">Payment Due <span>{{ tenantFilterCount(overview.tenants, 'paymentDue') }}</span></button>
+            </div>
           </div>
           <form [formGroup]="bulkActionForm" (ngSubmit)="applyBulkAction()" class="dashboard-grid" style="margin-bottom:16px">
             <label class="field">
@@ -931,12 +1009,22 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <textarea formControlName="emailBody"></textarea>
             </label>
             <div class="form-actions">
-              <button class="ghost-button" type="button" (click)="selectAllTenants(overview.tenants)">Select all</button>
+              <button class="ghost-button" type="button" (click)="selectAllTenants(filteredTenants(overview.tenants))">Select visible</button>
               <button class="ghost-button" type="button" (click)="selectedTenantIds.set([])">Clear</button>
               <button class="primary-button" type="submit" [disabled]="!selectedTenantIds().length || saving()">Apply bulk action</button>
             </div>
           </form>
-          <div class="quick-grid" *ngIf="bulkSelectionSummary(overview.tenants) as bulk">
+          <div class="bulk-command-bar" *ngIf="selectedTenantIds().length">
+            <strong>{{ selectedTenantIds().length }} selected</strong>
+            <button type="button" (click)="prepareBulkCommand('changePlan')">Change plan</button>
+            <button type="button" (click)="runBulkCommand('suspend')" [disabled]="saving()">Suspend</button>
+            <button type="button" (click)="runBulkCommand('reactivate')" [disabled]="saving()">Reactivate</button>
+            <button type="button" (click)="prepareBulkCommand('sendEmail')">Send email</button>
+            <button type="button" (click)="prepareBulkCommand('export')">Export</button>
+            <button type="button" (click)="prepareBulkCommand('assignOwner')">Assign owner</button>
+            <span>Dangerous actions need CONFIRM</span>
+          </div>
+          <div class="quick-grid" *ngIf="bulkSelectionSummary(filteredTenants(overview.tenants)) as bulk">
             <article class="action-card">
               <strong>{{ bulk.count }}</strong>
               <span>Selected tenants</span>
@@ -954,8 +1042,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <span>Outstanding exposure</span>
             </article>
           </div>
-          <div class="activity-list" *ngIf="selectedTenants(overview.tenants).length" style="margin-bottom:16px">
-            <article *ngFor="let tenant of selectedTenants(overview.tenants).slice(0, 6)" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div class="activity-list" *ngIf="selectedTenants(filteredTenants(overview.tenants)).length" style="margin-bottom:16px">
+            <article *ngFor="let tenant of selectedTenants(filteredTenants(overview.tenants)).slice(0, 6)" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
               <div style="min-width:0">
                 <strong>{{ tenant.name }}</strong>
                 <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · health {{ tenant.healthScore | number: '1.0-1' }}</span>
@@ -969,7 +1057,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <tr><th class="select-col"></th><th class="salon-col">Salon</th><th class="plan-col">Plan</th><th class="status-col">Status</th><th class="money-col">Billing</th><th class="money-col">Sales</th><th class="usage-col">Usage</th><th class="health-col">Health</th><th class="flag-col">Flag</th><th class="actions-col">Actions</th></tr>
               </thead>
               <tbody>
-                <tr *ngFor="let tenant of overview.tenants" style="cursor:pointer" (click)="openTenantDrilldown(tenant.id)">
+                <tr *ngFor="let tenant of filteredTenants(overview.tenants)" style="cursor:pointer" (click)="openTenantDrilldown(tenant.id)">
                   <td class="select-col">
                     <input type="checkbox" [checked]="isTenantSelected(tenant.id)" (click)="$event.stopPropagation()" (change)="toggleTenantSelection(tenant.id)" />
                   </td>
@@ -996,29 +1084,36 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   </td>
                   <td class="health-cell">{{ tenant.healthScore | number: '1.0-1' }}</td>
                   <td class="flag-cell">
+                    <span class="badge" [style.background]="tenantRiskTone(tenant)" style="color:#fff">{{ tenantRiskLabel(tenant) }}</span>
                     <span class="badge" [style.background]="healthFlagTone(tenant.healthFlag?.severity)" style="color:#fff">
                       {{ tenant.healthFlag?.label || 'Healthy' }}
                     </span>
                     <small style="display:block;color:var(--text-muted)">{{ tenant.healthFlag?.reason }}</small>
                   </td>
                   <td class="actions-cell">
-                    <div class="tenant-actions">
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); openTenantDrilldown(tenant.id)">Profile</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); selectTenant(tenant.id)">360</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editTenantLimits(tenant)">Limits</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editIpAllowlist(tenant)">IP rules</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editTenantSso(tenant)">SSO</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editDataExportControls(tenant)">Export</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editRolePermissionMatrix(tenant)">Roles</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareTenantFeatureOverride(tenant)">Override</button>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareImpersonation(tenant)">Impersonate</button>
-                    <a class="ghost-button mini" [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer" (click)="$event.stopPropagation()">Intercom</a>
-                    <a class="ghost-button mini" [href]="tenant.supportLinks?.zendesk" target="_blank" rel="noreferrer" (click)="$event.stopPropagation()">Zendesk</a>
-                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); toggleTenant(tenant)">
-                      {{ tenant.subscriptionStatus === 'suspended' ? 'Reactivate' : 'Suspend' }}
-                    </button>
+                    <div class="row-action-shell">
+                      <button class="icon-menu-button" type="button" title="Tenant actions" (click)="$event.stopPropagation(); toggleActionMenu(tenant.id)">
+                        ...
+                      </button>
+                      <div class="row-action-menu" *ngIf="actionMenuTenantId() === tenant.id" (click)="$event.stopPropagation()">
+                        <button type="button" (click)="openTenantDrilldown(tenant.id); closeActionMenu()">Open Tenant 360</button>
+                        <button type="button" (click)="selectTenant(tenant.id); setDrawerTab('profile'); closeActionMenu()">Profile</button>
+                        <button type="button" (click)="editTenantLimits(tenant); setAdminFormTab('limits'); closeActionMenu()">Limits</button>
+                        <button type="button" (click)="editIpAllowlist(tenant); setAdminFormTab('security'); closeActionMenu()">IP rules</button>
+                        <button type="button" (click)="editTenantSso(tenant); setAdminFormTab('sso'); closeActionMenu()">SSO</button>
+                        <button type="button" (click)="editDataExportControls(tenant); setAdminFormTab('exports'); closeActionMenu()">Export controls</button>
+                        <button type="button" (click)="editRolePermissionMatrix(tenant); setAdminFormTab('security'); closeActionMenu()">Roles</button>
+                        <button type="button" (click)="prepareTenantFeatureOverride(tenant); setAdminFormTab('features'); closeActionMenu()">Override</button>
+                        <button type="button" (click)="prepareImpersonation(tenant); setAdminFormTab('impersonation'); closeActionMenu()">Impersonate</button>
+                        <a [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer">Intercom</a>
+                        <a [href]="tenant.supportLinks?.zendesk" target="_blank" rel="noreferrer">Zendesk</a>
+                        <button type="button" class="danger-action" (click)="toggleTenant(tenant); closeActionMenu()">{{ tenant.subscriptionStatus === 'suspended' ? 'Reactivate' : 'Suspend' }}</button>
+                      </div>
                     </div>
                   </td>
+                </tr>
+                <tr *ngIf="!filteredTenants(overview.tenants).length">
+                  <td colspan="10" class="empty-command-row">No tenants match this command filter.</td>
                 </tr>
               </tbody>
             </table>
@@ -1039,6 +1134,16 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <h2>{{ tenantLabel(tenant) }} full profile, usage, invoices and audit log</h2>
               </div>
               <button class="ghost-button mini" type="button" (click)="drilldownOpen.set(false)">Close</button>
+            </div>
+            <div class="drawer-tabs" role="tablist" aria-label="Tenant 360 sections">
+              <button type="button" [class.active]="drawerTab() === 'profile'" (click)="setDrawerTab('profile')">Profile</button>
+              <button type="button" [class.active]="drawerTab() === 'billing'" (click)="setDrawerTab('billing')">Billing</button>
+              <button type="button" [class.active]="drawerTab() === 'users'" (click)="setDrawerTab('users')">Users</button>
+              <button type="button" [class.active]="drawerTab() === 'branches'" (click)="setDrawerTab('branches')">Branches</button>
+              <button type="button" [class.active]="drawerTab() === 'limits'" (click)="setDrawerTab('limits')">Limits</button>
+              <button type="button" [class.active]="drawerTab() === 'audit'" (click)="setDrawerTab('audit')">Audit</button>
+              <button type="button" [class.active]="drawerTab() === 'support'" (click)="setDrawerTab('support')">Support</button>
+              <button type="button" [class.active]="drawerTab() === 'impersonation'" (click)="setDrawerTab('impersonation')">Impersonation</button>
             </div>
 
             <div class="quick-grid">
@@ -1066,6 +1171,43 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <strong>{{ tenant.drilldown.lastLoginAt || 'No login' }}</strong>
                 <span>Last login</span>
               </article>
+            </div>
+
+            <div class="drawer-focus-card">
+              <ng-container [ngSwitch]="drawerTab()">
+                <article *ngSwitchCase="'profile'">
+                  <strong>Profile</strong>
+                  <span>{{ tenant.ownerEmail || 'Owner pending' }} · {{ tenant.primaryDomain || 'Domain pending' }} · {{ tenant.planName || 'No plan' }}</span>
+                </article>
+                <article *ngSwitchCase="'billing'">
+                  <strong>Billing</strong>
+                  <span>{{ tenant.drilldown?.invoiceSummary?.outstanding | currency: 'INR':'symbol':'1.0-0' }} outstanding · {{ tenant.billingOps?.dunningStatus || 'Clear' }} · {{ tenant.billingOps?.failedPaymentCount || 0 }} failed payments</span>
+                </article>
+                <article *ngSwitchCase="'users'">
+                  <strong>Users</strong>
+                  <span>{{ tenant.drilldown?.tenantUserCount || 0 }} tenant users · {{ tenant.drilldown?.staffCount || 0 }} staff · last login {{ tenant.drilldown?.lastLoginAt || 'No login' }}</span>
+                </article>
+                <article *ngSwitchCase="'branches'">
+                  <strong>Branches</strong>
+                  <span>{{ tenant.usage?.branches || 0 }} used / {{ tenant.tenantLimits?.branches || 0 }} allowed · support tier {{ tenant.tenantLimits?.supportTier || 'standard' }}</span>
+                </article>
+                <article *ngSwitchCase="'limits'">
+                  <strong>Limits</strong>
+                  <span>{{ tenant.usage?.staff || 0 }}/{{ tenant.tenantLimits?.staff || 0 }} staff · {{ tenant.usage?.clients || 0 }}/{{ tenant.tenantLimits?.clients || 0 }} clients · {{ tenant.usage?.appointments || 0 }} bookings</span>
+                </article>
+                <article *ngSwitchCase="'audit'">
+                  <strong>Audit</strong>
+                  <span>{{ tenant.drilldown?.auditTrail?.length || 0 }} audit events · IP {{ tenant.enterpriseSecurity?.ipRestrictionStatus || 'not_required' }} · SSO {{ tenant.enterpriseSecurity?.ssoStatus || 'not_configured' }}</span>
+                </article>
+                <article *ngSwitchCase="'support'">
+                  <strong>Support notes</strong>
+                  <span>{{ tenant.drilldown?.supportNotes?.length || 0 }} notes · {{ tenant.supportLinks?.internal || 'No internal ticket linked' }}</span>
+                </article>
+                <article *ngSwitchCase="'impersonation'">
+                  <strong>Impersonation controls</strong>
+                  <span>Audited session with restricted refunds, payroll, password changes and destructive deletes.</span>
+                </article>
+              </ng-container>
             </div>
 
             <div class="dashboard-grid">
@@ -1265,8 +1407,19 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
-        <div class="dashboard-grid">
-          <section class="form-panel">
+        <div class="admin-form-tabs" role="tablist" aria-label="Advanced admin forms">
+          <button type="button" [class.active]="adminFormTab() === 'subscription'" (click)="setAdminFormTab('subscription')">Subscription</button>
+          <button type="button" [class.active]="adminFormTab() === 'limits'" (click)="setAdminFormTab('limits')">Limits</button>
+          <button type="button" [class.active]="adminFormTab() === 'security'" (click)="setAdminFormTab('security')">Security</button>
+          <button type="button" [class.active]="adminFormTab() === 'sso'" (click)="setAdminFormTab('sso')">SSO</button>
+          <button type="button" [class.active]="adminFormTab() === 'exports'" (click)="setAdminFormTab('exports')">Export controls</button>
+          <button type="button" [class.active]="adminFormTab() === 'features'" (click)="setAdminFormTab('features')">Feature overrides</button>
+          <button type="button" [class.active]="adminFormTab() === 'impersonation'" (click)="setAdminFormTab('impersonation')">Impersonation</button>
+          <button type="button" [class.active]="adminFormTab() === 'plans'" (click)="setAdminFormTab('plans')">Plans</button>
+        </div>
+
+        <div class="dashboard-grid admin-form-grid">
+          <section class="form-panel" *ngIf="adminFormTab() === 'limits'">
             <h3>Tenant limits</h3>
             <form [formGroup]="tenantLimitsForm" (ngSubmit)="saveTenantLimits()">
               <label class="field">
@@ -1303,7 +1456,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </form>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'security'">
             <h3>IP Allowlist per Tenant</h3>
             <form [formGroup]="ipAllowlistForm" (ngSubmit)="saveIpAllowlist()">
               <label class="field">
@@ -1329,7 +1482,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </form>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'sso'">
             <h3>SSO / SAML Management</h3>
             <form [formGroup]="ssoForm" (ngSubmit)="saveTenantSso()">
               <label class="field">
@@ -1367,7 +1520,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </form>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'exports'">
             <h3>Data Export Controls</h3>
             <form [formGroup]="dataExportControlsForm" (ngSubmit)="saveDataExportControls()">
               <label class="field">
@@ -1391,7 +1544,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </form>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'security'">
             <h3>Role & Permission Matrix</h3>
             <form [formGroup]="rolePermissionMatrixForm" (ngSubmit)="saveRolePermissionMatrix()">
               <label class="field">
@@ -1434,7 +1587,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </div>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'features'">
             <h3>Per-Tenant Feature Override</h3>
             <form [formGroup]="tenantFeatureOverrideForm" (ngSubmit)="saveTenantFeatureOverride()">
               <label class="field">
@@ -1466,7 +1619,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </form>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'impersonation'">
             <h3>Impersonate tenant</h3>
             <form [formGroup]="impersonationForm" (ngSubmit)="startImpersonation()">
               <label class="field">
@@ -1496,7 +1649,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </div>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'subscription'">
             <h3>Subscription management</h3>
             <form [formGroup]="subscriptionForm" (ngSubmit)="updateSubscription()">
               <label class="field">
@@ -1528,7 +1681,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </form>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel" *ngIf="adminFormTab() === 'plans'">
             <h3>Custom Plan Builder</h3>
             <form [formGroup]="planForm" (ngSubmit)="createPlan()">
               <label class="field"><span>Name</span><input formControlName="name" /></label>
@@ -1556,7 +1709,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </section>
         </div>
 
-        <section class="form-panel">
+        <section class="form-panel" *ngIf="adminFormTab() === 'features'">
           <h3>Advanced feature flags</h3>
           <div class="quick-grid" *ngIf="overview.featureFlagCommand as flags">
             <article class="action-card">
@@ -1710,20 +1863,298 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     </section>
   `,
   styles: [`
+    .super-admin-command {
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      border-radius: 18px;
+      padding: 18px;
+      background: linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(255, 255, 255, 0.98));
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.07);
+    }
+
+    .command-heading,
+    .command-live {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .command-heading h2 {
+      margin: 2px 0 0;
+      color: var(--ink);
+    }
+
+    .command-live {
+      justify-content: flex-end;
+    }
+
+    .command-kpi-grid,
+    .ops-intel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .command-kpi,
+    .ops-intel-card {
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.9);
+      min-width: 0;
+    }
+
+    .command-kpi {
+      border-left: 4px solid var(--accent, #0f766e);
+    }
+
+    .command-kpi.danger { border-left-color: var(--danger, #dc2626); }
+    .command-kpi.warning { border-left-color: var(--warning, #f59e0b); }
+    .command-kpi.success { border-left-color: var(--success, #16a34a); }
+    .command-kpi.security { border-left-color: #4f46e5; }
+
+    .command-kpi span,
+    .ops-intel-card small {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .command-kpi strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 1.45rem;
+      color: var(--ink);
+    }
+
+    .command-kpi small {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .ops-intel-grid {
+      margin-top: 0;
+    }
+
+    .ops-intel-card {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .ops-intel-card strong {
+      display: block;
+      color: var(--ink);
+    }
+
+    .ops-count {
+      display: inline-flex;
+      width: 42px;
+      height: 42px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: rgba(15, 118, 110, 0.12);
+      color: var(--accent, #0f766e);
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+
+    .ops-count.is-danger {
+      background: rgba(220, 38, 38, 0.12);
+      color: var(--danger, #dc2626);
+    }
+
+    .ops-count.is-warning {
+      background: rgba(245, 158, 11, 0.16);
+      color: #a16207;
+    }
+
+    .tenant-command-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 6;
+      display: grid;
+      grid-template-columns: minmax(240px, 340px) 1fr;
+      gap: 12px;
+      align-items: end;
+      padding: 10px 0 14px;
+      background: var(--surface, #fff);
+    }
+
+    .tenant-search span {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .tenant-search input {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid rgba(15, 118, 110, 0.18);
+      border-radius: 12px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .filter-strip,
+    .admin-form-tabs,
+    .drawer-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-strip button,
+    .admin-form-tabs button,
+    .drawer-tabs button,
+    .bulk-command-bar button,
+    .row-action-menu button,
+    .row-action-menu a {
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 850;
+      text-decoration: none;
+    }
+
+    .filter-strip button,
+    .admin-form-tabs button,
+    .drawer-tabs button {
+      padding: 9px 12px;
+    }
+
+    .filter-strip button span {
+      margin-left: 6px;
+      color: var(--muted);
+    }
+
+    .filter-strip button.active,
+    .admin-form-tabs button.active,
+    .drawer-tabs button.active {
+      background: var(--accent, #0f766e);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18);
+    }
+
+    .filter-strip button.active span {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .bulk-command-bar {
+      position: sticky;
+      top: 74px;
+      z-index: 7;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      padding: 10px;
+      border: 1px solid rgba(15, 118, 110, 0.18);
+      border-radius: 14px;
+      background: rgba(240, 253, 250, 0.98);
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.09);
+    }
+
+    .bulk-command-bar button {
+      padding: 7px 11px;
+    }
+
+    .bulk-command-bar span {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .admin-form-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      padding: 12px 0;
+      background: var(--page-bg, #f8fafc);
+    }
+
+    .admin-form-grid {
+      align-items: start;
+    }
+
+    .drawer-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      padding: 8px 0 12px;
+      background: var(--surface, #fff);
+    }
+
+    .drawer-focus-card {
+      margin: 12px 0 16px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(240, 253, 250, 0.7);
+    }
+
+    .drawer-focus-card strong,
+    .drawer-focus-card span {
+      display: block;
+    }
+
+    .drawer-focus-card span {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
     .super-admin-tenant-wrap {
       max-width: 100%;
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      border-radius: 16px;
+      overflow: auto;
     }
 
     .super-admin-tenant-table {
-      min-width: 1320px;
+      min-width: 1180px;
       table-layout: fixed;
+      border-collapse: separate;
+      border-spacing: 0;
     }
 
     .super-admin-tenant-table th,
     .super-admin-tenant-table td {
       vertical-align: top;
-      padding: 12px 14px;
+      padding: 10px 12px;
       white-space: normal;
+      background: var(--surface, #fff);
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    }
+
+    .super-admin-tenant-table th {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .super-admin-tenant-table tr:hover td {
+      background: rgba(240, 253, 250, 0.72);
     }
 
     .super-admin-tenant-table small,
@@ -1731,15 +2162,37 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       display: block;
     }
 
-    .select-col { width: 48px; }
-    .salon-col { width: 190px; }
+    .select-col {
+      width: 48px;
+      position: sticky;
+      left: 0;
+      z-index: 5;
+    }
+
+    td.select-col {
+      background: inherit;
+    }
+
+    .salon-col { width: 210px; }
     .plan-col { width: 110px; }
-    .status-col { width: 230px; }
+    .status-col { width: 210px; }
     .money-col { width: 110px; }
-    .usage-col { width: 220px; }
+    .usage-col { width: 190px; }
     .health-col { width: 76px; }
     .flag-col { width: 150px; }
-    .actions-col { width: 286px; }
+    .actions-col {
+      width: 84px;
+      position: sticky;
+      right: 0;
+      z-index: 5;
+    }
+
+    td.actions-cell {
+      position: sticky;
+      right: 0;
+      z-index: 4;
+      background: inherit;
+    }
 
     .salon-cell,
     .status-cell,
@@ -1761,32 +2214,67 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       font-weight: 700;
     }
 
-    .tenant-actions {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 6px;
-      align-items: stretch;
+    .row-action-shell {
+      position: relative;
+      display: flex;
+      justify-content: center;
     }
 
-    .tenant-actions .ghost-button {
+    .icon-menu-button {
+      width: 38px;
+      height: 34px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .row-action-menu {
+      position: absolute;
+      top: 38px;
+      right: 0;
+      z-index: 20;
+      display: grid;
+      width: 190px;
+      gap: 4px;
+      padding: 8px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+    }
+
+    .row-action-menu button,
+    .row-action-menu a {
+      display: block;
       width: 100%;
-      min-width: 0;
-      padding-inline: 8px;
-      justify-content: center;
-      white-space: normal;
-      line-height: 1.12;
+      padding: 8px 10px;
+      border-radius: 10px;
+      text-align: left;
+    }
+
+    .row-action-menu .danger-action {
+      color: var(--danger, #dc2626);
+      border-color: rgba(220, 38, 38, 0.18);
+    }
+
+    .empty-command-row {
+      padding: 28px !important;
+      color: var(--muted);
       text-align: center;
+      font-weight: 800;
     }
 
     @media (max-width: 900px) {
-      .super-admin-tenant-table {
-        min-width: 1180px;
+      .tenant-command-toolbar {
+        grid-template-columns: 1fr;
       }
 
-      .actions-col { width: 240px; }
-
-      .tenant-actions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .super-admin-tenant-table {
+        min-width: 1080px;
       }
     }
   `]
@@ -1796,6 +2284,11 @@ export class SuperAdminComponent implements OnInit {
   readonly selectedTenantId = signal('');
   readonly selectedTenantIds = signal<string[]>([]);
   readonly drilldownOpen = signal(false);
+  readonly tenantSearch = signal('');
+  readonly tenantFilter = signal<TenantFilter>('all');
+  readonly actionMenuTenantId = signal('');
+  readonly adminFormTab = signal<AdminFormTab>('subscription');
+  readonly drawerTab = signal<DrawerTab>('profile');
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
@@ -2299,6 +2792,164 @@ export class SuperAdminComponent implements OnInit {
       tenant.id ||
       'Unnamed tenant'
     );
+  }
+
+  commandMetrics(overview: ApiRecord = {}): ApiRecord {
+    const tenants = overview.tenants || [];
+    const security = overview.securityRiskCenter?.metrics || {};
+    const churn = overview.churnPrediction || {};
+    const billing = overview.billingOperationsReport || {};
+    const trialsExpiring = tenants.filter((tenant: ApiRecord) => this.trialExpiringTenant(tenant)).length;
+    return {
+      mrr: Number(overview.metrics?.monthlyRecurringRevenue || 0),
+      activeSalons: Number(overview.metrics?.activeSalons || tenants.filter((tenant: ApiRecord) => this.matchesTenantFilter(tenant, 'active')).length),
+      trials: Number(overview.metrics?.trialSalons || tenants.filter((tenant: ApiRecord) => this.matchesTenantFilter(tenant, 'trial')).length),
+      trialsExpiring,
+      churnRisk: Number(churn.highRiskCount || tenants.filter((tenant: ApiRecord) => this.highRiskTenant(tenant)).length),
+      mrrAtRisk: Number(churn.mrrAtRisk || 0),
+      unpaid: Number(billing.outstandingAmount || tenants.reduce((total: number, tenant: ApiRecord) => total + this.tenantOutstanding(tenant), 0)),
+      paymentDue: tenants.filter((tenant: ApiRecord) => this.paymentDueTenant(tenant)).length,
+      health: Number(overview.metrics?.averageHealth || 0),
+      highRisk: tenants.filter((tenant: ApiRecord) => this.highRiskTenant(tenant)).length,
+      securityAlerts: Number(security.criticalLogins || 0) + Number(security.suspiciousLogins || 0),
+      securityGaps: Number(security.ipGaps || 0) + Number(security.ssoGaps || 0) + Number(security.exportGaps || 0)
+    };
+  }
+
+  operationalIntelligence(overview: ApiRecord = {}): ApiRecord[] {
+    const tenants = overview.tenants || [];
+    const highRisk = tenants.filter((tenant: ApiRecord) => this.highRiskTenant(tenant)).length;
+    const paymentDue = tenants.filter((tenant: ApiRecord) => this.paymentDueTenant(tenant)).length;
+    const trialsExpiring = tenants.filter((tenant: ApiRecord) => this.trialExpiringTenant(tenant)).length;
+    const securityGaps = tenants.filter((tenant: ApiRecord) => this.securityGapTenant(tenant)).length;
+    const lowUsageHighMrr = tenants.filter((tenant: ApiRecord) => this.lowUsageHighMrrTenant(tenant)).length;
+    const suspendedPotential = tenants.filter((tenant: ApiRecord) => this.suspendedPotentialTenant(tenant)).length;
+    return [
+      { kind: 'Today', title: 'Need attention today', count: highRisk + paymentDue + securityGaps, detail: 'Risk, billing and security queues', tone: highRisk ? 'danger' : 'warning' },
+      { kind: 'Trials', title: 'Trials expiring this week', count: trialsExpiring, detail: 'Convert or extend before expiry', tone: trialsExpiring ? 'warning' : 'neutral' },
+      { kind: 'Billing', title: 'Payment failed', count: paymentDue, detail: 'Failed payment or unpaid exposure', tone: paymentDue ? 'danger' : 'neutral' },
+      { kind: 'Security', title: 'Security setup missing', count: securityGaps, detail: 'SSO, IP allowlist or export controls', tone: securityGaps ? 'warning' : 'neutral' },
+      { kind: 'Growth', title: 'Low usage but high MRR', count: lowUsageHighMrr, detail: 'Retention playbook candidates', tone: lowUsageHighMrr ? 'warning' : 'neutral' },
+      { kind: 'Recovery', title: 'Suspended revenue potential', count: suspendedPotential, detail: 'Suspended accounts with value left', tone: suspendedPotential ? 'danger' : 'neutral' }
+    ];
+  }
+
+  filteredTenants(tenants: ApiRecord[] = []): ApiRecord[] {
+    const query = this.tenantSearch().trim().toLowerCase();
+    const filter = this.tenantFilter();
+    return (tenants || []).filter((tenant) => {
+      if (!this.matchesTenantFilter(tenant, filter)) return false;
+      if (!query) return true;
+      const haystack = [
+        this.tenantLabel(tenant),
+        tenant.ownerEmail,
+        tenant.primaryDomain,
+        tenant.planName,
+        tenant.subscriptionStatus,
+        tenant.status,
+        tenant.id
+      ].map((value) => String(value || '').toLowerCase()).join(' ');
+      return haystack.includes(query);
+    });
+  }
+
+  tenantFilterCount(tenants: ApiRecord[] = [], filter: TenantFilter): number {
+    return (tenants || []).filter((tenant) => this.matchesTenantFilter(tenant, filter)).length;
+  }
+
+  matchesTenantFilter(tenant: ApiRecord = {}, filter: TenantFilter): boolean {
+    if (filter === 'all') return true;
+    const status = String(tenant.subscriptionStatus || tenant.status || '').toLowerCase();
+    if (filter === 'active') return status === 'active';
+    if (filter === 'trial') return status === 'trialing' || status === 'trial';
+    if (filter === 'suspended') return status === 'suspended';
+    if (filter === 'risk') return this.highRiskTenant(tenant);
+    if (filter === 'paymentDue') return this.paymentDueTenant(tenant);
+    return true;
+  }
+
+  highRiskTenant(tenant: ApiRecord = {}): boolean {
+    const severity = String(tenant.healthFlag?.severity || '').toLowerCase();
+    return severity === 'critical' || Number(tenant.healthScore || 0) < 55;
+  }
+
+  paymentDueTenant(tenant: ApiRecord = {}): boolean {
+    const dunning = String(tenant.billingOps?.dunningStatus || '').toLowerCase();
+    return this.tenantOutstanding(tenant) > 0 || Number(tenant.billingOps?.failedPaymentCount || 0) > 0 || Boolean(dunning && dunning !== 'clear');
+  }
+
+  tenantOutstanding(tenant: ApiRecord = {}): number {
+    return Number(tenant.outstanding || tenant.billingOps?.outstanding || tenant.drilldown?.invoiceSummary?.outstanding || 0);
+  }
+
+  trialExpiringTenant(tenant: ApiRecord = {}): boolean {
+    const status = String(tenant.subscriptionStatus || '').toLowerCase();
+    const days = Number(tenant.tenant360?.profile?.trialDaysLeft ?? tenant.trialDaysLeft ?? 99);
+    return (status === 'trialing' || status === 'trial') && days <= 7;
+  }
+
+  securityGapTenant(tenant: ApiRecord = {}): boolean {
+    const ip = String(tenant.enterpriseSecurity?.ipRestrictionStatus || tenant.ipAllowlist?.status || '').toLowerCase();
+    const sso = String(tenant.enterpriseSecurity?.ssoStatus || tenant.sso?.status || '').toLowerCase();
+    const exports = String(tenant.enterpriseSecurity?.dataExportStatus || tenant.dataExportControls?.status || '').toLowerCase();
+    return !ip || ip.includes('disabled') || ip.includes('gap') || !sso || sso.includes('not') || sso.includes('draft') || !exports || exports.includes('open');
+  }
+
+  lowUsageHighMrrTenant(tenant: ApiRecord = {}): boolean {
+    const mrr = Number(tenant.monthlyRecurringRevenue || tenant.totalBillingAmount || 0);
+    const appointments = Number(tenant.usage?.appointments || 0);
+    const clients = Number(tenant.usage?.clients || 0);
+    return mrr > 5000 && appointments < 25 && clients < 250;
+  }
+
+  suspendedPotentialTenant(tenant: ApiRecord = {}): boolean {
+    const status = String(tenant.subscriptionStatus || tenant.status || '').toLowerCase();
+    return status === 'suspended' && (Number(tenant.monthlyRecurringRevenue || 0) > 0 || this.tenantOutstanding(tenant) > 0);
+  }
+
+  tenantRiskLabel(tenant: ApiRecord = {}): string {
+    if (this.paymentDueTenant(tenant)) return 'Payment due';
+    if (this.highRiskTenant(tenant)) return 'High risk';
+    if (this.trialExpiringTenant(tenant)) return 'Trial expiry';
+    if (this.securityGapTenant(tenant)) return 'Security gap';
+    return 'Stable';
+  }
+
+  tenantRiskTone(tenant: ApiRecord = {}): string {
+    if (this.paymentDueTenant(tenant) || this.highRiskTenant(tenant)) return 'var(--danger,#dc2626)';
+    if (this.trialExpiringTenant(tenant) || this.securityGapTenant(tenant)) return 'var(--warning,#f59e0b)';
+    return 'var(--success,#16a34a)';
+  }
+
+  toggleActionMenu(tenantId: string): void {
+    this.actionMenuTenantId.set(this.actionMenuTenantId() === tenantId ? '' : tenantId);
+  }
+
+  closeActionMenu(): void {
+    this.actionMenuTenantId.set('');
+  }
+
+  setAdminFormTab(tab: AdminFormTab): void {
+    this.adminFormTab.set(tab);
+  }
+
+  setDrawerTab(tab: DrawerTab): void {
+    this.drawerTab.set(tab);
+  }
+
+  prepareBulkCommand(action: string): void {
+    if (action === 'export' || action === 'assignOwner') {
+      this.error.set(action === 'export'
+        ? 'Export control is available from tenant row actions and Tenant 360; bulk export queue needs backend wiring.'
+        : 'Support owner assignment UI is staged; backend owner queue is not connected yet.');
+      return;
+    }
+    this.bulkActionForm.patchValue({ action });
+  }
+
+  runBulkCommand(action: string): void {
+    this.bulkActionForm.patchValue({ action });
+    this.applyBulkAction();
   }
 
   startImpersonation(): void {
