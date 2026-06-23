@@ -167,10 +167,14 @@
 
 :host ::ng-deep .detail-body .page-stack,
 :host ::ng-deep .detail-body .auto-sunset-page,
+:host ::ng-deep .detail-body .client-brain-page,
 :host ::ng-deep .detail-body .campaign-audience-page,
+:host ::ng-deep .detail-body .elasticity-page,
 :host ::ng-deep .detail-body .offer-health-page,
 :host ::ng-deep .detail-body .client-return-page,
-:host ::ng-deep .detail-body .branch-leaderboard-page {
+:host ::ng-deep .detail-body .branch-leaderboard-page,
+:host ::ng-deep .detail-body .inventory-aware-page,
+:host ::ng-deep .detail-body .staff-aware-page {
   background: #ffffff;
   min-height: 0;
   padding: 18px;

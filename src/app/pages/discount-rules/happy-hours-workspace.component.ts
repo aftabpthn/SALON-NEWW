@@ -6,12 +6,15 @@ import { ApiRecord, ApiService } from '../../core/api.service';
 import { DiscountAnomalyInboxComponent } from './anomaly-inbox.component';
 import { BranchOfferLeaderboardComponent } from './branch-offer-leaderboard.component';
 import { CampaignAudienceBuilderComponent } from './campaign-audience-builder.component';
+import { ClientDiscountBrainComponent } from './client-discount-brain.component';
 import { ClientReturnTrackerComponent } from './client-return-tracker.component';
 import { HappyHoursClientSegmentsComponent } from './client-segments.component';
 import { CouponEngineComponent } from './coupon-engine.component';
 import { CrossBranchAnalyticsComponent } from './cross-branch-analytics.component';
+import { ElasticityProfitPricingComponent } from './elasticity-profit-pricing.component';
 import { HappyHoursFraudGuardComponent } from './fraud-guard.component';
 import { HappyHoursControlTowerComponent } from './happy-hours-control-tower.component';
+import { InventoryAwareOffersComponent } from './inventory-aware-offers.component';
 import { OfferAutoSunsetComponent } from './offer-auto-sunset.component';
 import { OfferHealthScoreComponent } from './offer-health-score.component';
 import { OfferLifecycleComponent } from './offer-lifecycle.component';
@@ -20,6 +23,7 @@ import { PromotionCalendarComponent } from './promotion-calendar.component';
 import { RuleConflictDetectorComponent } from './rule-conflict-detector.component';
 import { RuleListComponent } from './rule-list.component';
 import { DiscountSimulationSandboxComponent } from './simulation-sandbox.component';
+import { StaffAwareOffersComponent } from './staff-aware-offers.component';
 import { HappyHoursStaffIncentivesComponent } from './staff-incentives.component';
 import { WhiteLabelRulesComponent } from './white-label-rules.component';
 import { DiscountAuditLogComponent } from './audit-log.component';
@@ -34,10 +38,14 @@ type WorkspaceKey =
   | 'calendar'
   | 'coupons'
   | 'segments'
+  | 'clientBrain'
   | 'audience'
+  | 'staffAware'
+  | 'inventoryAware'
   | 'incentives'
   | 'lifecycle'
   | 'roi'
+  | 'elasticity'
   | 'health'
   | 'returns'
   | 'leaderboard'
@@ -73,12 +81,15 @@ type WorkspaceItem = {
     DiscountAnomalyInboxComponent,
     BranchOfferLeaderboardComponent,
     CampaignAudienceBuilderComponent,
+    ClientDiscountBrainComponent,
     ClientReturnTrackerComponent,
     HappyHoursClientSegmentsComponent,
     CouponEngineComponent,
     CrossBranchAnalyticsComponent,
+    ElasticityProfitPricingComponent,
     HappyHoursFraudGuardComponent,
     HappyHoursControlTowerComponent,
+    InventoryAwareOffersComponent,
     OfferAutoSunsetComponent,
     OfferHealthScoreComponent,
     OfferLifecycleComponent,
@@ -87,6 +98,7 @@ type WorkspaceItem = {
     RuleConflictDetectorComponent,
     RuleListComponent,
     DiscountSimulationSandboxComponent,
+    StaffAwareOffersComponent,
     HappyHoursStaffIncentivesComponent,
     WhiteLabelRulesComponent,
     DiscountAuditLogComponent,
@@ -110,10 +122,14 @@ export class HappyHoursWorkspaceComponent implements OnInit {
     { key: 'calendar', label: 'Promotion Calendar', source: 'promotionCalendar', note: 'scheduled offers', value: (m) => `${m.upcomingPromotions || 0}`, status: (m) => m.upcomingPromotions ? 'live' : 'ready' },
     { key: 'coupons', label: 'Coupon Engine', source: 'discountCoupons', note: 'promo codes', value: (m) => `${m.activeCoupons || 0} active`, status: (m) => m.activeCoupons ? 'live' : 'ready' },
     { key: 'segments', label: 'Client Segments', source: 'clientSegments', note: 'VIP/new/inactive', value: (m) => `${m.segments || 0}`, status: () => 'ready' },
+    { key: 'clientBrain', label: 'Client Discount Brain', source: 'CLV + churn + budget', note: 'per-client discount', value: (m) => `${m.clientBrain || 0}`, status: () => 'ready' },
     { key: 'audience', label: 'Audience Builder', source: 'campaign audiences', note: 'WhatsApp/SMS targets', value: (m) => `${m.audiences || 0}`, status: () => 'ready' },
+    { key: 'staffAware', label: 'Staff-Aware Offers', source: 'appointments + staff load', note: 'idle staff boost', value: (m) => `${m.staffAware || 0}`, status: () => 'ready' },
+    { key: 'inventoryAware', label: 'Inventory-Aware Offers', source: 'stock + expiry + bundles', note: 'stock-led offer', value: (m) => `${m.inventoryAware || 0}`, status: (m) => Number(m.inventoryRisk || 0) ? 'warn' : 'ready' },
     { key: 'incentives', label: 'Staff Incentives', source: 'staffDiscountIncentives', note: 'conversion payout', value: (m) => `${m.incentives || 0}`, status: () => 'ready' },
     { key: 'lifecycle', label: 'Offer Lifecycle', source: 'offer lifecycle + ROI', note: 'idea to report', value: (m) => `${m.lifecycle || 0}`, status: () => 'ready' },
     { key: 'roi', label: 'Offer ROI Score', source: 'offerRoiEvents', note: 'business result', value: (m) => `${m.roiOffers || 0} offers`, status: (m) => m.roiOffers ? 'live' : 'ready' },
+    { key: 'elasticity', label: 'Elasticity + Profit', source: 'demandSignals + profit assumptions', note: 'profit-aware discount', value: (m) => `${m.elasticityDiscount ?? '-'}%`, status: (m) => m.elasticityStatus === 'ready' ? 'live' : 'ready' },
     { key: 'health', label: 'Offer Health Score', source: 'ROI + margin + returns', note: 'single score', value: (m) => `${m.avgHealth || 0}`, status: (m) => Number(m.atRiskHealth || 0) ? 'risk' : 'live' },
     { key: 'returns', label: 'Client Return Tracker', source: 'offer outcomes + visits', note: 'retention signal', value: (m) => `${m.returnRate || 0}%`, status: (m) => Number(m.atRiskReturns || 0) ? 'warn' : 'live' },
     { key: 'leaderboard', label: 'Branch Leaderboard', source: 'branch offer performance', note: 'branch ranking', value: (m) => `${m.branchScore || 0}`, status: () => 'live' },
@@ -145,9 +161,13 @@ export class HappyHoursWorkspaceComponent implements OnInit {
       tower: this.safe('happy-hours-control-tower/summary'),
       roi: this.safe('happy-hours-roi-score/summary'),
       health: this.safe('happy-hours-offer-health/summary'),
+      elasticity: this.safe('happy-hours-elasticity/recommend', { servicePricePaise: 250000 }),
       returns: this.safe('happy-hours-client-returns/summary'),
       branch: this.safe('happy-hours-branch-leaderboard/summary'),
       segments: this.safeRows('happy-hours-control-tower/segments'),
+      clientBrain: this.safeRows('happy-hours-client-brain/decisions', { limit: 25 }),
+      staffAware: this.safeRows('happy-hours-staff-aware/suggestions', { limit: 25 }),
+      inventoryAware: this.safeRows('happy-hours-inventory-aware/suggestions', { limit: 25 }),
       incentives: this.safeRows('happy-hours-control-tower/staff-incentives'),
       audiences: this.safeRows('happy-hours-campaign-audiences'),
       lifecycle: this.safeRows('happy-hours-lifecycle'),
@@ -157,6 +177,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
       next: (result) => {
         const roi = result.roi as ApiRecord;
         const health = result.health as ApiRecord;
+        const elasticity = result.elasticity as ApiRecord;
         const returns = result.returns as ApiRecord;
         const branch = result.branch as ApiRecord;
         const conflicts = result.conflicts as ApiRecord;
@@ -165,11 +186,17 @@ export class HappyHoursWorkspaceComponent implements OnInit {
           roiOffers: roi.summary?.offers || 0,
           avgHealth: health.summary?.averageHealthScore || 0,
           atRiskHealth: health.summary?.byStatus?.at_risk || 0,
+          elasticityDiscount: elasticity.recommendedDiscountPct,
+          elasticityStatus: elasticity.status || 'collecting',
           returnRate: returns.summary?.returnRatePercent || 0,
           atRiskReturns: returns.summary?.atRiskCount || 0,
           branchScore: branch.summary?.averageScore || 0,
           branchCount: branch.summary?.branches || 0,
           segments: this.rowCount(result.segments),
+          clientBrain: this.rowCount(result.clientBrain),
+          staffAware: this.rowCount(result.staffAware),
+          inventoryAware: this.rowCount(result.inventoryAware),
+          inventoryRisk: this.rowCount(result.inventoryAware?.rows?.filter((row) => row['status'] === 'paused' || row['stockRisk'] === 'low_stock')),
           incentives: this.rowCount(result.incentives),
           audiences: this.rowCount(result.audiences),
           lifecycle: this.rowCount(result.lifecycle),

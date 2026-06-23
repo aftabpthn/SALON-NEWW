@@ -324,13 +324,25 @@ export const routes: Routes = [
     path: 'discount-rules/client-segments', loadComponent: () => import('./pages/discount-rules/client-segments.component').then(m => m.HappyHoursClientSegmentsComponent), title: 'Client Segment Targeting'
   },
   {
+    path: 'discount-rules/client-discount-brain', loadComponent: () => import('./pages/discount-rules/client-discount-brain.component').then(m => m.ClientDiscountBrainComponent), title: 'Client Discount Brain'
+  },
+  {
     path: 'discount-rules/staff-incentives', loadComponent: () => import('./pages/discount-rules/staff-incentives.component').then(m => m.HappyHoursStaffIncentivesComponent), title: 'Staff Incentive Link'
+  },
+  {
+    path: 'discount-rules/staff-aware-offers', loadComponent: () => import('./pages/discount-rules/staff-aware-offers.component').then(m => m.StaffAwareOffersComponent), title: 'Staff-Aware Offers'
+  },
+  {
+    path: 'discount-rules/inventory-aware-offers', loadComponent: () => import('./pages/discount-rules/inventory-aware-offers.component').then(m => m.InventoryAwareOffersComponent), title: 'Inventory-Aware Offers'
   },
   {
     path: 'discount-rules/offer-lifecycle', loadComponent: () => import('./pages/discount-rules/offer-lifecycle.component').then(m => m.OfferLifecycleComponent), title: 'Offer Lifecycle OS'
   },
   {
     path: 'discount-rules/offer-roi-score', loadComponent: () => import('./pages/discount-rules/offer-roi-score.component').then(m => m.OfferRoiScoreComponent), title: 'Offer ROI Score'
+  },
+  {
+    path: 'discount-rules/elasticity-profit-pricing', loadComponent: () => import('./pages/discount-rules/elasticity-profit-pricing.component').then(m => m.ElasticityProfitPricingComponent), title: 'Elasticity + Profit Pricing'
   },
   {
     path: 'discount-rules/fraud-guard', loadComponent: () => import('./pages/discount-rules/fraud-guard.component').then(m => m.HappyHoursFraudGuardComponent), title: 'Abuse / Fraud Guard'

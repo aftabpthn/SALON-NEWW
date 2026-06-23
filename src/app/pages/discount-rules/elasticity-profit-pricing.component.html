@@ -1,0 +1,150 @@
+<section class="page-stack elasticity-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Intelligence</span>
+      <h2>Elasticity + Profit Pricing</h2>
+      <p>Discount demand ko kitna move karta hai aur actual profit safe hai ya nahi, dono ek saath.</p>
+    </div>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Refresh' }}
+    </button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Day</span>
+      <select [(ngModel)]="filters.dayOfWeek" name="dayOfWeek">
+        <option *ngFor="let day of days" [value]="day.value">{{ day.label }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Hour</span>
+      <input type="number" min="0" max="23" [(ngModel)]="filters.hourSlot" name="hourSlot" placeholder="All" />
+    </label>
+    <label class="field">
+      <span>Service category</span>
+      <input type="text" [(ngModel)]="filters.serviceCategory" name="serviceCategory" />
+    </label>
+    <label class="field">
+      <span>Service price paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.servicePricePaise" name="servicePricePaise" />
+    </label>
+    <label class="field">
+      <span>Preview discount %</span>
+      <input type="number" min="0" max="90" [(ngModel)]="filters.discountPct" name="discountPct" />
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">Apply</button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Recommended discount</span>
+      <strong>{{ recommendation()?.recommendedDiscountPct === null ? '-' : (recommendation()?.recommendedDiscountPct || 0) + '%' }}</strong>
+      <small>{{ recommendation()?.status || 'collecting' }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Expected profit</span>
+      <strong>{{ formatMoney(recommendation()?.expectedProfitPaise) }}</strong>
+      <small>{{ formatMoney(recommendation()?.expectedRevenuePaise) }} revenue</small>
+    </article>
+    <article class="metric-card" [class.danger]="preview()?.marginSafe === false">
+      <span>Preview margin</span>
+      <strong>{{ pct(preview()?.marginPercent) }}</strong>
+      <small>Minimum {{ pct(preview()?.minMarginPercent) }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Observed bands</span>
+      <strong>{{ bands().length }}</strong>
+      <small>{{ summary()?.baseline?.discountPct || 0 }}% baseline</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Why this discount</h2>
+        <span class="status-pill">{{ recommendation()?.status || 'collecting' }}</span>
+      </div>
+      <ul class="reason-list">
+        <li *ngFor="let reason of recommendation()?.reasoning || []">{{ reason }}</li>
+        <li *ngIf="!(recommendation()?.reasoning || []).length">Demand samples collect hone ke baad recommendation strong hoga.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Profit assumptions</h2>
+        <span class="muted-text">{{ assumptions().length }} saved</span>
+      </div>
+      <div class="assumption-grid">
+        <label class="field">
+          <span>Category</span>
+          <input type="text" [(ngModel)]="assumptionForm.serviceCategory" name="assumptionCategory" />
+        </label>
+        <label class="field">
+          <span>Base cost paise</span>
+          <input type="number" min="0" [(ngModel)]="assumptionForm.baseCostPaise" name="baseCostPaise" />
+        </label>
+        <label class="field">
+          <span>Variable cost %</span>
+          <input type="number" min="0" max="100" [(ngModel)]="assumptionForm.variableCostPercent" name="variableCostPercent" />
+        </label>
+        <label class="field">
+          <span>Staff commission %</span>
+          <input type="number" min="0" max="100" [(ngModel)]="assumptionForm.staffCommissionPercent" name="staffCommissionPercent" />
+        </label>
+        <label class="field">
+          <span>Payment fee %</span>
+          <input type="number" min="0" max="100" [(ngModel)]="assumptionForm.paymentFeePercent" name="paymentFeePercent" />
+        </label>
+        <label class="field">
+          <span>Min margin %</span>
+          <input type="number" min="0" max="100" [(ngModel)]="assumptionForm.minMarginPercent" name="minMarginPercent" />
+        </label>
+      </div>
+      <button class="ghost-button" type="button" (click)="saveAssumption()" [disabled]="saving()">
+        {{ saving() ? 'Saving...' : 'Save assumptions' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Profit-aware candidates</h2>
+      <span class="muted-text">{{ candidates().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Discount</th>
+            <th>Samples</th>
+            <th>Elasticity</th>
+            <th>Demand lift</th>
+            <th>Expected bookings</th>
+            <th>Expected profit</th>
+            <th>Margin</th>
+            <th>Guard</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of candidates()">
+            <td>{{ row.discountPct }}%</td>
+            <td>{{ row.sampleCount }}</td>
+            <td>{{ row.elasticity }}</td>
+            <td>{{ pct(row.demandLiftPercent) }}</td>
+            <td>{{ row.expectedBookings | number:'1.1-2' }}</td>
+            <td>{{ formatMoney(row.expectedProfitPaise) }}</td>
+            <td>{{ pct(row.marginPercent) }}</td>
+            <td><span [class]="row.marginSafe ? 'safe-pill' : 'risk-pill'">{{ row.marginSafe ? 'Safe' : 'Risk' }}</span></td>
+          </tr>
+          <tr *ngIf="!loading() && !candidates().length">
+            <td colspan="8">No elasticity samples yet. Demand snapshot data collect hone do.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

@@ -1,0 +1,149 @@
+<section class="page-stack inventory-aware-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Intelligence</span>
+      <h2>Inventory-Aware Offers</h2>
+      <p>High stock, expiry risk aur low stock ke base par safe discount/bundle suggestion.</p>
+    </div>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Checking...' : 'Evaluate' }}
+    </button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Product ID</span>
+      <input type="text" [(ngModel)]="filters.productId" name="productId" placeholder="All products" />
+    </label>
+    <label class="field">
+      <span>Service category</span>
+      <input type="text" [(ngModel)]="filters.serviceCategory" name="serviceCategory" />
+    </label>
+    <label class="field">
+      <span>Date</span>
+      <input type="date" [(ngModel)]="filters.signalDate" name="signalDate" />
+    </label>
+    <label class="field">
+      <span>Service price paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.servicePricePaise" name="servicePricePaise" />
+    </label>
+    <label class="field">
+      <span>Product price paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.productPricePaise" name="productPricePaise" />
+    </label>
+    <label class="field">
+      <span>Overstock threshold</span>
+      <input type="number" min="1" step="1" [(ngModel)]="filters.overstockThreshold" name="overstockThreshold" />
+    </label>
+    <label class="field">
+      <span>Low stock threshold</span>
+      <input type="number" min="0" step="1" [(ngModel)]="filters.lowStockThreshold" name="lowStockThreshold" />
+    </label>
+    <label class="field">
+      <span>Expiry window days</span>
+      <input type="number" min="1" max="180" step="1" [(ngModel)]="filters.expiryWindowDays" name="expiryWindowDays" />
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">Run</button>
+    <button class="ghost-button" type="button" (click)="saveSuggestion()" [disabled]="saving()">
+      {{ saving() ? 'Saving...' : 'Save suggestion' }}
+    </button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Best discount</span>
+      <strong>{{ best().suggestedDiscountPercent || 0 }}%</strong>
+      <small>{{ formatMoney(best().expectedDiscountPaise) }} expected discount</small>
+    </article>
+    <article class="metric-card" [class.warning]="summary().expiringCount">
+      <span>Expiry risk</span>
+      <strong>{{ summary().expiringCount || 0 }}</strong>
+      <small>{{ expiryLabel(best()) }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Overstock</span>
+      <strong>{{ summary().overstockCount || 0 }}</strong>
+      <small>{{ summary().productCount || 0 }} products checked</small>
+    </article>
+    <article class="metric-card" [class.danger]="summary().blockedCount">
+      <span>Blocked</span>
+      <strong>{{ summary().blockedCount || 0 }}</strong>
+      <small>Low/out/expired stock</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Recommended action</h2>
+        <span class="status-pill">{{ evaluation()?.status || 'collecting' }}</span>
+      </div>
+      <div class="recommendation">
+        <strong>{{ label(best().bundleAction || 'collect_inventory') }}</strong>
+        <span>{{ best().productName || 'Inventory signal' }} | {{ label(best().stockRisk || 'unknown') }} | {{ label(best().expiryRisk || 'unknown') }}</span>
+      </div>
+      <ul class="reason-list">
+        <li *ngFor="let reason of best().reasons || []">{{ reason }}</li>
+        <li *ngIf="!(best().reasons || []).length">Inventory signals collect hone ke baad suggestion strong hoga.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Saved suggestions</h2>
+        <span class="muted-text">{{ suggestions().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of suggestions()">
+          <div>
+            <strong>{{ row.productName || row.productId }} | {{ row.suggestedDiscountPercent }}%</strong>
+            <small>{{ row.signalDate }} | {{ label(row.bundleAction) }} | {{ label(row.status) }}</small>
+          </div>
+          <div class="row-actions">
+            <button type="button" (click)="updateStatus(row, 'approved')">Approve</button>
+            <button type="button" (click)="updateStatus(row, 'paused')">Pause</button>
+          </div>
+        </article>
+        <p class="muted-text" *ngIf="!suggestions().length">No saved inventory-aware suggestions yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Inventory signals</h2>
+      <span class="muted-text">{{ rows().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Stock</th>
+            <th>Expiry</th>
+            <th>Risk</th>
+            <th>Action</th>
+            <th>Discount</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of rows()">
+            <td>{{ row.productName || row.productId }}</td>
+            <td>{{ row.stockQty || 0 }} / {{ row.highStockThreshold || '-' }}</td>
+            <td>{{ row.expiryDate || '-' }}<small>{{ expiryLabel(row) }}</small></td>
+            <td>{{ label(row.stockRisk) }}<small>{{ label(row.expiryRisk) }}</small></td>
+            <td>{{ label(row.bundleAction) }}</td>
+            <td>{{ row.suggestedDiscountPercent || 0 }}%</td>
+            <td>{{ row.sourceTable || 'collecting' }}</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="7">No inventory signals yet.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

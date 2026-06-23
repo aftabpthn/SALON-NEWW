@@ -1,0 +1,139 @@
+<section class="page-stack staff-aware-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Intelligence</span>
+      <h2>Staff-Aware Offers</h2>
+      <p>Staff idle ho to offer push, staff overloaded ho to discount avoid. Incentive bhi saath suggest hota hai.</p>
+    </div>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Checking...' : 'Evaluate' }}
+    </button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Staff ID</span>
+      <input type="text" [(ngModel)]="filters.staffId" name="staffId" placeholder="All staff" />
+    </label>
+    <label class="field">
+      <span>Date</span>
+      <input type="date" [(ngModel)]="filters.signalDate" name="signalDate" />
+    </label>
+    <label class="field">
+      <span>Day</span>
+      <select [(ngModel)]="filters.dayOfWeek" name="dayOfWeek">
+        <option *ngFor="let day of days" [value]="day.value">{{ day.label }}</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Hour</span>
+      <input type="number" min="0" max="23" [(ngModel)]="filters.hourSlot" name="hourSlot" placeholder="Auto" />
+    </label>
+    <label class="field">
+      <span>Service price paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.servicePricePaise" name="servicePricePaise" />
+    </label>
+    <label class="field">
+      <span>Capacity/hour</span>
+      <input type="number" min="1" max="12" [(ngModel)]="filters.capacityPerHour" name="capacityPerHour" />
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">Run</button>
+    <button class="ghost-button" type="button" (click)="saveSuggestion()" [disabled]="saving()">
+      {{ saving() ? 'Saving...' : 'Save suggestion' }}
+    </button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Best discount</span>
+      <strong>{{ best().suggestedDiscountPercent || 0 }}%</strong>
+      <small>{{ formatMoney(best().expectedDiscountPaise) }} expected discount</small>
+    </article>
+    <article class="metric-card">
+      <span>Incentive nudge</span>
+      <strong>{{ pct(best().suggestedIncentivePercent) }}</strong>
+      <small>For conversion discipline</small>
+    </article>
+    <article class="metric-card" [class.danger]="summary().overloadedCount">
+      <span>Overloaded staff</span>
+      <strong>{{ summary().overloadedCount || 0 }}</strong>
+      <small>{{ summary().idleCount || 0 }} idle staff</small>
+    </article>
+    <article class="metric-card">
+      <span>Average load</span>
+      <strong>{{ pct(summary().averageLoadPercent) }}</strong>
+      <small>{{ summary().staffCount || 0 }} staff checked</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Why this offer</h2>
+        <span class="status-pill">{{ evaluation()?.status || 'collecting' }}</span>
+      </div>
+      <ul class="reason-list">
+        <li *ngFor="let reason of best().reasons || []">{{ reason }}</li>
+        <li *ngIf="!(best().reasons || []).length">Staff/load signals collect hone ke baad suggestion strong hoga.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Saved suggestions</h2>
+        <span class="muted-text">{{ suggestions().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of suggestions()">
+          <div>
+            <strong>{{ row.staffName || row.staffId || 'All staff' }} | {{ row.suggestedDiscountPercent }}%</strong>
+            <small>{{ row.signalDate }} {{ row.hourSlot }}:00 | {{ label(row.status) }}</small>
+          </div>
+          <div class="row-actions">
+            <button type="button" (click)="updateStatus(row, 'approved')">Approve</button>
+            <button type="button" (click)="updateStatus(row, 'paused')">Pause</button>
+          </div>
+        </article>
+        <p class="muted-text" *ngIf="!suggestions().length">No saved staff-aware suggestions yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Staff load signals</h2>
+      <span class="muted-text">{{ rows().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Staff</th>
+            <th>Load</th>
+            <th>Occupancy</th>
+            <th>Active discount</th>
+            <th>Suggested discount</th>
+            <th>Incentive</th>
+            <th>Signal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of rows()">
+            <td>{{ row.staffName || row.staffId || 'All staff' }}</td>
+            <td>{{ pct(row.loadPercent) }}</td>
+            <td>{{ pct((row.occupancyRate || 0) * 100) }}</td>
+            <td>{{ row.activeDiscountPct || 0 }}%</td>
+            <td>{{ row.suggestedDiscountPercent || 0 }}%</td>
+            <td>{{ pct(row.suggestedIncentivePercent) }}</td>
+            <td>{{ row.sampleCount || 0 }} samples</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="7">No staff signals yet.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

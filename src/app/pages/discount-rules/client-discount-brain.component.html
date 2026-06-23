@@ -1,0 +1,117 @@
+<section class="page-stack client-brain-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Intelligence</span>
+      <h2>Client Discount Brain</h2>
+      <p>Har client ke CLV, churn risk, segment aur discount budget ke hisaab se personalized offer.</p>
+    </div>
+    <button class="primary-button" type="button" (click)="evaluate()" [disabled]="loading()">
+      {{ loading() ? 'Checking...' : 'Evaluate' }}
+    </button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Client ID</span>
+      <input type="number" min="1" [(ngModel)]="form.clientId" name="clientId" />
+    </label>
+    <label class="field">
+      <span>Service category</span>
+      <input type="text" [(ngModel)]="form.serviceCategory" name="serviceCategory" />
+    </label>
+    <label class="field">
+      <span>Cart total paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="form.cartTotalPaise" name="cartTotalPaise" />
+    </label>
+    <label class="field">
+      <span>Base discount %</span>
+      <input type="number" min="0" max="40" [(ngModel)]="form.baseDiscountPercent" name="baseDiscountPercent" />
+    </label>
+    <button class="primary-button" type="button" (click)="evaluate()" [disabled]="loading()">Run</button>
+    <button class="ghost-button" type="button" (click)="recordDecision()" [disabled]="recording()">
+      {{ recording() ? 'Recording...' : 'Record decision' }}
+    </button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Recommended discount</span>
+      <strong>{{ decision()?.recommendedDiscountPercent || 0 }}%</strong>
+      <small>{{ formatMoney(decision()?.recommendedDiscountPaise) }} discount</small>
+    </article>
+    <article class="metric-card">
+      <span>Strategy</span>
+      <strong>{{ label(decision()?.strategy || 'default') }}</strong>
+      <small>{{ label(decision()?.segment || 'unknown') }} segment</small>
+    </article>
+    <article class="metric-card" [class.danger]="decision()?.budgetCapApplied">
+      <span>Budget cap</span>
+      <strong>{{ decision()?.budgetCapApplied ? 'Applied' : 'Clear' }}</strong>
+      <small>{{ formatMoney(decision()?.score?.recommendedDiscountBudgetPaise) }} budget</small>
+    </article>
+    <article class="metric-card">
+      <span>Churn risk</span>
+      <strong>{{ pct((decision()?.score?.churnRisk || 0) * 100) }}</strong>
+      <small>{{ formatMoney(decision()?.score?.predictedClvPaise) }} predicted CLV</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Reasoning</h2>
+        <span class="status-pill">{{ decision()?.status || 'collecting' }}</span>
+      </div>
+      <ul class="reason-list">
+        <li *ngFor="let reason of decision()?.reasons || []">{{ reason }}</li>
+        <li *ngIf="!(decision()?.reasons || []).length">Client CLV score collect hone ke baad stronger decision milega.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Recent decisions</h2>
+        <span class="muted-text">{{ history().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <button type="button" *ngFor="let row of history()" (click)="useClient(row)">
+          <span>Client #{{ row.clientId }} | {{ row.recommendedDiscountPercent }}%</span>
+          <small>{{ label(row.strategy) }} | {{ formatMoney(row.recommendedDiscountPaise) }}</small>
+        </button>
+        <p class="muted-text" *ngIf="!history().length">No recorded decisions yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Top CLV clients</h2>
+        <span class="muted-text">{{ topClients().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <button type="button" *ngFor="let client of topClients()" (click)="useClient(client)">
+          <span>Client #{{ client.clientId }}</span>
+          <small>{{ formatMoney(client.predictedClvPaise) }} CLV | {{ label(client.acquisitionStage) }}</small>
+        </button>
+        <p class="muted-text" *ngIf="!topClients().length">No CLV scores yet.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>At-risk clients</h2>
+        <span class="muted-text">{{ atRiskClients().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <button type="button" *ngFor="let client of atRiskClients()" (click)="useClient(client)">
+          <span>Client #{{ client.clientId }}</span>
+          <small>{{ pct(client.churnRisk * 100) }} churn | {{ formatMoney(client.currentValuePaise) }} spent</small>
+        </button>
+        <p class="muted-text" *ngIf="!atRiskClients().length">No at-risk clients yet.</p>
+      </div>
+    </div>
+  </section>
+</section>
