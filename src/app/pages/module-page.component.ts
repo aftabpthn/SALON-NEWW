@@ -61,20 +61,20 @@ type PageConfig = {
               <button class="zenoti-button" type="button" (click)="query = 'email'">Email</button>
             </div>
           </div>
-          <select class="command-select" aria-label="Message logs quick action" (change)="runZenotiAction($event)">
+          <select class="command-select" aria-label="Module quick action" (change)="runZenotiAction($event)">
             <option>I want to ...</option>
-            <option value="create">Add message log</option>
-            <option value="refresh">Refresh delivery logs</option>
+            <option value="create">{{ config.createLabel }}</option>
+            <option value="refresh">Refresh records</option>
             <option value="failed">Show failed messages</option>
             <option value="whatsapp">Show WhatsApp logs</option>
-            <option value="outbound">Show outbound messages</option>
+            <option value="queueOrOutbound">{{ zenotiFifthMetricLabel() }}</option>
           </select>
         </section>
 
         <div class="zenoti-page-heading">
           <div>
             <h1>{{ config.title }}</h1>
-            <p>Messages &gt; SMS, email, WhatsApp delivery tracking and provider payloads</p>
+            <p>{{ config.subtitle }}</p>
           </div>
           <label class="zenoti-search">
             <span>Search logs</span>
@@ -83,11 +83,11 @@ type PageConfig = {
         </div>
 
         <div class="zenoti-metric-strip">
-          <article><span>Total logs</span><strong>{{ rows.length }}</strong><small>Provider records</small></article>
+          <article><span>Total records</span><strong>{{ rows.length }}</strong><small>{{ config.entity }}</small></article>
           <article><span>WhatsApp</span><strong>{{ countBy('channel', 'whatsapp') }}</strong><small>Chat messages</small></article>
           <article><span>SMS</span><strong>{{ countBy('channel', 'sms') }}</strong><small>Text messages</small></article>
           <article><span>Email</span><strong>{{ countBy('channel', 'email') }}</strong><small>Email logs</small></article>
-          <article><span>Outbound</span><strong>{{ countBy('direction', 'outbound') }}</strong><small>Sent from salon</small></article>
+          <article><span>{{ zenotiFifthMetricLabel() }}</span><strong>{{ zenotiFifthMetricValue() }}</strong><small>{{ zenotiFifthMetricHint() }}</small></article>
           <article><span>Failed</span><strong>{{ statusCount('failed') }}</strong><small>Needs review</small></article>
         </div>
       </ng-container>
@@ -680,6 +680,18 @@ export class ModulePageComponent implements OnInit, OnDestroy {
     return this.rows.filter((row) => String(row.status || '').toLowerCase().includes(needle)).length;
   }
 
+  zenotiFifthMetricLabel(): string {
+    return this.config?.entity === 'notifications' ? 'Queued' : 'Outbound';
+  }
+
+  zenotiFifthMetricValue(): number {
+    return this.config?.entity === 'notifications' ? this.statusCount('queued') : this.countBy('direction', 'outbound');
+  }
+
+  zenotiFifthMetricHint(): string {
+    return this.config?.entity === 'notifications' ? 'Waiting to send' : 'Sent from salon';
+  }
+
   runZenotiAction(event: Event): void {
     const select = event.target as HTMLSelectElement;
     const action = select.value;
@@ -689,7 +701,7 @@ export class ModulePageComponent implements OnInit, OnDestroy {
     if (action === 'refresh') this.load();
     if (action === 'failed') this.query = 'failed';
     if (action === 'whatsapp') this.query = 'whatsapp';
-    if (action === 'outbound') this.query = 'outbound';
+    if (action === 'queueOrOutbound') this.query = this.config?.entity === 'notifications' ? 'queued' : 'outbound';
     select.selectedIndex = 0;
   }
 
