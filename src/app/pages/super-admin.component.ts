@@ -101,7 +101,7 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               <span class="eyebrow">Command search</span>
               <h2>Search salons, domains, invoices, audit events, feature flags and plans</h2>
             </div>
-            <span class="badge">{{ commandSearchResults(overview).length }} results</span>
+            <span class="badge">{{ commandSearch().trim() ? commandSearchResults(overview).length + ' results' : 'Live index ready' }}</span>
           </div>
           <label class="tenant-search command-search-box">
             <span>Global search</span>
@@ -117,6 +117,16 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               <strong>{{ result.title }}</strong>
               <small>{{ result.detail }}</small>
             </button>
+          </div>
+          <div class="command-results command-suggestions" *ngIf="!commandSearch().trim()">
+            <button type="button" *ngFor="let result of commandQuickInsights(overview)" (click)="openCommandResult(result)">
+              <span>{{ result.type }}</span>
+              <strong>{{ result.title }}</strong>
+              <small>{{ result.detail }}</small>
+            </button>
+          </div>
+          <div class="command-empty-state" *ngIf="commandSearch().trim() && !commandSearchResults(overview).length">
+            No match found. Try salon name, owner email, domain, invoice number, audit action, plan or feature key.
           </div>
         </section>
 
@@ -147,12 +157,12 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           </label>
           <div class="action-kanban">
             <section class="kanban-column" *ngFor="let column of actionInboxColumns()">
-              <h3>{{ column.label }} <span>{{ actionInboxColumnItems(inbox.items, column.status).length }}</span></h3>
+              <h3>{{ column.label }} <span>{{ actionInboxColumnCount(inbox.items, column.status) }}</span></h3>
               <article *ngFor="let item of actionInboxColumnItems(inbox.items, column.status)" class="kanban-card">
                 <div>
                   <strong>{{ item.title }}</strong>
-                  <span>{{ item.detail }}</span>
-                  <small>{{ item.ownerQueue }} · SLA {{ item.dueInDays }}d · {{ item.recommendedAction }}</small>
+                  <span>{{ actionInboxTenantLabel(item) }} · {{ item.detail }}</span>
+                  <small>{{ item.category || 'ops' }} · {{ item.ownerQueue }} · SLA {{ item.dueInDays }}d · {{ item.recommendedAction }}</small>
                 </div>
                 <div class="action-inbox-buttons">
                   <span class="badge" [style.background]="riskTone(item.priority)" style="color:#fff">{{ item.riskScore | number: '1.0-0' }}</span>
@@ -165,7 +175,8 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                 </div>
               </article>
               <article class="kanban-empty" *ngIf="!actionInboxColumnItems(inbox.items, column.status).length">
-                No {{ column.label | lowercase }} items.
+                <strong>{{ actionInboxEmptyTitle(column.status) }}</strong>
+                <span>{{ actionInboxEmptyText(column.status) }}</span>
               </article>
             </section>
           </div>
@@ -2307,6 +2318,20 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
       color: var(--ink);
     }
 
+    .command-suggestions button {
+      min-height: 94px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 250, 0.72));
+    }
+
+    .command-empty-state {
+      margin-top: 12px;
+      border: 1px dashed rgba(15, 118, 110, 0.22);
+      border-radius: 12px;
+      padding: 12px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
     .action-inbox-filters {
       margin-bottom: 12px;
     }
@@ -2402,6 +2427,16 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
       color: var(--muted);
       font-size: 0.78rem;
       font-weight: 700;
+    }
+
+    .kanban-empty strong,
+    .kanban-empty span {
+      display: block;
+    }
+
+    .kanban-empty strong {
+      color: var(--ink);
+      margin-bottom: 4px;
     }
 
     .kanban-card .action-inbox-buttons {
@@ -3393,10 +3428,47 @@ export class SuperAdminComponent implements OnInit {
     return results.slice(0, 14);
   }
 
+  commandQuickInsights(overview: ApiRecord = {}): ApiRecord[] {
+    const tenants = overview.tenants || [];
+    const topRisk = [...tenants]
+      .sort((first: ApiRecord, second: ApiRecord) => {
+        const firstScore = Number(first.aiRiskScore?.score || 0) + (this.paymentDueTenant(first) ? 25 : 0) + (this.securityGapTenant(first) ? 10 : 0);
+        const secondScore = Number(second.aiRiskScore?.score || 0) + (this.paymentDueTenant(second) ? 25 : 0) + (this.securityGapTenant(second) ? 10 : 0);
+        return secondScore - firstScore;
+      })
+      .slice(0, 4)
+      .map((tenant: ApiRecord) => ({
+        type: this.paymentDueTenant(tenant) ? 'Payment due' : this.securityGapTenant(tenant) ? 'Security gap' : 'Risk tenant',
+        title: this.tenantLabel(tenant),
+        detail: `${tenant.ownerEmail || tenant.primaryDomain || 'Owner pending'} · ${tenant.planName || 'No plan'} · AI ${tenant.aiRiskScore?.score || 0}`,
+        tenantId: tenant.id
+      }));
+    const playbooks = (overview.operationsPlaybooks || []).slice(0, 2).map((playbook: ApiRecord) => ({
+      type: 'Playbook',
+      title: playbook.title,
+      detail: `${playbook.count || 0} matching item(s) · ${playbook.ownerQueue || 'ops queue'}`,
+      filter: playbook.category || 'all'
+    }));
+    const approvals = (overview.actionSafetyCommand?.pendingApprovals || []).slice(0, 2).map((approval: ApiRecord) => ({
+      type: 'Approval',
+      title: approval.action,
+      detail: `${approval.targetType || 'target'} · ${approval.reason || 'approval pending'}`,
+      selector: '.ops-command-grid'
+    }));
+    return [...topRisk, ...approvals, ...playbooks].slice(0, 8);
+  }
+
   openCommandResult(result: ApiRecord): void {
-    if (!result?.tenantId) return;
-    this.selectTenant(result.tenantId);
-    this.openTenantDrilldown(result.tenantId);
+    if (result?.tenantId) {
+      this.openTenantDrilldown(result.tenantId);
+      return;
+    }
+    if (result?.filter) {
+      this.setActionInboxFilter(result.filter);
+      this.scrollToSelector('.action-inbox-filters');
+      return;
+    }
+    if (result?.selector) this.scrollToSelector(result.selector);
   }
 
   setActionInboxFilter(filter: ActionInboxFilter): void {
@@ -3421,6 +3493,36 @@ export class SuperAdminComponent implements OnInit {
     const rows = this.filteredActionInbox(items);
     if (status === 'open') return rows.filter((item) => !item.status || item.status === 'open').slice(0, 12);
     return rows.filter((item) => item.status === status).slice(0, 12);
+  }
+
+  actionInboxColumnCount(items: ApiRecord[] = [], status = 'open'): number {
+    const rows = this.filteredActionInbox(items);
+    if (status === 'open') return rows.filter((item) => !item.status || item.status === 'open').length;
+    return rows.filter((item) => item.status === status).length;
+  }
+
+  actionInboxTenantLabel(item: ApiRecord = {}): string {
+    const tenant = (this.overview()?.tenants || []).find((row: ApiRecord) => row.id === item.tenantId);
+    return tenant ? this.tenantLabel(tenant) : String(item.tenantName || item.tenantId || 'Tenant');
+  }
+
+  actionInboxEmptyTitle(status = ''): string {
+    const titles: ApiRecord = {
+      snoozed: 'No snoozed work',
+      escalated: 'No escalations',
+      resolved: 'Nothing resolved yet'
+    };
+    return titles[status] || 'No open work';
+  }
+
+  actionInboxEmptyText(status = ''): string {
+    const copy: ApiRecord = {
+      snoozed: 'Items snoozed from this board will land here with their next follow-up window.',
+      escalated: 'Critical billing, security or churn risks escalated by the team will appear here.',
+      resolved: 'Completed inbox work will move here after Resolve is clicked.',
+      open: 'New risk, billing, usage and security items will appear here automatically.'
+    };
+    return copy[status] || copy.open;
   }
 
   timelineBarHeight(point: ApiRecord = {}): number {
