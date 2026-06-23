@@ -846,7 +846,7 @@ interface PolicyRow {
                 <article
                   *ngFor="let alert of filteredAlerts(); trackBy: trackById"
                   class="alert-card"
-                  [class.selected]="selectedAlert()?.id === alert.id"
+                  [class.selected]="selectedAlert().id === alert.id"
                   [ngClass]="riskTone(alert.riskLevel || alert.severity)"
                   (click)="selectAlert(alert)"
                 >

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
@@ -12,7 +12,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
 @Component({
   selector: 'app-inventory-workspace-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [CommonModule, FormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack inventory-detail-page">
       <app-inventory-zenoti-chrome

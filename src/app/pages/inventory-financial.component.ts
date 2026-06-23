@@ -1,6 +1,5 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
@@ -9,7 +8,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 @Component({
   selector: 'app-inventory-financial',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [CommonModule, CurrencyPipe, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack financial-page">
       <app-inventory-zenoti-chrome

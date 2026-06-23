@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -10,7 +10,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, DatePipe, RouterLink, StateComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, RouterLink, StateComponent],
   template: `
     <section class="page-stack inventory-shell zenoti-inventory-shell">
       <section class="zenoti-product-page">
@@ -166,7 +166,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
             <h2>{{ deskTitle() }}</h2>
           </div>
           <div class="section-actions">
-            <small>{{ selectedProduct()?.name || 'New inventory entry' }}</small>
+            <small>{{ selectedProduct().name || 'New inventory entry' }}</small>
             <button class="ghost-button" type="button" (click)="activeDesk.set(''); quickAction = ''">Back To Search</button>
           </div>
         </div>

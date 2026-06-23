@@ -1,7 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 
@@ -56,7 +55,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
 @Component({
   selector: 'app-product-consume',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, InventoryZenotiChromeComponent],
+  imports: [CommonModule, FormsModule, InventoryZenotiChromeComponent],
   template: `
     <section class="page-stack">
       <app-inventory-zenoti-chrome
