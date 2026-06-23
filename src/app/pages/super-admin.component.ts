@@ -39,6 +39,54 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <aura-kpi-card tone="violet" target="/kpi-details/super-admin/health"><span>Health</span><strong>{{ overview.metrics.averageHealth | number: '1.0-1' }}</strong><small>Average score</small></aura-kpi-card>
         </div>
 
+        <section class="dashboard-grid executive-deep-grid">
+          <section class="panel revenue-trend-panel">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">MRR / Revenue trend</span>
+                <h2>Invoice revenue, MRR base and outstanding exposure</h2>
+              </div>
+              <span class="badge">{{ overview.revenueCommand?.arr | currency: 'INR':'symbol':'1.0-0' }} ARR</span>
+            </div>
+            <div class="revenue-bars">
+              <article *ngFor="let point of revenueTrend(overview)">
+                <div class="bar-stack">
+                  <span class="bar-paid" [style.height.%]="revenueBarHeight(point.paid, revenueTrend(overview))"></span>
+                  <span class="bar-due" [style.height.%]="revenueBarHeight(point.outstanding, revenueTrend(overview))"></span>
+                </div>
+                <strong>{{ point.label }}</strong>
+                <small>{{ point.total | currency: 'INR':'symbol':'1.0-0' }}</small>
+              </article>
+            </div>
+            <div class="quick-grid compact-grid">
+              <article class="action-card" *ngFor="let metric of revenueDeepMetrics(overview)">
+                <strong>{{ metric.value }}</strong>
+                <span>{{ metric.label }}</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel compliance-panel">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">Compliance audit timeline</span>
+                <h2>Latest super-admin actions and approval events</h2>
+              </div>
+              <span class="badge">{{ complianceTimeline(overview).length }} events</span>
+            </div>
+            <div class="compliance-timeline">
+              <article *ngFor="let event of complianceTimeline(overview).slice(0, 8)">
+                <span [style.background]="riskTone(event.severity)"></span>
+                <div>
+                  <strong>{{ event.action }}</strong>
+                  <small>{{ event.tenantName }} · {{ event.actor }} · {{ event.createdAt || 'No time' }}</small>
+                  <p>{{ event.summary }}</p>
+                </div>
+              </article>
+            </div>
+          </section>
+        </section>
+
         <section class="super-admin-command" *ngIf="commandMetrics(overview) as command">
           <div class="command-heading">
             <div>
@@ -155,6 +203,32 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
             <span>Action note</span>
             <input [ngModel]="actionInboxNote()" (ngModelChange)="actionInboxNote.set($event)" [ngModelOptions]="{ standalone: true }" placeholder="Add context for note/escalation" />
           </label>
+          <div class="quick-grid compact-grid">
+            <article class="action-card" *ngFor="let metric of actionInboxMetrics(inbox.items)">
+              <strong>{{ metric.value }}</strong>
+              <span>{{ metric.label }}</span>
+            </article>
+          </div>
+          <div class="dashboard-grid inbox-deep-grid">
+            <div class="activity-list">
+              <article *ngFor="let owner of actionInboxOwnerRows(inbox.items)">
+                <div>
+                  <strong>{{ owner.owner }}</strong>
+                  <span>{{ owner.open }} open · {{ owner.escalated }} escalated · avg SLA {{ owner.avgSla }}d</span>
+                </div>
+                <span class="badge" [style.background]="owner.escalated ? 'var(--danger,#dc2626)' : 'var(--accent,#0f766e)'" style="color:#fff">{{ owner.total }}</span>
+              </article>
+            </div>
+            <div class="activity-list">
+              <article *ngFor="let row of actionInboxCategoryRows(inbox.items)">
+                <div>
+                  <strong>{{ row.category }}</strong>
+                  <span>{{ row.open }} open · {{ row.resolved }} resolved · {{ row.topAction }}</span>
+                </div>
+                <span class="badge">{{ row.total }}</span>
+              </article>
+            </div>
+          </div>
           <div class="action-kanban">
             <section class="kanban-column" *ngFor="let column of actionInboxColumns()">
               <h3>{{ column.label }} <span>{{ actionInboxColumnCount(inbox.items, column.status) }}</span></h3>
@@ -1491,7 +1565,27 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                 </article>
               </div>
 
+              <div class="activity-list" *ngIf="drawerTab() === 'branches' || drawerTab() === 'limits'">
+                <article *ngFor="let branch of tenantBranchUsageRows(tenant)">
+                  <div style="flex:1;min-width:0">
+                    <strong>{{ branch.label }}</strong>
+                    <span>{{ branch.value }} used of {{ branch.limit }} · {{ branch.percent }}% utilization</span>
+                    <span style="display:block;height:7px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
+                      <span [style.width.%]="branch.percent" [style.background]="branch.percent >= 90 ? 'var(--danger,#dc2626)' : branch.percent >= 70 ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)'" style="display:block;height:100%"></span>
+                    </span>
+                  </div>
+                  <span class="badge" [style.background]="branch.percent >= 90 ? 'var(--danger,#dc2626)' : 'var(--accent,#0f766e)'" style="color:#fff">{{ branch.status }}</span>
+                </article>
+              </div>
+
               <div class="activity-list" *ngIf="drawerTab() === 'billing'">
+                <article *ngFor="let metric of tenantBillingMetrics(tenant)">
+                  <div>
+                    <strong>{{ metric.value }}</strong>
+                    <span>{{ metric.label }}</span>
+                  </div>
+                  <span class="badge" [style.background]="metric.tone" style="color:#fff">{{ metric.badge }}</span>
+                </article>
                 <article *ngFor="let invoice of tenant.drilldown.recentInvoices">
                   <div>
                     <strong>{{ invoice.invoiceNumber }}</strong>
@@ -1508,6 +1602,16 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               </div>
 
               <div class="activity-list" *ngIf="drawerTab() === 'users'">
+                <article *ngFor="let role of tenantUserRoleRows(tenant)">
+                  <div style="flex:1;min-width:0">
+                    <strong>{{ role.role }}</strong>
+                    <span>{{ role.count }} users · {{ role.failedLogins }} failed logins · last {{ role.lastLogin || 'No login' }}</span>
+                    <span style="display:block;height:7px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
+                      <span [style.width.%]="role.percent" style="display:block;height:100%;background:var(--accent,#0f766e)"></span>
+                    </span>
+                  </div>
+                  <span class="badge">{{ role.percent }}%</span>
+                </article>
                 <article *ngFor="let user of tenant.drilldown.recentUsers">
                   <div>
                     <strong>{{ user.name }}</strong>
@@ -1654,15 +1758,16 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                 </div>
               </section>
 
-              <div class="activity-list" *ngIf="drawerTab() === 'audit'">
-                <article *ngFor="let event of tenant.drilldown.auditLog">
+              <div class="activity-list audit-deep-list" *ngIf="drawerTab() === 'audit'">
+                <article *ngFor="let event of tenantAuditTimeline(tenant)">
                   <div>
                     <strong>{{ event.action }}</strong>
-                    <span>{{ event.actorUserId }} · {{ event.summary || 'No details' }}</span>
+                    <span>{{ event.actor }} · {{ event.summary || 'No details' }}</span>
+                    <small>{{ event.targetType }} · {{ event.targetId }}</small>
                   </div>
-                  <small>{{ event.createdAt }}</small>
+                  <span class="badge" [style.background]="riskTone(event.severity)" style="color:#fff">{{ event.severity }}</span>
                 </article>
-                <article *ngIf="!tenant.drilldown.auditLog.length">
+                <article *ngIf="!tenantAuditTimeline(tenant).length">
                   <div>
                     <strong>No audit events</strong>
                     <span>Super-admin actions for this tenant will appear here.</span>
@@ -1948,12 +2053,20 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           </section>
 
           <section class="form-panel" *ngIf="adminFormTab() === 'plans'">
-            <h3>Custom Plan Builder</h3>
-            <form [formGroup]="planForm" (ngSubmit)="createPlan()">
+            <h3>{{ editingPlanId() ? 'Edit Plan' : 'Custom Plan Builder' }}</h3>
+            <form [formGroup]="planForm" (ngSubmit)="savePlan()">
               <label class="field"><span>Name</span><input formControlName="name" /></label>
               <label class="field"><span>Code</span><input formControlName="code" /></label>
               <label class="field"><span>Monthly price</span><input type="number" formControlName="priceMonthly" /></label>
               <label class="field"><span>Trial days</span><input type="number" formControlName="trialDays" /></label>
+              <label class="field">
+                <span>Status</span>
+                <select formControlName="status">
+                  <option value="active">Active</option>
+                  <option value="draft">Draft</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
               <label class="field"><span>Branches</span><input type="number" formControlName="branches" /></label>
               <label class="field"><span>Staff</span><input type="number" formControlName="staff" /></label>
               <label class="field"><span>Clients</span><input type="number" formControlName="clients" /></label>
@@ -1969,7 +2082,8 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               </label>
               <label class="field full"><span>Features</span><textarea formControlName="featuresText"></textarea></label>
               <div class="form-actions">
-                <button class="primary-button" type="submit" [disabled]="planForm.invalid || saving()">Create custom plan</button>
+                <button class="ghost-button" type="button" *ngIf="editingPlanId()" (click)="resetPlanForm()">Cancel edit</button>
+                <button class="primary-button" type="submit" [disabled]="planForm.invalid || saving()">{{ editingPlanId() ? 'Update plan' : 'Create custom plan' }}</button>
               </div>
             </form>
           </section>
@@ -2111,7 +2225,7 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               </article>
             </div>
             <div class="activity-list">
-              <article *ngFor="let plan of overview.plans">
+              <article *ngFor="let plan of overview.plans" class="plan-row">
                 <div>
                   <strong>{{ plan.name }}</strong>
                   <span>{{ plan.priceMonthly | currency: 'INR':'symbol':'1.0-0' }}/mo · {{ plan.trialDays }} trial days</span>
@@ -2120,7 +2234,13 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                   </span>
                   <span *ngIf="plan.features?.length" style="display:block;font-size:0.78em;color:var(--text-muted)">{{ plan.features.join(' · ') }}</span>
                 </div>
-                <span class="badge">{{ plan.status }}</span>
+                <div class="plan-actions">
+                  <span class="badge">{{ plan.status }}</span>
+                  <button class="ghost-button mini" type="button" (click)="editPlan(plan)">Edit</button>
+                  <button class="ghost-button mini" type="button" [disabled]="saving()" (click)="setPlanStatus(plan, plan.status === 'active' ? 'inactive' : 'active')">
+                    {{ plan.status === 'active' ? 'Deactivate' : 'Activate' }}
+                  </button>
+                </div>
               </article>
             </div>
           </div>
@@ -2240,6 +2360,98 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
     .ops-count.is-warning {
       background: rgba(245, 158, 11, 0.16);
       color: #a16207;
+    }
+
+    .executive-deep-grid {
+      grid-template-columns: minmax(360px, 1.4fr) minmax(320px, 1fr);
+      align-items: stretch;
+    }
+
+    .revenue-bars {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(54px, 1fr));
+      gap: 10px;
+      min-height: 210px;
+      align-items: end;
+      margin-top: 12px;
+    }
+
+    .revenue-bars article {
+      display: grid;
+      gap: 6px;
+      justify-items: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .bar-stack {
+      display: flex;
+      width: 100%;
+      height: 150px;
+      align-items: end;
+      gap: 3px;
+      justify-content: center;
+      padding: 8px;
+      border-radius: 14px;
+      background: rgba(15, 118, 110, 0.06);
+    }
+
+    .bar-stack span {
+      width: 18px;
+      min-height: 4px;
+      border-radius: 999px 999px 4px 4px;
+    }
+
+    .bar-paid {
+      background: var(--success, #16a34a);
+    }
+
+    .bar-due {
+      background: var(--danger, #dc2626);
+    }
+
+    .compact-grid {
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      margin-top: 12px;
+    }
+
+    .compliance-timeline {
+      display: grid;
+      gap: 10px;
+      max-height: 344px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .compliance-timeline article {
+      display: grid;
+      grid-template-columns: 10px 1fr;
+      gap: 10px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 12px;
+      padding: 10px;
+      background: #fff;
+    }
+
+    .compliance-timeline article > span {
+      width: 10px;
+      min-height: 100%;
+      border-radius: 999px;
+    }
+
+    .compliance-timeline strong,
+    .compliance-timeline small,
+    .compliance-timeline p {
+      display: block;
+      margin: 0;
+    }
+
+    .compliance-timeline small,
+    .compliance-timeline p {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 750;
     }
 
     .tenant-command-toolbar {
@@ -2376,6 +2588,11 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
       font-weight: 850;
     }
 
+    .inbox-deep-grid {
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin-bottom: 12px;
+    }
+
     .action-kanban {
       display: grid;
       grid-template-columns: repeat(4, minmax(220px, 1fr));
@@ -2443,6 +2660,22 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
       justify-content: flex-start;
       margin-top: 8px;
       max-width: none;
+    }
+
+    .audit-deep-list article,
+    .plan-row {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .plan-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
     }
 
     .ops-command-grid {
@@ -2838,6 +3071,7 @@ export class SuperAdminComponent implements OnInit {
   readonly adminFormTab = signal<AdminFormTab>('subscription');
   readonly drawerTab = signal<DrawerTab>('profile');
   readonly bulkPreviewOpen = signal(false);
+  readonly editingPlanId = signal('');
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
@@ -2959,6 +3193,7 @@ export class SuperAdminComponent implements OnInit {
     code: ['', Validators.required],
     priceMonthly: [9999],
     trialDays: [14],
+    status: ['active'],
     branches: [3],
     staff: [25],
     clients: [5000],
@@ -3374,6 +3609,85 @@ export class SuperAdminComponent implements OnInit {
     };
   }
 
+  moneyText(value: number): string {
+    return `₹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
+  }
+
+  revenueTrend(overview: ApiRecord = {}): ApiRecord[] {
+    const buckets = new Map<string, ApiRecord>();
+    for (const tenant of overview.tenants || []) {
+      for (const invoice of tenant.drilldown?.recentInvoices || []) {
+        const key = String(invoice.createdAt || '').slice(0, 7) || 'Current';
+        const row = buckets.get(key) || { key, label: key === 'Current' ? 'Current' : key.slice(5), total: 0, paid: 0, outstanding: 0 };
+        row.total += Number(invoice.total || invoice.paid || invoice.balance || 0);
+        row.paid += Number(invoice.paid || 0);
+        row.outstanding += Number(invoice.balance || 0);
+        buckets.set(key, row);
+      }
+    }
+    const rows = [...buckets.values()].sort((a, b) => String(a.key).localeCompare(String(b.key))).slice(-6);
+    if (rows.length) return rows;
+    const revenue = overview.revenueCommand || {};
+    return [
+      { label: 'MRR', total: Number(overview.metrics?.monthlyRecurringRevenue || 0), paid: Number(overview.metrics?.monthlyRecurringRevenue || 0), outstanding: 0 },
+      { label: 'Trial', total: Number(revenue.trialMrr || 0), paid: Number(revenue.trialMrr || 0), outstanding: 0 },
+      { label: 'Due', total: Number(revenue.outstanding || overview.metrics?.outstanding || 0), paid: 0, outstanding: Number(revenue.outstanding || overview.metrics?.outstanding || 0) }
+    ];
+  }
+
+  revenueBarHeight(value: number, rows: ApiRecord[] = []): number {
+    const max = Math.max(1, ...rows.map((row) => Number(row.total || 0)));
+    return Math.max(4, Math.min(100, (Number(value || 0) / max) * 100));
+  }
+
+  revenueDeepMetrics(overview: ApiRecord = {}): ApiRecord[] {
+    const revenue = overview.revenueCommand || {};
+    return [
+      { label: 'ARPU', value: this.moneyText(revenue.arpu || 0) },
+      { label: 'Revenue quality', value: `${Number(revenue.revenueQuality || 0)}%` },
+      { label: 'Trial MRR', value: this.moneyText(revenue.trialMrr || 0) },
+      { label: 'Suspended at risk', value: this.moneyText(revenue.suspendedMrrAtRisk || 0) }
+    ];
+  }
+
+  complianceTimeline(overview: ApiRecord = {}): ApiRecord[] {
+    const events: ApiRecord[] = [];
+    for (const tenant of overview.tenants || []) {
+      for (const event of tenant.drilldown?.auditLog || []) {
+        events.push({
+          action: event.action || 'audit.event',
+          tenantName: this.tenantLabel(tenant),
+          actor: event.actorUserId || event.actor || 'system',
+          summary: event.summary || event.targetId || 'Super-admin action recorded',
+          createdAt: event.createdAt || '',
+          severity: this.auditSeverity(event.action || ''),
+          targetType: event.targetType || 'tenant',
+          targetId: event.targetId || tenant.id
+        });
+      }
+    }
+    for (const approval of overview.actionSafetyCommand?.pendingApprovals || []) {
+      events.push({
+        action: `approval.${approval.status || 'pending'}`,
+        tenantName: approval.targetId || 'Approval queue',
+        actor: approval.requestedBy || 'super_admin',
+        summary: approval.reason || approval.action || 'Approval requested',
+        createdAt: approval.createdAt || '',
+        severity: approval.priority === 'high' ? 'high' : 'medium',
+        targetType: approval.targetType || 'approval',
+        targetId: approval.id || approval.targetId
+      });
+    }
+    return events.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 30);
+  }
+
+  auditSeverity(action = ''): string {
+    const value = String(action || '').toLowerCase();
+    if (value.includes('suspend') || value.includes('imperson') || value.includes('export') || value.includes('delete')) return 'high';
+    if (value.includes('plan') || value.includes('approval') || value.includes('role') || value.includes('sso')) return 'medium';
+    return 'low';
+  }
+
   operationalIntelligence(overview: ApiRecord = {}): ApiRecord[] {
     const tenants = overview.tenants || [];
     const highRisk = tenants.filter((tenant: ApiRecord) => this.highRiskTenant(tenant)).length;
@@ -3499,6 +3813,55 @@ export class SuperAdminComponent implements OnInit {
     const rows = this.filteredActionInbox(items);
     if (status === 'open') return rows.filter((item) => !item.status || item.status === 'open').length;
     return rows.filter((item) => item.status === status).length;
+  }
+
+  actionInboxMetrics(items: ApiRecord[] = []): ApiRecord[] {
+    const rows = this.filteredActionInbox(items);
+    const open = rows.filter((item) => !item.status || item.status === 'open').length;
+    const escalated = rows.filter((item) => item.status === 'escalated').length;
+    const resolved = rows.filter((item) => item.status === 'resolved').length;
+    const avgSla = rows.length ? Math.round(rows.reduce((total, item) => total + Number(item.dueInDays || 0), 0) / rows.length) : 0;
+    return [
+      { label: 'Open workload', value: open },
+      { label: 'Escalated', value: escalated },
+      { label: 'Resolved', value: resolved },
+      { label: 'Avg SLA days', value: avgSla }
+    ];
+  }
+
+  actionInboxOwnerRows(items: ApiRecord[] = []): ApiRecord[] {
+    const map = new Map<string, ApiRecord>();
+    for (const item of this.filteredActionInbox(items)) {
+      const owner = item.ownerQueue || 'customer_success';
+      const row = map.get(owner) || { owner, total: 0, open: 0, escalated: 0, slaTotal: 0 };
+      row.total += 1;
+      row.slaTotal += Number(item.dueInDays || 0);
+      if (!item.status || item.status === 'open') row.open += 1;
+      if (item.status === 'escalated') row.escalated += 1;
+      map.set(owner, row);
+    }
+    return ([...map.values()] as ApiRecord[])
+      .map((row) => ({ ...row, avgSla: row.total ? Math.round(row.slaTotal / row.total) : 0 }))
+      .sort((a: ApiRecord, b: ApiRecord) => b.total - a.total)
+      .slice(0, 4);
+  }
+
+  actionInboxCategoryRows(items: ApiRecord[] = []): ApiRecord[] {
+    const map = new Map<string, ApiRecord>();
+    for (const item of this.filteredActionInbox(items)) {
+      const category = item.category || 'ops';
+      const row = map.get(category) || { category, total: 0, open: 0, resolved: 0, actions: new Map<string, number>() };
+      row.total += 1;
+      if (!item.status || item.status === 'open') row.open += 1;
+      if (item.status === 'resolved') row.resolved += 1;
+      const action = item.recommendedAction || 'Review';
+      row.actions.set(action, (row.actions.get(action) || 0) + 1);
+      map.set(category, row);
+    }
+    return ([...map.values()] as ApiRecord[]).map((row) => {
+      const topAction = ([...row.actions.entries()] as [string, number][]).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Review';
+      return { ...row, topAction };
+    }).sort((a: ApiRecord, b: ApiRecord) => b.total - a.total).slice(0, 4);
   }
 
   actionInboxTenantLabel(item: ApiRecord = {}): string {
@@ -3919,6 +4282,58 @@ export class SuperAdminComponent implements OnInit {
     ];
   }
 
+  tenantBillingMetrics(tenant: ApiRecord = {}): ApiRecord[] {
+    const summary = tenant.drilldown?.invoiceSummary || {};
+    return [
+      { label: 'MRR', value: this.moneyText(tenant.monthlyRecurringRevenue || 0), badge: tenant.planName || 'Plan', tone: 'var(--accent,#0f766e)' },
+      { label: 'Outstanding', value: this.moneyText(summary.outstanding || tenant.outstanding || 0), badge: Number(summary.outstanding || tenant.outstanding || 0) ? 'Due' : 'Clear', tone: Number(summary.outstanding || tenant.outstanding || 0) ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)' },
+      { label: 'Invoices', value: `${summary.paid || 0}/${summary.total || 0}`, badge: `${summary.unpaid || 0} unpaid`, tone: Number(summary.unpaid || 0) ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)' }
+    ];
+  }
+
+  tenantUserRoleRows(tenant: ApiRecord = {}): ApiRecord[] {
+    const users = tenant.drilldown?.recentUsers || [];
+    const total = Math.max(1, users.length);
+    const roles = new Map<string, ApiRecord>();
+    for (const user of users) {
+      const role = user.role || 'user';
+      const row = roles.get(role) || { role, count: 0, failedLogins: 0, lastLogin: '' };
+      row.count += 1;
+      row.failedLogins += Number(user.failedLoginCount || 0);
+      if (String(user.lastLoginAt || '') > String(row.lastLogin || '')) row.lastLogin = user.lastLoginAt;
+      roles.set(role, row);
+    }
+    return ([...roles.values()] as ApiRecord[])
+      .map((row) => ({ ...row, percent: Math.round((row.count / total) * 100) }))
+      .sort((a: ApiRecord, b: ApiRecord) => b.count - a.count);
+  }
+
+  tenantBranchUsageRows(tenant: ApiRecord = {}): ApiRecord[] {
+    const limits = tenant.tenantLimits || {};
+    const usage = tenant.usage || {};
+    return [
+      { label: 'Branches', value: Number(usage.branches || 0), limit: Number(limits.branches || 1) },
+      { label: 'Staff seats', value: Number(usage.staff || 0), limit: Number(limits.staff || 1) },
+      { label: 'Client capacity', value: Number(usage.clients || 0), limit: Number(limits.clients || 1) },
+      { label: 'Monthly appointments', value: Number(usage.appointments || 0), limit: Number(limits.monthlyAppointments || 8000) }
+    ].map((row) => {
+      const percent = Math.min(100, Math.round((row.value / Math.max(1, row.limit)) * 100));
+      return { ...row, percent, status: percent >= 90 ? 'Limit risk' : percent >= 70 ? 'Watch' : 'Healthy' };
+    });
+  }
+
+  tenantAuditTimeline(tenant: ApiRecord = {}): ApiRecord[] {
+    return (tenant.drilldown?.auditLog || []).map((event: ApiRecord) => ({
+      action: event.action || 'audit.event',
+      actor: event.actorUserId || event.actor || 'system',
+      summary: event.summary || 'Super-admin action recorded',
+      targetType: event.targetType || 'tenant',
+      targetId: event.targetId || tenant.id,
+      createdAt: event.createdAt || '',
+      severity: this.auditSeverity(event.action || '')
+    })).sort((a: ApiRecord, b: ApiRecord) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  }
+
   updateSubscription(): void {
     if (this.subscriptionForm.invalid) return;
     this.ensureSafetyDefaults('subscription update');
@@ -4068,15 +4483,14 @@ export class SuperAdminComponent implements OnInit {
     });
   }
 
-  createPlan(): void {
-    if (this.planForm.invalid) return;
-    this.saving.set(true);
+  planPayload(): ApiRecord {
     const features = String(this.planForm.value.featuresText || '').split(',').map((item) => item.trim()).filter(Boolean);
-    this.api.post('super-admin/plans', {
+    return {
       name: this.planForm.value.name,
       code: this.planForm.value.code,
       priceMonthly: this.planForm.value.priceMonthly,
       trialDays: this.planForm.value.trialDays,
+      status: this.planForm.value.status || 'active',
       features,
       limits: {
         branches: Number(this.planForm.value.branches || 0),
@@ -4086,13 +4500,80 @@ export class SuperAdminComponent implements OnInit {
         campaigns: Number(this.planForm.value.campaigns || 0),
         supportTier: this.planForm.value.supportTier || 'standard'
       }
-    }).subscribe({
+    };
+  }
+
+  createPlan(): void {
+    this.savePlan();
+  }
+
+  savePlan(): void {
+    if (this.planForm.invalid) return;
+    this.saving.set(true);
+    const planId = this.editingPlanId();
+    const request = planId
+      ? this.api.patch(`super-admin/plans/${planId}`, this.planPayload())
+      : this.api.post('super-admin/plans', this.planPayload());
+    request.subscribe({
       next: () => {
+        this.resetPlanForm();
         this.saving.set(false);
         this.load();
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to create plan');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  editPlan(plan: ApiRecord): void {
+    this.editingPlanId.set(plan.id || '');
+    this.planForm.patchValue({
+      name: plan.name || '',
+      code: plan.code || '',
+      priceMonthly: Number(plan.priceMonthly || 0),
+      trialDays: Number(plan.trialDays || 14),
+      status: plan.status || 'active',
+      branches: Number(plan.limits?.branches || 3),
+      staff: Number(plan.limits?.staff || 25),
+      clients: Number(plan.limits?.clients || 5000),
+      monthlyAppointments: Number(plan.limits?.monthlyAppointments || 8000),
+      campaigns: Number(plan.limits?.campaigns || 50),
+      supportTier: plan.limits?.supportTier || 'standard',
+      featuresText: (plan.features || []).join(', ')
+    });
+    this.setAdminFormTab('plans');
+    this.scrollToSelector('.admin-form-tabs');
+  }
+
+  resetPlanForm(): void {
+    this.editingPlanId.set('');
+    this.planForm.reset({
+      name: '',
+      code: '',
+      priceMonthly: 9999,
+      trialDays: 14,
+      status: 'active',
+      branches: 3,
+      staff: 25,
+      clients: 5000,
+      monthlyAppointments: 8000,
+      campaigns: 50,
+      supportTier: 'standard',
+      featuresText: 'Advanced CRM, Marketing automation, Analytics'
+    });
+  }
+
+  setPlanStatus(plan: ApiRecord, status: 'active' | 'inactive'): void {
+    this.saving.set(true);
+    this.api.patch(`super-admin/plans/${plan.id}`, { status }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to update plan status');
         this.saving.set(false);
       }
     });
