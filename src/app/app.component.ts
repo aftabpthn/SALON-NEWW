@@ -25,6 +25,14 @@ type NavGroup = {
   items: NavItem[];
 };
 
+type ActiveNavTabGroup = {
+  groupLabel: string;
+  path: string;
+  label: string;
+  icon: string;
+  children: NavItem[];
+};
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -119,17 +127,19 @@ type NavGroup = {
                     <span>{{ item.label }}</span>
                     <small>{{ item.children?.length }}</small>
                   </a>
-                  <a
-                    *ngFor="let child of item.children"
-                    class="nav-subitem nested"
-                    [routerLink]="child.path"
-                    routerLinkActive="active"
-                    [routerLinkActiveOptions]="{ exact: child.path === '/dashboard' }"
-                    (click)="rememberNavGroup(group.id)"
-                  >
-                    <span class="nav-icon" aria-hidden="true">{{ child.icon }}</span>
-                    <span>{{ child.label }}</span>
-                  </a>
+                  <ng-container *ngIf="navQuery()">
+                    <a
+                      *ngFor="let child of item.children"
+                      class="nav-subitem nested"
+                      [routerLink]="child.path"
+                      routerLinkActive="active"
+                      [routerLinkActiveOptions]="{ exact: child.path === '/dashboard' }"
+                      (click)="rememberNavGroup(group.id)"
+                    >
+                      <span class="nav-icon" aria-hidden="true">{{ child.icon }}</span>
+                      <span>{{ child.label }}</span>
+                    </a>
+                  </ng-container>
                 </div>
                 <ng-template #singleNavItem>
                   <a
@@ -229,6 +239,28 @@ type NavGroup = {
           {{ globalError() }}
           <button class="ghost-button mini" type="button" (click)="globalError.set('')">{{ i18n.t('shell.dismiss', 'Dismiss') }}</button>
         </div>
+
+        <section class="workspace-page-tabs" *ngIf="activePageTabs() as tabs" aria-label="Related pages">
+          <div class="workspace-page-tabs-head">
+            <span class="nav-icon" aria-hidden="true">{{ tabs.icon }}</span>
+            <div>
+              <span class="eyebrow">{{ tabs.groupLabel }}</span>
+              <strong>{{ tabs.label }}</strong>
+            </div>
+          </div>
+          <nav class="workspace-page-tabs-nav" aria-label="Page sections">
+            <a
+              *ngFor="let tab of tabs.children"
+              class="workspace-page-tab"
+              [routerLink]="tab.path"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: tab.path === tabs.path || tab.path === '/dashboard' }"
+            >
+              <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
+              <span>{{ tab.label }}</span>
+            </a>
+          </nav>
+        </section>
 
         <router-outlet></router-outlet>
       </main>
@@ -436,7 +468,12 @@ export class AppComponent {
           keywords: 'commission dashboard target incentives service product membership branch admin all transaction',
           children: [
             { path: '/staff-os/commission-dashboard', label: 'Commission Dashboard', icon: 'CD', keywords: 'commission rules payout incentive' },
-            { path: '/staff-os/target-incentives/service', label: 'Target Incentives', icon: 'TI', keywords: 'service product membership branch admin all transaction target incentive slabs flexi commission' }
+            { path: '/staff-os/target-incentives/service', label: 'Service Incentives', icon: 'SI', keywords: 'service target incentive slabs flexi commission' },
+            { path: '/staff-os/target-incentives/product', label: 'Product Incentives', icon: 'PI', keywords: 'product target incentive commission retail' },
+            { path: '/staff-os/target-incentives/membership', label: 'Membership Incentives', icon: 'MI', keywords: 'membership target incentive sales' },
+            { path: '/staff-os/target-incentives/branch-admin', label: 'Branch Incentives', icon: 'BI', keywords: 'branch admin target incentive' },
+            { path: '/staff-os/target-incentives/admin', label: 'Admin Incentives', icon: 'AI', keywords: 'admin target incentive master' },
+            { path: '/staff-os/target-incentives/all-transaction', label: 'All Transaction Incentives', icon: 'TI', keywords: 'all transaction target incentive' }
           ]
         },
         {
@@ -639,6 +676,17 @@ export class AppComponent {
   });
   readonly activePageLabel = computed(() => {
     return this.pageLabelForUrl(this.activeRoute()) || 'Command workspace';
+  });
+  readonly activePageTabs = computed<ActiveNavTabGroup | null>(() => {
+    const branch = this.navBranchForUrl(this.activeRoute());
+    if (!branch?.item.children?.length) return null;
+    return {
+      groupLabel: branch.group.label,
+      path: branch.item.path,
+      label: branch.item.label,
+      icon: branch.item.icon,
+      children: branch.item.children
+    };
   });
   readonly backButtonLabel = computed(() => {
     const previous = this.previousRoute();
@@ -871,6 +919,18 @@ export class AppComponent {
 
   private navLeaves(items: NavItem[]): NavItem[] {
     return items.flatMap((item) => item.children?.length ? item.children : [item]);
+  }
+
+  private navBranchForUrl(url: string): { group: NavGroup; item: NavItem } | null {
+    for (const group of this.navGroups) {
+      for (const item of group.items) {
+        if (!item.children?.length) continue;
+        if (this.isRouteActive(url, item.path) || item.children.some((child) => this.isRouteActive(url, child.path))) {
+          return { group, item };
+        }
+      }
+    }
+    return null;
   }
 
   private filterNavItem(item: NavItem, group: NavGroup, term: string): NavItem | null {
