@@ -25,101 +25,209 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-      <section class="reorder-kpis">
-        <article class="metric-card teal"><span>Suggestions</span><strong>{{ suggestions().length }}</strong><small>approval required</small></article>
-        <article class="metric-card amber"><span>Low stock</span><strong>{{ lowStock().length }}</strong><small>threshold reached</small></article>
-        <article class="metric-card blue"><span>Estimated PO</span><strong>{{ suggestionValue() | currency:'INR':'symbol':'1.0-0' }}</strong><small>recommended spend</small></article>
-        <article class="metric-card red"><span>Critical</span><strong>{{ criticalSuggestions().length }}</strong><small>stockout priority</small></article>
-      </section>
-
-      <section class="panel">
-        <div class="section-title">
-          <div><span class="eyebrow">AI reorder cockpit</span><h2>Purchase recommendations</h2></div>
-          <small>{{ selectedBranchLabel() }}</small>
+      <section class="zenoti-reorder-workspace">
+        <div class="zenoti-result-bar">
+          <div>
+            <strong>{{ suggestions().length }}</strong><span>Results</span>
+            <small class="status-chip">Status: Reorder active in this center</small>
+          </div>
+          <div class="zenoti-totals">
+            <span>Low stock <strong>{{ lowStock().length }}</strong></span>
+            <span>Estimated PO <strong>{{ suggestionValue() | currency:'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Critical <strong>{{ criticalSuggestions().length }}</strong></span>
+          </div>
         </div>
-        <div class="reorder-list">
-          <article *ngFor="let row of suggestions()">
-            <div>
-              <strong>{{ row.name || productName(row.productId) }}</strong>
-              <span>{{ row.reason || 'Low-stock threshold reached' }}</span>
-              <small>Stockout {{ row.predictedStockoutDate || 'not projected' }} · supplier {{ row.supplier || supplierName(row.supplierId) }}</small>
-            </div>
-            <div class="right">
-              <strong>{{ row.recommendedQty || row.quantity || 0 }} units</strong>
-              <span>{{ row.estimatedCost | currency:'INR':'symbol':'1.0-0' }}</span>
-              <a class="ghost-button mini" routerLink="/inventory/purchase-orders">Create PO</a>
-            </div>
-          </article>
-          <article *ngIf="!suggestions().length">
-            <div><strong>No urgent reorder</strong><span>Run autopilot after live stock changes or purchase receiving.</span></div>
-          </article>
+
+        <div class="zenoti-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Reason</th>
+                <th>Supplier</th>
+                <th>Current stock</th>
+                <th>Threshold</th>
+                <th>Stockout</th>
+                <th>Order qty</th>
+                <th>Estimated PO</th>
+                <th>Priority</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of suggestions()">
+                <td>
+                  <strong>{{ row.name || productName(row.productId) }}</strong>
+                  <small>{{ row.productId || row.sku || 'AI suggestion' }}</small>
+                </td>
+                <td>{{ row.reason || 'Low stock threshold reached' }}</td>
+                <td>{{ row.supplier || supplierName(row.supplierId) }}</td>
+                <td>{{ row.stock ?? '-' }}</td>
+                <td>{{ row.lowStockThreshold ?? '-' }}</td>
+                <td>{{ row.predictedStockoutDate || 'not projected' }}</td>
+                <td>{{ row.recommendedQty || row.quantity || 0 }} units</td>
+                <td>{{ row.estimatedCost | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td><span class="priority-chip" [class.critical]="isCritical(row)">{{ priorityLabel(row) }}</span></td>
+                <td><a class="zenoti-mini-button" routerLink="/inventory/purchase-orders">Create PO</a></td>
+              </tr>
+              <tr *ngIf="!suggestions().length">
+                <td colspan="10" class="empty-cell">No urgent reorder. Run autopilot after live stock changes or purchase receiving.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="zenoti-footer">
+          <span>1 to {{ suggestions().length }} of {{ suggestions().length }}</span>
+          <span>{{ selectedBranchLabel() }}</span>
         </div>
       </section>
     </section>
   `,
   styles: [`
-    .compact-hero, .hero-actions, .section-title {
-      align-items: center;
+    .separated-inventory-page {
+      gap: 0;
     }
 
-    .hero-actions {
+    .zenoti-reorder-workspace {
+      background: #fff;
+      border-top: 1px solid #d8e1ea;
+      display: grid;
+    }
+
+    .zenoti-result-bar,
+    .zenoti-footer {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 10px 16px;
+    }
+
+    .zenoti-result-bar {
+      border-bottom: 1px solid #d8e1ea;
+    }
+
+    .zenoti-result-bar > div,
+    .zenoti-totals {
+      align-items: center;
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      justify-content: flex-end;
     }
 
-    .reorder-kpis {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
+    .zenoti-result-bar strong {
+      color: #152033;
+      font-size: 14px;
+      font-weight: 900;
     }
 
-    .section-title small,
-    .reorder-list span,
-    .reorder-list small {
-      color: var(--muted);
+    .zenoti-result-bar span,
+    .zenoti-footer {
+      color: #50637d;
+      font-size: 12px;
       font-weight: 800;
     }
 
-    .reorder-list {
-      display: grid;
-      gap: 10px;
+    .status-chip,
+    .priority-chip {
+      background: #eaf6ff;
+      border: 1px solid #b9d0e7;
+      border-radius: 999px;
+      color: #173f62;
+      display: inline-flex;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      padding: 6px 10px;
+      white-space: nowrap;
     }
 
-    .reorder-list article {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 170px;
-      gap: 14px;
-      align-items: center;
-      padding: 14px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: #fff;
+    .priority-chip {
+      background: #e7f7ef;
+      border-color: #bfe9d4;
+      color: #086245;
     }
 
-    .reorder-list strong,
-    .reorder-list span,
-    .reorder-list small {
+    .priority-chip.critical {
+      background: #fff1f0;
+      border-color: #ffc8c2;
+      color: #a51d16;
+    }
+
+    .zenoti-table-wrap {
+      overflow: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      min-width: 1180px;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid #dfe6ee;
+      color: #243142;
+      font-size: 13px;
+      padding: 11px 14px;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #f5f8fb;
+      color: #5d6e84;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: none;
+    }
+
+    td strong {
+      color: #075f9e;
       display: block;
+      font-size: 14px;
+      font-weight: 900;
     }
 
-    .reorder-list .right {
-      display: grid;
-      justify-items: end;
-      gap: 4px;
-      text-align: right;
+    td small {
+      color: #61738d;
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      margin-top: 3px;
+    }
+
+    .zenoti-mini-button {
+      background: #fff;
+      border: 1px solid #b9d0e7;
+      border-radius: 3px;
+      color: #075f9e;
+      display: inline-flex;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 7px 10px;
+      text-decoration: none;
+    }
+
+    .empty-cell {
+      color: #61738d;
+      font-weight: 800;
+      padding: 28px 14px;
+      text-align: center;
+    }
+
+    .zenoti-footer {
+      border-top: 1px solid #d8e1ea;
+      justify-content: flex-end;
     }
 
     @media (max-width: 980px) {
-      .reorder-kpis,
-      .reorder-list article {
-        grid-template-columns: 1fr;
-      }
-
-      .reorder-list .right {
-        justify-items: start;
-        text-align: left;
+      .zenoti-result-bar,
+      .zenoti-footer {
+        align-items: flex-start;
+        display: grid;
       }
     }
   `]
@@ -195,7 +303,15 @@ export class InventoryReorderComponent implements OnInit {
   }
 
   criticalSuggestions(): ApiRecord[] {
-    return this.suggestions().filter((row) => String(row.priority || '').toLowerCase() === 'critical' || Number(row.daysOfStock || 999) <= 7);
+    return this.suggestions().filter((row) => this.isCritical(row));
+  }
+
+  isCritical(row: ApiRecord): boolean {
+    return String(row.priority || '').toLowerCase() === 'critical' || Number(row.daysOfStock || 999) <= 7;
+  }
+
+  priorityLabel(row: ApiRecord): string {
+    return this.isCritical(row) ? 'Critical' : String(row.priority || 'High');
   }
 
   suggestionValue(): number {
