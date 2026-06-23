@@ -351,6 +351,9 @@ export const routes: Routes = [
     path: 'discount-rules/bundle-aware-offers', loadComponent: () => import('./pages/discount-rules/bundle-aware-offers.component').then(m => m.BundleAwareOffersComponent), title: 'Bundle-Aware Offers'
   },
   {
+    path: 'discount-rules/member-wallet-offers', loadComponent: () => import('./pages/discount-rules/member-wallet-offers.component').then(m => m.MemberWalletOffersComponent), title: 'Member / Wallet Offers'
+  },
+  {
     path: 'discount-rules/offer-lifecycle', loadComponent: () => import('./pages/discount-rules/offer-lifecycle.component').then(m => m.OfferLifecycleComponent), title: 'Offer Lifecycle OS'
   },
   {

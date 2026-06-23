@@ -19,6 +19,7 @@ import { HappyHoursControlTowerComponent } from './happy-hours-control-tower.com
 import { InventoryAwareOffersComponent } from './inventory-aware-offers.component';
 import { LeadTimeOffersComponent } from './lead-time-offers.component';
 import { MarketAwareOffersComponent } from './market-aware-offers.component';
+import { MemberWalletOffersComponent } from './member-wallet-offers.component';
 import { OfferAutoSunsetComponent } from './offer-auto-sunset.component';
 import { OfferHealthScoreComponent } from './offer-health-score.component';
 import { OfferLifecycleComponent } from './offer-lifecycle.component';
@@ -52,6 +53,7 @@ type WorkspaceKey =
   | 'channelAware'
   | 'leadTime'
   | 'bundleAware'
+  | 'memberWallet'
   | 'incentives'
   | 'lifecycle'
   | 'roi'
@@ -104,6 +106,7 @@ type WorkspaceItem = {
     InventoryAwareOffersComponent,
     LeadTimeOffersComponent,
     MarketAwareOffersComponent,
+    MemberWalletOffersComponent,
     OfferAutoSunsetComponent,
     OfferHealthScoreComponent,
     OfferLifecycleComponent,
@@ -146,6 +149,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
     { key: 'channelAware', label: 'Channel-Aware Offers', source: 'source channel + fee + conversion', note: 'source-wise pricing', value: (m) => `${m.channelAware || 0}`, status: (m) => Number(m.channelRisk || 0) ? 'warn' : 'ready' },
     { key: 'leadTime', label: 'Lead-Time Offers', source: 'booking lead time + occupancy', note: 'last-minute fill', value: (m) => `${m.leadTime || 0}`, status: (m) => Number(m.leadTimeUrgent || 0) ? 'warn' : 'ready' },
     { key: 'bundleAware', label: 'Bundle-Aware Offers', source: 'add-ons + packages + ticket lift', note: 'upsell pricing', value: (m) => `${m.bundleAware || 0}`, status: (m) => Number(m.bundleMarginRisk || 0) ? 'warn' : 'ready' },
+    { key: 'memberWallet', label: 'Member/Wallet Offers', source: 'membership + wallet + loyalty', note: 'loyalty pricing', value: (m) => `${m.memberWallet || 0}`, status: (m) => Number(m.memberCreditRisk || 0) ? 'warn' : 'ready' },
     { key: 'incentives', label: 'Staff Incentives', source: 'staffDiscountIncentives', note: 'conversion payout', value: (m) => `${m.incentives || 0}`, status: () => 'ready' },
     { key: 'lifecycle', label: 'Offer Lifecycle', source: 'offer lifecycle + ROI', note: 'idea to report', value: (m) => `${m.lifecycle || 0}`, status: () => 'ready' },
     { key: 'roi', label: 'Offer ROI Score', source: 'offerRoiEvents', note: 'business result', value: (m) => `${m.roiOffers || 0} offers`, status: (m) => m.roiOffers ? 'live' : 'ready' },
@@ -193,6 +197,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
       channelAware: this.safeRows('happy-hours-channel-aware/suggestions', { limit: 25 }),
       leadTime: this.safeRows('happy-hours-lead-time/suggestions', { limit: 25 }),
       bundleAware: this.safeRows('happy-hours-bundle-aware/suggestions', { limit: 25 }),
+      memberWallet: this.safeRows('happy-hours-member-wallet/suggestions', { limit: 25 }),
       incentives: this.safeRows('happy-hours-control-tower/staff-incentives'),
       audiences: this.safeRows('happy-hours-campaign-audiences'),
       lifecycle: this.safeRows('happy-hours-lifecycle'),
@@ -232,6 +237,8 @@ export class HappyHoursWorkspaceComponent implements OnInit {
           leadTimeUrgent: this.rowCount(result.leadTime?.rows?.filter((row) => row['leadTimeBucket'] === 'urgent_2h' || row['leadTimeBucket'] === 'same_day')),
           bundleAware: this.rowCount(result.bundleAware),
           bundleMarginRisk: this.rowCount(result.bundleAware?.rows?.filter((row) => row['marginPosture'] === 'low_margin_bundle')),
+          memberWallet: this.rowCount(result.memberWallet),
+          memberCreditRisk: this.rowCount(result.memberWallet?.rows?.filter((row) => row['discountPosture'] === 'redeem_credit_first')),
           incentives: this.rowCount(result.incentives),
           audiences: this.rowCount(result.audiences),
           lifecycle: this.rowCount(result.lifecycle),
