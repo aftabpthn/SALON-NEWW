@@ -1300,6 +1300,87 @@ function churnPrediction(tenantRows) {
   };
 }
 
+function securityRiskCenter(tenantRows = [], auditRows = []) {
+  const sensitiveActions = auditRows.filter((row) => [
+    "tenant.impersonation.started",
+    "tenant.gdpr_export.initiated",
+    "tenant.sso.updated",
+    "tenant.ip_allowlist.updated",
+    "tenant.data_export_controls.updated"
+  ].includes(row.action));
+  const incidents = [];
+  for (const tenant of tenantRows) {
+    const map = tenant.drilldown?.loginActivityMap || {};
+    const enterprise = tenant.enterpriseSecurity || {};
+    const suspiciousLogins = Number(map.suspiciousLogins || 0);
+    const criticalLogins = Number(map.criticalLogins || 0);
+    if (criticalLogins || suspiciousLogins) {
+      incidents.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        severity: criticalLogins ? "critical" : "warning",
+        signal: "suspicious_login",
+        summary: `${suspiciousLogins} suspicious and ${criticalLogins} critical login signals`,
+        action: criticalLogins ? "Require session review and 2FA verification" : "Review device/IP activity"
+      });
+    }
+    if (enterprise.enterpriseTenant && enterprise.ipRestrictionStatus !== "enforced") {
+      incidents.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        severity: "warning",
+        signal: "ip_gap",
+        summary: `Enterprise IP restriction is ${enterprise.ipRestrictionStatus || "missing"}`,
+        action: "Enforce IP allowlist or document exception"
+      });
+    }
+    if (enterprise.enterpriseTenant && !["active", "enforced", "ready"].includes(enterprise.ssoStatus || "")) {
+      incidents.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        severity: "warning",
+        signal: "sso_gap",
+        summary: `SSO status is ${enterprise.ssoStatus || "not_configured"}`,
+        action: "Complete SSO/SAML setup"
+      });
+    }
+    if (enterprise.enterpriseTenant && enterprise.dataExportStatus !== "restricted") {
+      incidents.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        severity: "warning",
+        signal: "export_gap",
+        summary: `Data export controls are ${enterprise.dataExportStatus || "open"}`,
+        action: "Require approval and PII masking"
+      });
+    }
+  }
+  return {
+    metrics: {
+      suspiciousLogins: sumRows(tenantRows, (tenant) => tenant.drilldown?.loginActivityMap?.suspiciousLogins || 0),
+      criticalLogins: sumRows(tenantRows, (tenant) => tenant.drilldown?.loginActivityMap?.criticalLogins || 0),
+      ipGaps: tenantRows.filter((tenant) => tenant.enterpriseSecurity?.enterpriseTenant && tenant.enterpriseSecurity?.ipRestrictionStatus !== "enforced").length,
+      ssoGaps: tenantRows.filter((tenant) => tenant.enterpriseSecurity?.enterpriseTenant && !["active", "enforced", "ready"].includes(tenant.enterpriseSecurity?.ssoStatus || "")).length,
+      exportGaps: tenantRows.filter((tenant) => tenant.enterpriseSecurity?.enterpriseTenant && tenant.enterpriseSecurity?.dataExportStatus !== "restricted").length,
+      sensitiveActions: sensitiveActions.length
+    },
+    sensitiveActions: sensitiveActions.slice(0, 8).map((row) => {
+      const details = normalizeRules(row.details);
+      return {
+        id: row.id,
+        action: row.action,
+        tenantId: row.targetId,
+        actorUserId: row.actorUserId,
+        createdAt: row.createdAt,
+        summary: details.reason || details.status || "Recorded"
+      };
+    }),
+    incidents: incidents
+      .sort((a, b) => (a.severity === "critical" ? 0 : 1) - (b.severity === "critical" ? 0 : 1))
+      .slice(0, 12)
+  };
+}
+
 function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows, trustedDevices = [], riskEvents = [], privacyRequests = []) {
   const lastLoginAt = tenantUsers
     .map((user) => user.lastLoginAt || "")
@@ -1576,6 +1657,7 @@ export class SuperAdminService {
       actionSafetyCommand: actionSafetyCommand(tenantRows, featureToggles),
       saasHealthEngine: saasHealthEngine(metrics, tenantRows, featureToggles),
       realtimeHealthAlerts: realtimeHealthAlerts(tenantRows),
+      securityRiskCenter: securityRiskCenter(tenantRows, auditRows),
       revenueCommand: revenueCommand(metrics, tenantRows, plans),
       revenueIntelligence: revenueIntelligence(metrics, tenantRows, plans),
       revenueLeakageReport: revenueLeakageReport(metrics, tenantRows, featureToggles),

@@ -133,6 +133,66 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
+        <section class="panel" *ngIf="overview.securityRiskCenter as risk">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Security Risk Center</span>
+              <h2>Login risk, enterprise gaps and sensitive actions</h2>
+            </div>
+            <span class="badge" [style.background]="risk.metrics.criticalLogins ? 'var(--danger,#dc2626)' : risk.metrics.suspiciousLogins ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)'" style="color:#fff">{{ risk.metrics.suspiciousLogins }} suspicious</span>
+          </div>
+          <div class="quick-grid">
+            <article class="action-card">
+              <strong>{{ risk.metrics.criticalLogins }}</strong>
+              <span>Critical logins</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ risk.metrics.ipGaps }}</strong>
+              <span>IP restriction gaps</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ risk.metrics.ssoGaps }}</strong>
+              <span>SSO gaps</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ risk.metrics.exportGaps }}</strong>
+              <span>Export control gaps</span>
+            </article>
+          </div>
+          <div class="dashboard-grid">
+            <div class="activity-list">
+              <article *ngFor="let incident of risk.incidents">
+                <div style="min-width:0">
+                  <strong>{{ incident.tenantName }}</strong>
+                  <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ incident.signal }} · {{ incident.summary }} · {{ incident.action }}</span>
+                </div>
+                <span class="badge" [style.background]="incident.severity === 'critical' ? 'var(--danger,#dc2626)' : 'var(--warning,#f59e0b)'" style="color:#fff">{{ incident.severity }}</span>
+              </article>
+              <article *ngIf="!risk.incidents.length">
+                <div>
+                  <strong>No security incidents</strong>
+                  <span>SSO, IP, export and login risks are clear.</span>
+                </div>
+              </article>
+            </div>
+            <div class="activity-list">
+              <article *ngFor="let action of risk.sensitiveActions">
+                <div style="min-width:0">
+                  <strong>{{ action.action }}</strong>
+                  <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ action.tenantId }} · {{ action.summary }}</span>
+                </div>
+                <small>{{ action.createdAt }}</small>
+              </article>
+              <article *ngIf="!risk.sensitiveActions.length">
+                <div>
+                  <strong>No sensitive actions</strong>
+                  <span>Impersonation, GDPR export and security-policy changes will appear here.</span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" *ngIf="overview.actionSafetyCommand as safety">
           <div class="section-title">
             <div>
