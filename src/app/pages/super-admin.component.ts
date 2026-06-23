@@ -991,6 +991,8 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                 <option value="reactivate">Reactivate selected</option>
                 <option value="changePlan">Change plan</option>
                 <option value="sendEmail">Send email</option>
+                <option value="export">Queue data export</option>
+                <option value="assignOwner">Assign support owner</option>
               </select>
             </label>
             <label class="field" *ngIf="bulkActionForm.value.action === 'changePlan'">
@@ -1007,6 +1009,10 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
             <label class="field full" *ngIf="bulkActionForm.value.action === 'sendEmail'">
               <span>Email body</span>
               <textarea formControlName="emailBody"></textarea>
+            </label>
+            <label class="field" *ngIf="bulkActionForm.value.action === 'assignOwner'">
+              <span>Support owner / queue</span>
+              <input formControlName="supportOwner" placeholder="customer_success_urgent" />
             </label>
             <div class="form-actions">
               <button class="ghost-button" type="button" (click)="selectAllTenants(filteredTenants(overview.tenants))">Select visible</button>
@@ -2329,7 +2335,8 @@ export class SuperAdminComponent implements OnInit {
     action: ['suspend', Validators.required],
     planId: [''],
     emailSubject: ['Aura platform update'],
-    emailBody: ['']
+    emailBody: [''],
+    supportOwner: ['customer_success']
   });
 
   readonly supportNoteForm = this.fb.group({
@@ -2938,12 +2945,6 @@ export class SuperAdminComponent implements OnInit {
   }
 
   prepareBulkCommand(action: string): void {
-    if (action === 'export' || action === 'assignOwner') {
-      this.error.set(action === 'export'
-        ? 'Export control is available from tenant row actions and Tenant 360; bulk export queue needs backend wiring.'
-        : 'Support owner assignment UI is staged; backend owner queue is not connected yet.');
-      return;
-    }
     this.bulkActionForm.patchValue({ action });
   }
 
@@ -3129,6 +3130,7 @@ export class SuperAdminComponent implements OnInit {
       planId: this.bulkActionForm.value.planId || '',
       emailSubject: this.bulkActionForm.value.emailSubject || '',
       emailBody: this.bulkActionForm.value.emailBody || '',
+      supportOwner: this.bulkActionForm.value.supportOwner || '',
       tenantIds: this.selectedTenantIds(),
       ...this.safetyPayload()
     }).subscribe({

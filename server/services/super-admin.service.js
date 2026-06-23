@@ -1480,13 +1480,14 @@ function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows, trusted
     .sort()
     .pop() || "";
   const supportNotes = auditRows
-    .filter((row) => row.targetType === "tenant" && row.targetId === tenant.id && row.action === "tenant.support_note.added")
+    .filter((row) => row.targetType === "tenant" && row.targetId === tenant.id && ["tenant.support_note.added", "tenant.support_owner.assigned"].includes(row.action))
     .slice(0, 8)
     .map((row) => {
       const details = normalizeRules(row.details);
+      const assignedOwner = row.action === "tenant.support_owner.assigned" ? `Assigned support owner: ${details.supportOwner || details.queue || "customer_success"}` : "";
       return {
         id: row.id,
-        note: details.note || details.reason || "",
+        note: details.note || assignedOwner || details.reason || "",
         author: row.actorUserId,
         createdAt: row.createdAt
       };
@@ -1501,7 +1502,7 @@ function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows, trusted
         action: row.action,
         actorUserId: row.actorUserId,
         createdAt: row.createdAt,
-        summary: details.note || details.reason || details.status || details.planId || details.key || ""
+        summary: details.note || details.supportOwner || details.reason || details.status || details.planId || details.key || ""
       };
     });
   const gdprExportRequests = privacyRequests
@@ -2068,14 +2069,43 @@ export class SuperAdminService {
     const tenantIds = Array.isArray(payload.tenantIds) ? [...new Set(payload.tenantIds.filter(Boolean))] : [];
     if (!tenantIds.length) throw badRequest("tenantIds are required");
     const action = String(payload.action || "");
-    if (!["suspend", "reactivate", "changePlan", "sendEmail"].includes(action)) throw badRequest("Unsupported bulk action");
+    if (!["suspend", "reactivate", "changePlan", "sendEmail", "export", "assignOwner"].includes(action)) throw badRequest("Unsupported bulk action");
     if (action === "changePlan" && !payload.planId) throw badRequest("planId is required for bulk plan change");
     if (action === "sendEmail" && !String(payload.emailBody || "").trim()) throw badRequest("emailBody is required for bulk email");
+    if (action === "assignOwner" && !String(payload.supportOwner || "").trim()) throw badRequest("supportOwner is required for support owner assignment");
     if (payload.planId && !repositories.subscriptionPlans.getById(payload.planId)) throw badRequest("Plan does not exist");
 
     const results = tenantIds.map((tenantId) => {
       const tenant = repositories.tenants.getById(tenantId);
       if (!tenant) return { tenantId, status: "not_found" };
+      if (action === "export") {
+        try {
+          const exportResult = this.initiateTenantGdprExport(tenantId, {
+            reason: safety.reason,
+            confirmation: safety.confirmation
+          }, access);
+          return {
+            tenantId,
+            status: "queued",
+            exportRequestId: exportResult.exportRequest.id,
+            exportStatus: exportResult.exportRequest.status,
+            manifest: exportResult.manifest
+          };
+        } catch (error) {
+          return { tenantId, status: "failed", error: error?.message || "Unable to queue export" };
+        }
+      }
+      if (action === "assignOwner") {
+        const supportOwner = String(payload.supportOwner || "").trim();
+        const assignment = this.audit(access, "tenant.support_owner.assigned", "tenant", tenantId, {
+          supportOwner,
+          reason: safety.reason,
+          confirmation: safety.confirmation,
+          queue: supportOwner,
+          assignedAt: now()
+        });
+        return { tenantId, status: "assigned", supportOwner, auditId: assignment.id };
+      }
       if (action === "sendEmail") {
         if (!tenant.ownerEmail) return { tenantId, status: "missing_email" };
         const message = repositories.messageLogs.create({
@@ -2111,10 +2141,11 @@ export class SuperAdminService {
       tenantIds,
       planId: payload.planId || "",
       emailSubject: payload.emailSubject || "",
+      supportOwner: payload.supportOwner || "",
       reason: safety.reason,
       confirmation: safety.confirmation,
-      updated: results.filter((row) => ["updated", "queued"].includes(row.status)).length,
-      failed: results.filter((row) => !["updated", "queued"].includes(row.status)).length
+      updated: results.filter((row) => ["updated", "queued", "assigned"].includes(row.status)).length,
+      failed: results.filter((row) => !["updated", "queued", "assigned"].includes(row.status)).length
     };
     this.audit(access, "tenant.bulk_action.executed", "tenant", "bulk", summary);
     return { summary, results };
