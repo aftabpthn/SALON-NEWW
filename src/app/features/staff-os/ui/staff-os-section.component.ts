@@ -50,6 +50,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
       [class.staff-list-mode]="section === 'staff-list' || section === 'staff-profile'"
       [class.staff-attendance-mode]="section === 'attendance-dashboard'"
       [class.staff-roster-mode]="section === 'roster-calendar'"
+      [class.staff-payroll-mode]="section === 'payroll-dashboard'"
     >
       <header class="topbar">
         <div>
@@ -1824,7 +1825,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
         </div>
       </section>
 
-      <section class="panel" *ngIf="section === 'performance-dashboard' || section === 'leaderboard' || section === 'commission-dashboard' || section === 'payroll-dashboard'">
+      <section class="panel" *ngIf="section === 'performance-dashboard' || section === 'leaderboard' || section === 'commission-dashboard'">
         <div class="panel-heading">
           <h2>Performance Intelligence</h2>
           <span>Avg score {{ store.performance().summary.avgScore | number:'1.0-0' }}</span>
@@ -1864,6 +1865,75 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
             <span>Connect invoices and staff assignment to generate seller ranking.</span>
             <a class="refresh" routerLink="/reports/staff-sales" [queryParams]="staffContextParams()">Open staff sales</a>
           </div>
+        </div>
+      </section>
+
+      <section class="panel payroll-register-panel" *ngIf="section === 'payroll-dashboard'">
+        <div class="panel-heading payroll-register-heading">
+          <div>
+            <p class="eyebrow">Payroll register</p>
+            <h2>Salary And Payroll Control</h2>
+          </div>
+          <div class="staff-register-actions">
+            <span>{{ staffDirectoryRows().length }} staff</span>
+            <a class="refresh" routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
+            <a class="refresh" routerLink="/staff-os/payroll-salary-structure">Salary Structure</a>
+            <button type="button" class="refresh" (click)="store.load()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="payroll-kpi-strip">
+          <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong><small>staff salary setup</small></article>
+          <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong><small>payroll rules</small></article>
+          <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong><small>attendance payroll</small></article>
+          <article><span>Risk signals</span><strong>{{ store.attendanceRisks().length }}</strong><small>hold / mismatch</small></article>
+        </div>
+
+        <div class="payroll-register-scroll">
+          <table class="payroll-register-table">
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Basic salary</th>
+                <th>Payment</th>
+                <th>Payroll sync</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let staff of staffDirectoryRows()">
+                <td>
+                  <strong>{{ staff.fullName }}</strong>
+                  <small>{{ staff.employeeCode || staff.designation || staff.department || staff.id }}</small>
+                </td>
+                <td>{{ salaryAmount(staff) | currency:'INR':'symbol-narrow':'1.0-0' }}</td>
+                <td>{{ salaryProfile(staff)['paymentMode'] || 'Not set' }}</td>
+                <td>{{ salaryProfile(staff)['supportAttendancePayroll'] ? 'Attendance sync' : 'Manual review' }}</td>
+                <td><span class="badge">{{ staff.status }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div *ngIf="!staffDirectoryRows().length && !store.loading()" class="empty action-empty">
+            <strong>No payroll staff found.</strong>
+            <span>Add employee salary details to start payroll preview.</span>
+            <a class="refresh" routerLink="/staff-os/staff-list" [queryParams]="{ add: 1 }">Add staff</a>
+          </div>
+        </div>
+
+        <div class="payroll-risk-strip" *ngIf="store.attendancePayrollPreview().length || store.attendanceRisks().length">
+          <article *ngFor="let row of store.attendancePayrollPreview().slice(0, 4)">
+            <strong>{{ displayStaffName(row) }}</strong>
+            <span>{{ row['presentDays'] || 0 }} present · {{ row['lateCount'] || 0 }} late · ₹{{ row['netPreview'] || 0 }}</span>
+          </article>
+          <article *ngFor="let risk of store.attendanceRisks().slice(0, 4)">
+            <strong>{{ risk['riskType'] || 'Risk' }}</strong>
+            <span>{{ risk['severity'] || 'review' }} · {{ risk['reason'] || 'Payroll check' }}</span>
+          </article>
+        </div>
+
+        <div class="staff-register-footer">
+          <span>{{ staffDirectoryRows().length ? 1 : 0 }} to {{ staffDirectoryRows().length }} of {{ staffDirectoryRows().length }}</span>
+          <span>Page 1 of 1</span>
         </div>
       </section>
 
@@ -2170,6 +2240,42 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .roster-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
     .roster-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
     .roster-register-table tbody tr:hover { background: #eef7fc; }
+    .staff-payroll-mode { gap: 10px; }
+    .staff-payroll-mode .topbar,
+    .staff-payroll-mode .staff-shell-nav,
+    .staff-payroll-mode .staff-control-room,
+    .staff-payroll-mode .metrics,
+    .staff-payroll-mode .payroll-register-panel { border-radius: 0; box-shadow: none; }
+    .staff-payroll-mode .topbar { background: #fff; border: 1px solid #d8e1ea; padding: 13px 16px; }
+    .staff-payroll-mode .refresh,
+    .staff-payroll-mode .primary,
+    .staff-payroll-mode .row-action { border-radius: 3px; min-height: 32px; padding: 7px 11px; }
+    .staff-payroll-mode .primary { background: #0b72b5; border-color: #0b72b5; }
+    .staff-payroll-mode .staff-shell-nav { background: #fff; border-color: #d8e1ea; padding: 7px; }
+    .staff-payroll-mode .staff-shell-nav a { border-radius: 3px; min-height: 44px; }
+    .staff-payroll-mode .staff-control-room { border-color: #d8e1ea; padding: 12px 16px; }
+    .staff-payroll-mode .control-card { border-radius: 3px; min-height: 76px; padding: 10px 12px; }
+    .staff-payroll-mode .metrics { gap: 0; border: 1px solid #d8e1ea; background: #fff; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .staff-payroll-mode .metric { border: 0; border-right: 1px solid #e5edf4; border-radius: 0; min-height: 62px; padding: 10px 14px; }
+    .staff-payroll-mode .metric:last-child { border-right: 0; }
+    .payroll-register-panel { border-color: #d8e1ea; overflow: hidden; padding: 0; }
+    .payroll-register-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
+    .payroll-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8e1ea; }
+    .payroll-kpi-strip article { border-right: 1px solid #e5edf4; display: grid; gap: 3px; padding: 10px 16px; }
+    .payroll-kpi-strip article:last-child { border-right: 0; }
+    .payroll-kpi-strip span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .payroll-kpi-strip strong { color: #111827; font-size: 22px; line-height: 1; }
+    .payroll-kpi-strip small { color: #64748b; }
+    .payroll-register-scroll { max-width: 100%; overflow: auto; }
+    .payroll-register-table { border-collapse: collapse; min-width: 980px; width: 100%; }
+    .payroll-register-table th,
+    .payroll-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
+    .payroll-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
+    .payroll-register-table tbody tr:hover { background: #eef7fc; }
+    .payroll-register-table td small { color: #60766d; display: block; font-size: 12px; margin-top: 3px; }
+    .payroll-risk-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 10px 16px; border-top: 1px solid #d8e1ea; }
+    .payroll-risk-strip article { border: 1px solid #dfe7ef; display: grid; gap: 4px; padding: 9px 10px; }
+    .payroll-risk-strip span { color: #64748b; font-size: 12px; }
     .attendance-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .attendance-controls input { width: 170px; min-height: 38px; }
     .attendance-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
@@ -2325,7 +2431,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .live-panel-links a { border: 1px solid #cbd8d2; border-radius: 4px; color: #0f6eb3; font-size: 12px; font-weight: 900; min-height: 32px; padding: 8px 9px; text-align: center; text-decoration: none; }
     .drawer-action-buttons { display: grid; gap: 10px; }
     .drawer-action-buttons .refresh, .drawer-action-buttons .primary { width: 100%; }
-    @media (max-width: 900px) { .metrics, .task-grid, .split, .attendance-stats, .workspace-kpi-grid { grid-template-columns: 1fr 1fr; } .staff-attendance-mode .attendance-stats, .roster-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-attendance-mode .attendance-stats article:nth-child(2n), .roster-kpi-strip article:nth-child(2n) { border-right: 0; } .staff-workspace-shell, .commission-setup, .attendance-workspace, .attendance-wide { grid-template-columns: 1fr; } .commission-actions { justify-content: flex-start; } .staff-category-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .attendance-workspace .device-form, .attendance-workspace .gateway-form, .attendance-workspace .mapping-form, .attendance-workspace .consent-form, .attendance-workspace .payroll-form, .attendance-workspace .camera-form, .attendance-workspace .camera-form.staff-form, .workspace-manual-form.staff-form { grid-template-columns: 1fr; } .attendance-workspace .camera-form .drawer-actions { grid-template-columns: 1fr; } .login-provision { grid-column: 1 / -1; } .drawer-actions { position: static; grid-column: 1 / -1; grid-row: auto; border-left: 0; border-top: 1px solid #edf2ef; padding: 10px 0 0; } .live-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .live-panel-title, .catalog-mini-grid, .live-panel-links, .drawer-action-buttons { grid-column: 1 / -1; } }
+    @media (max-width: 900px) { .metrics, .task-grid, .split, .attendance-stats, .workspace-kpi-grid { grid-template-columns: 1fr 1fr; } .staff-attendance-mode .attendance-stats, .roster-kpi-strip, .payroll-kpi-strip, .payroll-risk-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-attendance-mode .attendance-stats article:nth-child(2n), .roster-kpi-strip article:nth-child(2n), .payroll-kpi-strip article:nth-child(2n) { border-right: 0; } .staff-workspace-shell, .commission-setup, .attendance-workspace, .attendance-wide { grid-template-columns: 1fr; } .commission-actions { justify-content: flex-start; } .staff-category-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .attendance-workspace .device-form, .attendance-workspace .gateway-form, .attendance-workspace .mapping-form, .attendance-workspace .consent-form, .attendance-workspace .payroll-form, .attendance-workspace .camera-form, .attendance-workspace .camera-form.staff-form, .workspace-manual-form.staff-form { grid-template-columns: 1fr; } .attendance-workspace .camera-form .drawer-actions { grid-template-columns: 1fr; } .login-provision { grid-column: 1 / -1; } .drawer-actions { position: static; grid-column: 1 / -1; grid-row: auto; border-left: 0; border-top: 1px solid #edf2ef; padding: 10px 0 0; } .live-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .live-panel-title, .catalog-mini-grid, .live-panel-links, .drawer-action-buttons { grid-column: 1 / -1; } }
     @media (max-width: 640px) {
       .staff-os { gap: 12px; padding: 0; }
       .drawer-shell { padding: 0; }
@@ -2347,6 +2453,8 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
       .staff-attendance-mode .attendance-stats article { border-right: 0; }
       .roster-kpi-strip { grid-template-columns: 1fr; }
       .roster-kpi-strip article { border-right: 0; }
+      .payroll-kpi-strip, .payroll-risk-strip { grid-template-columns: 1fr; }
+      .payroll-kpi-strip article { border-right: 0; }
       .metrics { gap: 9px; }
       .metric, .panel, .state { border-radius: 8px; }
       .panel { padding: 13px; }
