@@ -1204,6 +1204,20 @@ function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows, trusted
       createdAt: row.createdAt,
       updatedAt: row.updatedAt
     }));
+  const recentUsers = tenantUsers
+    .slice()
+    .sort((a, b) => String(b.lastLoginAt || b.updatedAt || "").localeCompare(String(a.lastLoginAt || a.updatedAt || "")))
+    .slice(0, 8)
+    .map((user) => ({
+      id: user.id,
+      name: user.name || user.email || user.id,
+      email: user.email || "",
+      role: user.role || "",
+      status: user.status || "",
+      branchIds: parseBranchIds(user.branchIds),
+      failedLoginCount: Number(user.failedLoginCount || 0),
+      lastLoginAt: user.lastLoginAt || ""
+    }));
   return {
     usageGraph: [
       { label: "Branches", value: tenant.usage.branches },
@@ -1235,6 +1249,7 @@ function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows, trusted
     staffCount: tenant.usage.staff,
     tenantUserCount: tenantUsers.length,
     lastLoginAt,
+    recentUsers,
     loginActivityMap: loginActivityMap(tenantUsers, trustedDevices, riskEvents),
     gdprExportRequests,
     supportNotes,

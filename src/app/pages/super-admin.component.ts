@@ -965,6 +965,23 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   </div>
                 </article>
               </div>
+
+              <div class="activity-list">
+                <article *ngFor="let user of tenant.drilldown.recentUsers">
+                  <div>
+                    <strong>{{ user.name }}</strong>
+                    <span>{{ user.email }} · {{ user.role }} · {{ user.branchIds.join(', ') || 'All branches' }}</span>
+                    <span style="display:block;font-size:0.78em;color:var(--text-muted)">Last login {{ user.lastLoginAt || 'No login' }} · failed {{ user.failedLoginCount || 0 }}</span>
+                  </div>
+                  <span class="badge">{{ user.status || 'active' }}</span>
+                </article>
+                <article *ngIf="!tenant.drilldown.recentUsers.length">
+                  <div>
+                    <strong>No tenant users found</strong>
+                    <span>Staff and owner users will appear here.</span>
+                  </div>
+                </article>
+              </div>
             </div>
 
             <div class="dashboard-grid" style="margin-top:16px">
