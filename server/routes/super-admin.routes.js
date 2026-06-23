@@ -163,6 +163,13 @@ superAdminRouter.post(
 );
 
 superAdminRouter.post(
+  "/super-admin/playbooks/:key/run",
+  asyncHandler((req, res) => {
+    res.status(201).json(superAdminService.runOperationsPlaybook(req.params.key, req.body, req.access));
+  })
+);
+
+superAdminRouter.post(
   "/super-admin/tenants/:id/support-notes",
   validateBody({ required: ["note"] }),
   asyncHandler((req, res) => {

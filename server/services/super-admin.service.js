@@ -1491,7 +1491,6 @@ function actionInboxForTenants(tenantRows = [], auditRows = []) {
       const itemId = `inbox_${tenant.id}_${factor.key}`;
       const state = latest.get(itemId) || {};
       const status = state.status || "open";
-      if (status === "resolved") continue;
       items.push({
         id: itemId,
         tenantId: tenant.id,
@@ -1522,6 +1521,129 @@ function actionInboxForTenants(tenantRows = [], auditRows = []) {
       dueToday: activeItems.filter((item) => Number(item.dueInDays || 0) <= 1).length
     },
     items: activeItems
+  };
+}
+
+function riskTimelineForTenant(tenant, auditRows = []) {
+  const current = Number(tenant.aiRiskScore?.score || tenant.healthScore || 0);
+  const driverWeight = {
+    "tenant.support_note.added": 5,
+    "tenant.support_owner.assigned": -3,
+    "super_admin.action_inbox.updated": -4,
+    "tenant.gdpr_export.initiated": 4,
+    "tenant.bulk_action.executed": 3,
+    "tenant.suspended": 18,
+    "tenant.reactivated": -12,
+    "tenant.subscription.updated": -4,
+    "tenant.sso.updated": -6,
+    "tenant.ip_allowlist.updated": -6,
+    "tenant.data_export_controls.updated": -5
+  };
+  const relevant = auditRows
+    .filter((row) => row.targetId === tenant.id || normalizeRules(row.details).tenantId === tenant.id)
+    .slice(0, 40);
+  return Array.from({ length: 7 }).map((_, index) => {
+    const daysAgo = 6 - index;
+    const day = new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
+    const dayEvents = relevant.filter((row) => String(row.createdAt || "").slice(0, 10) === day);
+    const adjustment = dayEvents.reduce((total, event) => total + Number(driverWeight[event.action] || 0), 0);
+    const drift = (6 - index) * 2;
+    const score = Math.max(0, Math.min(100, Math.round(current - drift + adjustment)));
+    return {
+      day,
+      score,
+      events: dayEvents.length,
+      label: score >= 75 ? "critical" : score >= 55 ? "high" : score >= 35 ? "watch" : "stable"
+    };
+  });
+}
+
+function operationsPlaybooks(tenantRows = [], actionInbox = {}) {
+  const items = actionInbox.items || [];
+  const countByCategory = (category) => items.filter((item) => item.category === category).length;
+  return [
+    {
+      key: "billing_recovery",
+      title: "Billing recovery",
+      category: "billing",
+      count: countByCategory("billing"),
+      ownerQueue: "finance_recovery",
+      actions: ["Retry failed payments", "Send owner payment link", "Escalate unpaid MRR"]
+    },
+    {
+      key: "adoption_rescue",
+      title: "Adoption rescue",
+      category: "usage",
+      count: countByCategory("usage"),
+      ownerQueue: "customer_success_watch",
+      actions: ["Book onboarding call", "Review branch/staff setup", "Send usage checklist"]
+    },
+    {
+      key: "trial_conversion",
+      title: "Trial conversion",
+      category: "churn",
+      count: tenantRows.filter((tenant) => tenant.subscriptionStatus === "trialing" && daysUntil(tenant.trialEndsAt) !== null && daysUntil(tenant.trialEndsAt) <= 7).length,
+      ownerQueue: "sales_conversion",
+      actions: ["Call decision maker", "Recommend plan fit", "Confirm conversion date"]
+    },
+    {
+      key: "security_hardening",
+      title: "Security hardening",
+      category: "security",
+      count: countByCategory("security") + countByCategory("login"),
+      ownerQueue: "security_success",
+      actions: ["Enforce SSO", "Review IP allowlist", "Close export control gaps"]
+    },
+    {
+      key: "churn_prevention",
+      title: "Churn prevention",
+      category: "churn",
+      count: tenantRows.filter((tenant) => Number(tenant.aiRiskScore?.score || 0) >= 55).length,
+      ownerQueue: "customer_success_urgent",
+      actions: ["Assign owner", "Set SLA", "Run retention review"]
+    }
+  ];
+}
+
+function commandCenterNotifications(auditRows = [], actionInbox = {}, pendingApprovals = []) {
+  const notificationActions = new Set([
+    "super_admin.action_inbox.updated",
+    "super_admin.action_approval.requested",
+    "super_admin.action_approval.resolved",
+    "tenant.gdpr_export.initiated",
+    "tenant.support_owner.assigned",
+    "tenant.bulk_action.executed",
+    "tenant.quota_alert.batch_dispatched"
+  ]);
+  const notifications = auditRows
+    .filter((row) => notificationActions.has(row.action))
+    .slice(0, 30)
+    .map((row) => {
+      const details = normalizeRules(row.details);
+      const severity = row.action.includes("approval") || details.status === "escalated"
+        ? "warning"
+        : row.action.includes("gdpr") || row.action.includes("bulk")
+          ? "critical"
+          : "info";
+      return {
+        id: row.id,
+        title: row.action.replaceAll("_", " "),
+        detail: details.reason || details.note || details.supportOwner || details.status || details.action || "Recorded",
+        targetId: row.targetId,
+        severity,
+        createdAt: row.createdAt
+      };
+    });
+  const breached = (actionInbox.items || []).filter((item) => Number(item.dueInDays || 0) <= 0 && item.status !== "resolved");
+  return {
+    summary: {
+      notifications: notifications.length,
+      pendingApprovals: pendingApprovals.length,
+      slaBreaches: breached.length,
+      escalated: (actionInbox.items || []).filter((item) => item.status === "escalated").length
+    },
+    notifications,
+    slaBreaches: breached.slice(0, 10)
   };
 }
 
@@ -1867,6 +1989,14 @@ export class SuperAdminService {
       };
     });
     tenantRows = tenantRows.map((tenant) => ({ ...tenant, aiRiskScore: tenantAiRiskScore(tenant, auditRows) }));
+    tenantRows = tenantRows.map((tenant) => ({
+      ...tenant,
+      riskTimeline: riskTimelineForTenant(tenant, auditRows),
+      drilldown: {
+        ...tenant.drilldown,
+        riskTimeline: riskTimelineForTenant(tenant, auditRows)
+      }
+    }));
     const metrics = {
       salons: tenants.length,
       activeSalons: tenants.filter((tenant) => ["active", "trialing"].includes(tenant.subscriptionStatus)).length,
@@ -1882,6 +2012,8 @@ export class SuperAdminService {
     const featureToggles = repositories.featureToggles.list({ limit: 10000 })
       .map((toggle) => enrichFeatureToggle(toggle, tenantRows, plans));
     const revenueGraph = revenueGrowthGraph(tenantRows);
+    const actionInbox = actionInboxForTenants(tenantRows, auditRows);
+    const safety = actionSafetyCommand(tenantRows, featureToggles);
     return {
       metrics,
       tenants: tenantRows.sort((a, b) => b.monthlyRecurringRevenue - a.monthlyRecurringRevenue),
@@ -1889,7 +2021,7 @@ export class SuperAdminService {
       featureToggles,
       featureFlagCommand: featureFlagCommand(featureToggles),
       tenantFeatureOverrides: tenantFeatureOverrideMatrix(featureToggles, tenantRows),
-      actionSafetyCommand: actionSafetyCommand(tenantRows, featureToggles),
+      actionSafetyCommand: safety,
       saasHealthEngine: saasHealthEngine(metrics, tenantRows, featureToggles),
       realtimeHealthAlerts: realtimeHealthAlerts(tenantRows),
       securityRiskCenter: securityRiskCenter(tenantRows, auditRows),
@@ -1902,7 +2034,9 @@ export class SuperAdminService {
       revenueGrowthSummary: revenueGrowthSummary(revenueGraph),
       trialPaidFunnel: trialPaidFunnel(tenantRows),
       churnPrediction: churnPrediction(tenantRows),
-      actionInbox: actionInboxForTenants(tenantRows, auditRows),
+      actionInbox,
+      operationsPlaybooks: operationsPlaybooks(tenantRows, actionInbox),
+      commandCenterNotifications: commandCenterNotifications(auditRows, actionInbox, safety.pendingApprovals),
       tenantRiskCommand: {
         alertCount: sumRows(tenantRows, (tenant) => tenant.tenant360.alertSummary.total),
         highRiskTenants: tenantRows
@@ -2465,6 +2599,41 @@ export class SuperAdminService {
       });
     }
     return { itemId, status: statuses[action], auditId: audit.id, ownerQueue, note, dueInDays };
+  }
+
+  runOperationsPlaybook(key, payload = {}, access) {
+    ensureSuperAdmin(access);
+    const allowed = new Map([
+      ["billing_recovery", { category: "billing", ownerQueue: "finance_recovery", title: "Billing recovery" }],
+      ["adoption_rescue", { category: "usage", ownerQueue: "customer_success_watch", title: "Adoption rescue" }],
+      ["trial_conversion", { category: "churn", ownerQueue: "sales_conversion", title: "Trial conversion" }],
+      ["security_hardening", { category: "security", ownerQueue: "security_success", title: "Security hardening" }],
+      ["churn_prevention", { category: "churn", ownerQueue: "customer_success_urgent", title: "Churn prevention" }]
+    ]);
+    const playbook = allowed.get(String(key || ""));
+    if (!playbook) throw badRequest("Unsupported operations playbook");
+    const note = String(payload.note || `Run ${playbook.title} playbook`).trim();
+    const tenantIds = Array.isArray(payload.tenantIds) ? payload.tenantIds.filter(Boolean).slice(0, 100) : [];
+    const audit = this.audit(access, "super_admin.playbook.run", "operations_playbook", key, {
+      key,
+      title: playbook.title,
+      category: playbook.category,
+      ownerQueue: payload.ownerQueue || playbook.ownerQueue,
+      tenantIds,
+      note,
+      runAt: now()
+    });
+    const assignments = tenantIds
+      .filter((tenantId) => repositories.tenants.getById(tenantId))
+      .map((tenantId) => this.audit(access, "tenant.support_owner.assigned", "tenant", tenantId, {
+        supportOwner: payload.ownerQueue || playbook.ownerQueue,
+        queue: payload.ownerQueue || playbook.ownerQueue,
+        source: "operations_playbook",
+        playbookKey: key,
+        note,
+        assignedAt: now()
+      }));
+    return { playbook: { key, ...playbook }, auditId: audit.id, assigned: assignments.length };
   }
 
   addSupportNote(tenantId, payload = {}, access) {

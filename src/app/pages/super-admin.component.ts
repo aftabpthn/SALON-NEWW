@@ -145,30 +145,109 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
             <span>Action note</span>
             <input [ngModel]="actionInboxNote()" (ngModelChange)="actionInboxNote.set($event)" [ngModelOptions]="{ standalone: true }" placeholder="Add context for note/escalation" />
           </label>
-          <div class="activity-list action-inbox-list">
-            <article *ngFor="let item of filteredActionInbox(inbox.items)" class="action-inbox-item">
-              <div>
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.detail }} · {{ item.recommendedAction }}</span>
-                <small>{{ item.ownerQueue }} · due {{ item.dueInDays }}d · status {{ item.status }}</small>
-              </div>
-              <div class="action-inbox-buttons">
-                <span class="badge" [style.background]="riskTone(item.priority)" style="color:#fff">{{ item.riskScore | number: '1.0-0' }}</span>
-                <button type="button" (click)="selectTenant(item.tenantId); openTenantDrilldown(item.tenantId)">360</button>
-                <button type="button" (click)="updateActionInbox(item, 'assign')">Assign</button>
-                <button type="button" (click)="updateActionInbox(item, 'snooze')">Snooze</button>
-                <button type="button" (click)="updateActionInbox(item, 'escalate')">Escalate</button>
-                <button type="button" (click)="updateActionInbox(item, 'note')">Note</button>
-                <button type="button" (click)="updateActionInbox(item, 'resolve')">Resolve</button>
-              </div>
-            </article>
-            <article *ngIf="!filteredActionInbox(inbox.items).length">
-              <div>
-                <strong>No action inbox items</strong>
-                <span>Risk, billing, security, login and support work will appear here.</span>
-              </div>
-            </article>
+          <div class="action-kanban">
+            <section class="kanban-column" *ngFor="let column of actionInboxColumns()">
+              <h3>{{ column.label }} <span>{{ actionInboxColumnItems(inbox.items, column.status).length }}</span></h3>
+              <article *ngFor="let item of actionInboxColumnItems(inbox.items, column.status)" class="kanban-card">
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.detail }}</span>
+                  <small>{{ item.ownerQueue }} · SLA {{ item.dueInDays }}d · {{ item.recommendedAction }}</small>
+                </div>
+                <div class="action-inbox-buttons">
+                  <span class="badge" [style.background]="riskTone(item.priority)" style="color:#fff">{{ item.riskScore | number: '1.0-0' }}</span>
+                  <button type="button" (click)="selectTenant(item.tenantId); openTenantDrilldown(item.tenantId)">360</button>
+                  <button type="button" (click)="updateActionInbox(item, 'assign')">Assign</button>
+                  <button type="button" (click)="updateActionInbox(item, 'snooze')">Snooze</button>
+                  <button type="button" (click)="updateActionInbox(item, 'escalate')">Escalate</button>
+                  <button type="button" (click)="updateActionInbox(item, 'note')">Note</button>
+                  <button type="button" (click)="updateActionInbox(item, 'resolve')">Resolve</button>
+                </div>
+              </article>
+              <article class="kanban-empty" *ngIf="!actionInboxColumnItems(inbox.items, column.status).length">
+                No {{ column.label | lowercase }} items.
+              </article>
+            </section>
           </div>
+        </section>
+
+        <section class="dashboard-grid ops-command-grid">
+          <section class="panel" *ngIf="overview.actionSafetyCommand as safety">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">Approval Center</span>
+                <h2>Dangerous action approval queue</h2>
+              </div>
+              <span class="badge">{{ safety.pendingApprovals?.length || 0 }} pending</span>
+            </div>
+            <div class="activity-list">
+              <article *ngFor="let approval of safety.pendingApprovals?.slice(0, 8)">
+                <div>
+                  <strong>{{ approval.action }}</strong>
+                  <span>{{ approval.targetType }} · {{ approval.targetId }} · {{ approval.reason }}</span>
+                  <small>{{ approval.requestedBy }} · {{ approval.createdAt }}</small>
+                </div>
+                <div class="action-inbox-buttons">
+                  <span class="badge">{{ approval.priority }}</span>
+                  <button type="button" (click)="resolveApproval(approval.id, 'approved')" [disabled]="saving()">Approve</button>
+                  <button type="button" (click)="resolveApproval(approval.id, 'rejected')" [disabled]="saving()">Reject</button>
+                </div>
+              </article>
+              <article *ngIf="!safety.pendingApprovals?.length">
+                <div>
+                  <strong>No pending approvals</strong>
+                  <span>Bulk suspend/export/change-plan requests will appear here.</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" *ngIf="overview.operationsPlaybooks as playbooks">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">Playbook automation</span>
+                <h2>One-click operating playbooks</h2>
+              </div>
+            </div>
+            <div class="playbook-grid">
+              <article class="playbook-card" *ngFor="let playbook of playbooks">
+                <strong>{{ playbook.title }}</strong>
+                <span>{{ playbook.count }} matching item(s) · {{ playbook.ownerQueue }}</span>
+                <small>{{ playbook.actions.join(' · ') }}</small>
+                <button type="button" (click)="runPlaybook(playbook)" [disabled]="saving()">Run playbook</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" *ngIf="overview.commandCenterNotifications as center">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">Command notifications</span>
+                <h2>Live operating signals</h2>
+              </div>
+              <div class="command-live">
+                <span class="badge">{{ center.summary?.pendingApprovals || 0 }} approvals</span>
+                <span class="badge">{{ center.summary?.slaBreaches || 0 }} SLA</span>
+                <span class="badge">{{ center.summary?.escalated || 0 }} escalated</span>
+              </div>
+            </div>
+            <div class="activity-list">
+              <article *ngFor="let item of center.notifications?.slice(0, 10)">
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.detail }}</span>
+                  <small>{{ item.createdAt }} · {{ item.targetId }}</small>
+                </div>
+                <span class="badge" [style.background]="riskTone(item.severity)" style="color:#fff">{{ item.severity }}</span>
+              </article>
+              <article *ngIf="!center.notifications?.length">
+                <div>
+                  <strong>No command notifications</strong>
+                  <span>Approvals, SLA breaches, exports and owner assignments will appear here.</span>
+                </div>
+              </article>
+            </div>
+          </section>
         </section>
 
         <section class="panel" *ngIf="overview.saasHealthEngine as health">
@@ -1356,6 +1435,23 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               </ng-container>
             </div>
 
+            <div class="risk-timeline" *ngIf="tenant.riskTimeline?.length">
+              <div class="section-title compact-title">
+                <div>
+                  <span class="eyebrow">Risk Timeline</span>
+                  <h2>AI risk movement</h2>
+                </div>
+                <span class="badge" [style.background]="riskTone(tenant.aiRiskScore?.label)" style="color:#fff">{{ tenant.aiRiskScore?.score || 0 }}</span>
+              </div>
+              <div class="risk-bars">
+                <article *ngFor="let point of tenant.riskTimeline">
+                  <span [style.height.%]="timelineBarHeight(point)" [style.background]="riskTone(point.label)"></span>
+                  <strong>{{ point.score }}</strong>
+                  <small>{{ point.day | date: 'MMM d' }}</small>
+                </article>
+              </div>
+            </div>
+
             <div class="dashboard-grid">
               <div class="activity-list" *ngIf="drawerTab() === 'profile' || drawerTab() === 'branches' || drawerTab() === 'limits'">
                 <article>
@@ -2253,6 +2349,152 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
       padding: 7px 9px;
       font-size: 0.78rem;
       font-weight: 850;
+    }
+
+    .action-kanban {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(220px, 1fr));
+      gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .kanban-column {
+      min-width: 220px;
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      border-radius: 14px;
+      background: rgba(248, 250, 252, 0.9);
+      padding: 10px;
+    }
+
+    .kanban-column h3 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 10px;
+      font-size: 0.9rem;
+      color: var(--ink);
+    }
+
+    .kanban-column h3 span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .kanban-card,
+    .kanban-empty {
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+
+    .kanban-card strong,
+    .kanban-card span,
+    .kanban-card small {
+      display: block;
+    }
+
+    .kanban-card span,
+    .kanban-card small,
+    .kanban-empty {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .kanban-card .action-inbox-buttons {
+      justify-content: flex-start;
+      margin-top: 8px;
+      max-width: none;
+    }
+
+    .ops-command-grid {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      align-items: start;
+    }
+
+    .playbook-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .playbook-card {
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .playbook-card strong,
+    .playbook-card span,
+    .playbook-card small {
+      display: block;
+    }
+
+    .playbook-card span,
+    .playbook-card small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .playbook-card button {
+      margin-top: 10px;
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: 999px;
+      background: var(--accent, #0f766e);
+      color: #fff;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 850;
+    }
+
+    .risk-timeline {
+      margin: 14px 0;
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(248, 250, 252, 0.88);
+    }
+
+    .compact-title {
+      margin-bottom: 8px;
+    }
+
+    .risk-bars {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(48px, 1fr));
+      gap: 8px;
+      align-items: end;
+      min-height: 150px;
+    }
+
+    .risk-bars article {
+      display: grid;
+      align-content: end;
+      gap: 5px;
+      min-height: 130px;
+      text-align: center;
+    }
+
+    .risk-bars article > span {
+      display: block;
+      width: 100%;
+      min-height: 8px;
+      border-radius: 10px 10px 4px 4px;
+    }
+
+    .risk-bars strong {
+      color: var(--ink);
+      font-size: 0.82rem;
+    }
+
+    .risk-bars small {
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 0.72rem;
     }
 
     .bulk-preview-overlay {
@@ -3158,6 +3400,25 @@ export class SuperAdminComponent implements OnInit {
     return filter === 'all' ? items || [] : (items || []).filter((item) => item.category === filter);
   }
 
+  actionInboxColumns(): ApiRecord[] {
+    return [
+      { status: 'open', label: 'Open' },
+      { status: 'snoozed', label: 'Snoozed' },
+      { status: 'escalated', label: 'Escalated' },
+      { status: 'resolved', label: 'Resolved' }
+    ];
+  }
+
+  actionInboxColumnItems(items: ApiRecord[] = [], status = 'open'): ApiRecord[] {
+    const rows = this.filteredActionInbox(items);
+    if (status === 'open') return rows.filter((item) => !item.status || item.status === 'open').slice(0, 12);
+    return rows.filter((item) => item.status === status).slice(0, 12);
+  }
+
+  timelineBarHeight(point: ApiRecord = {}): number {
+    return Math.max(8, Math.min(100, Number(point.score || 0)));
+  }
+
   filteredTenants(tenants: ApiRecord[] = []): ApiRecord[] {
     const query = this.tenantSearch().trim().toLowerCase();
     const filter = this.tenantFilter();
@@ -3352,6 +3613,30 @@ export class SuperAdminComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to update action inbox');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  runPlaybook(playbook: ApiRecord): void {
+    this.saving.set(true);
+    const tenantIds = (this.overview()?.actionInbox?.items || [])
+      .filter((item: ApiRecord) => item.category === playbook.category)
+      .map((item: ApiRecord) => item.tenantId)
+      .filter(Boolean)
+      .slice(0, 20);
+    this.api.post(`super-admin/playbooks/${playbook.key}/run`, {
+      tenantIds,
+      ownerQueue: playbook.ownerQueue || '',
+      note: this.actionInboxNote() || `Run ${playbook.title} playbook`
+    }).subscribe({
+      next: () => {
+        this.actionInboxNote.set('');
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to run playbook');
         this.saving.set(false);
       }
     });
