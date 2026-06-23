@@ -1,0 +1,163 @@
+<section class="page-stack bundle-aware-page">
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Happy Hours Intelligence</span>
+      <h2>Bundle / Upsell-Aware Offers</h2>
+      <p>Plain discount ke bajay add-on, package aur ticket-lift ke saath offer recommend karta hai.</p>
+    </div>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Checking...' : 'Evaluate' }}
+    </button>
+  </div>
+
+  <p class="error-text" *ngIf="error()">{{ error() }}</p>
+
+  <section class="panel toolbar">
+    <label class="field">
+      <span>Service category</span>
+      <input type="text" [(ngModel)]="filters.serviceCategory" name="serviceCategory" />
+    </label>
+    <label class="field">
+      <span>Primary service ID</span>
+      <input type="text" [(ngModel)]="filters.primaryServiceId" name="primaryServiceId" placeholder="Optional" />
+    </label>
+    <label class="field">
+      <span>Date</span>
+      <input type="date" [(ngModel)]="filters.signalDate" name="signalDate" />
+    </label>
+    <label class="field">
+      <span>Hour</span>
+      <input type="number" min="0" max="23" [(ngModel)]="filters.hourSlot" name="hourSlot" placeholder="Auto" />
+    </label>
+    <label class="field">
+      <span>Services in cart</span>
+      <input type="number" min="1" max="20" [(ngModel)]="filters.selectedServiceCount" name="selectedServiceCount" />
+    </label>
+    <label class="field">
+      <span>Cart total paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.cartTotalPaise" name="cartTotalPaise" />
+    </label>
+    <label class="field">
+      <span>Base discount %</span>
+      <input type="number" min="0" max="100" [(ngModel)]="filters.baseDiscountPercent" name="baseDiscountPercent" />
+    </label>
+    <label class="field">
+      <span>Bundle margin %</span>
+      <input type="number" min="0" max="100" [(ngModel)]="filters.bundleMarginPercent" name="bundleMarginPercent" />
+    </label>
+    <label class="field">
+      <span>Add-on attach %</span>
+      <input type="number" min="0" max="100" [(ngModel)]="filters.addOnAttachRatePercent" name="addOnAttachRatePercent" />
+    </label>
+    <label class="field">
+      <span>Ticket lift paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.targetTicketLiftPaise" name="targetTicketLiftPaise" />
+    </label>
+    <label class="field">
+      <span>Package price paise</span>
+      <input type="number" min="0" step="100" [(ngModel)]="filters.packagePricePaise" name="packagePricePaise" />
+    </label>
+    <label class="toggle-field">
+      <input type="checkbox" [(ngModel)]="filters.packageEligible" name="packageEligible" />
+      <span>Package eligible</span>
+    </label>
+    <button class="primary-button" type="button" (click)="load()" [disabled]="loading()">Run</button>
+    <button class="ghost-button" type="button" (click)="saveSuggestion()" [disabled]="saving()">
+      {{ saving() ? 'Saving...' : 'Save suggestion' }}
+    </button>
+  </section>
+
+  <section class="metric-grid">
+    <article class="metric-card">
+      <span>Suggested discount</span>
+      <strong>{{ best().suggestedDiscountPercent || 0 }}%</strong>
+      <small>{{ formatMoney(best().expectedDiscountPaise) }} discount</small>
+    </article>
+    <article class="metric-card" [class.warning]="best().marginPosture === 'low_margin_bundle'">
+      <span>Bundle posture</span>
+      <strong>{{ label(best().marginPosture || 'unknown') }}</strong>
+      <small>{{ pct(best().bundleMarginPercent) }} margin</small>
+    </article>
+    <article class="metric-card">
+      <span>Net revenue</span>
+      <strong>{{ formatMoney(best().expectedNetRevenuePaise) }}</strong>
+      <small>bundle price {{ formatMoney(best().suggestedBundlePricePaise) }}</small>
+    </article>
+    <article class="metric-card">
+      <span>Catalog candidates</span>
+      <strong>{{ (best().candidateAddOnCount || 0) + (best().candidatePackageCount || 0) }}</strong>
+      <small>{{ best().candidateAddOnCount || 0 }} add-ons | {{ best().candidatePackageCount || 0 }} packages</small>
+    </article>
+  </section>
+
+  <section class="insight-grid">
+    <div class="panel">
+      <div class="section-title">
+        <h2>Recommended move</h2>
+        <span class="status-pill">{{ evaluation()?.status || 'collecting' }}</span>
+      </div>
+      <div class="recommendation">
+        <strong>{{ label(best().campaignAngle || 'collect_bundle_data') }}</strong>
+        <span>{{ label(best().bundleOpportunity || 'unknown') }} | {{ label(best().serviceCategory || filters.serviceCategory) }}</span>
+      </div>
+      <ul class="reason-list">
+        <li *ngFor="let reason of best().reasons || []">{{ reason }}</li>
+        <li *ngIf="!(best().reasons || []).length">Bundle/add-on data collect hone ke baad suggestion strong hoga.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">
+        <h2>Saved suggestions</h2>
+        <span class="muted-text">{{ suggestions().length }} rows</span>
+      </div>
+      <div class="compact-list">
+        <article *ngFor="let row of suggestions()">
+          <div>
+            <strong>{{ label(row.bundleOpportunity) }} | {{ row.suggestedDiscountPercent }}%</strong>
+            <small>{{ label(row.marginPosture) }} | net {{ formatMoney(row.expectedNetRevenuePaise) }} | {{ label(row.status) }}</small>
+          </div>
+          <div class="row-actions">
+            <button type="button" (click)="updateStatus(row, 'approved')">Approve</button>
+            <button type="button" (click)="updateStatus(row, 'paused')">Pause</button>
+          </div>
+        </article>
+        <p class="muted-text" *ngIf="!suggestions().length">No saved bundle-aware suggestions yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>Scenario comparison</h2>
+      <span class="muted-text">{{ rows().length }} rows</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mode</th>
+            <th>Opportunity</th>
+            <th>Margin</th>
+            <th>Discount</th>
+            <th>Bundle price</th>
+            <th>Net revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of rows()">
+            <td>{{ label(row.mode) }}</td>
+            <td>{{ label(row.bundleOpportunity) }}</td>
+            <td>{{ label(row.marginPosture) }}</td>
+            <td>{{ row.suggestedDiscountPercent || 0 }}%</td>
+            <td>{{ formatMoney(row.suggestedBundlePricePaise) }}</td>
+            <td>{{ formatMoney(row.expectedNetRevenuePaise) }}</td>
+          </tr>
+          <tr *ngIf="!loading() && !rows().length">
+            <td colspan="6">No bundle-aware scenarios yet.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

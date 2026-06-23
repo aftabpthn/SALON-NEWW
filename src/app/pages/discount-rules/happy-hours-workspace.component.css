@@ -167,6 +167,7 @@
 
 :host ::ng-deep .detail-body .page-stack,
 :host ::ng-deep .detail-body .auto-sunset-page,
+:host ::ng-deep .detail-body .bundle-aware-page,
 :host ::ng-deep .detail-body .channel-aware-page,
 :host ::ng-deep .detail-body .client-brain-page,
 :host ::ng-deep .detail-body .campaign-audience-page,

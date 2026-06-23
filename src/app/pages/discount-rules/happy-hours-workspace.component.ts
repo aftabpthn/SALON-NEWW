@@ -5,6 +5,7 @@ import { catchError, forkJoin, of } from 'rxjs';
 import { ApiRecord, ApiService } from '../../core/api.service';
 import { DiscountAnomalyInboxComponent } from './anomaly-inbox.component';
 import { BranchOfferLeaderboardComponent } from './branch-offer-leaderboard.component';
+import { BundleAwareOffersComponent } from './bundle-aware-offers.component';
 import { CampaignAudienceBuilderComponent } from './campaign-audience-builder.component';
 import { ChannelAwareOffersComponent } from './channel-aware-offers.component';
 import { ClientDiscountBrainComponent } from './client-discount-brain.component';
@@ -50,6 +51,7 @@ type WorkspaceKey =
   | 'marketAware'
   | 'channelAware'
   | 'leadTime'
+  | 'bundleAware'
   | 'incentives'
   | 'lifecycle'
   | 'roi'
@@ -88,6 +90,7 @@ type WorkspaceItem = {
     RouterLink,
     DiscountAnomalyInboxComponent,
     BranchOfferLeaderboardComponent,
+    BundleAwareOffersComponent,
     CampaignAudienceBuilderComponent,
     ChannelAwareOffersComponent,
     ClientDiscountBrainComponent,
@@ -142,6 +145,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
     { key: 'marketAware', label: 'Market-Aware Offers', source: 'competitor prices + occupancy', note: 'market-match pricing', value: (m) => `${m.marketAware || 0}`, status: (m) => Number(m.marketAbove || 0) ? 'warn' : 'ready' },
     { key: 'channelAware', label: 'Channel-Aware Offers', source: 'source channel + fee + conversion', note: 'source-wise pricing', value: (m) => `${m.channelAware || 0}`, status: (m) => Number(m.channelRisk || 0) ? 'warn' : 'ready' },
     { key: 'leadTime', label: 'Lead-Time Offers', source: 'booking lead time + occupancy', note: 'last-minute fill', value: (m) => `${m.leadTime || 0}`, status: (m) => Number(m.leadTimeUrgent || 0) ? 'warn' : 'ready' },
+    { key: 'bundleAware', label: 'Bundle-Aware Offers', source: 'add-ons + packages + ticket lift', note: 'upsell pricing', value: (m) => `${m.bundleAware || 0}`, status: (m) => Number(m.bundleMarginRisk || 0) ? 'warn' : 'ready' },
     { key: 'incentives', label: 'Staff Incentives', source: 'staffDiscountIncentives', note: 'conversion payout', value: (m) => `${m.incentives || 0}`, status: () => 'ready' },
     { key: 'lifecycle', label: 'Offer Lifecycle', source: 'offer lifecycle + ROI', note: 'idea to report', value: (m) => `${m.lifecycle || 0}`, status: () => 'ready' },
     { key: 'roi', label: 'Offer ROI Score', source: 'offerRoiEvents', note: 'business result', value: (m) => `${m.roiOffers || 0} offers`, status: (m) => m.roiOffers ? 'live' : 'ready' },
@@ -188,6 +192,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
       marketAware: this.safeRows('happy-hours-market-aware/suggestions', { limit: 25 }),
       channelAware: this.safeRows('happy-hours-channel-aware/suggestions', { limit: 25 }),
       leadTime: this.safeRows('happy-hours-lead-time/suggestions', { limit: 25 }),
+      bundleAware: this.safeRows('happy-hours-bundle-aware/suggestions', { limit: 25 }),
       incentives: this.safeRows('happy-hours-control-tower/staff-incentives'),
       audiences: this.safeRows('happy-hours-campaign-audiences'),
       lifecycle: this.safeRows('happy-hours-lifecycle'),
@@ -225,6 +230,8 @@ export class HappyHoursWorkspaceComponent implements OnInit {
           channelRisk: this.rowCount(result.channelAware?.rows?.filter((row) => row['channelRisk'] === 'high_fee_channel')),
           leadTime: this.rowCount(result.leadTime),
           leadTimeUrgent: this.rowCount(result.leadTime?.rows?.filter((row) => row['leadTimeBucket'] === 'urgent_2h' || row['leadTimeBucket'] === 'same_day')),
+          bundleAware: this.rowCount(result.bundleAware),
+          bundleMarginRisk: this.rowCount(result.bundleAware?.rows?.filter((row) => row['marginPosture'] === 'low_margin_bundle')),
           incentives: this.rowCount(result.incentives),
           audiences: this.rowCount(result.audiences),
           lifecycle: this.rowCount(result.lifecycle),

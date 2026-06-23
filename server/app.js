@@ -113,6 +113,7 @@ import { engagementRouter } from "./routes/engagement.routes.js";
 import { financeEngineRouter } from "./routes/finance-engine.routes.js";
 import { futureFeaturesRouter } from "./routes/future-features.routes.js";
 import { giftCardRouter } from "./routes/gift-card.routes.js";
+import { happyHoursBundleAwareRouter } from "./routes/happy-hours-bundle-aware.routes.js";
 import { gstRouter } from "./routes/gst.routes.js";
 import { happyHoursCampaignAudiencesRouter } from "./routes/happy-hours-campaign-audiences.routes.js";
 import { happyHoursCampaignLinksRouter } from "./routes/happy-hours-campaign-links.routes.js";
@@ -304,6 +305,7 @@ export function createApp() {
   app.use("/api/v1/discount-simulations", discountSimulationsRouter);
   app.use("/api/v1/discount-anomalies", discountAnomaliesRouter);
   app.use("/api/v1/cross-branch-analytics", crossBranchAnalyticsRouter);
+  app.use("/api/v1/happy-hours-bundle-aware", happyHoursBundleAwareRouter);
   app.use("/api/v1/happy-hours-campaign-audiences", happyHoursCampaignAudiencesRouter);
   app.use("/api/v1/happy-hours-campaign-links", happyHoursCampaignLinksRouter);
   app.use("/api/v1/happy-hours-auto-sunset", happyHoursAutoSunsetRouter);
@@ -425,6 +427,7 @@ export function createApp() {
   app.use("/api/happy-hours-client-brain", clientDiscountBrainRouter);
   app.use("/api/pricing", federatedLearningRouter);
   app.use("/api/yield", yieldRouter);
+  app.use("/api/happy-hours-bundle-aware", happyHoursBundleAwareRouter);
   app.use("/api/happy-hours-auto-sunset", happyHoursAutoSunsetRouter);
   app.use("/api/happy-hours-branch-leaderboard", happyHoursBranchLeaderboardRouter);
   app.use("/api/happy-hours-channel-aware", happyHoursChannelAwareRouter);
