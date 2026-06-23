@@ -89,7 +89,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             <div class="activity-list">
               <article *ngFor="let tenant of health.watchlist" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
                 <div style="flex:1;min-width:0">
-                  <strong>{{ tenant.name }}</strong>
+                  <strong>{{ tenantLabel(tenant) }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · {{ tenant.nextAction }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
@@ -336,12 +336,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <div class="section-title">
             <div>
               <span class="eyebrow">Tenant 360</span>
-              <h2>{{ tenant.name }} account health, billing risk and adoption</h2>
+              <h2>{{ tenantLabel(tenant) }} account health, billing risk and adoption</h2>
             </div>
             <label class="field" style="max-width:280px;margin:0">
               <span>Selected salon</span>
               <select [ngModel]="selectedTenantId()" (ngModelChange)="selectTenant($event)">
-                <option *ngFor="let item of overview.tenants" [value]="item.id">{{ item.name }}</option>
+                <option *ngFor="let item of overview.tenants" [value]="item.id">{{ tenantLabel(item) }}</option>
               </select>
             </label>
           </div>
@@ -973,7 +973,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   <td class="select-col">
                     <input type="checkbox" [checked]="isTenantSelected(tenant.id)" (click)="$event.stopPropagation()" (change)="toggleTenantSelection(tenant.id)" />
                   </td>
-                  <td class="salon-cell"><strong>{{ tenant.name }}</strong><small>{{ tenant.ownerEmail }} · {{ tenant.primaryDomain }}</small></td>
+                  <td class="salon-cell"><strong>{{ tenantLabel(tenant) }}</strong><small>{{ tenant.ownerEmail }} · {{ tenant.primaryDomain }}</small></td>
                   <td class="plan-cell">{{ tenant.planName }}</td>
                   <td class="status-cell">
                     <span class="badge">{{ tenant.subscriptionStatus }}</span>
@@ -1036,7 +1036,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             <div class="section-title">
               <div>
                 <span class="eyebrow">Tenant drill-down</span>
-                <h2>{{ tenant.name }} full profile, usage, invoices and audit log</h2>
+                <h2>{{ tenantLabel(tenant) }} full profile, usage, invoices and audit log</h2>
               </div>
               <button class="ghost-button mini" type="button" (click)="drilldownOpen.set(false)">Close</button>
             </div>
@@ -1273,7 +1273,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId" (change)="loadTenantLimitForm()">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field">
@@ -1310,7 +1310,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId" (change)="loadIpAllowlistForm()">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field">
@@ -1336,7 +1336,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId" (change)="loadSsoForm()">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field">
@@ -1374,7 +1374,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId" (change)="loadDataExportControlsForm()">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field"><span>Allowed formats</span><input formControlName="formatsText" /></label>
@@ -1398,7 +1398,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId" (change)="loadRolePermissionMatrixForm()">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field">
@@ -1441,7 +1441,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field">
@@ -1473,7 +1473,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field"><span>Open path</span><input formControlName="returnPath" /></label>
@@ -1503,7 +1503,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <span>Tenant</span>
                 <select formControlName="tenantId">
                   <option value="">Select tenant</option>
-                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
                 </select>
               </label>
               <label class="field">
@@ -1591,7 +1591,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <span>Tenant target</span>
               <select formControlName="tenantId">
                 <option value="">Select tenant</option>
-                <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenantLabel(tenant) }}</option>
               </select>
             </label>
             <label class="field" *ngIf="toggleForm.value.scope === 'plan'">
@@ -2281,12 +2281,24 @@ export class SuperAdminComponent implements OnInit {
       this.startImpersonation();
       return;
     }
-    this.error.set(`Type IMPERSONATE in the impersonation form to debug ${tenant.name}.`);
+    this.error.set(`Type IMPERSONATE in the impersonation form to debug ${this.tenantLabel(tenant)}.`);
   }
 
   impersonationTenant(tenants: ApiRecord[] = []): ApiRecord | null {
     const tenantId = this.impersonationForm.value.tenantId || '';
     return (tenants || []).find((tenant) => tenant.id === tenantId) || null;
+  }
+
+  tenantLabel(tenant: ApiRecord = {}): string {
+    return String(
+      tenant.name ||
+      tenant.brandName ||
+      tenant.primaryDomain ||
+      tenant.ownerEmail ||
+      tenant.slug ||
+      tenant.id ||
+      'Unnamed tenant'
+    );
   }
 
   startImpersonation(): void {
