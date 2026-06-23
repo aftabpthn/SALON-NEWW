@@ -43,6 +43,13 @@ superAdminRouter.post(
 );
 
 superAdminRouter.post(
+  "/super-admin/health-alerts/broadcast",
+  asyncHandler((req, res) => {
+    res.status(201).json(superAdminService.broadcastHealthAlerts(req.access));
+  })
+);
+
+superAdminRouter.post(
   "/super-admin/plans",
   validateBody({ required: ["name", "code"] }),
   asyncHandler((req, res) => {

@@ -1,6 +1,7 @@
 import { db } from "../db.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { tenantService } from "./tenant.service.js";
+import { realtimeService } from "./realtime.service.js";
 import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 
 const now = () => new Date().toISOString();
@@ -377,6 +378,52 @@ function saasHealthEngine(metrics, tenantRows, featureToggles) {
   };
 }
 
+function realtimeHealthAlerts(tenantRows) {
+  return tenantRows
+    .flatMap((tenant) => {
+      const alerts = [];
+      if (tenant.healthScore < 45) {
+        alerts.push({
+          id: `${tenant.id}:critical-health`,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          severity: "critical",
+          type: "health",
+          title: "Critical tenant health",
+          message: `${tenant.name} health score is ${tenant.healthScore}.`,
+          createdAt: now()
+        });
+      }
+      if (tenant.outstanding > 0) {
+        alerts.push({
+          id: `${tenant.id}:billing-risk`,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          severity: tenant.outstanding > tenant.monthlyRecurringRevenue ? "critical" : "warning",
+          type: "billing",
+          title: "Outstanding billing risk",
+          message: `${tenant.name} has INR ${tenant.outstanding} outstanding.`,
+          createdAt: now()
+        });
+      }
+      if (tenant.subscriptionStatus === "suspended" || tenant.status === "suspended") {
+        alerts.push({
+          id: `${tenant.id}:suspended`,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          severity: "critical",
+          type: "subscription",
+          title: "Tenant suspended",
+          message: `${tenant.name} is suspended and needs account review.`,
+          createdAt: now()
+        });
+      }
+      return alerts;
+    })
+    .sort((a, b) => (a.severity === "critical" ? -1 : 1) - (b.severity === "critical" ? -1 : 1))
+    .slice(0, 30);
+}
+
 function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows) {
   const lastLoginAt = tenantUsers
     .map((user) => user.lastLoginAt || "")
@@ -584,6 +631,7 @@ export class SuperAdminService {
       featureFlagCommand: featureFlagCommand(featureToggles),
       actionSafetyCommand: actionSafetyCommand(tenantRows, featureToggles),
       saasHealthEngine: saasHealthEngine(metrics, tenantRows, featureToggles),
+      realtimeHealthAlerts: realtimeHealthAlerts(tenantRows),
       revenueCommand: revenueCommand(metrics, tenantRows, plans),
       tenantRiskCommand: {
         alertCount: sumRows(tenantRows, (tenant) => tenant.tenant360.alertSummary.total),
@@ -694,13 +742,33 @@ export class SuperAdminService {
     const tenantIds = Array.isArray(payload.tenantIds) ? [...new Set(payload.tenantIds.filter(Boolean))] : [];
     if (!tenantIds.length) throw badRequest("tenantIds are required");
     const action = String(payload.action || "");
-    if (!["suspend", "reactivate", "changePlan"].includes(action)) throw badRequest("Unsupported bulk action");
+    if (!["suspend", "reactivate", "changePlan", "sendEmail"].includes(action)) throw badRequest("Unsupported bulk action");
     if (action === "changePlan" && !payload.planId) throw badRequest("planId is required for bulk plan change");
+    if (action === "sendEmail" && !String(payload.emailBody || "").trim()) throw badRequest("emailBody is required for bulk email");
     if (payload.planId && !repositories.subscriptionPlans.getById(payload.planId)) throw badRequest("Plan does not exist");
 
     const results = tenantIds.map((tenantId) => {
       const tenant = repositories.tenants.getById(tenantId);
       if (!tenant) return { tenantId, status: "not_found" };
+      if (action === "sendEmail") {
+        if (!tenant.ownerEmail) return { tenantId, status: "missing_email" };
+        const message = repositories.messageLogs.create({
+          id: makeId("msg"),
+          branchId: "",
+          channel: "email",
+          recipient: tenant.ownerEmail,
+          message: payload.emailBody,
+          direction: "outbound",
+          status: "queued",
+          payload: {
+            subject: payload.emailSubject || "Aura platform update",
+            tenantId,
+            source: "super-admin-bulk-action"
+          }
+        }, { tenantId });
+        this.audit(access, "tenant.bulk_email.queued", "tenant", tenantId, { reason: safety.reason, recipient: tenant.ownerEmail, messageLogId: message.id });
+        return { tenantId, status: "queued", messageLogId: message.id };
+      }
       if (action === "changePlan") {
         const updated = this.updateTenantSubscription(tenantId, { planId: payload.planId, reason: safety.reason, confirmation: safety.confirmation }, access);
         return { tenantId, status: "updated", tenant: updated.tenant };
@@ -716,13 +784,26 @@ export class SuperAdminService {
       action,
       tenantIds,
       planId: payload.planId || "",
+      emailSubject: payload.emailSubject || "",
       reason: safety.reason,
       confirmation: safety.confirmation,
-      updated: results.filter((row) => row.status === "updated").length,
-      failed: results.filter((row) => row.status !== "updated").length
+      updated: results.filter((row) => ["updated", "queued"].includes(row.status)).length,
+      failed: results.filter((row) => !["updated", "queued"].includes(row.status)).length
     };
     this.audit(access, "tenant.bulk_action.executed", "tenant", "bulk", summary);
     return { summary, results };
+  }
+
+  broadcastHealthAlerts(access) {
+    ensureSuperAdmin(access);
+    const overview = this.overview(access);
+    const alerts = overview.realtimeHealthAlerts || [];
+    const events = alerts.map((alert) => realtimeService.broadcast("super-admin.health.alert", alert, {
+      tenantId: alert.tenantId,
+      channel: `tenant:${alert.tenantId}`
+    })).filter(Boolean);
+    this.audit(access, "health_alerts.broadcast", "tenant", "bulk", { count: alerts.length });
+    return { alerts, events: events.length };
   }
 
   requestActionApproval(payload = {}, access) {

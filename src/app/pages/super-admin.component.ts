@@ -106,6 +106,31 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
+        <section class="panel" *ngIf="overview.realtimeHealthAlerts as alerts">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Real-time health alerts</span>
+              <h2>Critical tenant alerts ready for websocket broadcast</h2>
+            </div>
+            <button class="ghost-button" type="button" [disabled]="saving() || !alerts.length" (click)="broadcastHealthAlerts()">Broadcast alerts</button>
+          </div>
+          <div class="activity-list">
+            <article *ngFor="let alert of alerts" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div style="flex:1;min-width:0">
+                <strong>{{ alert.title }}</strong>
+                <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ alert.tenantName }} · {{ alert.message }}</span>
+              </div>
+              <span class="badge" [style.background]="alert.severity === 'critical' ? 'var(--danger,#dc2626)' : 'var(--warning,#f59e0b)'" style="color:#fff">{{ alert.severity }}</span>
+            </article>
+            <article *ngIf="!alerts.length">
+              <div>
+                <strong>No live health alerts</strong>
+                <span>Critical billing, health and suspension alerts will appear here.</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section class="panel" *ngIf="overview.actionSafetyCommand as safety">
           <div class="section-title">
             <div>
@@ -468,6 +493,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <option value="suspend">Suspend selected</option>
                 <option value="reactivate">Reactivate selected</option>
                 <option value="changePlan">Change plan</option>
+                <option value="sendEmail">Send email</option>
               </select>
             </label>
             <label class="field" *ngIf="bulkActionForm.value.action === 'changePlan'">
@@ -476,6 +502,14 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <option value="">Select plan</option>
                 <option *ngFor="let plan of overview.plans" [value]="plan.id">{{ plan.name }}</option>
               </select>
+            </label>
+            <label class="field" *ngIf="bulkActionForm.value.action === 'sendEmail'">
+              <span>Email subject</span>
+              <input formControlName="emailSubject" />
+            </label>
+            <label class="field full" *ngIf="bulkActionForm.value.action === 'sendEmail'">
+              <span>Email body</span>
+              <textarea formControlName="emailBody"></textarea>
             </label>
             <div class="form-actions">
               <button class="ghost-button" type="button" (click)="selectAllTenants(overview.tenants)">Select all</button>
@@ -836,7 +870,9 @@ export class SuperAdminComponent implements OnInit {
 
   readonly bulkActionForm = this.fb.group({
     action: ['suspend', Validators.required],
-    planId: ['']
+    planId: [''],
+    emailSubject: ['Aura platform update'],
+    emailBody: ['']
   });
 
   readonly supportNoteForm = this.fb.group({
@@ -1014,6 +1050,8 @@ export class SuperAdminComponent implements OnInit {
     this.api.post('super-admin/tenants/bulk-action', {
       action: this.bulkActionForm.value.action,
       planId: this.bulkActionForm.value.planId || '',
+      emailSubject: this.bulkActionForm.value.emailSubject || '',
+      emailBody: this.bulkActionForm.value.emailBody || '',
       tenantIds: this.selectedTenantIds(),
       ...this.safetyPayload()
     }).subscribe({
@@ -1024,6 +1062,20 @@ export class SuperAdminComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to apply bulk action');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  broadcastHealthAlerts(): void {
+    this.saving.set(true);
+    this.api.post('super-admin/health-alerts/broadcast', {}).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to broadcast health alerts');
         this.saving.set(false);
       }
     });
