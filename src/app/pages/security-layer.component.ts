@@ -1,37 +1,66 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
-import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
+import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
-import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
 
 @Component({
   selector: 'app-security-layer',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, DatePipe, StateComponent, AuraKpiCardComponent],
+  imports: [CommonModule, ReactiveFormsModule, DatePipe, RouterLink, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
-        <div>
-          <span class="eyebrow">Level 13 · Enterprise security</span>
-          <h2>Rate limiting, API protection, audit logs, permissions, sessions, encryption, backups and activity tracking</h2>
-          <p>Security events are persisted and the API now applies security headers, request tracking and per-user rate limits.</p>
+    <section class="security-workspace">
+      <div class="command-bar">
+        <div class="brand-block">
+          <span class="brand-mark">A</span>
+          <div>
+            <small>ENTERPRISE COMMAND WORKSPACE</small>
+            <strong>Aurashine OS</strong>
+          </div>
         </div>
-        <button class="ghost-button" type="button" (click)="load()">Refresh</button>
+        <div class="command-actions">
+          <button type="button" class="zenoti-button" routerLink="/apps">Back</button>
+          <button type="button" class="zenoti-button primary" (click)="load()">Refresh</button>
+        </div>
       </div>
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/security/audit-logs"><span>Audit logs</span><strong>{{ metrics.auditLogs }}</strong><small>Persisted events</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/security/active-sessions"><span>Active sessions</span><strong>{{ metrics.activeSessions }}</strong><small>Session management</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/security/backups"><span>Backups</span><strong>{{ metrics.backups }}</strong><small>SQLite snapshots</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/security/permissions"><span>Permissions</span><strong>{{ metrics.permissions }}</strong><small>Role grants</small></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/security/encrypted-secrets"><span>Encrypted secrets</span><strong>{{ metrics.encryptedSecrets }}</strong><small>AES vault entries</small></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/security/risk-score"><span>Risk score</span><strong>{{ metrics.riskScore }}</strong><small>Denied + activity signals</small></aura-kpi-card>
+      <div class="zenoti-header">
+        <strong>malad</strong>
+        <div class="header-actions">
+          <button type="button" class="zenoti-button">Audit logs</button>
+          <button type="button" class="zenoti-button">Permissions</button>
+          <button type="button" class="zenoti-button">Backups</button>
+        </div>
+        <select (change)="runQuickAction($event)" aria-label="Security quick actions">
+          <option>I want to ...</option>
+          <option value="refresh">Refresh security summary</option>
+          <option value="permission">Prepare permission save</option>
+          <option value="session">Prepare front desk session</option>
+          <option value="backup">Create manual backup</option>
+        </select>
       </div>
 
-      <div class="three-grid">
+      <div class="page-heading">
+        <div>
+          <h1>Enterprise security</h1>
+          <span>Security events, API protection, audit logs, permissions, sessions, encryption, backups and activity tracking</span>
+        </div>
+        <button class="primary-button" type="button" (click)="createBackup()">Create backup</button>
+      </div>
+
+      <div class="metric-strip" *ngIf="summary()?.metrics as metrics">
+        <article><span>Audit logs</span><strong>{{ metrics.auditLogs }}</strong><small>Persisted events</small></article>
+        <article><span>Active sessions</span><strong>{{ metrics.activeSessions }}</strong><small>Session management</small></article>
+        <article><span>Backups</span><strong>{{ metrics.backups }}</strong><small>SQLite snapshots</small></article>
+        <article><span>Permissions</span><strong>{{ metrics.permissions }}</strong><small>Role grants</small></article>
+        <article><span>Secrets</span><strong>{{ metrics.encryptedSecrets }}</strong><small>AES vault entries</small></article>
+        <article><span>Risk score</span><strong>{{ metrics.riskScore }}</strong><small>Denied + activity signals</small></article>
+      </div>
+
+      <div class="workdesk">
         <section class="form-panel">
           <h3>Permission system</h3>
           <form [formGroup]="permissionForm" (ngSubmit)="savePermission()">
@@ -65,7 +94,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       </div>
 
       <section class="panel">
-        <div class="section-title"><h2>Protection controls</h2></div>
+        <div class="section-title"><h2>Protection controls</h2><span>{{ controlEntries().length }} controls</span></div>
         <div class="quick-grid">
           <article class="action-card" *ngFor="let control of controlEntries()">
             <strong>{{ control[0] }}</strong>
@@ -128,7 +157,70 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
       <pre class="result-json" *ngIf="result()">{{ result() | json }}</pre>
     </section>
-  `
+  `,
+  styles: [`
+    .security-workspace { background: #fff; color: #111827; min-height: 100vh; }
+    .command-bar { background: #111827; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.16); }
+    .brand-block, .command-actions, .header-actions, .page-heading, .section-title, .form-actions { display: flex; align-items: center; gap: 10px; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: #635bff; font-weight: 900; }
+    .brand-block small { display: block; color: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: 0; }
+    .brand-block strong { display: block; font-size: 16px; }
+    .zenoti-button, .primary-button, .ghost-button { border: 1px solid #bfdbfe; background: #fff; color: #075985; border-radius: 4px; padding: 8px 13px; font-weight: 800; cursor: pointer; text-decoration: none; }
+    .zenoti-button.primary, .primary-button { background: #0f8f7f; border-color: #0f8f7f; color: #fff; }
+    .zenoti-button:disabled, .ghost-button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .zenoti-header { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 26px 16px 12px; border-bottom: 1px solid #d7e2ea; }
+    .zenoti-header select { grid-column: 2; width: min(620px, 100%); border: 1px solid #bfdbfe; border-radius: 4px; padding: 9px 12px; font-weight: 800; background: #fff; }
+    .page-heading { justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #d7e2ea; }
+    .page-heading h1 { margin: 0 0 4px; font-size: 24px; }
+    .page-heading span, .section-title span, small, td, .field span { color: #64748b; }
+    .metric-strip { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); border-bottom: 1px solid #d7e2ea; background: #f8fafc; }
+    .metric-strip article { padding: 14px 16px; border-right: 1px solid #d7e2ea; border-top: 4px solid #0f8f7f; min-height: 86px; }
+    .metric-strip article:nth-child(2) { border-top-color: #2563eb; }
+    .metric-strip article:nth-child(3) { border-top-color: #b7791f; }
+    .metric-strip article:nth-child(4) { border-top-color: #15803d; }
+    .metric-strip article:nth-child(5) { border-top-color: #7c3aed; }
+    .metric-strip article:nth-child(6) { border-top-color: #b91c1c; }
+    .metric-strip span { display: block; color: #64748b; font-size: 12px; font-weight: 900; }
+    .metric-strip strong { display: block; margin-top: 6px; font-size: 25px; }
+    .workdesk { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px; border-bottom: 1px solid #d7e2ea; }
+    .form-panel, .panel { background: #fff; border: 1px solid #d7e2ea; border-radius: 4px; padding: 14px; }
+    .form-panel h3, .section-title h2 { margin: 0; font-size: 16px; }
+    form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+    .field { display: grid; gap: 6px; font-weight: 800; }
+    .field.full, .form-actions { grid-column: 1 / -1; }
+    input { border: 1px solid #d7e2ea; border-radius: 4px; min-height: 38px; padding: 8px 10px; color: #111827; background: #fff; }
+    .form-actions { justify-content: flex-end; }
+    .panel { margin: 16px; }
+    .section-title { justify-content: space-between; margin-bottom: 12px; }
+    .quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .action-card { border: 1px solid #d7e2ea; border-radius: 4px; padding: 12px; min-height: 74px; }
+    .action-card strong, .action-card span { display: block; }
+    .action-card span { margin-top: 7px; color: #64748b; font-size: 12px; }
+    .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr); gap: 0; }
+    .dashboard-grid .panel { margin-top: 0; }
+    .table-wrap { overflow: auto; border: 1px solid #d7e2ea; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th { background: #f1f5f9; color: #475569; font-size: 12px; text-align: left; text-transform: uppercase; }
+    th, td { border-bottom: 1px solid #d7e2ea; padding: 12px; vertical-align: top; }
+    .badge { display: inline-block; border-radius: 999px; background: #e0f2fe; color: #075985; padding: 5px 9px; font-weight: 800; font-size: 12px; }
+    .rank-list { display: grid; gap: 10px; }
+    .rank-list article { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #d7e2ea; border-radius: 4px; padding: 11px; }
+    .rank-list strong, .rank-list span { display: block; }
+    .rank-list span { color: #64748b; font-size: 12px; margin-top: 4px; }
+    .mini { padding: 6px 10px; }
+    .result-json { margin: 16px; border: 1px solid #d7e2ea; border-radius: 4px; padding: 12px; background: #f8fafc; overflow: auto; }
+    @media (max-width: 1100px) {
+      .metric-strip { grid-template-columns: repeat(3, 1fr); }
+      .workdesk, .dashboard-grid, .quick-grid { grid-template-columns: 1fr; }
+      .zenoti-header { grid-template-columns: 1fr; }
+      .zenoti-header select { grid-column: auto; }
+    }
+    @media (max-width: 720px) {
+      .command-bar, .page-heading, .rank-list article { align-items: stretch; flex-direction: column; }
+      .metric-strip, form { grid-template-columns: 1fr; }
+      .header-actions { flex-wrap: wrap; }
+    }
+  `]
 })
 export class SecurityLayerComponent implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);
@@ -206,5 +298,15 @@ export class SecurityLayerComponent implements OnInit {
       this.result.set(response);
       this.load();
     });
+  }
+
+  runQuickAction(event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const action = select.value;
+    if (action === 'refresh') this.load();
+    if (action === 'permission') this.permissionForm.patchValue({ role: 'owner', resource: 'security', actions: 'read,write,approve' });
+    if (action === 'session') this.sessionForm.patchValue({ userId: 'front-desk-user', deviceId: 'front-desk-terminal' });
+    if (action === 'backup') this.createBackup();
+    select.selectedIndex = 0;
   }
 }
