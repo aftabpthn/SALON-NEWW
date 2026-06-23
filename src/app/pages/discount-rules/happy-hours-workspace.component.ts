@@ -15,6 +15,7 @@ import { ElasticityProfitPricingComponent } from './elasticity-profit-pricing.co
 import { HappyHoursFraudGuardComponent } from './fraud-guard.component';
 import { HappyHoursControlTowerComponent } from './happy-hours-control-tower.component';
 import { InventoryAwareOffersComponent } from './inventory-aware-offers.component';
+import { MarketAwareOffersComponent } from './market-aware-offers.component';
 import { OfferAutoSunsetComponent } from './offer-auto-sunset.component';
 import { OfferHealthScoreComponent } from './offer-health-score.component';
 import { OfferLifecycleComponent } from './offer-lifecycle.component';
@@ -44,6 +45,7 @@ type WorkspaceKey =
   | 'staffAware'
   | 'inventoryAware'
   | 'weatherEvent'
+  | 'marketAware'
   | 'incentives'
   | 'lifecycle'
   | 'roi'
@@ -92,6 +94,7 @@ type WorkspaceItem = {
     HappyHoursFraudGuardComponent,
     HappyHoursControlTowerComponent,
     InventoryAwareOffersComponent,
+    MarketAwareOffersComponent,
     OfferAutoSunsetComponent,
     OfferHealthScoreComponent,
     OfferLifecycleComponent,
@@ -130,6 +133,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
     { key: 'staffAware', label: 'Staff-Aware Offers', source: 'appointments + staff load', note: 'idle staff boost', value: (m) => `${m.staffAware || 0}`, status: () => 'ready' },
     { key: 'inventoryAware', label: 'Inventory-Aware Offers', source: 'stock + expiry + bundles', note: 'stock-led offer', value: (m) => `${m.inventoryAware || 0}`, status: (m) => Number(m.inventoryRisk || 0) ? 'warn' : 'ready' },
     { key: 'weatherEvent', label: 'Weather/Event Offers', source: 'weather + local events + demand', note: 'rain/festival pricing', value: (m) => `${m.weatherEvent || 0}`, status: (m) => Number(m.weatherEventRisk || 0) ? 'warn' : 'ready' },
+    { key: 'marketAware', label: 'Market-Aware Offers', source: 'competitor prices + occupancy', note: 'market-match pricing', value: (m) => `${m.marketAware || 0}`, status: (m) => Number(m.marketAbove || 0) ? 'warn' : 'ready' },
     { key: 'incentives', label: 'Staff Incentives', source: 'staffDiscountIncentives', note: 'conversion payout', value: (m) => `${m.incentives || 0}`, status: () => 'ready' },
     { key: 'lifecycle', label: 'Offer Lifecycle', source: 'offer lifecycle + ROI', note: 'idea to report', value: (m) => `${m.lifecycle || 0}`, status: () => 'ready' },
     { key: 'roi', label: 'Offer ROI Score', source: 'offerRoiEvents', note: 'business result', value: (m) => `${m.roiOffers || 0} offers`, status: (m) => m.roiOffers ? 'live' : 'ready' },
@@ -173,6 +177,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
       staffAware: this.safeRows('happy-hours-staff-aware/suggestions', { limit: 25 }),
       inventoryAware: this.safeRows('happy-hours-inventory-aware/suggestions', { limit: 25 }),
       weatherEvent: this.safeRows('happy-hours-weather-event/suggestions', { limit: 25 }),
+      marketAware: this.safeRows('happy-hours-market-aware/suggestions', { limit: 25 }),
       incentives: this.safeRows('happy-hours-control-tower/staff-incentives'),
       audiences: this.safeRows('happy-hours-campaign-audiences'),
       lifecycle: this.safeRows('happy-hours-lifecycle'),
@@ -204,6 +209,8 @@ export class HappyHoursWorkspaceComponent implements OnInit {
           inventoryRisk: this.rowCount(result.inventoryAware?.rows?.filter((row) => row['status'] === 'paused' || row['stockRisk'] === 'low_stock')),
           weatherEvent: this.rowCount(result.weatherEvent),
           weatherEventRisk: this.rowCount(result.weatherEvent?.rows?.filter((row) => String(row['demandRisk'] || '').includes('disruption'))),
+          marketAware: this.rowCount(result.marketAware),
+          marketAbove: this.rowCount(result.marketAware?.rows?.filter((row) => row['marketPosition'] === 'above_market')),
           incentives: this.rowCount(result.incentives),
           audiences: this.rowCount(result.audiences),
           lifecycle: this.rowCount(result.lifecycle),
