@@ -131,10 +131,11 @@ export class ApiService {
       'cache-control': 'no-cache',
       pragma: 'no-cache'
     });
+    if (!environment.production) {
+      headers = headers.set('x-user-role', this.appState.userRole());
+    }
     if (token) {
       headers = headers.set('authorization', `Bearer ${token}`);
-    } else if (!environment.production) {
-      headers = headers.set('x-user-role', this.appState.userRole());
     }
     return headers;
   }
