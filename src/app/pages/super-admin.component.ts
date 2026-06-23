@@ -582,6 +582,53 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
+        <section class="panel" *ngIf="overview.billingOperationsReport as billingOps">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Billing operations</span>
+              <h2>Failed payments, paused subscriptions and dunning status</h2>
+            </div>
+            <span class="badge" [style.background]="billingOps.criticalDunning ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)'" style="color:#fff">{{ billingOps.criticalDunning }} escalations</span>
+          </div>
+          <div class="quick-grid">
+            <article class="action-card">
+              <strong>{{ billingOps.failedPayments }}</strong>
+              <span>Failed payments</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ billingOps.failedPaymentAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Failed payment value</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ billingOps.pausedSubscriptions }}</strong>
+              <span>Paused subscriptions</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ billingOps.dunningAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Dunning amount</span>
+            </article>
+          </div>
+
+          <div class="activity-list">
+            <article *ngFor="let tenant of billingOps.tenants" style="display:grid;grid-template-columns:1fr 130px 150px 120px;gap:12px;align-items:center">
+              <div style="min-width:0">
+                <strong>{{ tenant.name }}</strong>
+                <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · {{ tenant.billingOps.nextAction }}</span>
+              </div>
+              <span class="badge" [style.background]="healthFlagTone(tenant.billingOps.dunningSeverity)" style="color:#fff">{{ tenant.billingOps.dunningStatus }}</span>
+              <span>{{ tenant.billingOps.failedPaymentCount }} failed · {{ tenant.billingOps.unpaidInvoiceCount }} unpaid</span>
+              <div style="text-align:right">
+                <strong>{{ tenant.billingOps.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <button type="button" class="link-button" (click)="openTenantDrilldown(tenant.id)">Open 360</button>
+              </div>
+            </article>
+            <article *ngIf="!billingOps.tenants?.length">
+              <strong>No active dunning queue</strong>
+              <span style="display:block;font-size:0.8em;color:var(--text-muted)">No failed payments, paused subscriptions or unpaid dunning items found.</span>
+            </article>
+          </div>
+        </section>
+
         <section class="panel" *ngIf="overview.revenueGrowthGraph as graph">
           <div class="section-title">
             <div>
@@ -734,7 +781,13 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   </td>
                   <td><strong>{{ tenant.name }}</strong><small>{{ tenant.ownerEmail }} · {{ tenant.primaryDomain }}</small></td>
                   <td>{{ tenant.planName }}</td>
-                  <td><span class="badge">{{ tenant.subscriptionStatus }}</span></td>
+                  <td>
+                    <span class="badge">{{ tenant.subscriptionStatus }}</span>
+                    <small style="display:block;color:var(--text-muted)">
+                      <span class="badge" [style.background]="healthFlagTone(tenant.billingOps?.dunningSeverity)" style="color:#fff">{{ tenant.billingOps?.dunningStatus || 'Clear' }}</span>
+                      {{ tenant.billingOps?.failedPaymentCount || 0 }} failed
+                    </small>
+                  </td>
                   <td>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}<small>{{ tenant.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} usage</small></td>
                   <td>{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
                   <td>{{ tenant.usage.clients }} clients · {{ tenant.usage.appointments }} bookings</td>

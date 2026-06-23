@@ -432,6 +432,52 @@ function planDaysLeft(tenant) {
   return daysUntil(tenant.subscription?.currentPeriodEnd || tenant.trialEndsAt || "");
 }
 
+function invoicePaymentStatus(invoice = {}) {
+  return String(invoice.payment_status || invoice.paymentStatus || invoice.status || "").toLowerCase();
+}
+
+function invoiceBalance(invoice = {}) {
+  return Number(invoice.balance ?? invoice.due_amount ?? invoice.dueAmount ?? 0);
+}
+
+function tenantBillingOps(tenant, tenantInvoices, tenantPayments) {
+  const failedInvoices = tenantInvoices.filter((invoice) => /failed|declined|bounced|rejected/.test(invoicePaymentStatus(invoice)));
+  const failedPayments = tenantPayments.filter((payment) => /failed|declined|bounced|rejected/.test(String(payment.status || payment.payment_status || "").toLowerCase()));
+  const unpaidInvoices = tenantInvoices.filter((invoice) => invoicePaymentStatus(invoice) !== "paid" && invoiceBalance(invoice) > 0);
+  const pausedSubscription = ["paused", "pause", "past_due"].includes(String(tenant.subscriptionStatus || "").toLowerCase())
+    || ["paused", "pause", "past_due"].includes(String(tenant.subscription?.status || "").toLowerCase());
+  const failedPaymentCount = failedInvoices.length + failedPayments.length;
+  const outstanding = money(sumRows(unpaidInvoices, invoiceBalance));
+  const dunningSeverity = failedPaymentCount >= 3 || outstanding > tenant.monthlyRecurringRevenue
+    ? "critical"
+    : failedPaymentCount || outstanding || pausedSubscription
+      ? "warning"
+      : "healthy";
+  const dunningStatus = dunningSeverity === "critical"
+    ? "Escalate"
+    : dunningSeverity === "warning"
+      ? "Active"
+      : "Clear";
+  return {
+    failedPaymentCount,
+    failedPaymentAmount: money(sumRows(failedInvoices, (invoice) => invoiceBalance(invoice) || Number(invoice.total || invoice.grand_total || 0))),
+    unpaidInvoiceCount: unpaidInvoices.length,
+    outstanding,
+    pausedSubscription,
+    dunningStatus,
+    dunningSeverity,
+    nextAction: dunningSeverity === "critical"
+      ? "Owner escalation"
+      : pausedSubscription
+        ? "Resume subscription"
+        : failedPaymentCount
+          ? "Retry payment"
+          : outstanding
+            ? "Send dunning reminder"
+            : "No action"
+  };
+}
+
 function healthFlagFor(tenant, threshold = 70) {
   if (tenant.subscriptionStatus === "suspended" || tenant.status === "suspended") {
     return { label: "Suspended", severity: "critical", threshold, reason: "Subscription suspended" };
@@ -581,6 +627,44 @@ function revenueLeakageReport(metrics, tenantRows, featureToggles) {
         mrrAtRisk: tenant.monthlyRecurringRevenue,
         usage: tenant.usage
       }))
+  };
+}
+
+function billingOperationsReport(tenantRows) {
+  const tenantsInDunning = tenantRows.filter((tenant) => tenant.billingOps?.dunningStatus !== "Clear");
+  const failedPaymentTenants = tenantRows.filter((tenant) => tenant.billingOps?.failedPaymentCount > 0);
+  const pausedTenants = tenantRows.filter((tenant) => tenant.billingOps?.pausedSubscription);
+  return {
+    failedPayments: sumRows(tenantRows, (tenant) => tenant.billingOps?.failedPaymentCount || 0),
+    failedPaymentAmount: money(sumRows(tenantRows, (tenant) => tenant.billingOps?.failedPaymentAmount || 0)),
+    pausedSubscriptions: pausedTenants.length,
+    activeDunning: tenantsInDunning.length,
+    criticalDunning: tenantsInDunning.filter((tenant) => tenant.billingOps?.dunningSeverity === "critical").length,
+    dunningAmount: money(sumRows(tenantsInDunning, (tenant) => tenant.billingOps?.outstanding || 0)),
+    tenants: tenantsInDunning
+      .sort((a, b) => (b.billingOps.outstanding + b.billingOps.failedPaymentAmount) - (a.billingOps.outstanding + a.billingOps.failedPaymentAmount))
+      .slice(0, 10)
+      .map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name,
+        planName: tenant.planName,
+        subscriptionStatus: tenant.subscriptionStatus,
+        monthlyRecurringRevenue: tenant.monthlyRecurringRevenue,
+        billingOps: tenant.billingOps
+      })),
+    pausedTenants: pausedTenants.slice(0, 8).map((tenant) => ({
+      id: tenant.id,
+      name: tenant.name,
+      planName: tenant.planName,
+      monthlyRecurringRevenue: tenant.monthlyRecurringRevenue,
+      billingOps: tenant.billingOps
+    })),
+    failedPaymentTenants: failedPaymentTenants.slice(0, 8).map((tenant) => ({
+      id: tenant.id,
+      name: tenant.name,
+      planName: tenant.planName,
+      billingOps: tenant.billingOps
+    }))
   };
 }
 
@@ -846,6 +930,7 @@ export class SuperAdminService {
     const subscriptions = repositories.subscriptions.list({ limit: 10000 });
     const sales = repositories.sales.list({ limit: 100000 });
     const invoices = repositories.invoices.list({ limit: 100000 });
+    const payments = repositories.payments.list({ limit: 100000 });
     const tenantUsers = repositories.tenantUsers.list({ limit: 100000 });
     const auditRows = repositories.superAdminAudit.list({ limit: 1000 }).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
@@ -853,6 +938,7 @@ export class SuperAdminService {
     const tenantRows = tenants.map((tenant) => {
       const tenantSales = sales.filter((sale) => sale.tenantId === tenant.id);
       const tenantInvoices = invoices.filter((invoice) => invoice.tenantId === tenant.id);
+      const tenantPayments = payments.filter((payment) => payment.tenantId === tenant.id);
       const usersForTenant = tenantUsers.filter((user) => user.tenantId === tenant.id);
       const plan = planById.get(tenant.planId);
       const billingPreview = tenantService.billingPreview(tenant.id);
@@ -890,6 +976,7 @@ export class SuperAdminService {
         healthScore: tenantHealth(tenant, usage),
         subscription: subscriptionByTenant.get(tenant.id) || null
       };
+      row.billingOps = tenantBillingOps(row, tenantInvoices, tenantPayments);
       return { ...row, healthFlag: healthFlagFor(row), tenant360: tenant360(row), drilldown: tenantDrilldown(row, tenantInvoices, usersForTenant, auditRows) };
     });
     const metrics = {
@@ -918,6 +1005,7 @@ export class SuperAdminService {
       revenueCommand: revenueCommand(metrics, tenantRows, plans),
       revenueIntelligence: revenueIntelligence(metrics, tenantRows, plans),
       revenueLeakageReport: revenueLeakageReport(metrics, tenantRows, featureToggles),
+      billingOperationsReport: billingOperationsReport(tenantRows),
       revenueGrowthGraph: revenueGrowthGraph(tenantRows),
       trialPaidFunnel: trialPaidFunnel(tenantRows),
       churnPrediction: churnPrediction(tenantRows),
