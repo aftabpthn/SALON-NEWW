@@ -10,6 +10,7 @@ const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
 const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const pct = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const TENANT_LIMITS_KEY = "superAdminTenantLimits";
+const TENANT_IP_ALLOWLIST_KEY = "superAdminIpAllowlist";
 
 function ensureSuperAdmin(access = {}) {
   if (access.role !== "superAdmin") throw forbidden("Super admin access is required");
@@ -54,6 +55,37 @@ function tenantLimitsFor(plan, override = {}, usage = {}) {
       staff: share(usage.staff, Math.max(1, limits.staff)),
       clients: share(usage.clients, Math.max(1, limits.clients))
     }
+  };
+}
+
+function parseIpAllowlist(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const entries = Array.isArray(source.entries)
+    ? source.entries
+    : String(source.entriesText || "").split(/\r?\n|,/);
+  return {
+    enabled: Boolean(source.enabled),
+    mode: source.mode === "monitor" ? "monitor" : "enforce",
+    entries: entries
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
+      .slice(0, 100),
+    reason: source.reason || "",
+    updatedBy: source.updatedBy || "",
+    updatedAt: source.updatedAt || ""
+  };
+}
+
+function ipAllowlistForTenant(policy = {}) {
+  const parsed = parseIpAllowlist(policy);
+  return {
+    ...parsed,
+    status: !parsed.enabled ? "disabled" : parsed.entries.length ? parsed.mode : "empty",
+    summary: !parsed.enabled
+      ? "IP allowlist disabled"
+      : parsed.entries.length
+        ? `${parsed.entries.length} IP/CIDR entries`
+        : "Enabled without entries"
   };
 }
 
@@ -1093,6 +1125,10 @@ export class SuperAdminService {
       .list({ limit: 10000 })
       .filter((setting) => setting.key === TENANT_LIMITS_KEY)
       .map((setting) => [setting.tenantId, setting.value || {}]));
+    const ipAllowlistByTenant = new Map(repositories.settings
+      .list({ limit: 10000 })
+      .filter((setting) => setting.key === TENANT_IP_ALLOWLIST_KEY)
+      .map((setting) => [setting.tenantId, setting.value || {}]));
     const tenantRows = tenants.map((tenant) => {
       const tenantSales = sales.filter((sale) => sale.tenantId === tenant.id);
       const tenantInvoices = invoices.filter((invoice) => invoice.tenantId === tenant.id);
@@ -1132,6 +1168,7 @@ export class SuperAdminService {
         outstanding,
         usage,
         tenantLimits: tenantLimitsFor(plan, tenantLimitByTenant.get(tenant.id), usage),
+        ipAllowlist: ipAllowlistForTenant(ipAllowlistByTenant.get(tenant.id)),
         healthBreakdown: health,
         healthScore: tenantHealth(tenant, usage),
         subscription: subscriptionByTenant.get(tenant.id) || null
@@ -1298,6 +1335,33 @@ export class SuperAdminService {
       reason: payload.reason || ""
     });
     return { tenantId, limits: record.value };
+  }
+
+  updateTenantIpAllowlist(tenantId, payload = {}, access) {
+    ensureSuperAdmin(access);
+    const tenant = repositories.tenants.getById(tenantId);
+    if (!tenant) throw notFound("Tenant not found");
+    const current = repositories.settings.list({ limit: 10000 }, { tenantId })
+      .find((setting) => setting.key === TENANT_IP_ALLOWLIST_KEY);
+    const policy = parseIpAllowlist({
+      ...current?.value,
+      ...payload,
+      entries: Array.isArray(payload.entries)
+        ? payload.entries
+        : String(payload.entriesText || "").split(/\r?\n|,/),
+      updatedBy: access.userId || "super-admin",
+      updatedAt: now()
+    });
+    const record = current
+      ? repositories.settings.update(current.id, { value: policy, scope: "tenant" }, { tenantId })
+      : repositories.settings.create({ id: makeId("set"), key: TENANT_IP_ALLOWLIST_KEY, value: policy, scope: "tenant" }, { tenantId });
+    this.audit(access, "tenant.ip_allowlist.updated", "tenant", tenantId, {
+      enabled: policy.enabled,
+      mode: policy.mode,
+      entries: policy.entries,
+      reason: payload.reason || ""
+    });
+    return { tenantId, ipAllowlist: ipAllowlistForTenant(record.value) };
   }
 
   bulkTenantAction(payload = {}, access) {

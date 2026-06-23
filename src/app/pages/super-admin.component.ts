@@ -839,6 +839,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                       <span class="badge" [style.background]="healthFlagTone(tenant.billingOps?.dunningSeverity)" style="color:#fff">{{ tenant.billingOps?.dunningStatus || 'Clear' }}</span>
                       {{ tenant.billingOps?.failedPaymentCount || 0 }} failed
                     </small>
+                    <small style="display:block;color:var(--text-muted)">
+                      IP {{ tenant.ipAllowlist?.status || 'disabled' }}
+                    </small>
                   </td>
                   <td>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}<small>{{ tenant.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} usage</small></td>
                   <td>{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
@@ -859,6 +862,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); openTenantDrilldown(tenant.id)">Profile</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); selectTenant(tenant.id)">360</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editTenantLimits(tenant)">Limits</button>
+                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editIpAllowlist(tenant)">IP rules</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareTenantFeatureOverride(tenant)">Override</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareImpersonation(tenant)">Impersonate</button>
                     <a class="ghost-button mini" [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer" (click)="$event.stopPropagation()">Intercom</a>
@@ -922,6 +926,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   <div>
                     <strong>Profile</strong>
                     <span>{{ tenant.ownerEmail }} · {{ tenant.primaryDomain || 'Domain pending' }} · {{ tenant.planName }}</span>
+                    <span style="display:block;font-size:0.8em;color:var(--text-muted)">IP allowlist: {{ tenant.ipAllowlist?.summary || 'disabled' }} · {{ tenant.ipAllowlist?.mode || 'enforce' }}</span>
                     <span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
                       <a class="ghost-button mini" [href]="tenant.supportLinks?.internal" target="_blank" rel="noreferrer">Support ticket</a>
                       <a class="ghost-button mini" [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer">Intercom</a>
@@ -1036,6 +1041,32 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
               <div class="form-actions">
                 <button class="primary-button" type="submit" [disabled]="tenantLimitsForm.invalid || saving()">Save tenant limits</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="form-panel">
+            <h3>IP Allowlist per Tenant</h3>
+            <form [formGroup]="ipAllowlistForm" (ngSubmit)="saveIpAllowlist()">
+              <label class="field">
+                <span>Tenant</span>
+                <select formControlName="tenantId" (change)="loadIpAllowlistForm()">
+                  <option value="">Select tenant</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Mode</span>
+                <select formControlName="mode">
+                  <option value="enforce">Enforce</option>
+                  <option value="monitor">Monitor only</option>
+                </select>
+              </label>
+              <label class="field check-line"><input type="checkbox" formControlName="enabled" /><span>Enable allowlist</span></label>
+              <label class="field full"><span>Allowed IPs / CIDR</span><textarea formControlName="entriesText" placeholder="203.0.113.10&#10;198.51.100.0/24"></textarea></label>
+              <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
+              <div class="form-actions">
+                <button class="primary-button" type="submit" [disabled]="ipAllowlistForm.invalid || saving()">Save IP allowlist</button>
               </div>
             </form>
           </section>
@@ -1360,6 +1391,14 @@ export class SuperAdminComponent implements OnInit {
     reason: ['Enterprise limit override']
   });
 
+  readonly ipAllowlistForm = this.fb.group({
+    tenantId: ['', Validators.required],
+    enabled: [false],
+    mode: ['enforce'],
+    entriesText: [''],
+    reason: ['Tenant network security policy']
+  });
+
   readonly tenantFeatureOverrideForm = this.fb.group({
     tenantId: ['', Validators.required],
     key: ['ai.marketing', Validators.required],
@@ -1429,6 +1468,9 @@ export class SuperAdminComponent implements OnInit {
         const limitTenantId = this.tenantLimitsForm.value.tenantId || this.selectedTenantId();
         const limitTenant = (overview?.tenants || []).find((tenant: ApiRecord) => tenant.id === limitTenantId);
         if (limitTenant) this.editTenantLimits(limitTenant);
+        const ipTenantId = this.ipAllowlistForm.value.tenantId || this.selectedTenantId();
+        const ipTenant = (overview?.tenants || []).find((tenant: ApiRecord) => tenant.id === ipTenantId);
+        if (ipTenant) this.editIpAllowlist(ipTenant);
         this.loading.set(false);
       },
       error: (error) => {
@@ -1505,6 +1547,44 @@ export class SuperAdminComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to save tenant limits');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  editIpAllowlist(tenant: ApiRecord): void {
+    this.selectedTenantId.set(tenant.id);
+    this.ipAllowlistForm.patchValue({
+      tenantId: tenant.id,
+      enabled: Boolean(tenant.ipAllowlist?.enabled),
+      mode: tenant.ipAllowlist?.mode || 'enforce',
+      entriesText: (tenant.ipAllowlist?.entries || []).join('\n'),
+      reason: 'Tenant network security policy'
+    });
+  }
+
+  loadIpAllowlistForm(): void {
+    const tenantId = this.ipAllowlistForm.value.tenantId || '';
+    const tenant = (this.overview()?.tenants || []).find((item: ApiRecord) => item.id === tenantId);
+    if (tenant) this.editIpAllowlist(tenant);
+  }
+
+  saveIpAllowlist(): void {
+    if (this.ipAllowlistForm.invalid) return;
+    this.saving.set(true);
+    const tenantId = this.ipAllowlistForm.value.tenantId || '';
+    this.api.patch(`super-admin/tenants/${tenantId}/ip-allowlist`, {
+      enabled: Boolean(this.ipAllowlistForm.value.enabled),
+      mode: this.ipAllowlistForm.value.mode || 'enforce',
+      entriesText: this.ipAllowlistForm.value.entriesText || '',
+      reason: this.ipAllowlistForm.value.reason || ''
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to save IP allowlist');
         this.saving.set(false);
       }
     });

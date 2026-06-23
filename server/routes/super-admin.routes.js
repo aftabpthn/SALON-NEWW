@@ -41,6 +41,13 @@ superAdminRouter.patch(
   })
 );
 
+superAdminRouter.patch(
+  "/super-admin/tenants/:id/ip-allowlist",
+  asyncHandler((req, res) => {
+    res.json(superAdminService.updateTenantIpAllowlist(req.params.id, req.body, req.access));
+  })
+);
+
 superAdminRouter.post(
   "/super-admin/tenants/bulk-action",
   validateBody({ required: ["action", "tenantIds", "reason", "confirmation"] }),
