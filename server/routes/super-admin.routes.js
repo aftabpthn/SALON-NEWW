@@ -155,6 +155,14 @@ superAdminRouter.post(
 );
 
 superAdminRouter.post(
+  "/super-admin/action-inbox/:id",
+  validateBody({ required: ["action"] }),
+  asyncHandler((req, res) => {
+    res.status(201).json(superAdminService.updateActionInboxItem(req.params.id, req.body, req.access));
+  })
+);
+
+superAdminRouter.post(
   "/super-admin/tenants/:id/support-notes",
   validateBody({ required: ["note"] }),
   asyncHandler((req, res) => {

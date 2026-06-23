@@ -9,7 +9,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
 type TenantFilter = 'all' | 'active' | 'trial' | 'suspended' | 'risk' | 'paymentDue';
 type AdminFormTab = 'subscription' | 'limits' | 'security' | 'sso' | 'exports' | 'features' | 'impersonation' | 'plans';
-type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audit' | 'support' | 'impersonation';
+type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'security' | 'audit' | 'support' | 'impersonation';
+type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 'support' | 'churn';
 
 @Component({
   selector: 'app-super-admin',
@@ -84,7 +85,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
         </section>
 
         <section class="ops-intel-grid">
-          <article class="ops-intel-card" *ngFor="let item of operationalIntelligence(overview)">
+          <article class="ops-intel-card" *ngFor="let item of operationalIntelligence(overview)" (click)="setActionInboxFilter(item.key)">
             <div>
               <span class="eyebrow">{{ item.kind }}</span>
               <strong>{{ item.title }}</strong>
@@ -92,6 +93,82 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
             </div>
             <span class="ops-count" [class.is-danger]="item.tone === 'danger'" [class.is-warning]="item.tone === 'warning'">{{ item.count }}</span>
           </article>
+        </section>
+
+        <section class="panel command-search-panel">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Command search</span>
+              <h2>Search salons, domains, invoices, audit events, feature flags and plans</h2>
+            </div>
+            <span class="badge">{{ commandSearchResults(overview).length }} results</span>
+          </div>
+          <label class="tenant-search command-search-box">
+            <span>Global search</span>
+            <input
+              [ngModel]="commandSearch()"
+              (ngModelChange)="commandSearch.set($event)"
+              [ngModelOptions]="{ standalone: true }"
+              placeholder="Salon, owner email, invoice, audit action, feature, plan" />
+          </label>
+          <div class="command-results" *ngIf="commandSearchResults(overview).length">
+            <button type="button" *ngFor="let result of commandSearchResults(overview)" (click)="openCommandResult(result)">
+              <span>{{ result.type }}</span>
+              <strong>{{ result.title }}</strong>
+              <small>{{ result.detail }}</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel" *ngIf="overview.actionInbox as inbox">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Action inbox</span>
+              <h2>Need attention today</h2>
+            </div>
+            <div class="command-live">
+              <span class="badge">{{ inbox.summary?.open || 0 }} open</span>
+              <span class="badge">{{ inbox.summary?.critical || 0 }} critical</span>
+              <span class="badge">{{ inbox.summary?.dueToday || 0 }} due today</span>
+            </div>
+          </div>
+          <div class="filter-strip action-inbox-filters">
+            <button type="button" [class.active]="actionInboxFilter() === 'all'" (click)="setActionInboxFilter('all')">All</button>
+            <button type="button" [class.active]="actionInboxFilter() === 'billing'" (click)="setActionInboxFilter('billing')">Billing</button>
+            <button type="button" [class.active]="actionInboxFilter() === 'usage'" (click)="setActionInboxFilter('usage')">Usage</button>
+            <button type="button" [class.active]="actionInboxFilter() === 'login'" (click)="setActionInboxFilter('login')">Login</button>
+            <button type="button" [class.active]="actionInboxFilter() === 'security'" (click)="setActionInboxFilter('security')">Security</button>
+            <button type="button" [class.active]="actionInboxFilter() === 'support'" (click)="setActionInboxFilter('support')">Support</button>
+            <button type="button" [class.active]="actionInboxFilter() === 'churn'" (click)="setActionInboxFilter('churn')">Churn</button>
+          </div>
+          <label class="field full action-note-field">
+            <span>Action note</span>
+            <input [ngModel]="actionInboxNote()" (ngModelChange)="actionInboxNote.set($event)" [ngModelOptions]="{ standalone: true }" placeholder="Add context for note/escalation" />
+          </label>
+          <div class="activity-list action-inbox-list">
+            <article *ngFor="let item of filteredActionInbox(inbox.items)" class="action-inbox-item">
+              <div>
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.detail }} · {{ item.recommendedAction }}</span>
+                <small>{{ item.ownerQueue }} · due {{ item.dueInDays }}d · status {{ item.status }}</small>
+              </div>
+              <div class="action-inbox-buttons">
+                <span class="badge" [style.background]="riskTone(item.priority)" style="color:#fff">{{ item.riskScore | number: '1.0-0' }}</span>
+                <button type="button" (click)="selectTenant(item.tenantId); openTenantDrilldown(item.tenantId)">360</button>
+                <button type="button" (click)="updateActionInbox(item, 'assign')">Assign</button>
+                <button type="button" (click)="updateActionInbox(item, 'snooze')">Snooze</button>
+                <button type="button" (click)="updateActionInbox(item, 'escalate')">Escalate</button>
+                <button type="button" (click)="updateActionInbox(item, 'note')">Note</button>
+                <button type="button" (click)="updateActionInbox(item, 'resolve')">Resolve</button>
+              </div>
+            </article>
+            <article *ngIf="!filteredActionInbox(inbox.items).length">
+              <div>
+                <strong>No action inbox items</strong>
+                <span>Risk, billing, security, login and support work will appear here.</span>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section class="panel" *ngIf="overview.saasHealthEngine as health">
@@ -983,7 +1060,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
               <button type="button" [class.active]="tenantFilter() === 'paymentDue'" (click)="tenantFilter.set('paymentDue')">Payment Due <span>{{ tenantFilterCount(overview.tenants, 'paymentDue') }}</span></button>
             </div>
           </div>
-          <form [formGroup]="bulkActionForm" (ngSubmit)="applyBulkAction()" class="dashboard-grid" style="margin-bottom:16px">
+          <form [formGroup]="bulkActionForm" (ngSubmit)="openBulkPreview(filteredTenants(overview.tenants))" class="dashboard-grid" style="margin-bottom:16px">
             <label class="field">
               <span>Bulk action</span>
               <select formControlName="action">
@@ -1023,8 +1100,8 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
           <div class="bulk-command-bar" *ngIf="selectedTenantIds().length">
             <strong>{{ selectedTenantIds().length }} selected</strong>
             <button type="button" (click)="prepareBulkCommand('changePlan')">Change plan</button>
-            <button type="button" (click)="runBulkCommand('suspend')" [disabled]="saving()">Suspend</button>
-            <button type="button" (click)="runBulkCommand('reactivate')" [disabled]="saving()">Reactivate</button>
+            <button type="button" (click)="runBulkCommand('suspend', filteredTenants(overview.tenants))" [disabled]="saving()">Suspend</button>
+            <button type="button" (click)="runBulkCommand('reactivate', filteredTenants(overview.tenants))" [disabled]="saving()">Reactivate</button>
             <button type="button" (click)="prepareBulkCommand('sendEmail')">Send email</button>
             <button type="button" (click)="prepareBulkCommand('export')">Export</button>
             <button type="button" (click)="prepareBulkCommand('assignOwner')">Assign owner</button>
@@ -1088,9 +1165,13 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                       {{ tenant.usage.branches }}/{{ tenant.tenantLimits?.branches }} branches · {{ tenant.usage.staff }}/{{ tenant.tenantLimits?.staff }} staff · {{ tenant.usage.clients }}/{{ tenant.tenantLimits?.clients }} clients
                     </small>
                   </td>
-                  <td class="health-cell">{{ tenant.healthScore | number: '1.0-1' }}</td>
+                  <td class="health-cell">
+                    {{ tenant.healthScore | number: '1.0-1' }}
+                    <small>AI {{ tenant.aiRiskScore?.score || 0 }}</small>
+                  </td>
                   <td class="flag-cell">
                     <span class="badge" [style.background]="tenantRiskTone(tenant)" style="color:#fff">{{ tenantRiskLabel(tenant) }}</span>
+                    <span class="badge" [style.background]="riskTone(tenant.aiRiskScore?.label)" style="color:#fff">AI {{ tenant.aiRiskScore?.label || 'stable' }}</span>
                     <span class="badge" [style.background]="healthFlagTone(tenant.healthFlag?.severity)" style="color:#fff">
                       {{ tenant.healthFlag?.label || 'Healthy' }}
                     </span>
@@ -1127,6 +1208,56 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
         </section>
 
         <section
+          *ngIf="bulkPreviewOpen() && bulkActionPreview(overview.tenants) as preview"
+          class="bulk-preview-overlay"
+          (click)="bulkPreviewOpen.set(false)">
+          <div class="panel bulk-preview-panel" (click)="$event.stopPropagation()">
+            <div class="section-title">
+              <div>
+                <span class="eyebrow">Bulk action preview</span>
+                <h2>{{ preview.label }}</h2>
+              </div>
+              <button class="ghost-button mini" type="button" (click)="bulkPreviewOpen.set(false)">Close</button>
+            </div>
+            <div class="quick-grid">
+              <article class="action-card">
+                <strong>{{ preview.count }}</strong>
+                <span>Selected tenants</span>
+              </article>
+              <article class="action-card">
+                <strong>{{ preview.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <span>MRR impact</span>
+              </article>
+              <article class="action-card">
+                <strong>{{ preview.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <span>Outstanding exposure</span>
+              </article>
+              <article class="action-card">
+                <strong>{{ preview.approvalRequired ? 'Required' : 'Optional' }}</strong>
+                <span>Approval gate</span>
+              </article>
+            </div>
+            <div class="activity-list" style="margin-top:12px">
+              <article *ngFor="let tenant of preview.tenants.slice(0, 8)">
+                <div>
+                  <strong>{{ tenantLabel(tenant) }}</strong>
+                  <span>{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · AI risk {{ tenant.aiRiskScore?.score || 0 }}</span>
+                </div>
+                <span class="badge" [style.background]="riskTone(tenant.aiRiskScore?.label)" style="color:#fff">{{ tenant.aiRiskScore?.label || 'stable' }}</span>
+              </article>
+            </div>
+            <form [formGroup]="safetyForm" class="dashboard-grid" style="margin-top:12px">
+              <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
+              <label class="field"><span>Type CONFIRM</span><input formControlName="confirmation" /></label>
+            </form>
+            <div class="form-actions">
+              <button class="ghost-button" type="button" (click)="requestBulkApproval(preview)" [disabled]="saving() || safetyForm.invalid">Request approval</button>
+              <button class="primary-button" type="button" (click)="confirmBulkAction()" [disabled]="saving() || safetyForm.invalid">Confirm and apply</button>
+            </div>
+          </div>
+        </section>
+
+        <section
           *ngIf="drilldownOpen() && selectedTenant() as tenant"
           style="position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.52);display:flex;justify-content:flex-end"
           (click)="drilldownOpen.set(false)">
@@ -1147,6 +1278,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
               <button type="button" [class.active]="drawerTab() === 'users'" (click)="setDrawerTab('users')">Users</button>
               <button type="button" [class.active]="drawerTab() === 'branches'" (click)="setDrawerTab('branches')">Branches</button>
               <button type="button" [class.active]="drawerTab() === 'limits'" (click)="setDrawerTab('limits')">Limits</button>
+              <button type="button" [class.active]="drawerTab() === 'security'" (click)="setDrawerTab('security')">Security</button>
               <button type="button" [class.active]="drawerTab() === 'audit'" (click)="setDrawerTab('audit')">Audit</button>
               <button type="button" [class.active]="drawerTab() === 'support'" (click)="setDrawerTab('support')">Support</button>
               <button type="button" [class.active]="drawerTab() === 'impersonation'" (click)="setDrawerTab('impersonation')">Impersonation</button>
@@ -1156,6 +1288,10 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
               <article class="action-card">
                 <strong>{{ tenant.healthScore | number: '1.0-1' }}</strong>
                 <span>Health score</span>
+              </article>
+              <article class="action-card">
+                <strong>{{ tenant.aiRiskScore?.score || 0 }}</strong>
+                <span>AI risk score · {{ tenant.aiRiskScore?.label || 'stable' }}</span>
               </article>
               <article class="action-card">
                 <strong>{{ tenant.drilldown.staffCount }}</strong>
@@ -1201,6 +1337,10 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                   <strong>Limits</strong>
                   <span>{{ tenant.usage?.staff || 0 }}/{{ tenant.tenantLimits?.staff || 0 }} staff · {{ tenant.usage?.clients || 0 }}/{{ tenant.tenantLimits?.clients || 0 }} clients · {{ tenant.usage?.appointments || 0 }} bookings</span>
                 </article>
+                <article *ngSwitchCase="'security'">
+                  <strong>Security posture</strong>
+                  <span>IP {{ tenant.enterpriseSecurity?.ipRestrictionStatus || 'not_required' }} · SSO {{ tenant.enterpriseSecurity?.ssoStatus || 'not_configured' }} · {{ tenant.drilldown?.loginActivityMap?.suspiciousLogins || 0 }} suspicious logins</span>
+                </article>
                 <article *ngSwitchCase="'audit'">
                   <strong>Audit</strong>
                   <span>{{ tenant.drilldown?.auditTrail?.length || 0 }} audit events · IP {{ tenant.enterpriseSecurity?.ipRestrictionStatus || 'not_required' }} · SSO {{ tenant.enterpriseSecurity?.ssoStatus || 'not_configured' }}</span>
@@ -1217,7 +1357,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
             </div>
 
             <div class="dashboard-grid">
-              <div class="activity-list">
+              <div class="activity-list" *ngIf="drawerTab() === 'profile' || drawerTab() === 'branches' || drawerTab() === 'limits'">
                 <article>
                   <div>
                     <strong>Profile</strong>
@@ -1244,7 +1384,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                 </article>
               </div>
 
-              <div class="activity-list">
+              <div class="activity-list" *ngIf="drawerTab() === 'billing'">
                 <article *ngFor="let invoice of tenant.drilldown.recentInvoices">
                   <div>
                     <strong>{{ invoice.invoiceNumber }}</strong>
@@ -1260,7 +1400,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                 </article>
               </div>
 
-              <div class="activity-list">
+              <div class="activity-list" *ngIf="drawerTab() === 'users'">
                 <article *ngFor="let user of tenant.drilldown.recentUsers">
                   <div>
                     <strong>{{ user.name }}</strong>
@@ -1279,7 +1419,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
             </div>
 
             <div class="dashboard-grid" style="margin-top:16px">
-              <section class="form-panel">
+              <section class="form-panel" *ngIf="drawerTab() === 'security'">
                 <h3>Login Activity Map</h3>
                 <div class="quick-grid">
                   <article class="action-card">
@@ -1342,7 +1482,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                 </div>
               </section>
 
-              <section class="form-panel">
+              <section class="form-panel" *ngIf="drawerTab() === 'billing'">
                 <h3>GDPR Tenant Export</h3>
                 <form [formGroup]="gdprExportForm" (ngSubmit)="initiateGdprExport(tenant)">
                   <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
@@ -1370,7 +1510,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
             </div>
 
             <div class="dashboard-grid" style="margin-top:16px">
-              <section class="form-panel">
+              <section class="form-panel" *ngIf="drawerTab() === 'support'">
                 <h3>Support notes</h3>
                 <form [formGroup]="supportNoteForm" (ngSubmit)="saveSupportNote(tenant.id)">
                   <label class="field full"><span>Internal note</span><textarea formControlName="note"></textarea></label>
@@ -1394,7 +1534,20 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
                 </div>
               </section>
 
-              <div class="activity-list">
+              <section class="form-panel" *ngIf="drawerTab() === 'impersonation'">
+                <h3>Impersonation controls</h3>
+                <div class="activity-list">
+                  <article>
+                    <div>
+                      <strong>Restricted support session</strong>
+                      <span>Refunds, payroll, password changes and destructive deletes stay blocked.</span>
+                    </div>
+                    <button class="primary-button" type="button" (click)="prepareImpersonation(tenant)">Prepare</button>
+                  </article>
+                </div>
+              </section>
+
+              <div class="activity-list" *ngIf="drawerTab() === 'audit'">
                 <article *ngFor="let event of tenant.drilldown.auditLog">
                   <div>
                     <strong>{{ event.action }}</strong>
@@ -1951,6 +2104,7 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
       justify-content: space-between;
       gap: 12px;
       align-items: center;
+      cursor: pointer;
     }
 
     .ops-intel-card strong {
@@ -2010,6 +2164,114 @@ type DrawerTab = 'profile' | 'billing' | 'users' | 'branches' | 'limits' | 'audi
       background: #fff;
       color: var(--ink);
       font: inherit;
+    }
+
+    .command-search-panel {
+      margin-top: 0;
+    }
+
+    .command-search-box {
+      display: block;
+      max-width: 760px;
+    }
+
+    .command-results {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .command-results button,
+    .action-inbox-buttons button {
+      border: 1px solid rgba(15, 118, 110, 0.16);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+
+    .command-results button {
+      padding: 12px;
+    }
+
+    .command-results span,
+    .command-results small {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .command-results strong {
+      display: block;
+      margin: 3px 0;
+      color: var(--ink);
+    }
+
+    .action-inbox-filters {
+      margin-bottom: 12px;
+    }
+
+    .action-note-field {
+      margin-bottom: 12px;
+    }
+
+    .action-note-field input {
+      min-height: 42px;
+      border: 1px solid rgba(15, 118, 110, 0.18);
+      border-radius: 12px;
+      padding: 0 12px;
+    }
+
+    .action-inbox-item {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .action-inbox-item small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .action-inbox-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      max-width: 430px;
+    }
+
+    .action-inbox-buttons button {
+      padding: 7px 9px;
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .bulk-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.52);
+    }
+
+    .bulk-preview-panel {
+      width: min(100%, 920px);
+      max-height: 88vh;
+      overflow: auto;
+      margin: 0;
+      background: var(--surface, #fff);
     }
 
     .filter-strip,
@@ -2291,10 +2553,14 @@ export class SuperAdminComponent implements OnInit {
   readonly selectedTenantIds = signal<string[]>([]);
   readonly drilldownOpen = signal(false);
   readonly tenantSearch = signal('');
+  readonly commandSearch = signal('');
   readonly tenantFilter = signal<TenantFilter>('all');
+  readonly actionInboxFilter = signal<ActionInboxFilter>('all');
+  readonly actionInboxNote = signal('');
   readonly actionMenuTenantId = signal('');
   readonly adminFormTab = signal<AdminFormTab>('subscription');
   readonly drawerTab = signal<DrawerTab>('profile');
+  readonly bulkPreviewOpen = signal(false);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
@@ -2832,13 +3098,64 @@ export class SuperAdminComponent implements OnInit {
     const lowUsageHighMrr = tenants.filter((tenant: ApiRecord) => this.lowUsageHighMrrTenant(tenant)).length;
     const suspendedPotential = tenants.filter((tenant: ApiRecord) => this.suspendedPotentialTenant(tenant)).length;
     return [
-      { kind: 'Today', title: 'Need attention today', count: highRisk + paymentDue + securityGaps, detail: 'Risk, billing and security queues', tone: highRisk ? 'danger' : 'warning' },
-      { kind: 'Trials', title: 'Trials expiring this week', count: trialsExpiring, detail: 'Convert or extend before expiry', tone: trialsExpiring ? 'warning' : 'neutral' },
-      { kind: 'Billing', title: 'Payment failed', count: paymentDue, detail: 'Failed payment or unpaid exposure', tone: paymentDue ? 'danger' : 'neutral' },
-      { kind: 'Security', title: 'Security setup missing', count: securityGaps, detail: 'SSO, IP allowlist or export controls', tone: securityGaps ? 'warning' : 'neutral' },
-      { kind: 'Growth', title: 'Low usage but high MRR', count: lowUsageHighMrr, detail: 'Retention playbook candidates', tone: lowUsageHighMrr ? 'warning' : 'neutral' },
-      { kind: 'Recovery', title: 'Suspended revenue potential', count: suspendedPotential, detail: 'Suspended accounts with value left', tone: suspendedPotential ? 'danger' : 'neutral' }
+      { key: 'all', kind: 'Today', title: 'Need attention today', count: highRisk + paymentDue + securityGaps, detail: 'Risk, billing and security queues', tone: highRisk ? 'danger' : 'warning' },
+      { key: 'churn', kind: 'Trials', title: 'Trials expiring this week', count: trialsExpiring, detail: 'Convert or extend before expiry', tone: trialsExpiring ? 'warning' : 'neutral' },
+      { key: 'billing', kind: 'Billing', title: 'Payment failed', count: paymentDue, detail: 'Failed payment or unpaid exposure', tone: paymentDue ? 'danger' : 'neutral' },
+      { key: 'security', kind: 'Security', title: 'Security setup missing', count: securityGaps, detail: 'SSO, IP allowlist or export controls', tone: securityGaps ? 'warning' : 'neutral' },
+      { key: 'usage', kind: 'Growth', title: 'Low usage but high MRR', count: lowUsageHighMrr, detail: 'Retention playbook candidates', tone: lowUsageHighMrr ? 'warning' : 'neutral' },
+      { key: 'churn', kind: 'Recovery', title: 'Suspended revenue potential', count: suspendedPotential, detail: 'Suspended accounts with value left', tone: suspendedPotential ? 'danger' : 'neutral' }
     ];
+  }
+
+  commandSearchResults(overview: ApiRecord = {}): ApiRecord[] {
+    const query = this.commandSearch().trim().toLowerCase();
+    if (!query) return [];
+    const results: ApiRecord[] = [];
+    for (const tenant of overview.tenants || []) {
+      const tenantText = [
+        this.tenantLabel(tenant),
+        tenant.ownerEmail,
+        tenant.primaryDomain,
+        tenant.planName,
+        tenant.subscriptionStatus,
+        tenant.aiRiskScore?.label
+      ].map((value) => String(value || '').toLowerCase()).join(' ');
+      if (tenantText.includes(query)) {
+        results.push({ type: 'Tenant', title: this.tenantLabel(tenant), detail: `${tenant.ownerEmail || 'No owner'} · ${tenant.planName || 'No plan'}`, tenantId: tenant.id });
+      }
+      for (const invoice of tenant.drilldown?.recentInvoices || []) {
+        const text = [invoice.invoiceNumber, invoice.status, invoice.createdAt, tenant.name].join(' ').toLowerCase();
+        if (text.includes(query)) results.push({ type: 'Invoice', title: invoice.invoiceNumber, detail: `${tenant.name} · ${invoice.status} · due ${invoice.balance || 0}`, tenantId: tenant.id });
+      }
+      for (const event of tenant.drilldown?.auditLog || []) {
+        const text = [event.action, event.summary, event.actorUserId, tenant.name].join(' ').toLowerCase();
+        if (text.includes(query)) results.push({ type: 'Audit', title: event.action, detail: `${tenant.name} · ${event.summary || 'Recorded'}`, tenantId: tenant.id });
+      }
+    }
+    for (const toggle of overview.featureToggles || []) {
+      const text = [toggle.name, toggle.key, toggle.statusLabel, toggle.targetSummary].join(' ').toLowerCase();
+      if (text.includes(query)) results.push({ type: 'Feature', title: toggle.name, detail: `${toggle.key} · ${toggle.statusLabel || ''}` });
+    }
+    for (const plan of overview.plans || []) {
+      const text = [plan.name, plan.code, plan.status, plan.priceMonthly].join(' ').toLowerCase();
+      if (text.includes(query)) results.push({ type: 'Plan', title: plan.name, detail: `${plan.priceMonthly || 0}/mo · ${plan.status || 'active'}` });
+    }
+    return results.slice(0, 14);
+  }
+
+  openCommandResult(result: ApiRecord): void {
+    if (!result?.tenantId) return;
+    this.selectTenant(result.tenantId);
+    this.openTenantDrilldown(result.tenantId);
+  }
+
+  setActionInboxFilter(filter: ActionInboxFilter): void {
+    this.actionInboxFilter.set(filter || 'all');
+  }
+
+  filteredActionInbox(items: ApiRecord[] = []): ApiRecord[] {
+    const filter = this.actionInboxFilter();
+    return filter === 'all' ? items || [] : (items || []).filter((item) => item.category === filter);
   }
 
   filteredTenants(tenants: ApiRecord[] = []): ApiRecord[] {
@@ -2928,6 +3245,14 @@ export class SuperAdminComponent implements OnInit {
     return 'var(--success,#16a34a)';
   }
 
+  riskTone(label = ''): string {
+    const value = String(label || '').toLowerCase();
+    if (value === 'critical' || value === 'high') return 'var(--danger,#dc2626)';
+    if (value === 'watch' || value === 'medium' || value === 'snoozed') return 'var(--warning,#f59e0b)';
+    if (value === 'escalated') return 'var(--danger,#dc2626)';
+    return 'var(--success,#16a34a)';
+  }
+
   toggleActionMenu(tenantId: string): void {
     this.actionMenuTenantId.set(this.actionMenuTenantId() === tenantId ? '' : tenantId);
   }
@@ -2948,9 +3273,88 @@ export class SuperAdminComponent implements OnInit {
     this.bulkActionForm.patchValue({ action });
   }
 
-  runBulkCommand(action: string): void {
+  runBulkCommand(action: string, tenants: ApiRecord[] = []): void {
     this.bulkActionForm.patchValue({ action });
+    this.openBulkPreview(tenants);
+  }
+
+  openBulkPreview(tenants: ApiRecord[] = []): void {
+    if (!this.selectedTenantIds().length) return;
+    this.bulkPreviewOpen.set(true);
+  }
+
+  bulkActionPreview(tenants: ApiRecord[] = []): ApiRecord {
+    const selected = this.selectedTenants(tenants);
+    const action = this.bulkActionForm.value.action || 'suspend';
+    const labels: ApiRecord = {
+      suspend: 'Suspend selected tenants',
+      reactivate: 'Reactivate selected tenants',
+      changePlan: 'Change plan for selected tenants',
+      sendEmail: 'Send email to selected tenants',
+      export: 'Queue data export for selected tenants',
+      assignOwner: 'Assign support owner'
+    };
+    return {
+      action,
+      label: labels[action] || 'Bulk action',
+      tenants: selected,
+      count: selected.length,
+      mrr: selected.reduce((total, tenant) => total + Number(tenant.monthlyRecurringRevenue || 0), 0),
+      outstanding: selected.reduce((total, tenant) => total + this.tenantOutstanding(tenant), 0),
+      highRisk: selected.filter((tenant) => this.highRiskTenant(tenant) || Number(tenant.aiRiskScore?.score || 0) >= 55).length,
+      approvalRequired: ['suspend', 'changePlan', 'export'].includes(action),
+      dangerous: ['suspend', 'changePlan', 'export', 'reactivate'].includes(action)
+    };
+  }
+
+  confirmBulkAction(): void {
+    this.bulkPreviewOpen.set(false);
     this.applyBulkAction();
+  }
+
+  requestBulkApproval(preview: ApiRecord): void {
+    if (this.safetyForm.invalid) return;
+    this.saving.set(true);
+    this.api.post('super-admin/action-approvals', {
+      action: `bulk.${preview.action}`,
+      targetType: 'tenant_bulk',
+      targetId: (preview.tenants || []).map((tenant: ApiRecord) => tenant.id).join(',').slice(0, 200),
+      priority: preview.approvalRequired ? 'high' : 'medium',
+      reason: this.safetyForm.value.reason || '',
+      confirmation: this.safetyForm.value.confirmation || ''
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.bulkPreviewOpen.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to request bulk approval');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  updateActionInbox(item: ApiRecord, action: 'assign' | 'snooze' | 'resolve' | 'escalate' | 'note'): void {
+    this.saving.set(true);
+    const note = this.actionInboxNote() || `${action} from Super Admin action inbox`;
+    this.api.post(`super-admin/action-inbox/${item.id}`, {
+      action,
+      tenantId: item.tenantId,
+      ownerQueue: item.ownerQueue || 'customer_success',
+      dueInDays: action === 'snooze' ? 3 : action === 'escalate' ? 1 : item.dueInDays || 2,
+      note
+    }).subscribe({
+      next: () => {
+        this.actionInboxNote.set('');
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to update action inbox');
+        this.saving.set(false);
+      }
+    });
   }
 
   startImpersonation(): void {

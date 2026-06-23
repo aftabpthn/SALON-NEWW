@@ -473,6 +473,13 @@ function daysUntil(dateValue) {
   return Math.ceil((target - Date.now()) / 86400000);
 }
 
+function daysSince(dateValue) {
+  if (!dateValue) return null;
+  const target = new Date(dateValue).getTime();
+  if (Number.isNaN(target)) return null;
+  return Math.max(0, Math.floor((Date.now() - target) / 86400000));
+}
+
 function healthBreakdown(tenant, usage, outstanding, monthlyRecurringRevenue) {
   const subscriptionScore = tenant.subscriptionStatus === "suspended" || tenant.status === "suspended"
     ? 5
@@ -1392,6 +1399,132 @@ function churnPrediction(tenantRows) {
   };
 }
 
+function tenantAiRiskScore(tenant, auditRows = []) {
+  const supportNotes = auditRows.filter((row) => row.targetType === "tenant" && row.targetId === tenant.id && ["tenant.support_note.added", "tenant.support_owner.assigned", "super_admin.action_inbox.updated"].includes(row.action));
+  const loginDays = daysSince(tenant.drilldown?.lastLoginAt);
+  const trialDaysLeft = daysUntil(tenant.trialEndsAt);
+  const security = tenant.enterpriseSecurity || {};
+  const securityGapCount = [
+    security.enterpriseTenant && security.ipRestrictionStatus !== "enforced",
+    security.enterpriseTenant && security.ssoStatus !== "enforced",
+    tenant.dataExportControls?.status === "open",
+    Number(tenant.drilldown?.loginActivityMap?.criticalLogins || 0) > 0
+  ].filter(Boolean).length;
+  const usageRisk = tenant.usage.appointments === 0 && tenant.usage.clients === 0
+    ? 22
+    : tenant.usage.appointments < 5
+      ? 14
+      : tenant.usage.appointments < 20
+        ? 8
+        : 0;
+  const billingRisk = tenant.outstanding > tenant.monthlyRecurringRevenue
+    ? 28
+    : tenant.outstanding > 0 || Number(tenant.billingOps?.failedPaymentCount || 0) > 0
+      ? 18
+      : 0;
+  const loginRisk = loginDays === null
+    ? 12
+    : loginDays > 30
+      ? 18
+      : loginDays > 14
+        ? 10
+        : 0;
+  const healthRisk = Math.max(0, Math.round((70 - Number(tenant.healthScore || 0)) / 2));
+  const churnRisk = tenant.subscriptionStatus === "suspended" || tenant.status === "suspended"
+    ? 24
+    : trialDaysLeft !== null && trialDaysLeft >= 0 && trialDaysLeft <= 7
+      ? 12
+      : 0;
+  const supportRisk = supportNotes.length >= 5 ? 12 : supportNotes.length >= 2 ? 7 : 0;
+  const securityRisk = securityGapCount * 8;
+  const factors = [
+    { key: "billing", label: "Billing exposure", score: billingRisk, detail: tenant.outstanding > 0 ? `INR ${tenant.outstanding} outstanding` : "No billing exposure" },
+    { key: "usage", label: "Usage drop", score: usageRisk, detail: `${tenant.usage.appointments} bookings and ${tenant.usage.clients} clients` },
+    { key: "login", label: "Login inactivity", score: loginRisk, detail: loginDays === null ? "No login seen" : `${loginDays} days since last login` },
+    { key: "security", label: "Security gap", score: securityRisk, detail: `${securityGapCount} enterprise/security gap(s)` },
+    { key: "support", label: "Support pressure", score: supportRisk, detail: `${supportNotes.length} recent support/audit signals` },
+    { key: "churn", label: "Churn probability", score: churnRisk + healthRisk, detail: tenant.subscriptionStatus === "suspended" ? "Suspended tenant" : `Health ${tenant.healthScore}` }
+  ];
+  const score = pct(Math.min(100, sumRows(factors, (factor) => factor.score)));
+  const label = score >= 75 ? "critical" : score >= 55 ? "high" : score >= 35 ? "watch" : "stable";
+  const primary = factors.slice().sort((a, b) => b.score - a.score)[0] || factors[0];
+  const recommendedAction = primary.key === "billing"
+    ? "Run payment recovery and owner follow-up"
+    : primary.key === "usage"
+      ? "Assign adoption rescue playbook"
+      : primary.key === "login"
+        ? "Contact owner and verify admin access"
+        : primary.key === "security"
+          ? "Close SSO/IP/export control gaps"
+          : primary.key === "support"
+            ? "Assign support owner and set SLA"
+            : "Run churn prevention review";
+  return {
+    score,
+    label,
+    confidence: Math.min(96, Math.max(42, Math.round(score + factors.filter((factor) => factor.score > 0).length * 6))),
+    primaryDriver: primary.label,
+    ownerQueue: label === "critical" ? "customer_success_urgent" : label === "high" ? "customer_success_watch" : "account_monitoring",
+    dueInDays: label === "critical" ? 1 : label === "high" ? 2 : label === "watch" ? 5 : 14,
+    recommendedAction,
+    factors
+  };
+}
+
+function latestActionInboxEvents(auditRows = []) {
+  const latest = new Map();
+  for (const row of auditRows.filter((event) => event.action === "super_admin.action_inbox.updated")) {
+    const details = normalizeRules(row.details);
+    const itemId = details.itemId || row.targetId;
+    if (!itemId || latest.has(itemId)) continue;
+    latest.set(itemId, { ...details, auditId: row.id, actorUserId: row.actorUserId, createdAt: row.createdAt });
+  }
+  return latest;
+}
+
+function actionInboxForTenants(tenantRows = [], auditRows = []) {
+  const latest = latestActionInboxEvents(auditRows);
+  const items = [];
+  for (const tenant of tenantRows) {
+    const factors = tenant.aiRiskScore?.factors || [];
+    for (const factor of factors.filter((item) => item.score > 0)) {
+      const itemId = `inbox_${tenant.id}_${factor.key}`;
+      const state = latest.get(itemId) || {};
+      const status = state.status || "open";
+      if (status === "resolved") continue;
+      items.push({
+        id: itemId,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        category: factor.key,
+        priority: tenant.aiRiskScore.label,
+        riskScore: tenant.aiRiskScore.score,
+        title: `${factor.label}: ${tenant.name}`,
+        detail: factor.detail,
+        recommendedAction: tenant.aiRiskScore.recommendedAction,
+        ownerQueue: state.ownerQueue || tenant.aiRiskScore.ownerQueue,
+        status,
+        dueInDays: state.dueInDays ?? tenant.aiRiskScore.dueInDays,
+        note: state.note || "",
+        updatedAt: state.createdAt || ""
+      });
+    }
+  }
+  const activeItems = items
+    .sort((a, b) => b.riskScore - a.riskScore || a.dueInDays - b.dueInDays)
+    .slice(0, 60);
+  return {
+    summary: {
+      open: activeItems.filter((item) => item.status === "open").length,
+      snoozed: activeItems.filter((item) => item.status === "snoozed").length,
+      escalated: activeItems.filter((item) => item.status === "escalated").length,
+      critical: activeItems.filter((item) => item.priority === "critical").length,
+      dueToday: activeItems.filter((item) => Number(item.dueInDays || 0) <= 1).length
+    },
+    items: activeItems
+  };
+}
+
 function securityRiskCenter(tenantRows = [], auditRows = []) {
   const sensitiveActions = auditRows.filter((row) => [
     "tenant.impersonation.started",
@@ -1667,7 +1800,7 @@ export class SuperAdminService {
       .filter((setting) => setting.key === TENANT_ROLE_PERMISSION_MATRIX_KEY)
       .map((setting) => [setting.tenantId, setting.value || {}]));
     const ssoByTenant = latestSsoByTenant();
-    const tenantRows = tenants.map((tenant) => {
+    let tenantRows = tenants.map((tenant) => {
       const tenantSales = sales.filter((sale) => sale.tenantId === tenant.id);
       const tenantInvoices = invoices.filter((invoice) => invoice.tenantId === tenant.id);
       const tenantPayments = payments.filter((payment) => payment.tenantId === tenant.id);
@@ -1724,13 +1857,16 @@ export class SuperAdminService {
         subscription: subscriptionByTenant.get(tenant.id) || null
       };
       row.billingOps = tenantBillingOps(row, tenantInvoices, tenantPayments);
+      const drilldown = tenantDrilldown(row, tenantInvoices, usersForTenant, auditRows, trustedDevicesForTenant, riskEventsForTenant, privacyRequestsForTenant);
+      row.drilldown = drilldown;
       return {
         ...row,
         healthFlag: healthFlagFor(row),
         tenant360: tenant360(row),
-        drilldown: tenantDrilldown(row, tenantInvoices, usersForTenant, auditRows, trustedDevicesForTenant, riskEventsForTenant, privacyRequestsForTenant)
+        drilldown
       };
     });
+    tenantRows = tenantRows.map((tenant) => ({ ...tenant, aiRiskScore: tenantAiRiskScore(tenant, auditRows) }));
     const metrics = {
       salons: tenants.length,
       activeSalons: tenants.filter((tenant) => ["active", "trialing"].includes(tenant.subscriptionStatus)).length,
@@ -1766,6 +1902,7 @@ export class SuperAdminService {
       revenueGrowthSummary: revenueGrowthSummary(revenueGraph),
       trialPaidFunnel: trialPaidFunnel(tenantRows),
       churnPrediction: churnPrediction(tenantRows),
+      actionInbox: actionInboxForTenants(tenantRows, auditRows),
       tenantRiskCommand: {
         alertCount: sumRows(tenantRows, (tenant) => tenant.tenant360.alertSummary.total),
         highRiskTenants: tenantRows
@@ -2278,6 +2415,56 @@ export class SuperAdminService {
       confirmation: safety.confirmation,
       resolvedAt: now()
     });
+  }
+
+  updateActionInboxItem(itemId, payload = {}, access) {
+    ensureSuperAdmin(access);
+    const action = String(payload.action || "").trim();
+    const statuses = {
+      assign: "open",
+      snooze: "snoozed",
+      resolve: "resolved",
+      escalate: "escalated",
+      note: "open"
+    };
+    if (!statuses[action]) throw badRequest("Unsupported action inbox update");
+    const tenantId = String(payload.tenantId || "").trim();
+    if (tenantId && !repositories.tenants.getById(tenantId)) throw notFound("Tenant not found");
+    const ownerQueue = String(payload.ownerQueue || payload.supportOwner || "").trim();
+    const note = String(payload.note || "").trim();
+    if (["assign", "escalate"].includes(action) && !ownerQueue) throw badRequest("ownerQueue is required");
+    if (action === "note" && !note) throw badRequest("note is required");
+    const dueInDays = Math.max(0, Math.min(30, Math.round(Number(payload.dueInDays ?? (action === "snooze" ? 3 : action === "escalate" ? 1 : 2)))));
+    const audit = this.audit(access, "super_admin.action_inbox.updated", "action_inbox", itemId, {
+      itemId,
+      tenantId,
+      action,
+      status: statuses[action],
+      ownerQueue,
+      note,
+      dueInDays,
+      updatedAt: now()
+    });
+    if (tenantId && action === "note" && note) {
+      this.audit(access, "tenant.support_note.added", "tenant", tenantId, {
+        note,
+        visibility: "internal",
+        source: "action_inbox",
+        itemId
+      });
+    }
+    if (tenantId && ["assign", "escalate"].includes(action)) {
+      this.audit(access, "tenant.support_owner.assigned", "tenant", tenantId, {
+        supportOwner: ownerQueue,
+        queue: ownerQueue,
+        source: "action_inbox",
+        itemId,
+        status: statuses[action],
+        dueInDays,
+        assignedAt: now()
+      });
+    }
+    return { itemId, status: statuses[action], auditId: audit.id, ownerQueue, note, dueInDays };
   }
 
   addSupportNote(tenantId, payload = {}, access) {
