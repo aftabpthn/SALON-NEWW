@@ -1,4 +1,4 @@
-import { db } from "../db.js";
+import { columnsFor, db, tenantScopedTables } from "../db.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { tenantService } from "./tenant.service.js";
 import { realtimeService } from "./realtime.service.js";
@@ -154,6 +154,125 @@ function latestSsoByTenant() {
     if (!byTenant.has(row.tenantId)) byTenant.set(row.tenantId, row);
   }
   return byTenant;
+}
+
+function rowsByTenant(table, orderColumn = "createdAt", limit = 1000) {
+  const rows = db.prepare(`SELECT * FROM ${table} ORDER BY ${orderColumn} DESC LIMIT @limit`).all({ limit });
+  const byTenant = new Map();
+  for (const row of rows) {
+    const tenantId = row.tenantId || "";
+    if (!tenantId) continue;
+    if (!byTenant.has(tenantId)) byTenant.set(tenantId, []);
+    byTenant.get(tenantId).push(row);
+  }
+  return byTenant;
+}
+
+function parseBranchIds(value) {
+  const parsed = normalizeRules(value);
+  if (Array.isArray(parsed)) return parsed.map((item) => String(item || "")).filter(Boolean);
+  return String(value || "").split(",").map((item) => item.replace(/[\[\]"]/g, "").trim()).filter(Boolean);
+}
+
+function loginActivityMap(tenantUsers = [], trustedDevices = [], riskEvents = []) {
+  const usersById = new Map(tenantUsers.map((user) => [user.id, user]));
+  const rows = [
+    ...tenantUsers
+      .filter((user) => user.lastLoginAt)
+      .map((user) => ({
+        userId: user.id,
+        userName: user.name || user.email || user.id,
+        role: user.role || "",
+        branchId: parseBranchIds(user.branchIds)[0] || "",
+        ipAddress: "",
+        riskLevel: user.failedLoginCount > 0 ? "watch" : "low",
+        source: "tenant_user",
+        occurredAt: user.lastLoginAt
+      })),
+    ...trustedDevices.map((device) => {
+      const user = usersById.get(device.userId) || {};
+      return {
+        userId: device.userId || "",
+        userName: user.name || user.email || device.userId || "Unknown user",
+        role: user.role || "",
+        branchId: device.branchId || parseBranchIds(user.branchIds)[0] || "",
+        ipAddress: device.ipAddress || "",
+        riskLevel: device.trustLevel || device.status || "observed",
+        source: "trusted_device",
+        occurredAt: device.lastSeenAt || device.updatedAt || device.createdAt || ""
+      };
+    }),
+    ...riskEvents.map((event) => {
+      const user = usersById.get(event.userId) || {};
+      return {
+        userId: event.userId || "",
+        userName: user.name || user.email || event.userId || "Unknown user",
+        role: user.role || "",
+        branchId: event.branchId || parseBranchIds(user.branchIds)[0] || "",
+        ipAddress: event.ipAddress || "",
+        riskLevel: event.riskLevel || "low",
+        source: "risk_event",
+        occurredAt: event.createdAt || event.updatedAt || ""
+      };
+    })
+  ].filter((row) => row.occurredAt).sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt)));
+  const locations = new Map();
+  for (const row of rows) {
+    const key = row.branchId || "tenant-wide";
+    if (!locations.has(key)) {
+      locations.set(key, {
+        key,
+        label: row.branchId ? `Branch ${row.branchId}` : "Tenant wide",
+        value: 0,
+        users: new Set(),
+        ipAddresses: new Set(),
+        riskEvents: 0,
+        lastSeenAt: ""
+      });
+    }
+    const item = locations.get(key);
+    item.value += 1;
+    if (row.userName) item.users.add(row.userName);
+    if (row.ipAddress) item.ipAddresses.add(row.ipAddress);
+    if (row.source === "risk_event") item.riskEvents += 1;
+    if (!item.lastSeenAt || String(row.occurredAt).localeCompare(String(item.lastSeenAt)) > 0) item.lastSeenAt = row.occurredAt;
+  }
+  return {
+    activeUsers: tenantUsers.filter((user) => user.lastLoginAt).length,
+    trustedDevices: trustedDevices.length,
+    riskEvents: riskEvents.length,
+    lastSeenAt: rows[0]?.occurredAt || "",
+    locations: [...locations.values()].map((item) => ({
+      ...item,
+      users: [...item.users].slice(0, 4),
+      ipAddresses: [...item.ipAddresses].slice(0, 4)
+    })).sort((a, b) => b.value - a.value).slice(0, 8),
+    recentActivity: rows.slice(0, 12)
+  };
+}
+
+function exportManifestForTenant(tenantId) {
+  const tables = [];
+  let totalRows = 0;
+  for (const table of tenantScopedTables) {
+    try {
+      const columns = columnsFor(table);
+      const tenantColumn = columns.includes("tenantId") ? "tenantId" : columns.includes("tenant_id") ? "tenant_id" : "";
+      if (!tenantColumn) continue;
+      const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${tenantColumn} = @tenantId`).get({ tenantId });
+      const rows = Number(countRow?.count || 0);
+      if (!rows) continue;
+      totalRows += rows;
+      tables.push({ table, rows });
+    } catch {
+      // Export manifest should not block request creation if a legacy table is unavailable.
+    }
+  }
+  return {
+    totalTables: tables.length,
+    totalRows,
+    tables: tables.sort((a, b) => b.rows - a.rows).slice(0, 25)
+  };
 }
 
 function scopedFeatureKey(key, scope, tenantId = "", planId = "") {
@@ -1043,7 +1162,7 @@ function churnPrediction(tenantRows) {
   };
 }
 
-function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows) {
+function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows, trustedDevices = [], riskEvents = [], privacyRequests = []) {
   const lastLoginAt = tenantUsers
     .map((user) => user.lastLoginAt || "")
     .filter(Boolean)
@@ -1074,6 +1193,17 @@ function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows) {
         summary: details.note || details.reason || details.status || details.planId || details.key || ""
       };
     });
+  const gdprExportRequests = privacyRequests
+    .filter((row) => row.requestType === "gdpr_full_export")
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.id,
+      status: row.status,
+      requesterId: row.requesterId,
+      summary: row.summary,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    }));
   return {
     usageGraph: [
       { label: "Branches", value: tenant.usage.branches },
@@ -1105,6 +1235,8 @@ function tenantDrilldown(tenant, tenantInvoices, tenantUsers, auditRows) {
     staffCount: tenant.usage.staff,
     tenantUserCount: tenantUsers.length,
     lastLoginAt,
+    loginActivityMap: loginActivityMap(tenantUsers, trustedDevices, riskEvents),
+    gdprExportRequests,
     supportNotes,
     auditLog
   };
@@ -1186,6 +1318,9 @@ export class SuperAdminService {
     const payments = repositories.payments.list({ limit: 100000 });
     const tenantUsers = repositories.tenantUsers.list({ limit: 100000 });
     const auditRows = repositories.superAdminAudit.list({ limit: 1000 }).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    const trustedDevicesByTenant = rowsByTenant("security_trusted_devices", "lastSeenAt", 2000);
+    const riskEventsByTenant = rowsByTenant("security_risk_events", "createdAt", 2000);
+    const privacyRequestsByTenant = rowsByTenant("security_privacy_requests", "createdAt", 1000);
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
     const subscriptionByTenant = new Map(subscriptions.map((sub) => [sub.tenantId, sub]));
     const tenantLimitByTenant = new Map(repositories.settings
@@ -1206,6 +1341,9 @@ export class SuperAdminService {
       const tenantInvoices = invoices.filter((invoice) => invoice.tenantId === tenant.id);
       const tenantPayments = payments.filter((payment) => payment.tenantId === tenant.id);
       const usersForTenant = tenantUsers.filter((user) => user.tenantId === tenant.id);
+      const trustedDevicesForTenant = trustedDevicesByTenant.get(tenant.id) || [];
+      const riskEventsForTenant = riskEventsByTenant.get(tenant.id) || [];
+      const privacyRequestsForTenant = privacyRequestsByTenant.get(tenant.id) || [];
       const plan = planById.get(tenant.planId);
       const billingPreview = tenantService.billingPreview(tenant.id);
       const usage = {
@@ -1253,7 +1391,12 @@ export class SuperAdminService {
         subscription: subscriptionByTenant.get(tenant.id) || null
       };
       row.billingOps = tenantBillingOps(row, tenantInvoices, tenantPayments);
-      return { ...row, healthFlag: healthFlagFor(row), tenant360: tenant360(row), drilldown: tenantDrilldown(row, tenantInvoices, usersForTenant, auditRows) };
+      return {
+        ...row,
+        healthFlag: healthFlagFor(row),
+        tenant360: tenant360(row),
+        drilldown: tenantDrilldown(row, tenantInvoices, usersForTenant, auditRows, trustedDevicesForTenant, riskEventsForTenant, privacyRequestsForTenant)
+      };
     });
     const metrics = {
       salons: tenants.length,
@@ -1510,6 +1653,54 @@ export class SuperAdminService {
       reason: payload.reason || ""
     });
     return { tenantId, dataExportControls: dataExportControlsForTenant(record.value) };
+  }
+
+  initiateTenantGdprExport(tenantId, payload = {}, access) {
+    ensureSuperAdmin(access);
+    const tenant = repositories.tenants.getById(tenantId);
+    if (!tenant) throw notFound("Tenant not found");
+    const safety = requireSafetyConfirmation(payload, "GDPR tenant data export");
+    const controlsRecord = repositories.settings.list({ limit: 10000 }, { tenantId })
+      .find((setting) => setting.key === TENANT_DATA_EXPORT_CONTROLS_KEY);
+    const controls = dataExportControlsForTenant(controlsRecord?.value || {});
+    if (!controls.enabled) throw badRequest("Data exports are disabled for this tenant");
+    const timestamp = now();
+    const manifest = exportManifestForTenant(tenantId);
+    const status = controls.approvalRequired ? "approval_required" : "open";
+    const record = {
+      id: makeId("privacy"),
+      tenantId,
+      branchId: "",
+      requesterId: access.userId || "super-admin",
+      subjectType: "tenant",
+      subjectId: tenantId,
+      requestType: "gdpr_full_export",
+      summary: `Full GDPR data export initiated for ${tenant.name}. ${manifest.totalTables} tables and ${manifest.totalRows} rows queued for review.`,
+      status,
+      resolvedAt: "",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    db.prepare(`
+      INSERT INTO security_privacy_requests
+      (id, tenantId, branchId, requesterId, subjectType, subjectId, requestType, summary, status, resolvedAt, createdAt, updatedAt)
+      VALUES (@id, @tenantId, @branchId, @requesterId, @subjectType, @subjectId, @requestType, @summary, @status, @resolvedAt, @createdAt, @updatedAt)
+    `).run(record);
+    this.audit(access, "tenant.gdpr_export.initiated", "tenant", tenantId, {
+      requestId: record.id,
+      status,
+      manifest,
+      controls: {
+        approvalRequired: controls.approvalRequired,
+        piiMasking: controls.piiMasking,
+        watermark: controls.watermark,
+        allowedFormats: controls.allowedFormats,
+        retentionDays: controls.retentionDays
+      },
+      reason: safety.reason,
+      confirmation: safety.confirmation
+    });
+    return { tenantId, exportRequest: record, controls, manifest };
   }
 
   bulkTenantAction(payload = {}, access) {

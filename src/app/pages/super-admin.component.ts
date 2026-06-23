@@ -969,6 +969,73 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
             <div class="dashboard-grid" style="margin-top:16px">
               <section class="form-panel">
+                <h3>Login Activity Map</h3>
+                <div class="quick-grid">
+                  <article class="action-card">
+                    <strong>{{ tenant.drilldown.loginActivityMap?.activeUsers || 0 }}</strong>
+                    <span>Active users</span>
+                  </article>
+                  <article class="action-card">
+                    <strong>{{ tenant.drilldown.loginActivityMap?.trustedDevices || 0 }}</strong>
+                    <span>Trusted devices</span>
+                  </article>
+                  <article class="action-card">
+                    <strong>{{ tenant.drilldown.loginActivityMap?.riskEvents || 0 }}</strong>
+                    <span>Risk events</span>
+                  </article>
+                </div>
+                <div class="activity-list" style="margin-top:12px">
+                  <article *ngFor="let location of tenant.drilldown.loginActivityMap?.locations || []" style="display:grid;grid-template-columns:1fr 120px;gap:12px;align-items:center">
+                    <div style="min-width:0">
+                      <strong>{{ location.label }}</strong>
+                      <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ location.users.join(', ') || 'No user' }} · {{ location.ipAddresses.join(', ') || 'No IP' }}</span>
+                      <span style="display:block;height:6px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
+                        <span [style.width.%]="usageBarWidth(location.value, tenant.drilldown.loginActivityMap?.locations || [])" style="display:block;height:100%;background:var(--accent,#2563eb)"></span>
+                      </span>
+                    </div>
+                    <div style="text-align:right">
+                      <strong>{{ location.value }}</strong>
+                      <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ location.riskEvents }} risk</span>
+                    </div>
+                  </article>
+                  <article *ngIf="!(tenant.drilldown.loginActivityMap?.locations || []).length">
+                    <div>
+                      <strong>No login activity mapped</strong>
+                      <span>Recent login/device signals will appear here.</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="form-panel">
+                <h3>GDPR Tenant Export</h3>
+                <form [formGroup]="gdprExportForm" (ngSubmit)="initiateGdprExport(tenant)">
+                  <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
+                  <label class="field"><span>Confirmation</span><input formControlName="confirmation" /></label>
+                  <div class="form-actions">
+                    <button class="primary-button" type="submit" [disabled]="gdprExportForm.invalid || saving()">Initiate export</button>
+                  </div>
+                </form>
+                <div class="activity-list" style="margin-top:12px">
+                  <article *ngFor="let request of tenant.drilldown.gdprExportRequests">
+                    <div>
+                      <strong>{{ request.status }}</strong>
+                      <span>{{ request.summary }}</span>
+                    </div>
+                    <small>{{ request.createdAt }}</small>
+                  </article>
+                  <article *ngIf="!tenant.drilldown.gdprExportRequests.length">
+                    <div>
+                      <strong>No GDPR export requests</strong>
+                      <span>Initiated exports will appear in privacy request history.</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+            </div>
+
+            <div class="dashboard-grid" style="margin-top:16px">
+              <section class="form-panel">
                 <h3>Support notes</h3>
                 <form [formGroup]="supportNoteForm" (ngSubmit)="saveSupportNote(tenant.id)">
                   <label class="field full"><span>Internal note</span><textarea formControlName="note"></textarea></label>
@@ -1446,6 +1513,11 @@ export class SuperAdminComponent implements OnInit {
 
   readonly supportNoteForm = this.fb.group({
     note: ['', Validators.required]
+  });
+
+  readonly gdprExportForm = this.fb.group({
+    reason: ['GDPR full tenant data export request', Validators.required],
+    confirmation: ['CONFIRM', Validators.required]
   });
 
   readonly tenantLimitsForm = this.fb.group({
@@ -2013,6 +2085,25 @@ export class SuperAdminComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to add support note');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  initiateGdprExport(tenant: ApiRecord): void {
+    if (this.gdprExportForm.invalid) return;
+    this.saving.set(true);
+    this.api.post(`super-admin/tenants/${tenant.id}/gdpr-export`, {
+      reason: this.gdprExportForm.value.reason || '',
+      confirmation: this.gdprExportForm.value.confirmation || ''
+    }).subscribe({
+      next: () => {
+        this.gdprExportForm.patchValue({ confirmation: 'CONFIRM' });
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to initiate GDPR tenant export');
         this.saving.set(false);
       }
     });

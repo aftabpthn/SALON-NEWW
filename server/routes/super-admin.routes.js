@@ -63,6 +63,14 @@ superAdminRouter.patch(
 );
 
 superAdminRouter.post(
+  "/super-admin/tenants/:id/gdpr-export",
+  validateBody({ required: ["reason", "confirmation"] }),
+  asyncHandler((req, res) => {
+    res.status(201).json(superAdminService.initiateTenantGdprExport(req.params.id, req.body, req.access));
+  })
+);
+
+superAdminRouter.post(
   "/super-admin/tenants/bulk-action",
   validateBody({ required: ["action", "tenantIds", "reason", "confirmation"] }),
   asyncHandler((req, res) => {
