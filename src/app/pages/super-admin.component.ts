@@ -851,6 +851,33 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <button class="primary-button" type="submit" [disabled]="!selectedTenantIds().length || saving()">Apply bulk action</button>
             </div>
           </form>
+          <div class="quick-grid" *ngIf="bulkSelectionSummary(overview.tenants) as bulk">
+            <article class="action-card">
+              <strong>{{ bulk.count }}</strong>
+              <span>Selected tenants</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ bulk.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Selected MRR impact</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ bulk.highRisk }}</strong>
+              <span>High-risk selected</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ bulk.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Outstanding exposure</span>
+            </article>
+          </div>
+          <div class="activity-list" *ngIf="selectedTenants(overview.tenants).length" style="margin-bottom:16px">
+            <article *ngFor="let tenant of selectedTenants(overview.tenants).slice(0, 6)" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div style="min-width:0">
+                <strong>{{ tenant.name }}</strong>
+                <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · health {{ tenant.healthScore | number: '1.0-1' }}</span>
+              </div>
+              <span class="badge" [style.background]="healthFlagTone(tenant.healthFlag?.severity)" style="color:#fff">{{ tenant.healthFlag?.label || 'Healthy' }}</span>
+            </article>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -2006,6 +2033,21 @@ export class SuperAdminComponent implements OnInit {
 
   selectAllTenants(tenants: ApiRecord[]): void {
     this.selectedTenantIds.set((tenants || []).map((tenant) => tenant.id).filter(Boolean));
+  }
+
+  selectedTenants(tenants: ApiRecord[] = []): ApiRecord[] {
+    const selected = new Set(this.selectedTenantIds());
+    return (tenants || []).filter((tenant) => selected.has(tenant.id));
+  }
+
+  bulkSelectionSummary(tenants: ApiRecord[] = []): ApiRecord {
+    const selected = this.selectedTenants(tenants);
+    return {
+      count: selected.length,
+      mrr: selected.reduce((total, tenant) => total + Number(tenant.monthlyRecurringRevenue || 0), 0),
+      outstanding: selected.reduce((total, tenant) => total + Number(tenant.outstanding || 0), 0),
+      highRisk: selected.filter((tenant) => tenant.healthFlag?.severity === 'critical' || Number(tenant.healthScore || 0) < 45).length
+    };
   }
 
   filteredAuditTimeline(safety: ApiRecord): ApiRecord[] {
