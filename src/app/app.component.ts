@@ -318,8 +318,16 @@ export class AppComponent {
       icon: 'CM',
       primaryPath: '/dashboard',
       items: [
-        { path: '/dashboard', label: 'Dashboard', icon: 'D', keywords: 'home overview kpi owner' },
-        { path: '/apps', label: 'All Apps', icon: 'AP', keywords: 'launchpad modules full suite salon apps' },
+        {
+          path: '/dashboard',
+          label: 'Home & Apps',
+          icon: 'HA',
+          keywords: 'home dashboard overview kpi owner launchpad apps modules suite',
+          children: [
+            { path: '/dashboard', label: 'Dashboard', icon: 'D', keywords: 'home overview kpi owner' },
+            { path: '/apps', label: 'All Apps', icon: 'AP', keywords: 'launchpad modules full suite salon apps' }
+          ]
+        },
         {
           path: '/command-center',
           label: 'Command Center',
@@ -334,11 +342,19 @@ export class AppComponent {
             { path: '/command-center/data-warehouse', label: 'Data Warehouse', icon: 'DW', keywords: 'data warehouse snapshots command center' }
           ]
         },
-        { path: '/analytics', label: 'Analytics', icon: 'AN', keywords: 'metrics insight kpi' },
-        { path: '/reports', label: 'Reports', icon: 'R', keywords: 'sales business reports' },
-        { path: '/reports/invoices', label: 'Invoice Reports', icon: 'IR', keywords: 'invoice staff discount gst product membership wallet due audit reports' },
-        { path: '/kpi-monitoring', label: 'KPI Monitor', icon: 'KM', keywords: 'monitor alerts targets' },
-        { path: '/predictive-forecasting', label: 'Forecast AI', icon: 'PF', keywords: 'forecast prediction revenue' }
+        {
+          path: '/analytics',
+          label: 'Insights & Reports',
+          icon: 'IR',
+          keywords: 'analytics reports invoice kpi monitor forecast prediction revenue',
+          children: [
+            { path: '/analytics', label: 'Analytics', icon: 'AN', keywords: 'metrics insight kpi' },
+            { path: '/reports', label: 'Reports', icon: 'R', keywords: 'sales business reports' },
+            { path: '/reports/invoices', label: 'Invoice Reports', icon: 'IR', keywords: 'invoice staff discount gst product membership wallet due audit reports' },
+            { path: '/kpi-monitoring', label: 'KPI Monitor', icon: 'KM', keywords: 'monitor alerts targets' },
+            { path: '/predictive-forecasting', label: 'Forecast AI', icon: 'PF', keywords: 'forecast prediction revenue' }
+          ]
+        }
       ]
     },
     {
@@ -347,16 +363,40 @@ export class AppComponent {
       icon: 'FD',
       primaryPath: '/appointments',
       items: [
-        { path: '/appointments', label: 'Calendar', icon: 'C', keywords: 'appointments booking schedule enterprise scheduler zenoti dingg fresha boulevard staff multi service booking' },
-        { path: '/appointment-activity', label: 'Activity Center', icon: 'AC', keywords: 'appointment audit cancellation reschedule no show reliability' },
-        { path: '/appointment-deposits', label: 'Deposit Report', icon: 'DP', keywords: 'appointment advance payment deposit report no show cancellation' },
-        { path: '/smart-booking', label: 'Smart Booking', icon: 'SB', keywords: 'ai booking slot' },
-        { path: '/salon-3d', label: '3D Salon Website', icon: '3D', keywords: 'public website three dimensional salon landing booking' },
-        { path: '/book', label: 'Booking Site', icon: 'OB', keywords: 'online booking portal' },
-        { path: '/queue-system', label: 'Queue TV', icon: 'QT', keywords: 'walkin queue display' },
-        { path: '/customer-360', label: 'Customer 360', icon: '360', keywords: 'customer intelligence guest' },
-        { path: '/clients', label: 'Client CRM', icon: 'CL', keywords: 'client guest crm' },
-        { path: '/client-masters', label: 'Client Masters', icon: 'CM', keywords: 'flexi client masters category source consultation feedback preferences' }
+        {
+          path: '/appointments',
+          label: 'Appointments',
+          icon: 'AP',
+          keywords: 'appointments booking calendar schedule activity deposits smart booking queue walkin',
+          children: [
+            { path: '/appointments', label: 'Calendar', icon: 'C', keywords: 'appointments booking schedule enterprise scheduler zenoti dingg fresha boulevard staff multi service booking' },
+            { path: '/appointment-activity', label: 'Activity Center', icon: 'AC', keywords: 'appointment audit cancellation reschedule no show reliability' },
+            { path: '/appointment-deposits', label: 'Deposit Report', icon: 'DP', keywords: 'appointment advance payment deposit report no show cancellation' },
+            { path: '/smart-booking', label: 'Smart Booking', icon: 'SB', keywords: 'ai booking slot' },
+            { path: '/queue-system', label: 'Queue TV', icon: 'QT', keywords: 'walkin queue display' }
+          ]
+        },
+        {
+          path: '/salon-3d',
+          label: 'Online Booking',
+          icon: 'OB',
+          keywords: 'public website online booking portal salon 3d customer booking',
+          children: [
+            { path: '/salon-3d', label: '3D Salon Website', icon: '3D', keywords: 'public website three dimensional salon landing booking' },
+            { path: '/book', label: 'Booking Site', icon: 'OB', keywords: 'online booking portal' }
+          ]
+        },
+        {
+          path: '/customer-360',
+          label: 'Clients',
+          icon: 'CL',
+          keywords: 'customer 360 client crm masters consultation feedback preferences',
+          children: [
+            { path: '/customer-360', label: 'Customer 360', icon: '360', keywords: 'customer intelligence guest' },
+            { path: '/clients', label: 'Client CRM', icon: 'CL', keywords: 'client guest crm' },
+            { path: '/client-masters', label: 'Client Masters', icon: 'CM', keywords: 'flexi client masters category source consultation feedback preferences' }
+          ]
+        }
       ]
     },
     {
@@ -365,7 +405,18 @@ export class AppComponent {
       icon: 'POS',
       primaryPath: '/pos',
       items: [
-        { path: '/pos', label: 'POS Billing', icon: 'P', keywords: 'checkout bill billing' },
+        {
+          path: '/pos',
+          label: 'Checkout',
+          icon: 'CK',
+          keywords: 'pos checkout bill billing holds tips payment modes',
+          children: [
+            { path: '/pos', label: 'POS Billing', icon: 'P', keywords: 'checkout bill billing' },
+            { path: '/pos/holds', label: 'Hold Invoices', icon: 'HI', keywords: 'hold pending invoice' },
+            { path: '/pos/tips', label: 'Tip Register', icon: 'TP', keywords: 'tips staff tip' },
+            { path: '/pos/payment-modes', label: 'Payment Modes', icon: 'PM', keywords: 'cash card upi payment' }
+          ]
+        },
         {
           path: '/pos/invoices',
           label: 'Invoices & Billing',
@@ -376,11 +427,16 @@ export class AppComponent {
             { path: '/billing', label: 'Enterprise Billing', icon: 'EB', keywords: 'billing refunds reconciliation daily closing enterprise' }
           ]
         },
-        { path: '/pos/holds', label: 'Hold Invoices', icon: 'HI', keywords: 'hold pending invoice' },
-        { path: '/pos/tips', label: 'Tip Register', icon: 'TP', keywords: 'tips staff tip' },
-        { path: '/pos/payment-modes', label: 'Payment Modes', icon: 'PM', keywords: 'cash card upi payment' },
-        { path: '/memberships', label: 'Membership Sales', icon: 'MS', keywords: 'membership sale pos loyalty credits redemption' },
-        { path: '/packages', label: 'Packages', icon: 'PK', keywords: 'package prepaid credits bundle' }
+        {
+          path: '/memberships',
+          label: 'Sales Catalog',
+          icon: 'SC',
+          keywords: 'membership sales packages prepaid credits bundle loyalty redemption',
+          children: [
+            { path: '/memberships', label: 'Membership Sales', icon: 'MS', keywords: 'membership sale pos loyalty credits redemption' },
+            { path: '/packages', label: 'Packages', icon: 'PK', keywords: 'package prepaid credits bundle' }
+          ]
+        }
       ]
     },
     {
@@ -526,12 +582,28 @@ export class AppComponent {
       icon: 'FN',
       primaryPath: '/finance',
       items: [
-        { path: '/finance', label: 'Finance', icon: 'FN', keywords: 'cash expense finance' },
-        { path: '/account-master', label: 'Account Master', icon: 'AM', keywords: 'ledger accounts chart' },
-        { path: '/reports/account-ledger', label: 'Account Ledger', icon: 'AL', keywords: 'account ledger debit credit journal drilldown' },
-        { path: '/balance-sheet', label: 'Balance Sheet', icon: 'BS', keywords: 'balance sheet trial balance ledger working capital accounting' },
-        { path: '/transactions/outgoing-funds', label: 'Outgoing Fund', icon: 'OF', keywords: 'outgoing funds payments expense cash bank balance sheet' },
-        { path: '/compliance', label: 'Compliance', icon: 'AC', keywords: 'statutory pf esi tax' }
+        {
+          path: '/finance',
+          label: 'Cash & Ledger',
+          icon: 'CL',
+          keywords: 'cash expense finance account master ledger outgoing funds payments',
+          children: [
+            { path: '/finance', label: 'Finance', icon: 'FN', keywords: 'cash expense finance' },
+            { path: '/account-master', label: 'Account Master', icon: 'AM', keywords: 'ledger accounts chart' },
+            { path: '/reports/account-ledger', label: 'Account Ledger', icon: 'AL', keywords: 'account ledger debit credit journal drilldown' },
+            { path: '/transactions/outgoing-funds', label: 'Outgoing Fund', icon: 'OF', keywords: 'outgoing funds payments expense cash bank balance sheet' }
+          ]
+        },
+        {
+          path: '/balance-sheet',
+          label: 'Controls & Compliance',
+          icon: 'CC',
+          keywords: 'balance sheet compliance statutory pf esi tax accounting controls',
+          children: [
+            { path: '/balance-sheet', label: 'Balance Sheet', icon: 'BS', keywords: 'balance sheet trial balance ledger working capital accounting' },
+            { path: '/compliance', label: 'Compliance', icon: 'AC', keywords: 'statutory pf esi tax' }
+          ]
+        }
       ]
     },
     {
@@ -654,7 +726,21 @@ export class AppComponent {
       icon: 'AI',
       primaryPath: '/ai',
       items: [
-        { path: '/ai', label: 'AI Assistant', icon: 'A', keywords: 'assistant ai' },
+        {
+          path: '/ai',
+          label: 'AI Tools',
+          icon: 'AT',
+          keywords: 'assistant ai workflows image gamification fraud appointment optimization knowledge',
+          children: [
+            { path: '/ai', label: 'AI Assistant', icon: 'A', keywords: 'assistant ai' },
+            { path: '/workflows', label: 'Workflows', icon: 'WF', keywords: 'workflow automation' },
+            { path: '/image-analysis', label: 'Image AI', icon: 'IA', keywords: 'image analysis ai' },
+            { path: '/gamification', label: 'Gamification', icon: 'GM', keywords: 'points badges gamification' },
+            { path: '/fraud-detection', label: 'Fraud AI', icon: 'FD', keywords: 'fraud detection risk' },
+            { path: '/appointment-optimization', label: 'Appt Optimize', icon: 'AO', keywords: 'appointment optimization ai' },
+            { path: '/knowledge-base', label: 'Knowledge', icon: 'KB', keywords: 'knowledge base ai' }
+          ]
+        },
         {
           path: '/future-features',
           label: 'AI Command Apps',
@@ -669,7 +755,6 @@ export class AppComponent {
             { path: '/command-center/inventory-autopilot', label: 'Inventory Autopilot', icon: 'IA', keywords: 'inventory autopilot ai' }
           ]
         },
-        { path: '/workflows', label: 'Workflows', icon: 'WF', keywords: 'workflow automation' },
         {
           path: '/dynamic-pricing',
           label: 'Pricing AI',
@@ -681,12 +766,7 @@ export class AppComponent {
             { path: '/pricing/market-intelligence', label: 'Market Intelligence', icon: 'MI', keywords: 'competitive price intelligence market' },
             { path: '/pricing/level6-readiness', label: 'Level 6 Readiness', icon: 'L6', keywords: 'pricing level 6 readiness center' }
           ]
-        },
-        { path: '/image-analysis', label: 'Image AI', icon: 'IA', keywords: 'image analysis ai' },
-        { path: '/gamification', label: 'Gamification', icon: 'GM', keywords: 'points badges gamification' },
-        { path: '/fraud-detection', label: 'Fraud AI', icon: 'FD', keywords: 'fraud detection risk' },
-        { path: '/appointment-optimization', label: 'Appt Optimize', icon: 'AO', keywords: 'appointment optimization ai' },
-        { path: '/knowledge-base', label: 'Knowledge', icon: 'KB', keywords: 'knowledge base ai' }
+        }
       ]
     }
   ];
