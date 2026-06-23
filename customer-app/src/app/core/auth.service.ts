@@ -172,8 +172,8 @@ export class AuthService {
     try {
       const response = await firstValueFrom(this.api.verifyEmailCode(email.trim(), cleanCode, name.trim(), this.deviceInfo()));
       this.saveSession(response);
-      await this.loadMe();
-      return response;
+      const profile = await this.loadMe();
+      return { ...response, customer: profile };
     } catch (error) {
       this.error.set(this.message(error, "Unable to verify email code"));
       throw error;
@@ -193,8 +193,8 @@ export class AuthService {
     try {
       const response = await firstValueFrom(this.api.verifyOtp(phone.trim(), cleanOtp, this.deviceInfo()));
       this.saveSession(response);
-      await this.loadMe();
-      return response;
+      const profile = await this.loadMe();
+      return { ...response, customer: profile };
     } catch (error) {
       this.error.set(this.message(error, "Unable to verify OTP"));
       throw error;
