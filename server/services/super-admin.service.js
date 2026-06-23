@@ -21,11 +21,80 @@ function sumRows(items, selector) {
   return items.reduce((total, item) => total + Number(selector(item) || 0), 0);
 }
 
+function share(part, total) {
+  return total ? pct((Number(part || 0) / total) * 100) : 0;
+}
+
 function tenantHealth(tenant, rows) {
   const overdue = tenant.subscriptionStatus === "suspended" || tenant.status === "suspended";
   const activityScore = Math.min(100, rows.appointments * 5 + rows.sales * 8 + rows.clients * 2);
   const subscriptionScore = overdue ? 5 : tenant.subscriptionStatus === "trialing" ? 72 : 95;
   return pct((activityScore + subscriptionScore) / 2);
+}
+
+function revenueCommand(metrics, tenants, plans) {
+  const activeTenants = tenants.filter((tenant) => ["active", "trialing"].includes(tenant.subscriptionStatus));
+  const planMix = plans.map((plan) => {
+    const planTenants = tenants.filter((tenant) => tenant.planId === plan.id);
+    const mrr = money(sumRows(planTenants, (tenant) => tenant.monthlyRecurringRevenue));
+    return {
+      planId: plan.id,
+      name: plan.name,
+      tenantCount: planTenants.length,
+      mrr,
+      arr: money(mrr * 12),
+      sharePct: share(mrr, metrics.monthlyRecurringRevenue),
+      averageHealth: planTenants.length ? pct(sumRows(planTenants, (tenant) => tenant.healthScore) / planTenants.length) : 0
+    };
+  }).sort((a, b) => b.mrr - a.mrr);
+  const statusMix = ["active", "trialing", "suspended", "cancelled"].map((status) => ({
+    status,
+    tenants: tenants.filter((tenant) => tenant.subscriptionStatus === status).length,
+    mrr: money(sumRows(tenants.filter((tenant) => tenant.subscriptionStatus === status), (tenant) => tenant.monthlyRecurringRevenue))
+  })).filter((row) => row.tenants || row.mrr);
+  const suspendedMrrAtRisk = money(sumRows(tenants.filter((tenant) => tenant.subscriptionStatus === "suspended"), (tenant) => tenant.monthlyRecurringRevenue));
+  const trialMrr = money(sumRows(tenants.filter((tenant) => tenant.subscriptionStatus === "trialing"), (tenant) => tenant.monthlyRecurringRevenue));
+  return {
+    arr: money(metrics.monthlyRecurringRevenue * 12),
+    arpu: activeTenants.length ? money(metrics.monthlyRecurringRevenue / activeTenants.length) : 0,
+    revenueQuality: share(metrics.monthlyRecurringRevenue, metrics.monthlyRecurringRevenue + metrics.outstanding),
+    outstanding: metrics.outstanding,
+    suspendedMrrAtRisk,
+    trialMrr,
+    planMix,
+    statusMix,
+    topRevenueTenants: tenants
+      .slice()
+      .sort((a, b) => b.totalBillingAmount - a.totalBillingAmount)
+      .slice(0, 5)
+      .map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name,
+        planName: tenant.planName,
+        subscriptionStatus: tenant.subscriptionStatus,
+        totalBillingAmount: tenant.totalBillingAmount,
+        monthlyRecurringRevenue: tenant.monthlyRecurringRevenue,
+        transactionRevenue: tenant.transactionRevenue,
+        outstanding: tenant.outstanding,
+        healthScore: tenant.healthScore
+      })),
+    revenueRisks: tenants
+      .filter((tenant) => tenant.outstanding > 0 || tenant.subscriptionStatus === "suspended" || tenant.healthScore < 45)
+      .sort((a, b) => (b.outstanding + b.monthlyRecurringRevenue) - (a.outstanding + a.monthlyRecurringRevenue))
+      .slice(0, 6)
+      .map((tenant) => ({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        severity: tenant.subscriptionStatus === "suspended" || tenant.outstanding > tenant.monthlyRecurringRevenue ? "high" : "medium",
+        reason: tenant.subscriptionStatus === "suspended"
+          ? "Subscription is suspended"
+          : tenant.outstanding > 0
+            ? "Outstanding billing balance"
+            : "Low tenant health score",
+        amountAtRisk: money(tenant.outstanding + tenant.monthlyRecurringRevenue),
+        healthScore: tenant.healthScore
+      }))
+  };
 }
 
 export class SuperAdminService {
@@ -90,6 +159,7 @@ export class SuperAdminService {
       tenants: tenantRows.sort((a, b) => b.monthlyRecurringRevenue - a.monthlyRecurringRevenue),
       plans,
       featureToggles: repositories.featureToggles.list({ limit: 10000 }),
+      revenueCommand: revenueCommand(metrics, tenantRows, plans),
       insights: this.insights(metrics, tenantRows)
     };
   }

@@ -32,6 +32,82 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <aura-kpi-card tone="violet" target="/kpi-details/super-admin/health"><span>Health</span><strong>{{ overview.metrics.averageHealth | number: '1.0-1' }}</strong><small>Average score</small></aura-kpi-card>
         </div>
 
+        <section class="panel" *ngIf="overview.revenueCommand as revenue">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Revenue command center</span>
+              <h2>ARR, plan mix, revenue quality and billing risk</h2>
+            </div>
+          </div>
+          <div class="quick-grid">
+            <article class="action-card">
+              <strong>{{ revenue.arr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Annual recurring revenue</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ revenue.arpu | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Average revenue per active salon</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ revenue.revenueQuality | number: '1.0-1' }}%</strong>
+              <span>MRR quality after outstanding exposure</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ revenue.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Outstanding billing to collect</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ revenue.suspendedMrrAtRisk | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Suspended MRR at risk</span>
+            </article>
+            <article class="action-card">
+              <strong>{{ revenue.trialMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <span>Trial MRR pipeline</span>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="activity-list">
+              <article *ngFor="let plan of revenue.planMix" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div style="flex:1;min-width:0">
+                  <strong>{{ plan.name }}</strong>
+                  <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ plan.tenantCount }} salons · {{ plan.sharePct | number: '1.0-1' }}% MRR share · {{ plan.averageHealth | number: '1.0-1' }} health</span>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                  <strong>{{ plan.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ plan.arr | currency: 'INR':'symbol':'1.0-0' }} ARR</span>
+                </div>
+              </article>
+            </div>
+
+            <div class="activity-list">
+              <article *ngFor="let tenant of revenue.topRevenueTenants" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div style="flex:1;min-width:0">
+                  <strong>{{ tenant.name }}</strong>
+                  <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · {{ tenant.healthScore | number: '1.0-1' }} health</span>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                  <strong>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }} sales</span>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="activity-list" style="margin-top:16px">
+            <article *ngFor="let risk of revenue.revenueRisks" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div style="flex:1;min-width:0">
+                <strong>{{ risk.tenantName }}</strong>
+                <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ risk.reason }} · {{ risk.healthScore | number: '1.0-1' }} health</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                <span class="badge" [style.background]="risk.severity === 'high' ? 'var(--danger,#dc2626)' : 'var(--warning,#f59e0b)'" style="color:#fff">{{ risk.severity }}</span>
+                <strong>{{ risk.amountAtRisk | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="section-title">
             <div>
