@@ -1,7 +1,7 @@
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -63,176 +63,47 @@ interface SupplierCommandRow {
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack suppliers-page">
-      <div class="module-hero compact-hero">
-        <div>
-          <span class="eyebrow">Inventory / Supplier command</span>
-          <h2>Supplier intelligence and vendor GST control</h2>
-          <p>Track supplier score, open PO value, purchase spend, quality risk and compliance readiness from live inventory data.</p>
+      <section class="zenoti-supplier-header">
+        <div class="zenoti-topline">
+          <strong>{{ selectedCenterName() }}</strong>
+          <div class="zenoti-actions">
+            <a routerLink="/inventory">Back to inventory</a>
+            <a routerLink="/inventory/purchase-orders">Purchase orders</a>
+            <button type="button" (click)="load()">Refresh</button>
+          </div>
         </div>
-        <div class="hero-actions">
-          <a class="ghost-button" routerLink="/inventory">Back to inventory</a>
-          <a class="ghost-button" routerLink="/inventory/purchase-orders">Purchase orders</a>
+        <select class="zenoti-command" aria-label="Supplier quick action" (change)="openSupplierAction($event)">
+          <option value="">I want to ...</option>
+          <option value="add">Add supplier</option>
+          <option value="po">Create purchase order</option>
+          <option value="inventory">Back to inventory</option>
+        </select>
+        <div class="zenoti-heading">
+          <div>
+            <h1>Supplier command register</h1>
+            <p>Inventory > Supplier command</p>
+          </div>
           <button class="primary-button" type="button" (click)="showForm.set(true)">Add supplier</button>
         </div>
-      </div>
+      </section>
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="metrics-grid supplier-kpis">
-        <article class="metric-card teal">
-          <span>Total suppliers</span>
-          <strong>{{ suppliers().length }}</strong>
-          <small>{{ activeSuppliers().length }} active vendors</small>
-        </article>
-        <article class="metric-card green">
-          <span>Supplier spend</span>
-          <strong>{{ totalSupplierSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Purchase value across vendors</small>
-        </article>
-        <article class="metric-card blue">
-          <span>Open PO value</span>
-          <strong>{{ openPoValue() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>{{ openPoSuppliers().length }} suppliers need follow-up</small>
-        </article>
-        <article class="metric-card red">
-          <span>Quality risk</span>
-          <strong>{{ qualityRiskSuppliers().length }}</strong>
-          <small>Expiry, waste or low stock linked</small>
-        </article>
-        <article class="metric-card amber">
-          <span>WhatsApp drafts</span>
-          <strong>{{ pendingWhatsappDrafts() }}</strong>
-          <small>Supplier orders waiting to send</small>
-        </article>
-        <article class="metric-card violet">
-          <span>Price rising</span>
-          <strong>{{ priceRiseSuppliers().length }}</strong>
-          <small>Unit cost increased over history</small>
-        </article>
-        <article class="metric-card amber">
-          <span>Auto PO ready</span>
-          <strong>{{ autoPoDraftRows().length }}</strong>
-          <small>{{ autoPoDraftTotal() | currency: 'INR':'symbol':'1.0-0' }} draft value</small>
-        </article>
-        <article class="metric-card red">
-          <span>Supplier payable</span>
-          <strong>{{ supplierOutstandingTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Open PO + unpaid supplier risk</small>
-        </article>
-      </div>
-
-      <section class="supplier-intelligence-grid">
-        <article class="panel supplier-trend-panel">
-          <div class="section-title"><div><span class="eyebrow">Supplier-wise spend trend</span><h2>Top vendor purchase movement</h2></div></div>
-          <div class="trend-list">
-            <article *ngFor="let row of topSpendRows()">
-              <div>
-                <strong>{{ supplierDisplayName(row.supplier) }}</strong>
-                <span>{{ row.purchaseValue | currency: 'INR':'symbol':'1.0-0' }} · {{ row.openPoCount }} open PO</span>
-              </div>
-              <div class="trend-bars" aria-label="Spend trend">
-                <span *ngFor="let bar of row.trendBars" [style.height.%]="bar || 8"></span>
-              </div>
-            </article>
-            <div class="empty-state compact" *ngIf="!topSpendRows().length"><strong>No purchase trend yet</strong><span>Receive supplier batches to build trend.</span></div>
-          </div>
-        </article>
-
-        <article class="panel supplier-alert-panel">
-          <div class="section-title"><div><span class="eyebrow">Purchase intelligence</span><h2>Price rise and cheaper supplier signals</h2></div></div>
-          <div class="alert-list compact">
-            <article *ngFor="let row of purchaseIntelligenceRows()">
-              <strong>{{ supplierDisplayName(row.supplier) }}</strong>
-              <span *ngIf="row.priceChangePct > 0">Price increased {{ row.priceChangePct | number: '1.0-1' }}% on tracked items.</span>
-              <span *ngIf="row.cheaperAlternative">{{ row.cheaperAlternative }} may save {{ row.cheaperSavingPct | number: '1.0-1' }}% on matched products.</span>
-              <small>{{ row.topProductName }}</small>
-            </article>
-            <div class="empty-state compact" *ngIf="!purchaseIntelligenceRows().length"><strong>No price warning</strong><span>Supplier costs are stable in available purchase history.</span></div>
-          </div>
-        </article>
-      </section>
-
-      <section class="supplier-workbench-grid">
-        <article class="panel">
-          <div class="section-title"><div><span class="eyebrow">Price intelligence report</span><h2>Same product, supplier-wise price</h2></div></div>
-          <div class="table-wrap mini-report-table">
-            <table>
-              <thead><tr><th>Product</th><th>Supplier rates</th><th>Best price</th><th>Saving</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let row of priceComparisonRows()">
-                  <td><strong>{{ row.productName }}</strong><small>{{ row.productId }}</small></td>
-                  <td>{{ row.priceLine }}</td>
-                  <td><span class="badge" [class.warn]="row.savingPct > 0">{{ row.bestSupplierName }} · {{ row.bestCost | currency: 'INR':'symbol':'1.0-0' }}</span></td>
-                  <td>{{ row.savingPct | number: '1.0-1' }}%</td>
-                </tr>
-                <tr *ngIf="!priceComparisonRows().length"><td colspan="4">No supplier-wise comparable rates yet.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="section-title"><div><span class="eyebrow">Auto PO recommendation</span><h2>Supplier-wise draft from low stock</h2></div></div>
-          <div class="recommendation-list">
-            <article *ngFor="let row of autoPoDraftRows()">
-              <div>
-                <strong>{{ supplierDisplayName(row.supplier) }}</strong>
-                <span>{{ row.poDraftItems.length }} products · {{ row.poDraftTotal | currency: 'INR':'symbol':'1.0-0' }} · {{ row.expectedDeliveryLabel }}</span>
-              </div>
-              <div class="row-actions">
-                <button class="ghost-button mini" type="button" (click)="buildWhatsAppDraft(row)">WhatsApp draft</button>
-                <button class="ghost-button mini" type="button" (click)="createPoForSupplier(row)" [disabled]="saving()">Create PO</button>
-              </div>
-            </article>
-            <div class="empty-state compact" *ngIf="!autoPoDraftRows().length"><strong>No auto PO needed</strong><span>Low-stock supplier-linked products will appear here.</span></div>
-          </div>
-        </article>
-      </section>
-
-      <section class="supplier-workbench-grid">
-        <article class="panel">
-          <div class="section-title"><div><span class="eyebrow">Purchase + GRN reliability</span><h2>Late, short, damaged and invoice mismatch</h2></div></div>
-          <div class="reliability-list">
-            <article *ngFor="let row of reliabilityRows()">
-              <div>
-                <strong>{{ supplierDisplayName(row.supplier) }}</strong>
-                <span>Score {{ row.reliabilityScore | number: '1.0-0' }} · on-time {{ row.onTimePct | number: '1.0-0' }}%</span>
-              </div>
-              <div class="metric-strip">
-                <span>Damage {{ row.damagePct | number: '1.0-0' }}%</span>
-                <span>Return {{ row.returnPct | number: '1.0-0' }}%</span>
-                <span>Invoice mismatch {{ row.invoiceMismatchPct | number: '1.0-0' }}%</span>
-              </div>
-            </article>
-            <div class="empty-state compact" *ngIf="!reliabilityRows().length"><strong>No reliability signal yet</strong><span>GRN and variance history will build the score.</span></div>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="section-title"><div><span class="eyebrow">Compliance, payment and mapping</span><h2>Missing setup and payable watch</h2></div></div>
-          <div class="watch-list">
-            <article *ngFor="let row of complianceWatchRows()">
-              <strong>{{ supplierDisplayName(row.supplier) }}</strong>
-              <span>{{ rowAlertSummary(row) }}</span>
-              <small>{{ row.outstandingValue | currency: 'INR':'symbol':'1.0-0' }} payable · {{ row.paymentTerms }}</small>
-            </article>
-            <div class="empty-state compact" *ngIf="!complianceWatchRows().length"><strong>Supplier setup clean</strong><span>GSTIN, contact, payment terms and product mapping are ready.</span></div>
-          </div>
-        </article>
-      </section>
-
-      <section class="panel supplier-command-panel">
-        <div class="section-title">
+      <section class="zenoti-supplier-workspace">
+        <div class="zenoti-result-bar">
           <div>
-            <span class="eyebrow">Smart filters</span>
-            <h2>Supplier command register</h2>
+            <strong>{{ filteredSupplierRows().length }}</strong><span>Results</span>
+            <small class="status-chip">Status: supplier control active in this center</small>
           </div>
-          <div class="toolbar-actions">
-            <button class="ghost-button" type="button" (click)="load()">Refresh</button>
-            <button class="primary-button" type="button" (click)="showForm.set(true)">Add supplier</button>
+          <div class="zenoti-totals">
+            <span>Total <strong>{{ suppliers().length }}</strong></span>
+            <span>Spend <strong>{{ totalSupplierSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Open PO <strong>{{ openPoValue() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Risk <strong>{{ qualityRiskSuppliers().length }}</strong></span>
+            <span>WhatsApp <strong>{{ pendingWhatsappDrafts() }}</strong></span>
+            <span>Payable <strong>{{ supplierOutstandingTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
           </div>
         </div>
-
         <div class="supplier-filter-row">
           <label class="search-field">
             <span>Search supplier</span>
@@ -254,18 +125,19 @@ interface SupplierCommandRow {
 
         <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-        <div class="table-wrap">
+        <div class="table-wrap zenoti-table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Supplier</th>
                 <th>Score</th>
-                <th>Purchase spend</th>
+                <th>Spend</th>
                 <th>Open PO</th>
-                <th>Risk</th>
+                <th>GRN reliability</th>
                 <th>Compliance</th>
                 <th>Price intel</th>
-                <th>Last purchase</th>
+                <th>Auto PO</th>
+                <th>Payment</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -291,7 +163,7 @@ interface SupplierCommandRow {
                 </td>
                 <td>
                   <span class="badge" [class.warn]="row.qualityRisk > 0">{{ row.qualityRisk ? row.qualityRisk + ' signals' : 'clear' }}</span>
-                  <small>{{ row.expiringBatchCount }} expiring · on-time {{ row.onTimePct | number: '1.0-0' }}%</small>
+                  <small>On-time {{ row.onTimePct | number: '1.0-0' }}% · damage {{ row.damagePct | number: '1.0-0' }}% · mismatch {{ row.invoiceMismatchPct | number: '1.0-0' }}%</small>
                 </td>
                 <td>
                   <div class="compliance-stack">
@@ -308,7 +180,11 @@ interface SupplierCommandRow {
                   <strong *ngIf="row.priceChangePct <= 0">Stable</strong>
                   <small>{{ row.cheaperAlternative || 'No cheaper match' }}</small>
                 </td>
-                <td>{{ row.lastPurchaseAt ? (row.lastPurchaseAt | date: 'mediumDate') : 'No purchase' }}<small>{{ row.outstandingValue | currency: 'INR':'symbol':'1.0-0' }} payable · {{ row.whatsappLogCount }} WhatsApp log</small></td>
+                <td>
+                  <strong>{{ row.poDraftItems.length }} item(s)</strong>
+                  <small>{{ row.poDraftTotal | currency: 'INR':'symbol':'1.0-0' }} · {{ row.expectedDeliveryLabel }}</small>
+                </td>
+                <td>{{ row.lastPurchaseAt ? (row.lastPurchaseAt | date: 'mediumDate') : 'No purchase' }}<small>{{ row.outstandingValue | currency: 'INR':'symbol':'1.0-0' }} payable · {{ row.paymentTerms }}</small></td>
                 <td class="supplier-actions">
                   <a class="ghost-button mini" [routerLink]="['/suppliers', row.supplier.id]">360</a>
                   <button class="ghost-button mini" type="button" (click)="createPoForSupplier(row)" [disabled]="saving()">Create PO</button>
@@ -328,6 +204,10 @@ interface SupplierCommandRow {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="zenoti-footer">
+          <span>1 to {{ filteredSupplierRows().length }} of {{ filteredSupplierRows().length }}</span>
+          <span>{{ selectedCenterName() }}</span>
         </div>
       </section>
 
@@ -382,7 +262,174 @@ interface SupplierCommandRow {
   `,
   styles: [`
     .suppliers-page {
-      gap: 14px;
+      gap: 0;
+    }
+
+    .zenoti-supplier-header,
+    .zenoti-supplier-workspace {
+      background: #fff;
+      border: 1px solid #d8e1ea;
+      color: #1d2733;
+    }
+
+    .zenoti-supplier-header {
+      border-bottom: 0;
+      display: grid;
+      gap: 10px;
+      padding: 14px 16px 12px;
+    }
+
+    .zenoti-topline,
+    .zenoti-heading,
+    .zenoti-actions,
+    .zenoti-result-bar,
+    .zenoti-totals,
+    .zenoti-footer {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+    }
+
+    .zenoti-topline,
+    .zenoti-heading,
+    .zenoti-result-bar {
+      justify-content: space-between;
+    }
+
+    .zenoti-topline strong {
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .zenoti-actions {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .zenoti-actions a,
+    .zenoti-actions button {
+      background: #fff;
+      border: 1px solid #b9d0e7;
+      border-radius: 3px;
+      color: #075f9e;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      padding: 8px 12px;
+      text-decoration: none;
+    }
+
+    .zenoti-command {
+      border: 1px solid #b9cce1;
+      border-radius: 3px;
+      font-weight: 900;
+      justify-self: end;
+      min-height: 36px;
+      padding: 6px 10px;
+      width: min(100%, 620px);
+    }
+
+    .zenoti-heading {
+      border-top: 1px solid #d8e1ea;
+      padding-top: 12px;
+    }
+
+    .zenoti-heading h1 {
+      font-size: 22px;
+      line-height: 1.15;
+      margin: 0;
+    }
+
+    .zenoti-heading p {
+      color: #38516e;
+      font-size: 13px;
+      margin: 6px 0 0;
+    }
+
+    .zenoti-supplier-workspace {
+      display: grid;
+      overflow: hidden;
+    }
+
+    .zenoti-result-bar,
+    .zenoti-footer {
+      border-top: 1px solid #d8e1ea;
+      padding: 10px 16px;
+    }
+
+    .zenoti-result-bar {
+      border-top: 0;
+      border-bottom: 1px solid #d8e1ea;
+    }
+
+    .zenoti-result-bar > div,
+    .zenoti-totals {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .zenoti-result-bar strong {
+      color: #152033;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .zenoti-result-bar span,
+    .zenoti-footer {
+      color: #50637d;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status-chip {
+      background: #eaf6ff;
+      border: 1px solid #b9d0e7;
+      border-radius: 999px;
+      color: #173f62;
+      display: inline-flex;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+
+    .zenoti-table-wrap table {
+      border-collapse: collapse;
+      min-width: 1420px;
+      width: 100%;
+    }
+
+    .zenoti-table-wrap th,
+    .zenoti-table-wrap td {
+      border-bottom: 1px solid #dfe6ee;
+      color: #243142;
+      font-size: 13px;
+      padding: 11px 14px;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .zenoti-table-wrap th {
+      background: #f5f8fb;
+      color: #5d6e84;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .zenoti-table-wrap td strong {
+      color: #075f9e;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .zenoti-footer {
+      justify-content: flex-end;
     }
 
     .compact-hero {
@@ -433,7 +480,8 @@ interface SupplierCommandRow {
       grid-template-columns: minmax(280px, 0.46fr) minmax(0, 1fr);
       gap: 12px;
       align-items: end;
-      margin-bottom: 14px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #d8e1ea;
     }
 
     .filter-chip-row {
@@ -444,16 +492,17 @@ interface SupplierCommandRow {
     }
 
     .filter-chip {
-      min-height: 38px;
+      min-height: 30px;
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      padding: 0 11px;
-      border: 1px solid var(--line);
+      padding: 0 10px;
+      border: 1px solid #b9d0e7;
       border-radius: 999px;
       background: #fff;
-      color: var(--ink);
-      font-weight: 800;
+      color: #173f62;
+      font-size: 12px;
+      font-weight: 900;
       cursor: pointer;
     }
 
@@ -820,7 +869,7 @@ export class SuppliersComponent implements OnInit {
     leadTimeDays: [0]
   });
 
-  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
+  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder, private readonly router: Router) {}
 
   ngOnInit(): void {
     this.load();
@@ -931,6 +980,19 @@ export class SuppliersComponent implements OnInit {
 
   filterCount(filter: SupplierFilter): number {
     return this.supplierRows().filter((row) => this.matchesFilter(row, filter)).length;
+  }
+
+  selectedCenterName(): string {
+    return String(this.api.selectedBranchId() || 'malad');
+  }
+
+  openSupplierAction(event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value;
+    if (value === 'add') this.showForm.set(true);
+    if (value === 'po') this.router.navigateByUrl('/inventory/purchase-orders');
+    if (value === 'inventory') this.router.navigateByUrl('/inventory');
+    select.value = '';
   }
 
   buildWhatsAppDraft(row: SupplierCommandRow): void {
