@@ -242,18 +242,30 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <h2>Who did what, when, and on which target</h2>
             </div>
           </div>
+          <form [formGroup]="auditFilterForm" class="dashboard-grid" style="margin-bottom:16px">
+            <label class="field"><span>Search action/target</span><input formControlName="query" /></label>
+            <label class="field"><span>Actor</span><input formControlName="actor" /></label>
+            <label class="field"><span>From</span><input type="date" formControlName="fromDate" /></label>
+            <label class="field"><span>To</span><input type="date" formControlName="toDate" /></label>
+            <div class="form-actions">
+              <button class="ghost-button" type="button" (click)="auditFilterForm.reset({ query: '', actor: '', fromDate: '', toDate: '' })">Clear filters</button>
+            </div>
+          </form>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Reason / Summary</th></tr>
               </thead>
               <tbody>
-                <tr *ngFor="let event of safety.timeline">
+                <tr *ngFor="let event of filteredAuditTimeline(safety)">
                   <td>{{ event.createdAt }}</td>
                   <td>{{ event.actorUserId }}</td>
                   <td>{{ event.action }}</td>
                   <td>{{ event.targetType }} · {{ event.targetId }}</td>
                   <td>{{ event.reason || event.summary || event.status || 'Recorded' }}</td>
+                </tr>
+                <tr *ngIf="!filteredAuditTimeline(safety).length">
+                  <td colspan="5">No audit events match these filters.</td>
                 </tr>
               </tbody>
             </table>
@@ -1521,6 +1533,13 @@ export class SuperAdminComponent implements OnInit {
     confirmation: ['', Validators.required]
   });
 
+  readonly auditFilterForm = this.fb.group({
+    query: [''],
+    actor: [''],
+    fromDate: [''],
+    toDate: ['']
+  });
+
   readonly bulkActionForm = this.fb.group({
     action: ['suspend', Validators.required],
     planId: [''],
@@ -1969,6 +1988,30 @@ export class SuperAdminComponent implements OnInit {
 
   selectAllTenants(tenants: ApiRecord[]): void {
     this.selectedTenantIds.set((tenants || []).map((tenant) => tenant.id).filter(Boolean));
+  }
+
+  filteredAuditTimeline(safety: ApiRecord): ApiRecord[] {
+    const query = String(this.auditFilterForm.value.query || '').trim().toLowerCase();
+    const actor = String(this.auditFilterForm.value.actor || '').trim().toLowerCase();
+    const fromDate = String(this.auditFilterForm.value.fromDate || '');
+    const toDate = String(this.auditFilterForm.value.toDate || '');
+    return (safety?.timeline || []).filter((event: ApiRecord) => {
+      const eventDate = String(event.createdAt || '').slice(0, 10);
+      const haystack = [
+        event.action,
+        event.targetType,
+        event.targetId,
+        event.reason,
+        event.summary,
+        event.status
+      ].map((item) => String(item || '').toLowerCase()).join(' ');
+      const eventActor = String(event.actorUserId || '').toLowerCase();
+      if (query && !haystack.includes(query)) return false;
+      if (actor && !eventActor.includes(actor)) return false;
+      if (fromDate && eventDate < fromDate) return false;
+      if (toDate && eventDate > toDate) return false;
+      return true;
+    });
   }
 
   tenantHealthRows(tenant: ApiRecord): ApiRecord[] {
