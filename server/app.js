@@ -131,6 +131,7 @@ import { invoiceNotificationRouter } from "./routes/invoice-notification.routes.
 import { inventoryIntelligenceRouter } from "./routes/inventory-intelligence.routes.js";
 import { legacyRevenueRouter } from "./routes/legacy-revenue.routes.js";
 import { localizationPreferenceRouter } from "./routes/localization-preference.routes.js";
+import { liveConsultationRouter } from "./routes/live-consultation.routes.js";
 import { membershipEnterpriseRouter } from "./routes/membership-enterprise.routes.js";
 import { migrationRouter } from "./routes/migration.routes.js";
 import { mobileRouter } from "./routes/mobile.routes.js";
@@ -254,6 +255,7 @@ export function createApp() {
   app.use("/api/v1", publicBookingProfileRouter);
   app.use("/api/v1", customerAuthRouter);
   app.use("/api/v1", customerMarketplaceRouter);
+  app.use("/api/v1", liveConsultationRouter);
   app.use("/api/v1", bookingPaymentsPublicRouter);
   app.use("/api/v1", paymentPublicRouter);
   app.use("/api/v1", calendarPublicRouter);
@@ -375,6 +377,7 @@ export function createApp() {
   app.use("/api", publicBookingProfileRouter);
   app.use("/api", customerAuthRouter);
   app.use("/api", customerMarketplaceRouter);
+  app.use("/api", liveConsultationRouter);
   app.use("/api", reputationPublicRouter);
   app.use("/api", billingHealthRouter);
   app.use("/api", cashDrawerEodPublicRouter);

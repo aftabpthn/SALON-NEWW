@@ -31,6 +31,8 @@ import {
   CustomerWaitlistEntry,
   FirebaseAuthPayload,
   JoinWaitlistPayload,
+  LiveConsultationRequest,
+  LiveConsultationResponse,
   OtpRequestResponse,
   PurchaseGiftCardPayload,
   RedeemGiftCardPayload,
@@ -95,6 +97,12 @@ export class CustomerApiService {
   searchPublicBusinesses(params: SearchBusinessesParams = {}): Observable<Business[]> {
     return this.http.get<ApiResponse<Business[] | ApiList<Business>>>(`${this.baseUrl}/public/search`, { params: this.toParams(params) }).pipe(
       map((response) => this.unwrapList<Business>(response))
+    );
+  }
+
+  createLiveConsultation(payload: LiveConsultationRequest): Observable<LiveConsultationResponse> {
+    return this.http.post<ApiResponse<LiveConsultationResponse>>(`${this.baseUrl}/public/live-consultations`, payload).pipe(
+      map((response) => this.unwrap<LiveConsultationResponse>(response))
     );
   }
 

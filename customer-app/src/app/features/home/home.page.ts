@@ -1,9 +1,14 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
 import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar } from "@ionic/angular/standalone";
+import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
 import {
   calendarOutline,
+  cameraOutline,
+  chatbubblesOutline,
+  chevronForwardOutline,
   locationOutline,
   navigateOutline,
   notificationsOutline,
@@ -15,8 +20,9 @@ import {
   timeOutline
 } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
+import { CustomerApiService } from "../../core/customer-api.service";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { Booking, Business } from "../../core/api.types";
+import { Booking, Business, LiveConsultationBusinessContext, LiveConsultationPhoto, LiveConsultationResponse } from "../../core/api.types";
 
 interface HomeSearchSuggestion {
   key: string;
@@ -26,9 +32,14 @@ interface HomeSearchSuggestion {
   query: string;
 }
 
+interface ConsultationChatMessage {
+  role: "customer" | "assistant";
+  text: string;
+}
+
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent],
+  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent],
   template: `
     <ion-header class="ion-no-border">
       <ion-toolbar>
@@ -90,6 +101,106 @@ interface HomeSearchSuggestion {
               <p class="location-notice">{{ locationNotice() }}</p>
             }
           </div>
+          <aside class="live-consultation-card" aria-label="Live AI consultation">
+            <div class="consultation-topline">
+              <span><ion-icon name="sparkles-outline"></ion-icon> Live consultation</span>
+              <small>{{ consultationResponse()?.mode === "groq" ? "Groq AI live" : "Smart local guide" }}</small>
+            </div>
+            <h2>Show photos, chat, and get the right salon plan</h2>
+            <p class="consultation-copy">Ask for hair, skin, nails, spa, barber or bridal help. Aura checks your photos, location, live salons, services, prices and next steps.</p>
+
+            <div class="consultation-goals" aria-label="Consultation goals">
+              @for (goal of consultationGoals; track goal) {
+                <button type="button" [class.active]="selectedConsultationGoals().includes(goal)" (click)="toggleConsultationGoal(goal)">{{ goal }}</button>
+              }
+            </div>
+
+            <div class="consultation-chat">
+              @for (message of consultationMessages(); track message.text) {
+                <div class="consultation-message" [class.customer]="message.role === 'customer'">
+                  <strong>{{ message.role === "customer" ? "You" : "Aura AI" }}</strong>
+                  <span>{{ message.text }}</span>
+                </div>
+              }
+            </div>
+
+            <label class="consultation-input-label">
+              Consultation details
+              <textarea
+                rows="4"
+                [(ngModel)]="consultationText"
+                placeholder="Example: I need hair color for wedding next week, budget 3000, near Jubilee Hills, attach current hair photo.">
+              </textarea>
+            </label>
+
+            <div class="consultation-photo-row">
+              <input #consultationPhotoInput type="file" accept="image/*" multiple hidden (change)="addConsultationPhotos($event)" />
+              <button type="button" class="consultation-upload" (click)="consultationPhotoInput.click()">
+                <ion-icon name="camera-outline"></ion-icon>
+                Add photos
+              </button>
+              <span>{{ consultationPhotos().length }}/5 photos</span>
+            </div>
+
+            @if (consultationPhotos().length) {
+              <div class="consultation-photo-strip">
+                @for (photo of consultationPhotos(); track photo.name) {
+                  <button type="button" (click)="removeConsultationPhoto(photo.name)" [title]="'Remove ' + photo.name">
+                    <img [src]="photo.dataUrl" [alt]="photo.name" />
+                    <span>Remove</span>
+                  </button>
+                }
+              </div>
+            }
+
+            @if (consultationError()) {
+              <p class="consultation-error">{{ consultationError() }}</p>
+            }
+
+            <div class="consultation-actions">
+              <button type="button" class="consultation-send" [disabled]="consultationLoading()" (click)="sendConsultation()">
+                <ion-icon name="chatbubbles-outline"></ion-icon>
+                {{ consultationLoading() ? "Consulting" : "Start consultation" }}
+              </button>
+              <button type="button" class="consultation-secondary" (click)="useCurrentLocation()">
+                <ion-icon name="location-outline"></ion-icon>
+                {{ areaLabel() }}
+              </button>
+            </div>
+
+            @if (consultationResponse(); as response) {
+              <div class="consultation-results">
+                <div>
+                  <strong>Plan</strong>
+                  <ol>
+                    @for (step of response.actionPlan; track step) {
+                      <li>{{ step }}</li>
+                    }
+                  </ol>
+                </div>
+                <div>
+                  <strong>Best salons</strong>
+                  @for (salon of response.recommendedSalons; track salon.slug || salon.businessName) {
+                    <button type="button" class="consultation-result-card" (click)="openBusinessSlug(salon.slug)">
+                      <span>{{ salon.businessName }}</span>
+                      <small>{{ salon.location }} - {{ salon.openStatus || "Check availability" }}</small>
+                      <ion-icon name="chevron-forward-outline"></ion-icon>
+                    </button>
+                  }
+                </div>
+                <div>
+                  <strong>Services</strong>
+                  @for (service of response.recommendedServices.slice(0, 3); track service.name + service.businessName) {
+                    <button type="button" class="consultation-service-card" (click)="openBusinessSlug(service.slug)">
+                      <span>{{ service.name }}</span>
+                      <small>{{ service.businessName }} - {{ service.priceLabel }} - {{ service.durationLabel }}</small>
+                    </button>
+                  }
+                </div>
+                <p class="consultation-safety">{{ response.safetyNote }}</p>
+              </div>
+            }
+          </aside>
         </section>
 
         <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
@@ -349,6 +460,336 @@ interface HomeSearchSuggestion {
       margin: 0;
       color: #7E6E55;
       font-size: 1.08rem;
+    }
+
+    .live-consultation-card {
+      align-self: stretch;
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid rgba(214, 169, 74, 0.28);
+      border-radius: 28px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.92));
+      box-shadow: 0 28px 60px rgba(92, 65, 28, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    .consultation-topline,
+    .consultation-actions,
+    .consultation-photo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .consultation-topline {
+      justify-content: space-between;
+    }
+
+    .consultation-topline span,
+    .consultation-topline small {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .consultation-topline span {
+      color: #120D05;
+    }
+
+    .consultation-topline small {
+      padding: 6px 9px;
+      color: #0F766E;
+      background: rgba(15, 118, 110, 0.1);
+    }
+
+    .live-consultation-card h2,
+    .consultation-copy,
+    .consultation-input-label {
+      margin: 0;
+    }
+
+    .live-consultation-card h2 {
+      color: var(--text);
+      font-size: clamp(1.28rem, 2.3vw, 2rem);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .consultation-copy {
+      color: #7E6E55;
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+
+    .consultation-goals {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .consultation-goals::-webkit-scrollbar {
+      display: none;
+    }
+
+    .consultation-goals button,
+    .consultation-secondary,
+    .consultation-upload {
+      min-height: 38px;
+      border: 1px solid rgba(214, 169, 74, 0.34);
+      border-radius: 999px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.72);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .consultation-goals button {
+      padding: 0 12px;
+    }
+
+    .consultation-goals button.active {
+      color: #120D05;
+      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      border-color: rgba(155, 107, 34, 0.4);
+    }
+
+    .consultation-chat {
+      display: grid;
+      gap: 8px;
+      max-height: 190px;
+      overflow-y: auto;
+      padding: 2px;
+    }
+
+    .consultation-message {
+      display: grid;
+      gap: 4px;
+      width: min(100%, 92%);
+      padding: 10px 12px;
+      border-radius: 16px 16px 16px 6px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(214, 169, 74, 0.22);
+    }
+
+    .consultation-message.customer {
+      justify-self: end;
+      border-radius: 16px 16px 6px 16px;
+      color: #fff;
+      background: #0F766E;
+      border-color: #0F766E;
+    }
+
+    .consultation-message strong {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .consultation-message span {
+      font-size: 0.92rem;
+      line-height: 1.42;
+    }
+
+    .consultation-input-label {
+      display: grid;
+      gap: 7px;
+      color: var(--text);
+      font-size: 0.86rem;
+      font-weight: 900;
+    }
+
+    .consultation-input-label textarea {
+      width: 100%;
+      min-height: 104px;
+      border: 1px solid rgba(214, 169, 74, 0.28);
+      border-radius: 18px;
+      padding: 13px 14px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.84);
+      font: inherit;
+      line-height: 1.45;
+      resize: vertical;
+      outline: 0;
+    }
+
+    .consultation-input-label textarea:focus {
+      border-color: rgba(155, 107, 34, 0.46);
+      box-shadow: 0 0 0 4px rgba(214, 169, 74, 0.14);
+    }
+
+    .consultation-upload,
+    .consultation-secondary,
+    .consultation-send {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      cursor: pointer;
+    }
+
+    .consultation-photo-row span {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 900;
+    }
+
+    .consultation-photo-strip {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 74px;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .consultation-photo-strip button {
+      position: relative;
+      width: 74px;
+      height: 74px;
+      overflow: hidden;
+      border: 1px solid rgba(214, 169, 74, 0.26);
+      border-radius: 18px;
+      padding: 0;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .consultation-photo-strip img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .consultation-photo-strip span {
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      left: 4px;
+      border-radius: 999px;
+      padding: 3px;
+      color: #fff;
+      background: rgba(18, 13, 5, 0.72);
+      font-size: 0.62rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .consultation-error {
+      margin: 0;
+      border: 1px solid rgba(239, 68, 68, 0.22);
+      border-radius: 14px;
+      padding: 9px 11px;
+      color: #B42318;
+      background: rgba(255, 241, 240, 0.9);
+      font-size: 0.84rem;
+      font-weight: 800;
+    }
+
+    .consultation-actions {
+      justify-content: space-between;
+    }
+
+    .consultation-send {
+      min-height: 44px;
+      border: 0;
+      border-radius: 999px;
+      color: #120D05;
+      background: linear-gradient(135deg, #F4D58D, #D6A94A, #B77B24);
+      font-weight: 1000;
+      box-shadow: 0 14px 30px rgba(155, 107, 34, 0.22);
+    }
+
+    .consultation-send:disabled {
+      opacity: 0.68;
+      cursor: wait;
+    }
+
+    .consultation-results {
+      display: grid;
+      gap: 12px;
+      border-top: 1px solid rgba(214, 169, 74, 0.22);
+      padding-top: 12px;
+    }
+
+    .consultation-results > div {
+      display: grid;
+      gap: 8px;
+    }
+
+    .consultation-results strong {
+      color: var(--text);
+      font-size: 0.84rem;
+      font-weight: 1000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .consultation-results ol {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding-left: 18px;
+      color: #5E4C34;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .consultation-result-card,
+    .consultation-service-card {
+      position: relative;
+      display: grid;
+      gap: 3px;
+      width: 100%;
+      border: 1px solid rgba(214, 169, 74, 0.24);
+      border-radius: 16px;
+      padding: 10px 42px 10px 12px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.76);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .consultation-result-card span,
+    .consultation-service-card span {
+      min-width: 0;
+      font-weight: 1000;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .consultation-result-card small,
+    .consultation-service-card small {
+      color: var(--muted);
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .consultation-result-card ion-icon {
+      position: absolute;
+      top: 50%;
+      right: 12px;
+      transform: translateY(-50%);
+    }
+
+    .consultation-safety {
+      margin: 0;
+      color: #7E6E55;
+      font-size: 0.78rem;
+      font-weight: 800;
+      line-height: 1.38;
     }
 
     .search-panel {
@@ -713,6 +1154,23 @@ interface HomeSearchSuggestion {
         border-radius: 32px;
       }
 
+      .live-consultation-card {
+        border-radius: 26px;
+        padding: 16px;
+      }
+
+      .consultation-actions,
+      .consultation-photo-row {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .consultation-send,
+      .consultation-secondary,
+      .consultation-upload {
+        width: 100%;
+      }
+
       .search-panel ion-button {
         width: 100%;
       }
@@ -749,6 +1207,7 @@ interface HomeSearchSuggestion {
       }
 
       .hero {
+        grid-template-columns: minmax(0, 1fr) minmax(390px, 0.62fr);
         padding: 34px;
       }
 
@@ -780,6 +1239,19 @@ export class HomePage implements OnInit {
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(this.savedLocation());
   readonly locating = signal(false);
   readonly locationNotice = signal("");
+  readonly consultationLoading = signal(false);
+  readonly consultationError = signal("");
+  readonly consultationPhotos = signal<LiveConsultationPhoto[]>([]);
+  readonly consultationMessages = signal<ConsultationChatMessage[]>([
+    {
+      role: "assistant",
+      text: "Tell me what you need, add photos if useful, and I will suggest services, salons, location details and booking steps."
+    }
+  ]);
+  readonly consultationResponse = signal<LiveConsultationResponse | null>(null);
+  readonly selectedConsultationGoals = signal<string[]>(["Hair", "Near me"]);
+  consultationText = "";
+  readonly consultationGoals = ["Hair", "Skin", "Nails", "Spa", "Bridal", "Barber", "Budget", "Near me"];
   readonly skeletons = [1, 2, 3, 4, 5, 6];
   readonly searchActive = computed(() => !!this.activeQuery().trim());
   readonly homeResults = computed(() => this.filterBusinesses(this.marketplace.businesses()));
@@ -833,9 +1305,12 @@ export class HomePage implements OnInit {
     slug: business.slug
   })));
 
-  constructor(readonly marketplace: MarketplaceService, private readonly router: Router) {
+  constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly api: CustomerApiService) {
     addIcons({
       calendarOutline,
+      cameraOutline,
+      chatbubblesOutline,
+      chevronForwardOutline,
       locationOutline,
       navigateOutline,
       notificationsOutline,
@@ -898,6 +1373,89 @@ export class HomePage implements OnInit {
     void this.router.navigate(["/business", business.slug]);
   }
 
+  openBusinessSlug(slug: string) {
+    if (!slug) return;
+    void this.router.navigate(["/business", slug]);
+  }
+
+  toggleConsultationGoal(goal: string) {
+    const current = new Set(this.selectedConsultationGoals());
+    current.has(goal) ? current.delete(goal) : current.add(goal);
+    this.selectedConsultationGoals.set([...current]);
+  }
+
+  async addConsultationPhotos(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files || []);
+    input.value = "";
+    if (!files.length) return;
+    this.consultationError.set("");
+    const existing = this.consultationPhotos();
+    const remaining = Math.max(0, 5 - existing.length);
+    if (!remaining) {
+      this.consultationError.set("Maximum 5 photos allowed in one consultation.");
+      return;
+    }
+    const accepted: LiveConsultationPhoto[] = [];
+    for (const file of files.slice(0, remaining)) {
+      if (!file.type.startsWith("image/")) {
+        this.consultationError.set("Only photo files are allowed.");
+        continue;
+      }
+      const totalSize = [...existing, ...accepted].reduce((sum, photo) => sum + photo.sizeBytes, 0) + file.size;
+      if (file.size > 2 * 1024 * 1024) {
+        this.consultationError.set("Each photo must be under 2 MB for AI consultation.");
+        continue;
+      }
+      if (totalSize > 5 * 1024 * 1024) {
+        this.consultationError.set("Photo upload total must stay under 5 MB for this consultation.");
+        continue;
+      }
+      accepted.push({
+        name: `${Date.now()}-${file.name}`,
+        type: file.type || "image/jpeg",
+        sizeBytes: file.size,
+        dataUrl: await this.readPhotoDataUrl(file)
+      });
+    }
+    this.consultationPhotos.set([...existing, ...accepted].slice(0, 5));
+  }
+
+  removeConsultationPhoto(name: string) {
+    this.consultationPhotos.set(this.consultationPhotos().filter((photo) => photo.name !== name));
+  }
+
+  async sendConsultation() {
+    const message = this.consultationText.trim();
+    const goals = this.selectedConsultationGoals();
+    if (!message && !goals.length && !this.consultationPhotos().length) {
+      this.consultationError.set("Write a consultation question, choose a goal, or add a photo.");
+      return;
+    }
+    this.consultationLoading.set(true);
+    this.consultationError.set("");
+    this.consultationMessages.update((items) => [...items, {
+      role: "customer",
+      text: message || `Need help with ${goals.join(", ")}`
+    }]);
+    try {
+      const response = await firstValueFrom(this.api.createLiveConsultation({
+        message,
+        goals,
+        location: this.currentLocation() ? { ...this.currentLocation(), label: this.areaLabel() } : { label: this.areaLabel() },
+        photos: this.consultationPhotos(),
+        businesses: this.consultationBusinessContext()
+      }));
+      this.consultationResponse.set(response);
+      this.consultationMessages.update((items) => [...items, { role: "assistant", text: response.answer }]);
+      this.consultationText = "";
+    } catch (error) {
+      this.consultationError.set(error instanceof Error ? error.message : "Unable to start live consultation.");
+    } finally {
+      this.consultationLoading.set(false);
+    }
+  }
+
   useCurrentLocation() {
     if (!navigator.geolocation) {
       this.locationNotice.set("Location is not supported in this browser.");
@@ -924,6 +1482,49 @@ export class HomePage implements OnInit {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
+  }
+
+  private readPhotoDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("Unable to read photo"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private consultationBusinessContext(): LiveConsultationBusinessContext[] {
+    const preferred = this.recommendations().length ? this.recommendations() : this.homeResults();
+    return preferred.slice(0, 12).map((business) => ({
+      id: business.id,
+      slug: business.slug,
+      businessName: business.businessName,
+      category: business.category,
+      description: business.description,
+      address: business.address,
+      area: business.area,
+      city: business.city,
+      state: business.state,
+      country: business.country,
+      phone: business.phone || business.mobileNumber || business.appointmentNumber,
+      mapsUrl: business.mapsUrl,
+      ratingAverage: business.ratingAverage,
+      ratingCount: business.ratingCount,
+      distanceKm: business.distanceKm,
+      isOpen: business.isOpen,
+      hoursLabel: business.hoursLabel,
+      nextAvailableSlot: business.nextAvailableSlot,
+      startingPricePaise: business.startingPricePaise,
+      popularService: business.popularService,
+      services: business.services.slice(0, 8).map((service) => ({
+        id: service.id,
+        name: service.name,
+        category: service.category,
+        description: service.description,
+        pricePaise: service.pricePaise,
+        durationMinutes: service.durationMinutes
+      }))
+    }));
   }
 
   private filterBusinesses(businesses: Business[]): Business[] {
