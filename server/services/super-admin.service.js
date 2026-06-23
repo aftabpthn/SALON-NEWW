@@ -12,6 +12,7 @@ const pct = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const TENANT_LIMITS_KEY = "superAdminTenantLimits";
 const TENANT_IP_ALLOWLIST_KEY = "superAdminIpAllowlist";
 const TENANT_DATA_EXPORT_CONTROLS_KEY = "superAdminDataExportControls";
+const TENANT_ROLE_PERMISSION_MATRIX_KEY = "superAdminRolePermissionMatrix";
 
 function ensureSuperAdmin(access = {}) {
   if (access.role !== "superAdmin") throw forbidden("Super admin access is required");
@@ -124,6 +125,97 @@ function dataExportControlsForTenant(policy = {}) {
     summary: !parsed.enabled
       ? "Exports disabled"
       : `${parsed.allowedFormats.join(", ") || "no formats"} · ${parsed.maxRows} rows · ${parsed.retentionDays}d retention`
+  };
+}
+
+const ROLE_PERMISSION_MODULES = [
+  { key: "bookings", label: "Bookings", permissions: ["read", "write", "approve"] },
+  { key: "clients", label: "Clients", permissions: ["read", "write", "export"] },
+  { key: "billing", label: "Billing", permissions: ["read", "write", "refund"] },
+  { key: "staff", label: "Staff", permissions: ["read", "write", "payroll"] },
+  { key: "reports", label: "Reports", permissions: ["read", "export"] },
+  { key: "settings", label: "Settings", permissions: ["read", "write"] }
+];
+
+const DEFAULT_ROLE_PERMISSION_MATRIX = {
+  owner: [
+    "bookings.read", "bookings.write", "bookings.approve",
+    "clients.read", "clients.write", "clients.export",
+    "billing.read", "billing.write", "billing.refund",
+    "staff.read", "staff.write", "staff.payroll",
+    "reports.read", "reports.export",
+    "settings.read", "settings.write"
+  ],
+  admin: [
+    "bookings.read", "bookings.write", "bookings.approve",
+    "clients.read", "clients.write",
+    "billing.read", "billing.write",
+    "staff.read", "staff.write",
+    "reports.read", "reports.export",
+    "settings.read"
+  ],
+  manager: ["bookings.read", "bookings.write", "bookings.approve", "clients.read", "clients.write", "billing.read", "staff.read", "reports.read"],
+  cashier: ["bookings.read", "bookings.write", "clients.read", "billing.read", "billing.write"],
+  accountant: ["billing.read", "billing.write", "reports.read", "reports.export"],
+  staff: ["bookings.read", "clients.read"]
+};
+
+const VALID_PERMISSION_KEYS = new Set(ROLE_PERMISSION_MODULES.flatMap((module) => module.permissions.map((permission) => `${module.key}.${permission}`)));
+
+function normalizePermissionList(value) {
+  const entries = Array.isArray(value) ? value : String(value || "").split(/\r?\n|,/);
+  return entries
+    .map((entry) => String(entry || "").trim().toLowerCase())
+    .filter((entry) => VALID_PERMISSION_KEYS.has(entry))
+    .filter((entry, index, list) => list.indexOf(entry) === index)
+    .slice(0, 100);
+}
+
+function parseRolePermissionMatrix(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const roles = Object.fromEntries(Object.entries(DEFAULT_ROLE_PERMISSION_MATRIX).map(([role, permissions]) => [role, [...permissions]]));
+  const sourceRoles = source.roles && typeof source.roles === "object" ? source.roles : {};
+  for (const [role, permissions] of Object.entries(sourceRoles)) {
+    const key = String(role || "").trim().toLowerCase();
+    if (!key) continue;
+    roles[key] = normalizePermissionList(permissions);
+  }
+  if (source.role) {
+    const role = String(source.role || "").trim().toLowerCase();
+    roles[role] = normalizePermissionList(source.permissions || source.permissionsText);
+  }
+  return {
+    roles,
+    reason: source.reason || "",
+    updatedBy: source.updatedBy || "",
+    updatedAt: source.updatedAt || ""
+  };
+}
+
+function rolePermissionMatrixForTenant(policy = {}) {
+  const parsed = parseRolePermissionMatrix(policy);
+  const roleRows = Object.entries(parsed.roles)
+    .map(([role, permissions]) => ({
+      role,
+      permissions,
+      permissionCount: permissions.length,
+      modules: ROLE_PERMISSION_MODULES.map((module) => ({
+        ...module,
+        granted: module.permissions.filter((permission) => permissions.includes(`${module.key}.${permission}`)).length,
+        total: module.permissions.length
+      }))
+    }))
+    .sort((a, b) => b.permissionCount - a.permissionCount || a.role.localeCompare(b.role));
+  const totalPermissions = sumRows(roleRows, (row) => row.permissionCount);
+  const privilegedRoles = roleRows.filter((row) => row.permissions.includes("billing.refund") || row.permissions.includes("settings.write")).map((row) => row.role);
+  return {
+    ...parsed,
+    modules: ROLE_PERMISSION_MODULES,
+    roleRows,
+    roleCount: roleRows.length,
+    totalPermissions,
+    privilegedRoles,
+    summary: `${roleRows.length} roles · ${totalPermissions} grants · ${privilegedRoles.length} privileged`
   };
 }
 
@@ -1569,6 +1661,10 @@ export class SuperAdminService {
       .list({ limit: 10000 })
       .filter((setting) => setting.key === TENANT_DATA_EXPORT_CONTROLS_KEY)
       .map((setting) => [setting.tenantId, setting.value || {}]));
+    const rolePermissionMatrixByTenant = new Map(repositories.settings
+      .list({ limit: 10000 })
+      .filter((setting) => setting.key === TENANT_ROLE_PERMISSION_MATRIX_KEY)
+      .map((setting) => [setting.tenantId, setting.value || {}]));
     const ssoByTenant = latestSsoByTenant();
     const tenantRows = tenants.map((tenant) => {
       const tenantSales = sales.filter((sale) => sale.tenantId === tenant.id);
@@ -1594,6 +1690,7 @@ export class SuperAdminService {
       const tenantLimits = tenantLimitsFor(plan, tenantLimitByTenant.get(tenant.id), usage);
       const ipAllowlist = ipAllowlistForTenant(ipAllowlistByTenant.get(tenant.id));
       const dataExportControls = dataExportControlsForTenant(dataExportControlsByTenant.get(tenant.id));
+      const rolePermissionMatrix = rolePermissionMatrixForTenant(rolePermissionMatrixByTenant.get(tenant.id));
       const sso = ssoByTenant.get(tenant.id) || null;
       const row = {
         id: tenant.id,
@@ -1618,6 +1715,7 @@ export class SuperAdminService {
         tenantLimits,
         ipAllowlist,
         dataExportControls,
+        rolePermissionMatrix,
         sso,
         enterpriseSecurity: enterpriseSecurityForTenant(plan, tenantLimits, ipAllowlist, sso || {}, dataExportControls),
         healthBreakdown: health,
@@ -1890,6 +1988,30 @@ export class SuperAdminService {
       reason: payload.reason || ""
     });
     return { tenantId, dataExportControls: dataExportControlsForTenant(record.value) };
+  }
+
+  updateTenantRolePermissionMatrix(tenantId, payload = {}, access) {
+    ensureSuperAdmin(access);
+    const tenant = repositories.tenants.getById(tenantId);
+    if (!tenant) throw notFound("Tenant not found");
+    const current = repositories.settings.list({ limit: 10000 }, { tenantId })
+      .find((setting) => setting.key === TENANT_ROLE_PERMISSION_MATRIX_KEY);
+    const policy = parseRolePermissionMatrix({
+      ...current?.value,
+      ...payload,
+      updatedBy: access.userId || "super-admin",
+      updatedAt: now()
+    });
+    const record = current
+      ? repositories.settings.update(current.id, { value: policy, scope: "tenant" }, { tenantId })
+      : repositories.settings.create({ id: makeId("set"), key: TENANT_ROLE_PERMISSION_MATRIX_KEY, value: policy, scope: "tenant" }, { tenantId });
+    this.audit(access, "tenant.role_permission_matrix.updated", "tenant", tenantId, {
+      role: payload.role || "",
+      permissions: policy.roles[String(payload.role || "").trim().toLowerCase()] || [],
+      privilegedRoles: rolePermissionMatrixForTenant(record.value).privilegedRoles,
+      reason: payload.reason || ""
+    });
+    return { tenantId, rolePermissionMatrix: rolePermissionMatrixForTenant(record.value) };
   }
 
   initiateTenantGdprExport(tenantId, payload = {}, access) {

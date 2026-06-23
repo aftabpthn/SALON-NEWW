@@ -62,6 +62,13 @@ superAdminRouter.patch(
   })
 );
 
+superAdminRouter.patch(
+  "/super-admin/tenants/:id/role-permissions",
+  asyncHandler((req, res) => {
+    res.json(superAdminService.updateTenantRolePermissionMatrix(req.params.id, req.body, req.access));
+  })
+);
+
 superAdminRouter.post(
   "/super-admin/tenants/:id/gdpr-export",
   validateBody({ required: ["reason", "confirmation"] }),

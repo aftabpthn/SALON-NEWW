@@ -984,6 +984,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                     <small style="display:block;color:var(--text-muted)">
                       IP {{ tenant.enterpriseSecurity?.ipRestrictionStatus || tenant.ipAllowlist?.status || 'disabled' }} · SSO {{ tenant.enterpriseSecurity?.ssoStatus || 'not_configured' }} · Export {{ tenant.enterpriseSecurity?.dataExportStatus || tenant.dataExportControls?.status || 'open' }}
                     </small>
+                    <small style="display:block;color:var(--text-muted)">Roles {{ tenant.rolePermissionMatrix?.summary || 'default matrix' }}</small>
                   </td>
                   <td>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}<small>{{ tenant.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} usage</small></td>
                   <td>{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
@@ -1007,6 +1008,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editIpAllowlist(tenant)">IP rules</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editTenantSso(tenant)">SSO</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editDataExportControls(tenant)">Export</button>
+                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editRolePermissionMatrix(tenant)">Roles</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareTenantFeatureOverride(tenant)">Override</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareImpersonation(tenant)">Impersonate</button>
                     <a class="ghost-button mini" [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer" (click)="$event.stopPropagation()">Intercom</a>
@@ -1388,6 +1390,49 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </section>
 
           <section class="form-panel">
+            <h3>Role & Permission Matrix</h3>
+            <form [formGroup]="rolePermissionMatrixForm" (ngSubmit)="saveRolePermissionMatrix()">
+              <label class="field">
+                <span>Tenant</span>
+                <select formControlName="tenantId" (change)="loadRolePermissionMatrixForm()">
+                  <option value="">Select tenant</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Role</span>
+                <select formControlName="role" (change)="selectRolePermissionRole()">
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="cashier">Cashier</option>
+                  <option value="accountant">Accountant</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </label>
+              <label class="field full"><span>Permissions</span><textarea formControlName="permissionsText" placeholder="bookings.read&#10;bookings.write&#10;clients.read"></textarea></label>
+              <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
+              <div class="form-actions">
+                <button class="primary-button" type="submit" [disabled]="rolePermissionMatrixForm.invalid || saving()">Save role matrix</button>
+              </div>
+            </form>
+            <div class="activity-list" style="margin-top:12px" *ngIf="rolePermissionMatrixTenant(overview.tenants) as tenant">
+              <article>
+                <div>
+                  <strong>{{ tenant.rolePermissionMatrix?.summary }}</strong>
+                  <span>Privileged roles: {{ tenant.rolePermissionMatrix?.privilegedRoles?.join(', ') || 'none' }}</span>
+                </div>
+              </article>
+              <article *ngFor="let row of tenant.rolePermissionMatrix?.roleRows || []">
+                <div>
+                  <strong>{{ row.role }} · {{ row.permissionCount }} grants</strong>
+                  <span>{{ row.permissions.join(', ') || 'No grants' }}</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="form-panel">
             <h3>Per-Tenant Feature Override</h3>
             <form [formGroup]="tenantFeatureOverrideForm" (ngSubmit)="saveTenantFeatureOverride()">
               <label class="field">
@@ -1758,6 +1803,13 @@ export class SuperAdminComponent implements OnInit {
     reason: ['Enterprise data export controls']
   });
 
+  readonly rolePermissionMatrixForm = this.fb.group({
+    tenantId: ['', Validators.required],
+    role: ['manager', Validators.required],
+    permissionsText: ['bookings.read\nbookings.write\nbookings.approve\nclients.read\nclients.write\nbilling.read\nstaff.read\nreports.read'],
+    reason: ['Tenant role permission matrix update']
+  });
+
   readonly tenantFeatureOverrideForm = this.fb.group({
     tenantId: ['', Validators.required],
     key: ['ai.marketing', Validators.required],
@@ -1837,6 +1889,9 @@ export class SuperAdminComponent implements OnInit {
         const exportTenantId = this.dataExportControlsForm.value.tenantId || this.selectedTenantId();
         const exportTenant = (overview?.tenants || []).find((tenant: ApiRecord) => tenant.id === exportTenantId);
         if (exportTenant) this.editDataExportControls(exportTenant);
+        const roleTenantId = this.rolePermissionMatrixForm.value.tenantId || this.selectedTenantId();
+        const roleTenant = (overview?.tenants || []).find((tenant: ApiRecord) => tenant.id === roleTenantId);
+        if (roleTenant) this.editRolePermissionMatrix(roleTenant);
         this.loading.set(false);
       },
       error: (error) => {
@@ -2037,6 +2092,54 @@ export class SuperAdminComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to save data export controls');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  rolePermissionMatrixTenant(tenants: ApiRecord[] = []): ApiRecord | null {
+    const tenantId = this.rolePermissionMatrixForm.value.tenantId || this.selectedTenantId();
+    return tenants.find((tenant) => tenant.id === tenantId) || null;
+  }
+
+  editRolePermissionMatrix(tenant: ApiRecord): void {
+    this.selectedTenantId.set(tenant.id);
+    const role = this.rolePermissionMatrixForm.value.role || 'manager';
+    const roleRow = (tenant.rolePermissionMatrix?.roleRows || []).find((row: ApiRecord) => row.role === role);
+    this.rolePermissionMatrixForm.patchValue({
+      tenantId: tenant.id,
+      role,
+      permissionsText: (roleRow?.permissions || []).join('\n'),
+      reason: 'Tenant role permission matrix update'
+    });
+  }
+
+  loadRolePermissionMatrixForm(): void {
+    const tenantId = this.rolePermissionMatrixForm.value.tenantId || '';
+    const tenant = (this.overview()?.tenants || []).find((item: ApiRecord) => item.id === tenantId);
+    if (tenant) this.editRolePermissionMatrix(tenant);
+  }
+
+  selectRolePermissionRole(): void {
+    const tenant = this.rolePermissionMatrixTenant(this.overview()?.tenants || []);
+    if (tenant) this.editRolePermissionMatrix(tenant);
+  }
+
+  saveRolePermissionMatrix(): void {
+    if (this.rolePermissionMatrixForm.invalid) return;
+    this.saving.set(true);
+    const tenantId = this.rolePermissionMatrixForm.value.tenantId || '';
+    this.api.patch(`super-admin/tenants/${tenantId}/role-permissions`, {
+      role: this.rolePermissionMatrixForm.value.role || 'manager',
+      permissionsText: this.rolePermissionMatrixForm.value.permissionsText || '',
+      reason: this.rolePermissionMatrixForm.value.reason || ''
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to save role permission matrix');
         this.saving.set(false);
       }
     });
