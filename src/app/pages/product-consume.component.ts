@@ -64,12 +64,83 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
         (refresh)="load()"
       ></app-inventory-zenoti-chrome>
 
-      <div class="metric-grid">
-        <article><span>Draft pending</span><strong>{{ draftCount() }}</strong><small>review before stock minus</small></article>
-        <article><span>Confirmed</span><strong>{{ confirmedCount() }}</strong><small>stock ledger posted</small></article>
-        <article><span>Expected cost</span><strong>{{ money(totalExpected()) }}</strong><small>recipe based</small></article>
-        <article><span>Actual cost</span><strong>{{ money(totalActual()) }}</strong><small>edited consume value</small></article>
-      </div>
+      <section class="zenoti-consume-register">
+        <div class="zenoti-toolbar">
+          <div>
+            <span class="eyebrow">Product consume register</span>
+            <h2>Invoice service usage</h2>
+          </div>
+          <div class="toolbar-actions">
+            <label>
+              <span>Status</span>
+              <select [ngModel]="statusFilter()" (ngModelChange)="setStatus($event)">
+                <option value="">All</option>
+                <option value="draft">Draft</option>
+                <option value="recipe_missing">Recipe missing</option>
+                <option value="confirmed">Confirmed</option>
+              </select>
+            </label>
+            <button type="button" class="ghost" (click)="load()">Refresh</button>
+            <button type="button" class="primary" (click)="loadControlLedgerReport()">Run report</button>
+          </div>
+        </div>
+
+        <div class="consume-kpi-strip">
+          <article><span>Draft pending</span><strong>{{ draftCount() }}</strong><small>review before stock minus</small></article>
+          <article><span>Confirmed</span><strong>{{ confirmedCount() }}</strong><small>stock ledger posted</small></article>
+          <article><span>Expected cost</span><strong>{{ money(totalExpected()) }}</strong><small>recipe based</small></article>
+          <article><span>Actual cost</span><strong>{{ money(totalActual()) }}</strong><small>edited consume value</small></article>
+        </div>
+
+        <div class="zenoti-table-scroll">
+          <table class="zenoti-register-table">
+            <thead>
+              <tr>
+                <th>Invoice</th>
+                <th>Service / client</th>
+                <th>Staff</th>
+                <th>Status</th>
+                <th>Lines</th>
+                <th>Expected</th>
+                <th>Actual</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let draft of drafts()"
+                [class.selected]="draft.id === selectedId()"
+                (click)="select(draft)"
+              >
+                <td>
+                  <strong>{{ draft.invoiceNumber || draft.id }}</strong>
+                  <small>{{ draft.id }}</small>
+                </td>
+                <td>
+                  <strong>{{ draft.serviceName }}</strong>
+                  <small>{{ draft.clientName || 'Walk-in client' }}</small>
+                </td>
+                <td>{{ draft.staffName || 'Unassigned' }}</td>
+                <td><span class="badge" [class.done]="draft.status === 'confirmed'">{{ draft.status }}</span></td>
+                <td>{{ draft.lineItems.length }}</td>
+                <td>{{ money(draft.expectedCost || 0) }}</td>
+                <td>{{ money(draft.actualCost || draft.expectedCost || 0) }}</td>
+                <td><button type="button" class="mini-action" (click)="select(draft)">Open</button></td>
+              </tr>
+              <tr *ngIf="!loading() && !drafts().length">
+                <td colspan="8" class="table-empty">No product consume draft found.</td>
+              </tr>
+              <tr *ngIf="loading()">
+                <td colspan="8" class="table-empty">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="zenoti-footer">
+          <span>{{ drafts().length }} result(s)</span>
+          <span>Click any invoice to edit consume lines, container usage and notes below.</span>
+        </div>
+      </section>
 
       <section class="owner-report" *ngIf="backbarReport() as report">
         <div class="ledger-head">
@@ -688,33 +759,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
       <div *ngIf="error()" class="alert">{{ error() }}</div>
       <div *ngIf="message()" class="success">{{ message() }}</div>
 
-      <div class="workspace">
-        <aside class="draft-list">
-          <div class="list-head">
-            <strong>Invoice drafts</strong>
-            <select [ngModel]="statusFilter()" (ngModelChange)="setStatus($event)">
-              <option value="">All</option>
-              <option value="draft">Draft</option>
-              <option value="recipe_missing">Recipe missing</option>
-              <option value="confirmed">Confirmed</option>
-            </select>
-          </div>
-          <button
-            type="button"
-            class="draft-card"
-            *ngFor="let draft of drafts()"
-            [class.active]="draft.id === selectedId()"
-            (click)="select(draft)"
-          >
-            <span class="badge" [class.done]="draft.status === 'confirmed'">{{ draft.status }}</span>
-            <strong>{{ draft.invoiceNumber || draft.id }}</strong>
-            <small>{{ draft.serviceName }} - {{ draft.clientName || 'Walk-in client' }}</small>
-            <em>{{ money(draft.actualCost || draft.expectedCost) }}</em>
-          </button>
-          <p *ngIf="!loading() && !drafts().length" class="empty">No product consume draft found.</p>
-          <p *ngIf="loading()" class="empty">Loading...</p>
-        </aside>
-
+      <div class="workspace zenoti-editor-shell">
         <section class="editor" *ngIf="selected() as draft; else noSelection">
           <div class="editor-head">
             <div>
@@ -916,34 +961,49 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     </section>
   `,
   styles: [`
-    .page-stack { display: grid; gap: 18px; }
-    .module-hero, .workspace, .metric-grid article, .editor, .draft-list { background: rgba(255,255,255,.92); border: 1px solid #dcebea; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
+    .page-stack { display: grid; gap: 12px; }
+    .zenoti-consume-register, .workspace, .editor, .owner-report, .owner-dashboard, .control-report, .staff-audit { background: #fff; border: 1px solid #d8e1ea; box-shadow: none; }
     .module-hero { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 24px; border-radius: 22px; }
-    .module-hero h1, .editor h2 { margin: 4px 0; color: #111827; }
+    .module-hero h1, .editor h2, .zenoti-toolbar h2 { margin: 4px 0; color: #111827; }
     .module-hero p { margin: 0; color: #64748b; }
-    .eyebrow { color: #0f766e; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .eyebrow { color: #5b6b81; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     .hero-actions, .action-row { display: flex; gap: 10px; flex-wrap: wrap; }
-    button, a.ghost { border: 1px solid #d7e6e4; border-radius: 14px; padding: 12px 16px; font-weight: 900; text-decoration: none; cursor: pointer; }
-    .primary { background: #0f172a; color: white; }
+    button, a.ghost { border: 1px solid #c7d6e5; border-radius: 3px; padding: 9px 14px; font-weight: 900; text-decoration: none; cursor: pointer; }
+    .primary { background: #0b72b5; border-color: #0b72b5; color: white; }
     .ghost { background: white; color: #0f172a; }
     button:disabled { opacity: .55; cursor: not-allowed; }
-    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-    .metric-grid article { border-radius: 18px; padding: 16px; display: grid; gap: 5px; }
-    .metric-grid span, .info-grid span, .consume-table .head { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    .metric-grid strong { font-size: 24px; }
-    .metric-grid small, .draft-card small, .consume-table small { color: #64748b; }
-    .workspace { display: grid; grid-template-columns: 340px 1fr; border-radius: 22px; overflow: hidden; }
-    .draft-list { border: 0; border-right: 1px solid #dcebea; box-shadow: none; padding: 14px; display: grid; gap: 10px; align-content: start; max-height: 72vh; overflow: auto; }
+    .zenoti-consume-register { display: grid; overflow: hidden; border-radius: 0; }
+    .zenoti-toolbar { display: flex; justify-content: space-between; gap: 14px; align-items: end; padding: 14px 16px; border-bottom: 1px solid #d8e1ea; }
+    .toolbar-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+    .toolbar-actions label { display: grid; gap: 4px; min-width: 210px; }
+    .toolbar-actions span { color: #5b6b81; font-size: 12px; font-weight: 900; }
+    .consume-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8e1ea; }
+    .consume-kpi-strip article { padding: 10px 16px; display: grid; gap: 3px; border-right: 1px solid #e5edf4; }
+    .consume-kpi-strip article:last-child { border-right: 0; }
+    .consume-kpi-strip span, .info-grid span, .consume-table .head { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .consume-kpi-strip strong { font-size: 22px; }
+    .consume-kpi-strip small, .zenoti-register-table small, .consume-table small { color: #64748b; }
+    .zenoti-table-scroll { overflow: auto; }
+    .zenoti-register-table { width: 100%; min-width: 1180px; border-collapse: collapse; }
+    .zenoti-register-table th, .zenoti-register-table td { padding: 10px 12px; border-bottom: 1px solid #dfe7ef; text-align: left; vertical-align: middle; }
+    .zenoti-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
+    .zenoti-register-table tbody tr { cursor: pointer; }
+    .zenoti-register-table tbody tr:hover, .zenoti-register-table tbody tr.selected { background: #eef7fc; }
+    .zenoti-register-table td small { display: block; margin-top: 3px; }
+    .mini-action { padding: 6px 10px; background: #fff; color: #0b72b5; }
+    .table-empty { text-align: center; color: #64748b; padding: 18px; }
+    .zenoti-footer { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; color: #64748b; border-top: 1px solid #d8e1ea; font-size: 12px; }
+    .workspace { display: block; border-radius: 0; overflow: hidden; }
     .list-head, .editor-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-    select, input, textarea { width: 100%; border: 1px solid #d7e6e4; border-radius: 12px; padding: 10px; font: inherit; }
+    select, input, textarea { width: 100%; border: 1px solid #cbd8e4; border-radius: 3px; padding: 9px 10px; font: inherit; }
     .draft-card { text-align: left; background: white; display: grid; gap: 5px; }
     .draft-card.active { background: #e8f4f2; border-color: #14b8a6; }
     .badge { width: max-content; border-radius: 999px; padding: 5px 10px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 900; }
     .badge.done { background: #dcfce7; color: #166534; }
-    .editor { border: 0; box-shadow: none; padding: 18px; display: grid; gap: 16px; }
+    .editor { border: 0; box-shadow: none; padding: 16px; display: grid; gap: 14px; }
     .info-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-    .info-grid label { border: 1px solid #dcebea; border-radius: 14px; padding: 12px; display: grid; gap: 6px; }
-    .consume-table { border: 1px solid #dcebea; border-radius: 16px; overflow: auto; }
+    .info-grid label { border: 1px solid #d8e1ea; border-radius: 3px; padding: 10px; display: grid; gap: 6px; }
+    .consume-table { border: 1px solid #d8e1ea; border-radius: 0; overflow: auto; }
     .row { display: grid; grid-template-columns: 1.6fr 1.1fr .7fr 1.1fr 1.3fr 1.4fr .75fr; gap: 12px; align-items: center; padding: 12px; border-bottom: 1px solid #edf4f3; min-width: 1120px; }
     .row:last-child { border-bottom: 0; }
     .line-ledger { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -951,10 +1011,7 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .qty-unit, .range-fields { display: grid; grid-template-columns: 1fr 86px; gap: 8px; }
     .range-fields { grid-template-columns: 1fr 1fr; }
     .backbar-ledger { border: 1px solid #dcebea; border-radius: 16px; padding: 14px; display: grid; gap: 12px; background: #f8fbfa; }
-    .owner-report { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
-    .owner-dashboard { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
-    .control-report { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
-    .staff-audit { border: 1px solid #dcebea; border-radius: 18px; padding: 16px; display: grid; gap: 12px; background: #fff; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
+    .owner-report, .owner-dashboard, .control-report, .staff-audit { border-radius: 0; padding: 14px 16px; display: grid; gap: 12px; }
     .owner-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
     .owner-metrics article { border: 1px solid #dcebea; border-radius: 12px; padding: 12px; display: grid; gap: 4px; background: #f8fbfa; }
     .owner-metrics span, .owner-metrics small { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
@@ -1055,15 +1112,15 @@ const RECIPE_UNITS = ['ml', 'gm', 'g', 'kg', 'l', 'ltr', 'pcs', 'tube', 'bottle'
     .empty, .empty-editor { color: #64748b; padding: 18px; }
     @media (max-width: 900px) {
       .module-hero, .workspace { display: grid; }
-      .metric-grid, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .consume-kpi-strip, .info-grid, .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .zenoti-toolbar, .zenoti-footer { display: grid; }
       .audit-filters, .audit-layout, .dashboard-layout, .report-filters, .report-grid, .report-feed, .product-360-grid, .risk-grid, .next-control-grid, .deep-control-grid, .owner-control-grid { grid-template-columns: 1fr; }
       .ledger-summary, .history-row, .ledger-actions, .ledger-actions.override, .container-scan, .scan-result { grid-template-columns: 1fr 1fr; }
       .active-container { display: grid; }
       .manual-product-add { grid-template-columns: 1fr; }
-      .draft-list { border-right: 0; border-bottom: 1px solid #dcebea; max-height: 360px; }
     }
     @media (max-width: 560px) {
-      .metric-grid, .info-grid { grid-template-columns: 1fr; }
+      .consume-kpi-strip, .info-grid { grid-template-columns: 1fr; }
       .module-hero { padding: 18px; }
     }
   `]
