@@ -769,12 +769,14 @@ function usageQuotaBillingAlerts(tenantRows) {
       return {
         tenantId: tenant.id,
         tenantName: tenant.name,
+        ownerEmail: tenant.ownerEmail,
         metric,
         used,
         limit,
         usagePct,
         severity: usagePct >= 100 ? "critical" : usagePct >= 90 ? "warning" : "watch",
-        action: usagePct >= 100 ? "Block or upsell quota" : "Send quota warning"
+        action: usagePct >= 100 ? "Block or upsell quota" : "Send quota warning",
+        supportTicketLink: `/support/tickets/new?tenantId=${encodeURIComponent(tenant.id)}&source=quota&metric=${encodeURIComponent(metric)}`
       };
     }).filter(Boolean);
   });
@@ -787,7 +789,8 @@ function usageQuotaBillingAlerts(tenantRows) {
       dunningStatus: tenant.billingOps?.dunningStatus || "Clear",
       failedPayments: tenant.billingOps?.failedPaymentCount || 0,
       severity: tenant.billingOps?.dunningSeverity || (tenant.outstanding > 0 ? "warning" : "healthy"),
-      action: tenant.billingOps?.nextAction || "Send billing alert"
+      action: tenant.billingOps?.nextAction || "Send billing alert",
+      supportTicketLink: `/support/tickets/new?tenantId=${encodeURIComponent(tenant.id)}&source=billing`
     }));
   return {
     quotaAlertCount: quotaAlerts.length,
@@ -800,6 +803,10 @@ function usageQuotaBillingAlerts(tenantRows) {
       .sort((a, b) => b.outstanding - a.outstanding || b.failedPayments - a.failedPayments)
       .slice(0, 20)
   };
+}
+
+function quotaAlertEventKey(alert) {
+  return `quota-cross:${alert.tenantId}:${alert.metric}:${now().slice(0, 10)}`;
 }
 
 function monthKey(dateValue) {
@@ -1347,6 +1354,93 @@ export class SuperAdminService {
     })).filter(Boolean);
     this.audit(access, "health_alerts.broadcast", "tenant", "bulk", { count: alerts.length });
     return { alerts, events: events.length };
+  }
+
+  dispatchQuotaAlerts(payload = {}, access) {
+    ensureSuperAdmin(access);
+    const overview = this.overview(access);
+    const requestedTenantIds = Array.isArray(payload.tenantIds) ? new Set(payload.tenantIds.filter(Boolean)) : null;
+    const alerts = (overview.usageQuotaBillingAlerts?.quotaAlerts || [])
+      .filter((alert) => alert.severity === "critical")
+      .filter((alert) => !requestedTenantIds || requestedTenantIds.has(alert.tenantId));
+    const tenantsById = new Map(overview.tenants.map((tenant) => [tenant.id, tenant]));
+    const results = alerts.map((alert) => {
+      const tenant = tenantsById.get(alert.tenantId);
+      if (!tenant) return { tenantId: alert.tenantId, metric: alert.metric, status: "tenant_missing" };
+      const eventKey = quotaAlertEventKey(alert);
+      const existing = repositories.messageLogs.list({ limit: 10000 }, { tenantId: alert.tenantId })
+        .find((message) => message.payload?.eventKey === eventKey && message.payload?.source === "super-admin-quota-alert");
+      if (existing) return { tenantId: alert.tenantId, metric: alert.metric, status: "already_queued", messageLogId: existing.id, supportTicketLink: alert.supportTicketLink };
+      const body = `Quota crossed for ${tenant.name}: ${alert.metric} is ${alert.used}/${alert.limit} (${alert.usagePct}%). Support ticket: ${alert.supportTicketLink}`;
+      const email = tenant.ownerEmail
+        ? repositories.messageLogs.create({
+            id: makeId("msg"),
+            branchId: "",
+            channel: "email",
+            recipient: tenant.ownerEmail,
+            message: body,
+            direction: "outbound",
+            status: "queued",
+            payload: {
+              subject: `Quota crossed: ${alert.metric}`,
+              source: "super-admin-quota-alert",
+              eventKey,
+              alert,
+              supportTicketLink: alert.supportTicketLink
+            }
+          }, { tenantId: alert.tenantId })
+        : null;
+      const webhook = repositories.messageLogs.create({
+        id: makeId("msg"),
+        branchId: "",
+        channel: "webhook",
+        recipient: "tenant.quota_crossed",
+        message: JSON.stringify({ eventType: "tenant.quota_crossed", eventKey, alert, supportTicketLink: alert.supportTicketLink }),
+        direction: "outbound",
+        status: "queued",
+        payload: {
+          source: "super-admin-quota-alert",
+          eventType: "tenant.quota_crossed",
+          eventKey,
+          alert,
+          supportTicketLink: alert.supportTicketLink
+        }
+      }, { tenantId: alert.tenantId });
+      const event = realtimeService.broadcast("tenant.quota_crossed", {
+        eventKey,
+        alert,
+        supportTicketLink: alert.supportTicketLink
+      }, {
+        tenantId: alert.tenantId,
+        channel: `tenant:${alert.tenantId}`
+      });
+      this.audit(access, "tenant.quota_alert.dispatched", "tenant", alert.tenantId, {
+        eventKey,
+        metric: alert.metric,
+        used: alert.used,
+        limit: alert.limit,
+        usagePct: alert.usagePct,
+        emailMessageLogId: email?.id || "",
+        webhookMessageLogId: webhook.id,
+        supportTicketLink: alert.supportTicketLink
+      });
+      return {
+        tenantId: alert.tenantId,
+        metric: alert.metric,
+        status: "queued",
+        emailMessageLogId: email?.id || "",
+        webhookMessageLogId: webhook.id,
+        realtimeEventId: event?.id || "",
+        supportTicketLink: alert.supportTicketLink
+      };
+    });
+    const summary = {
+      alerts: alerts.length,
+      queued: results.filter((item) => item.status === "queued").length,
+      skipped: results.filter((item) => item.status !== "queued").length
+    };
+    this.audit(access, "tenant.quota_alert.batch_dispatched", "tenant", "bulk", summary);
+    return { summary, results };
   }
 
   requestActionApproval(payload = {}, access) {

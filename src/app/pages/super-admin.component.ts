@@ -637,7 +637,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <span class="eyebrow">Usage quotas & billing alerts</span>
               <h2>{{ quota.quotaAlertCount }} quota alerts and {{ quota.billingAlertCount }} billing alerts</h2>
             </div>
-            <span class="badge" [style.background]="quota.overLimitCount ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)'" style="color:#fff">{{ quota.overLimitCount }} over limit</span>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="badge" [style.background]="quota.overLimitCount ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)'" style="color:#fff">{{ quota.overLimitCount }} over limit</span>
+              <button class="ghost-button mini" type="button" [disabled]="!quota.overLimitCount || saving()" (click)="dispatchQuotaAlerts()">Auto email/webhook</button>
+            </div>
           </div>
           <div class="dashboard-grid">
             <div class="activity-list">
@@ -645,6 +648,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <div style="min-width:0">
                   <strong>{{ alert.tenantName }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ alert.metric }} · {{ alert.used }}/{{ alert.limit }} · {{ alert.action }}</span>
+                  <a [href]="alert.supportTicketLink" style="display:block;font-size:0.78em;color:var(--accent,#2563eb)">Support ticket link</a>
                 </div>
                 <span style="display:block;height:10px;background:var(--surface-muted,#e5e7eb);border-radius:999px;overflow:hidden">
                   <span [style.width.%]="alert.usagePct > 100 ? 100 : alert.usagePct" [style.background]="healthFlagTone(alert.severity)" style="display:block;height:100%"></span>
@@ -662,6 +666,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <div style="flex:1;min-width:0">
                   <strong>{{ alert.tenantName }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ alert.dunningStatus }} · {{ alert.failedPayments }} failed payments · {{ alert.action }}</span>
+                  <a [href]="alert.supportTicketLink" style="display:block;font-size:0.78em;color:var(--accent,#2563eb)">Support ticket link</a>
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                   <span class="badge" [style.background]="healthFlagTone(alert.severity)" style="color:#fff">{{ alert.severity }}</span>
@@ -1712,6 +1717,20 @@ export class SuperAdminComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to broadcast health alerts');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  dispatchQuotaAlerts(): void {
+    this.saving.set(true);
+    this.api.post('super-admin/quota-alerts/dispatch', {}).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to dispatch quota alerts');
         this.saving.set(false);
       }
     });

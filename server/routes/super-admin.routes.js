@@ -57,6 +57,13 @@ superAdminRouter.post(
 );
 
 superAdminRouter.post(
+  "/super-admin/quota-alerts/dispatch",
+  asyncHandler((req, res) => {
+    res.status(201).json(superAdminService.dispatchQuotaAlerts(req.body, req.access));
+  })
+);
+
+superAdminRouter.post(
   "/super-admin/tenants/:id/impersonation",
   validateBody({ required: ["reason", "confirmation"] }),
   asyncHandler((req, res) => {
