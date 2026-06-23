@@ -1321,13 +1321,23 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 </select>
               </label>
               <label class="field"><span>Open path</span><input formControlName="returnPath" /></label>
+              <label class="field"><span>Branch scope</span><input formControlName="branchId" placeholder="Auto first branch" /></label>
               <label class="field full"><span>Debug reason</span><textarea formControlName="reason"></textarea></label>
               <label class="field"><span>Confirmation</span><input formControlName="confirmation" placeholder="Type IMPERSONATE" /></label>
               <div class="form-actions">
                 <button class="primary-button" type="submit" [disabled]="impersonationForm.invalid || saving()">Start impersonation</button>
               </div>
             </form>
-            <small style="display:block;color:var(--text-muted);margin-top:8px">Creates an audited tenant session for support debugging.</small>
+            <div class="activity-list" *ngIf="impersonationTenant(overview.tenants) as tenant" style="margin-top:12px">
+              <article>
+                <div>
+                  <strong>{{ tenant.name }}</strong>
+                  <span>{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · health {{ tenant.healthScore | number: '1.0-1' }}</span>
+                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">Session will be audited and restricted from refunds, payroll, password changes and destructive deletes.</span>
+                </div>
+                <span class="badge">{{ tenant.drilldown?.tenantUserCount || 0 }} users</span>
+              </article>
+            </div>
           </section>
 
           <section class="form-panel">
@@ -1652,6 +1662,7 @@ export class SuperAdminComponent implements OnInit {
   readonly impersonationForm = this.fb.group({
     tenantId: ['', Validators.required],
     returnPath: ['/'],
+    branchId: [''],
     reason: ['Support debugging', Validators.required],
     confirmation: ['', Validators.required]
   });
@@ -1970,12 +1981,17 @@ export class SuperAdminComponent implements OnInit {
   }
 
   prepareImpersonation(tenant: ApiRecord): void {
-    this.impersonationForm.patchValue({ tenantId: tenant.id });
+    this.impersonationForm.patchValue({ tenantId: tenant.id, branchId: '' });
     if (this.impersonationForm.value.confirmation === 'IMPERSONATE') {
       this.startImpersonation();
       return;
     }
     this.error.set(`Type IMPERSONATE in the impersonation form to debug ${tenant.name}.`);
+  }
+
+  impersonationTenant(tenants: ApiRecord[] = []): ApiRecord | null {
+    const tenantId = this.impersonationForm.value.tenantId || '';
+    return (tenants || []).find((tenant) => tenant.id === tenantId) || null;
   }
 
   startImpersonation(): void {
@@ -1986,7 +2002,8 @@ export class SuperAdminComponent implements OnInit {
     this.api.post<ApiRecord>(`super-admin/tenants/${tenantId}/impersonation`, {
       reason: this.impersonationForm.value.reason || '',
       confirmation: this.impersonationForm.value.confirmation || '',
-      returnPath: this.impersonationForm.value.returnPath || '/'
+      returnPath: this.impersonationForm.value.returnPath || '/',
+      branchId: this.impersonationForm.value.branchId || ''
     }).subscribe({
       next: (result) => {
         const currentSession = localStorage.getItem('aura.authSession') || '';
@@ -1996,6 +2013,9 @@ export class SuperAdminComponent implements OnInit {
           tenantName: result.tenantName,
           auditId: result.auditId,
           expiresAt: result.expiresAt,
+          scope: result.scope || {},
+          restrictions: result.restrictions || [],
+          banner: result.banner || '',
           startedAt: new Date().toISOString()
         }));
         this.authSession.setSession(result.session);

@@ -1956,7 +1956,8 @@ export class SuperAdminService {
     const users = repositories.tenantUsers.list({ limit: 10000 }, { tenantId });
     const owner = users.find((user) => ["owner", "admin"].includes(String(user.role || "").toLowerCase()) && (!user.status || user.status === "active"))
       || users.find((user) => !user.status || user.status === "active");
-    const branch = db.prepare("SELECT id FROM branches WHERE tenantId = ? ORDER BY createdAt ASC LIMIT 1").get(tenantId);
+    const branch = db.prepare("SELECT id FROM branches WHERE tenantId = @tenantId ORDER BY createdAt ASC LIMIT 1").get({ tenantId });
+    const branchId = String(payload.branchId || branch?.id || "");
     const impersonatedUser = owner || {
       id: `impersonation_${tenant.id}`,
       name: "Super Admin Impersonation",
@@ -1973,7 +1974,7 @@ export class SuperAdminService {
         role: owner?.role || "owner",
         branchIds: Array.isArray(impersonatedUser.branchIds) ? impersonatedUser.branchIds : branch?.id ? [branch.id] : []
       },
-      branchId: payload.branchId || branch?.id || "",
+      branchId,
       deviceId: `impersonation:${access.userId || "super-admin"}`
     });
     const expiresAt = new Date(Date.now() + Number(session.expiresIn || 0) * 1000).toISOString();
@@ -1982,6 +1983,8 @@ export class SuperAdminService {
       confirmation,
       impersonatedUserId: impersonatedUser.id,
       impersonatedRole: session.user.role,
+      branchId,
+      returnPath: payload.returnPath || "/",
       expiresAt,
       restrictions: ["refunds", "staff_payroll", "password_change", "destructive_delete"]
     });
@@ -1992,6 +1995,12 @@ export class SuperAdminService {
       launchUrl: payload.returnPath || "/",
       expiresAt,
       auditId: audit.id,
+      scope: {
+        impersonatedUserId: impersonatedUser.id,
+        impersonatedUserEmail: impersonatedUser.email || "",
+        impersonatedRole: session.user.role,
+        branchId
+      },
       banner: `Impersonating ${tenant.name} for support debugging`,
       restrictions: ["Refunds require approval", "Payroll and password changes remain protected", "All actions are audit logged"]
     };
