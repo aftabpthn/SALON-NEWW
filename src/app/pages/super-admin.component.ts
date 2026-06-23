@@ -792,7 +792,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   </td>
                   <td>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}<small>{{ tenant.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} usage</small></td>
                   <td>{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ tenant.usage.clients }} clients · {{ tenant.usage.appointments }} bookings</td>
+                  <td>
+                    {{ tenant.usage.clients }} clients · {{ tenant.usage.appointments }} bookings
+                    <small style="display:block;color:var(--text-muted)">
+                      {{ tenant.usage.branches }}/{{ tenant.tenantLimits?.branches }} branches · {{ tenant.usage.staff }}/{{ tenant.tenantLimits?.staff }} staff · {{ tenant.usage.clients }}/{{ tenant.tenantLimits?.clients }} clients
+                    </small>
+                  </td>
                   <td>{{ tenant.healthScore | number: '1.0-1' }}</td>
                   <td>
                     <span class="badge" [style.background]="healthFlagTone(tenant.healthFlag?.severity)" style="color:#fff">
@@ -803,6 +808,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   <td>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); openTenantDrilldown(tenant.id)">Profile</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); selectTenant(tenant.id)">360</button>
+                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); editTenantLimits(tenant)">Limits</button>
+                    <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareTenantFeatureOverride(tenant)">Override</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); prepareImpersonation(tenant)">Impersonate</button>
                     <button class="ghost-button mini" type="button" (click)="$event.stopPropagation(); toggleTenant(tenant)">
                       {{ tenant.subscriptionStatus === 'suspended' ? 'Reactivate' : 'Suspend' }}
@@ -939,6 +946,68 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </section>
 
         <div class="dashboard-grid">
+          <section class="form-panel">
+            <h3>Tenant limits</h3>
+            <form [formGroup]="tenantLimitsForm" (ngSubmit)="saveTenantLimits()">
+              <label class="field">
+                <span>Tenant</span>
+                <select formControlName="tenantId" (change)="loadTenantLimitForm()">
+                  <option value="">Select tenant</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Branches: {{ tenantLimitsForm.value.branches }}</span>
+                <input type="range" min="1" max="100" formControlName="branches" />
+              </label>
+              <label class="field">
+                <span>Staff: {{ tenantLimitsForm.value.staff }}</span>
+                <input type="range" min="1" max="500" formControlName="staff" />
+              </label>
+              <label class="field">
+                <span>Clients: {{ tenantLimitsForm.value.clients }}</span>
+                <input type="range" min="100" max="100000" step="100" formControlName="clients" />
+              </label>
+              <label class="field">
+                <span>Support tier</span>
+                <select formControlName="supportTier">
+                  <option value="standard">Standard</option>
+                  <option value="priority">Priority</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </label>
+              <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
+              <div class="form-actions">
+                <button class="primary-button" type="submit" [disabled]="tenantLimitsForm.invalid || saving()">Save tenant limits</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="form-panel">
+            <h3>Per-Tenant Feature Override</h3>
+            <form [formGroup]="tenantFeatureOverrideForm" (ngSubmit)="saveTenantFeatureOverride()">
+              <label class="field">
+                <span>Tenant</span>
+                <select formControlName="tenantId">
+                  <option value="">Select tenant</option>
+                  <option *ngFor="let tenant of overview.tenants" [value]="tenant.id">{{ tenant.name }}</option>
+                </select>
+              </label>
+              <label class="field"><span>Feature key</span><input formControlName="key" /></label>
+              <label class="field"><span>Feature name</span><input formControlName="name" /></label>
+              <label class="field">
+                <span>Rollout %: {{ tenantFeatureOverrideForm.value.rolloutPercentage }}</span>
+                <input type="range" min="0" max="100" formControlName="rolloutPercentage" />
+              </label>
+              <label class="field check-line"><input type="checkbox" formControlName="enabled" /><span>Enabled for tenant</span></label>
+              <label class="field check-line"><input type="checkbox" formControlName="killSwitch" /><span>Kill switch</span></label>
+              <label class="field full"><span>Description</span><textarea formControlName="description"></textarea></label>
+              <div class="form-actions">
+                <button class="primary-button" type="submit" [disabled]="tenantFeatureOverrideForm.invalid || saving()">Save override</button>
+              </div>
+            </form>
+          </section>
+
           <section class="form-panel">
             <h3>Impersonate tenant</h3>
             <form [formGroup]="impersonationForm" (ngSubmit)="startImpersonation()">
@@ -1183,6 +1252,25 @@ export class SuperAdminComponent implements OnInit {
     note: ['', Validators.required]
   });
 
+  readonly tenantLimitsForm = this.fb.group({
+    tenantId: ['', Validators.required],
+    branches: [3],
+    staff: [25],
+    clients: [5000],
+    supportTier: ['standard'],
+    reason: ['Enterprise limit override']
+  });
+
+  readonly tenantFeatureOverrideForm = this.fb.group({
+    tenantId: ['', Validators.required],
+    key: ['ai.marketing', Validators.required],
+    name: ['Marketing automation override', Validators.required],
+    rolloutPercentage: [100],
+    enabled: [true],
+    killSwitch: [false],
+    description: ['Tenant-specific feature override']
+  });
+
   readonly impersonationForm = this.fb.group({
     tenantId: ['', Validators.required],
     returnPath: ['/'],
@@ -1235,7 +1323,13 @@ export class SuperAdminComponent implements OnInit {
     this.api.list<ApiRecord>('super-admin/overview').subscribe({
       next: (overview) => {
         this.overview.set(overview);
-        if (!this.selectedTenantId() && overview?.tenants?.length) this.selectedTenantId.set(overview.tenants[0].id);
+        if (!this.selectedTenantId() && overview?.tenants?.length) {
+          this.selectedTenantId.set(overview.tenants[0].id);
+          this.editTenantLimits(overview.tenants[0]);
+        }
+        const limitTenantId = this.tenantLimitsForm.value.tenantId || this.selectedTenantId();
+        const limitTenant = (overview?.tenants || []).find((tenant: ApiRecord) => tenant.id === limitTenantId);
+        if (limitTenant) this.editTenantLimits(limitTenant);
         this.loading.set(false);
       },
       error: (error) => {
@@ -1275,6 +1369,83 @@ export class SuperAdminComponent implements OnInit {
   openTenantDrilldown(tenantId: string): void {
     this.selectedTenantId.set(tenantId);
     this.drilldownOpen.set(true);
+  }
+
+  editTenantLimits(tenant: ApiRecord): void {
+    this.selectedTenantId.set(tenant.id);
+    this.tenantLimitsForm.patchValue({
+      tenantId: tenant.id,
+      branches: Number(tenant.tenantLimits?.branches || 3),
+      staff: Number(tenant.tenantLimits?.staff || 25),
+      clients: Number(tenant.tenantLimits?.clients || 5000),
+      supportTier: tenant.tenantLimits?.supportTier || 'standard',
+      reason: 'Enterprise limit override'
+    });
+  }
+
+  loadTenantLimitForm(): void {
+    const tenantId = this.tenantLimitsForm.value.tenantId || '';
+    const tenant = (this.overview()?.tenants || []).find((item: ApiRecord) => item.id === tenantId);
+    if (tenant) this.editTenantLimits(tenant);
+  }
+
+  saveTenantLimits(): void {
+    if (this.tenantLimitsForm.invalid) return;
+    this.saving.set(true);
+    const tenantId = this.tenantLimitsForm.value.tenantId || '';
+    this.api.patch(`super-admin/tenants/${tenantId}/limits`, {
+      branches: this.tenantLimitsForm.value.branches,
+      staff: this.tenantLimitsForm.value.staff,
+      clients: this.tenantLimitsForm.value.clients,
+      supportTier: this.tenantLimitsForm.value.supportTier,
+      reason: this.tenantLimitsForm.value.reason || ''
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to save tenant limits');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  prepareTenantFeatureOverride(tenant: ApiRecord): void {
+    this.selectedTenantId.set(tenant.id);
+    this.tenantFeatureOverrideForm.patchValue({ tenantId: tenant.id });
+    this.toggleForm.patchValue({ scope: 'tenant', tenantId: tenant.id });
+  }
+
+  saveTenantFeatureOverride(): void {
+    if (this.tenantFeatureOverrideForm.invalid) return;
+    this.saving.set(true);
+    const formValue = this.tenantFeatureOverrideForm.value;
+    const rolloutPercentage = Math.max(0, Math.min(100, Number(formValue.rolloutPercentage || 0)));
+    this.api.post('super-admin/feature-toggles', {
+      key: formValue.key,
+      name: formValue.name,
+      scope: 'tenant',
+      tenantId: formValue.tenantId,
+      rolloutPercentage,
+      enabled: Boolean(formValue.enabled),
+      killSwitch: Boolean(formValue.killSwitch),
+      description: formValue.description || '',
+      rules: {
+        rolloutPercentage,
+        killSwitch: Boolean(formValue.killSwitch),
+        baseKey: formValue.key
+      }
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to save tenant feature override');
+        this.saving.set(false);
+      }
+    });
   }
 
   prepareImpersonation(tenant: ApiRecord): void {
@@ -1526,7 +1697,7 @@ export class SuperAdminComponent implements OnInit {
 
   editToggle(toggle: ApiRecord): void {
     this.toggleForm.patchValue({
-      key: toggle.key || '',
+      key: toggle.rules?.baseKey || String(toggle.key || '').split('::tenant::')[0].split('::plan::')[0],
       name: toggle.name || '',
       scope: toggle.scope || 'global',
       tenantId: toggle.tenantId || '',

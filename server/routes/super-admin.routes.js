@@ -34,6 +34,13 @@ superAdminRouter.patch(
   })
 );
 
+superAdminRouter.patch(
+  "/super-admin/tenants/:id/limits",
+  asyncHandler((req, res) => {
+    res.json(superAdminService.updateTenantLimits(req.params.id, req.body, req.access));
+  })
+);
+
 superAdminRouter.post(
   "/super-admin/tenants/bulk-action",
   validateBody({ required: ["action", "tenantIds", "reason", "confirmation"] }),

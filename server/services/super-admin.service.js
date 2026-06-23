@@ -9,6 +9,7 @@ const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
 const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const pct = (value) => Math.round((Number(value) || 0) * 100) / 100;
+const TENANT_LIMITS_KEY = "superAdminTenantLimits";
 
 function ensureSuperAdmin(access = {}) {
   if (access.role !== "superAdmin") throw forbidden("Super admin access is required");
@@ -25,6 +26,42 @@ function sumRows(items, selector) {
 
 function share(part, total) {
   return total ? pct((Number(part || 0) / total) * 100) : 0;
+}
+
+function tenantLimitValue(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : fallback;
+}
+
+function planLimitsFor(plan = {}) {
+  const limits = plan?.limits || {};
+  return {
+    branches: tenantLimitValue(limits.branches, 3),
+    staff: tenantLimitValue(limits.staff, 25),
+    clients: tenantLimitValue(limits.clients, 5000),
+    monthlyAppointments: tenantLimitValue(limits.monthlyAppointments, 8000),
+    campaigns: tenantLimitValue(limits.campaigns, 50),
+    supportTier: limits.supportTier || "standard"
+  };
+}
+
+function tenantLimitsFor(plan, override = {}, usage = {}) {
+  const limits = { ...planLimitsFor(plan), ...(override || {}) };
+  return {
+    ...limits,
+    utilization: {
+      branches: share(usage.branches, Math.max(1, limits.branches)),
+      staff: share(usage.staff, Math.max(1, limits.staff)),
+      clients: share(usage.clients, Math.max(1, limits.clients))
+    }
+  };
+}
+
+function scopedFeatureKey(key, scope, tenantId = "", planId = "") {
+  const cleanKey = String(key || "").trim();
+  if (scope === "tenant" && tenantId && !cleanKey.includes("::tenant::")) return `${cleanKey}::tenant::${tenantId}`;
+  if (scope === "plan" && planId && !cleanKey.includes("::plan::")) return `${cleanKey}::plan::${planId}`;
+  return cleanKey;
 }
 
 function tenantHealth(tenant, rows) {
@@ -936,6 +973,10 @@ export class SuperAdminService {
     const auditRows = repositories.superAdminAudit.list({ limit: 1000 }).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
     const subscriptionByTenant = new Map(subscriptions.map((sub) => [sub.tenantId, sub]));
+    const tenantLimitByTenant = new Map(repositories.settings
+      .list({ limit: 10000 })
+      .filter((setting) => setting.key === TENANT_LIMITS_KEY)
+      .map((setting) => [setting.tenantId, setting.value || {}]));
     const tenantRows = tenants.map((tenant) => {
       const tenantSales = sales.filter((sale) => sale.tenantId === tenant.id);
       const tenantInvoices = invoices.filter((invoice) => invoice.tenantId === tenant.id);
@@ -973,6 +1014,7 @@ export class SuperAdminService {
         transactionRevenue: money(sumRows(tenantSales, (sale) => sale.total)),
         outstanding,
         usage,
+        tenantLimits: tenantLimitsFor(plan, tenantLimitByTenant.get(tenant.id), usage),
         healthBreakdown: health,
         healthScore: tenantHealth(tenant, usage),
         subscription: subscriptionByTenant.get(tenant.id) || null
@@ -1111,6 +1153,32 @@ export class SuperAdminService {
       : repositories.subscriptions.create({ id: makeId("sub"), ...subscriptionPayload }, { tenantId });
     this.audit(access, "tenant.subscription.updated", "tenant", tenantId, { planId: subscriptionPayload.planId, status: subscriptionPayload.status, reason: safety.reason, confirmation: safety.confirmation });
     return { tenant: updatedTenant, subscription, plan: plan || repositories.subscriptionPlans.getById(updatedTenant.planId) };
+  }
+
+  updateTenantLimits(tenantId, payload = {}, access) {
+    ensureSuperAdmin(access);
+    const tenant = repositories.tenants.getById(tenantId);
+    if (!tenant) throw notFound("Tenant not found");
+    const plan = repositories.subscriptionPlans.getById(tenant.planId);
+    const planDefaults = planLimitsFor(plan);
+    const current = repositories.settings.list({ limit: 10000 }, { tenantId })
+      .find((setting) => setting.key === TENANT_LIMITS_KEY);
+    const limits = {
+      ...planDefaults,
+      ...(current?.value || {}),
+      branches: tenantLimitValue(payload.branches, planDefaults.branches),
+      staff: tenantLimitValue(payload.staff, planDefaults.staff),
+      clients: tenantLimitValue(payload.clients, planDefaults.clients),
+      supportTier: payload.supportTier || current?.value?.supportTier || planDefaults.supportTier
+    };
+    const record = current
+      ? repositories.settings.update(current.id, { value: limits, scope: "tenant" }, { tenantId })
+      : repositories.settings.create({ id: makeId("set"), key: TENANT_LIMITS_KEY, value: limits, scope: "tenant" }, { tenantId });
+    this.audit(access, "tenant.limits.updated", "tenant", tenantId, {
+      limits,
+      reason: payload.reason || ""
+    });
+    return { tenantId, limits: record.value };
   }
 
   bulkTenantAction(payload = {}, access) {
@@ -1321,9 +1389,11 @@ export class SuperAdminService {
     if (scope === "plan" && !payload.planId) throw badRequest("planId is required for plan-scoped flags");
     if (payload.tenantId && !repositories.tenants.getById(payload.tenantId)) throw badRequest("Tenant target does not exist");
     if (payload.planId && !repositories.subscriptionPlans.getById(payload.planId)) throw badRequest("Plan target does not exist");
-    const existing = repositories.featureToggles.list({ limit: 10000 }).find((toggle) => toggle.key === payload.key);
+    const key = scopedFeatureKey(payload.key, scope, payload.tenantId, payload.planId);
+    const existing = repositories.featureToggles.list({ limit: 10000 }).find((toggle) => toggle.key === key);
     const rules = {
       ...normalizeRules(payload.rules),
+      baseKey: payload.key,
       rolloutPercentage: clampPercent(payload.rolloutPercentage ?? normalizeRules(payload.rules).rolloutPercentage),
       expiresAt: payload.expiresAt || normalizeRules(payload.rules).expiresAt || "",
       killSwitch: Boolean(payload.killSwitch ?? normalizeRules(payload.rules).killSwitch),
@@ -1332,7 +1402,7 @@ export class SuperAdminService {
       updatedAt: now()
     };
     const record = {
-      key: payload.key,
+      key,
       name: payload.name,
       description: payload.description || "",
       scope,
