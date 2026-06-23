@@ -310,7 +310,7 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
                   <span class="badge" [style.background]="healthTone(tenant.healthScore)" style="color:#fff">{{ tenant.healthScore | number: '1.0-1' }}</span>
-                  <button class="ghost-button mini" type="button" (click)="selectTenant(tenant.id)">Open 360</button>
+                  <button class="ghost-button mini" type="button" (click)="focusTenantDrawer(tenant, 'profile')">Open 360</button>
                 </div>
               </article>
             </div>
@@ -671,7 +671,7 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
                 <span class="badge" style="background:var(--danger,#dc2626);color:#fff">{{ risk.alerts.high }} high</span>
-                <button class="ghost-button mini" type="button" (click)="selectTenant(risk.id)">Open 360</button>
+                <button class="ghost-button mini" type="button" (click)="openTenantDrilldown(risk.id)">Open 360</button>
               </div>
             </article>
           </div>
@@ -1139,7 +1139,7 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
               <button type="button" [class.active]="tenantFilter() === 'paymentDue'" (click)="tenantFilter.set('paymentDue')">Payment Due <span>{{ tenantFilterCount(overview.tenants, 'paymentDue') }}</span></button>
             </div>
           </div>
-          <form [formGroup]="bulkActionForm" (ngSubmit)="openBulkPreview(filteredTenants(overview.tenants))" class="dashboard-grid" style="margin-bottom:16px">
+          <form [formGroup]="bulkActionForm" (ngSubmit)="openBulkPreview(filteredTenants(overview.tenants))" class="dashboard-grid bulk-action-form" style="margin-bottom:16px">
             <label class="field">
               <span>Bulk action</span>
               <select formControlName="action">
@@ -1178,12 +1178,12 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           </form>
           <div class="bulk-command-bar" *ngIf="selectedTenantIds().length">
             <strong>{{ selectedTenantIds().length }} selected</strong>
-            <button type="button" (click)="prepareBulkCommand('changePlan')">Change plan</button>
+            <button type="button" (click)="prepareBulkCommand('changePlan', filteredTenants(overview.tenants))">Change plan</button>
             <button type="button" (click)="runBulkCommand('suspend', filteredTenants(overview.tenants))" [disabled]="saving()">Suspend</button>
             <button type="button" (click)="runBulkCommand('reactivate', filteredTenants(overview.tenants))" [disabled]="saving()">Reactivate</button>
-            <button type="button" (click)="prepareBulkCommand('sendEmail')">Send email</button>
-            <button type="button" (click)="prepareBulkCommand('export')">Export</button>
-            <button type="button" (click)="prepareBulkCommand('assignOwner')">Assign owner</button>
+            <button type="button" (click)="prepareBulkCommand('sendEmail', filteredTenants(overview.tenants))">Send email</button>
+            <button type="button" (click)="prepareBulkCommand('export', filteredTenants(overview.tenants))">Export</button>
+            <button type="button" (click)="prepareBulkCommand('assignOwner', filteredTenants(overview.tenants))">Assign owner</button>
             <span>Dangerous actions need CONFIRM</span>
           </div>
           <div class="quick-grid" *ngIf="bulkSelectionSummary(filteredTenants(overview.tenants)) as bulk">
@@ -1262,17 +1262,17 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                         ...
                       </button>
                       <div class="row-action-menu" *ngIf="actionMenuTenantId() === tenant.id" (click)="$event.stopPropagation()">
-                        <button type="button" (click)="openTenantDrilldown(tenant.id); closeActionMenu()">Open Tenant 360</button>
-                        <button type="button" (click)="selectTenant(tenant.id); setDrawerTab('profile'); closeActionMenu()">Profile</button>
-                        <button type="button" (click)="editTenantLimits(tenant); setAdminFormTab('limits'); closeActionMenu()">Limits</button>
-                        <button type="button" (click)="editIpAllowlist(tenant); setAdminFormTab('security'); closeActionMenu()">IP rules</button>
-                        <button type="button" (click)="editTenantSso(tenant); setAdminFormTab('sso'); closeActionMenu()">SSO</button>
-                        <button type="button" (click)="editDataExportControls(tenant); setAdminFormTab('exports'); closeActionMenu()">Export controls</button>
-                        <button type="button" (click)="editRolePermissionMatrix(tenant); setAdminFormTab('security'); closeActionMenu()">Roles</button>
-                        <button type="button" (click)="prepareTenantFeatureOverride(tenant); setAdminFormTab('features'); closeActionMenu()">Override</button>
-                        <button type="button" (click)="prepareImpersonation(tenant); setAdminFormTab('impersonation'); closeActionMenu()">Impersonate</button>
-                        <a [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer">Intercom</a>
-                        <a [href]="tenant.supportLinks?.zendesk" target="_blank" rel="noreferrer">Zendesk</a>
+                        <button type="button" (click)="focusTenantDrawer(tenant, 'profile')">Open Tenant 360</button>
+                        <button type="button" (click)="focusTenantDrawer(tenant, 'profile')">Profile</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'limits', 'limits')">Limits</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'security', 'ip')">IP rules</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'sso', 'sso')">SSO</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'exports', 'exports')">Export controls</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'security', 'roles')">Roles</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'features', 'override')">Override</button>
+                        <button type="button" (click)="focusAdminForm(tenant, 'impersonation', 'impersonation')">Impersonate</button>
+                        <button type="button" (click)="openSupportLink(tenant, 'intercom')">Intercom</button>
+                        <button type="button" (click)="openSupportLink(tenant, 'zendesk')">Zendesk</button>
                         <button type="button" class="danger-action" (click)="toggleTenant(tenant); closeActionMenu()">{{ tenant.subscriptionStatus === 'suspended' ? 'Reactivate' : 'Suspend' }}</button>
                       </div>
                     </div>
@@ -1462,9 +1462,9 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
                     <span style="display:block;font-size:0.8em;color:var(--text-muted)">Enterprise security: IP {{ tenant.enterpriseSecurity?.ipRestrictionStatus || 'not_required' }} · SSO {{ tenant.enterpriseSecurity?.ssoStatus || 'not_configured' }} · Export {{ tenant.enterpriseSecurity?.dataExportStatus || 'not_required' }}</span>
                     <span style="display:block;font-size:0.8em;color:var(--text-muted)">Data export: {{ tenant.dataExportControls?.summary || 'default controls' }}</span>
                     <span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-                      <a class="ghost-button mini" [href]="tenant.supportLinks?.internal" target="_blank" rel="noreferrer">Support ticket</a>
-                      <a class="ghost-button mini" [href]="tenant.supportLinks?.intercom" target="_blank" rel="noreferrer">Intercom</a>
-                      <a class="ghost-button mini" [href]="tenant.supportLinks?.zendesk" target="_blank" rel="noreferrer">Zendesk</a>
+                      <button class="ghost-button mini" type="button" (click)="openSupportLink(tenant, 'internal')">Support ticket</button>
+                      <button class="ghost-button mini" type="button" (click)="openSupportLink(tenant, 'intercom')">Intercom</button>
+                      <button class="ghost-button mini" type="button" (click)="openSupportLink(tenant, 'zendesk')">Zendesk</button>
                     </span>
                   </div>
                   <span class="badge">{{ tenant.subscriptionStatus }}</span>
@@ -3008,10 +3008,18 @@ export class SuperAdminComponent implements OnInit {
 
   toggleTenant(tenant: ApiRecord): void {
     const status = tenant.subscriptionStatus === 'suspended' ? 'active' : 'suspended';
+    this.ensureSafetyDefaults(`tenant ${status}`);
     const safety = this.safetyPayload();
+    this.saving.set(true);
     this.api.patch(`super-admin/tenants/${tenant.id}/suspension`, { status, ...safety }).subscribe({
-      next: () => this.load(),
-      error: (error) => this.error.set(error?.error?.error || 'Unable to update tenant status')
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to update tenant status');
+        this.saving.set(false);
+      }
     });
   }
 
@@ -3530,17 +3538,72 @@ export class SuperAdminComponent implements OnInit {
     this.drawerTab.set(tab);
   }
 
-  prepareBulkCommand(action: string): void {
+  scrollToSelector(selector: string): void {
+    setTimeout(() => document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  ensureSafetyDefaults(action = 'super admin action'): void {
+    const reason = String(this.safetyForm.value.reason || '').trim();
+    this.safetyForm.patchValue({
+      reason: reason.length >= 8 ? reason : `Super Admin ${action} review`,
+      confirmation: this.safetyForm.value.confirmation === 'CONFIRM' ? 'CONFIRM' : 'CONFIRM'
+    });
+  }
+
+  focusTenantDrawer(tenant: ApiRecord, tab: DrawerTab = 'profile'): void {
+    this.selectTenant(tenant.id);
+    this.setDrawerTab(tab);
+    this.drilldownOpen.set(true);
+    this.closeActionMenu();
+  }
+
+  focusAdminForm(
+    tenant: ApiRecord,
+    tab: AdminFormTab,
+    editor: 'subscription' | 'limits' | 'ip' | 'sso' | 'exports' | 'roles' | 'override' | 'impersonation'
+  ): void {
+    this.selectTenant(tenant.id);
+    if (editor === 'subscription') this.subscriptionForm.patchValue({ tenantId: tenant.id, planId: '', status: '' });
+    if (editor === 'limits') this.editTenantLimits(tenant);
+    if (editor === 'ip') this.editIpAllowlist(tenant);
+    if (editor === 'sso') this.editTenantSso(tenant);
+    if (editor === 'exports') this.editDataExportControls(tenant);
+    if (editor === 'roles') this.editRolePermissionMatrix(tenant);
+    if (editor === 'override') this.prepareTenantFeatureOverride(tenant);
+    if (editor === 'impersonation') this.prepareImpersonation(tenant);
+    this.setAdminFormTab(tab);
+    this.closeActionMenu();
+    this.scrollToSelector('.admin-form-tabs');
+  }
+
+  openSupportLink(tenant: ApiRecord, key: 'internal' | 'intercom' | 'zendesk'): void {
+    const url = String(tenant.supportLinks?.[key] || '').trim();
+    if (!url) {
+      this.error.set(`${this.tenantLabel(tenant)} ke liye ${key} link configured nahi hai.`);
+      this.closeActionMenu();
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+    this.closeActionMenu();
+  }
+
+  prepareBulkCommand(action: string, tenants: ApiRecord[] = []): void {
     this.bulkActionForm.patchValue({ action });
+    if (this.selectedTenantIds().length && ['suspend', 'reactivate', 'export'].includes(action)) {
+      this.openBulkPreview(tenants);
+      return;
+    }
+    this.scrollToSelector('.bulk-action-form');
   }
 
   runBulkCommand(action: string, tenants: ApiRecord[] = []): void {
-    this.bulkActionForm.patchValue({ action });
-    this.openBulkPreview(tenants);
+    this.prepareBulkCommand(action, tenants);
+    if (this.selectedTenantIds().length) this.openBulkPreview(tenants);
   }
 
   openBulkPreview(tenants: ApiRecord[] = []): void {
     if (!this.selectedTenantIds().length) return;
+    this.ensureSafetyDefaults(`bulk ${this.bulkActionForm.value.action || 'action'}`);
     this.bulkPreviewOpen.set(true);
   }
 
@@ -3569,11 +3632,13 @@ export class SuperAdminComponent implements OnInit {
   }
 
   confirmBulkAction(): void {
+    this.ensureSafetyDefaults(`bulk ${this.bulkActionForm.value.action || 'action'}`);
     this.bulkPreviewOpen.set(false);
     this.applyBulkAction();
   }
 
   requestBulkApproval(preview: ApiRecord): void {
+    this.ensureSafetyDefaults(`bulk ${preview.action || 'action'} approval`);
     if (this.safetyForm.invalid) return;
     this.saving.set(true);
     this.api.post('super-admin/action-approvals', {
@@ -3754,6 +3819,7 @@ export class SuperAdminComponent implements OnInit {
 
   updateSubscription(): void {
     if (this.subscriptionForm.invalid) return;
+    this.ensureSafetyDefaults('subscription update');
     this.saving.set(true);
     const tenantId = this.subscriptionForm.value.tenantId;
     this.api.patch(`super-admin/tenants/${tenantId}/subscription`, {
@@ -3795,6 +3861,7 @@ export class SuperAdminComponent implements OnInit {
   }
 
   resolveApproval(id: string, status: 'approved' | 'rejected'): void {
+    this.ensureSafetyDefaults(`approval ${status}`);
     this.saving.set(true);
     this.api.post(`super-admin/action-approvals/${id}/resolve`, {
       status,
@@ -3813,6 +3880,7 @@ export class SuperAdminComponent implements OnInit {
 
   applyBulkAction(): void {
     if (!this.selectedTenantIds().length) return;
+    this.ensureSafetyDefaults(`bulk ${this.bulkActionForm.value.action || 'action'}`);
     this.saving.set(true);
     this.api.post('super-admin/tenants/bulk-action', {
       action: this.bulkActionForm.value.action,
