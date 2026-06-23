@@ -124,6 +124,7 @@ import { happyHoursControlTowerRouter, happyHoursPublicOffersRouter } from "./ro
 import { happyHoursElasticityRouter } from "./routes/happy-hours-elasticity.routes.js";
 import { happyHoursFraudGuardRouter } from "./routes/happy-hours-fraud-guard.routes.js";
 import { happyHoursInventoryAwareRouter } from "./routes/happy-hours-inventory-aware.routes.js";
+import { happyHoursLeadTimeRouter } from "./routes/happy-hours-lead-time.routes.js";
 import { happyHoursLifecycleRouter } from "./routes/happy-hours-lifecycle.routes.js";
 import { happyHoursMarketAwareRouter } from "./routes/happy-hours-market-aware.routes.js";
 import { happyHoursOfferHealthRouter } from "./routes/happy-hours-offer-health.routes.js";
@@ -313,6 +314,7 @@ export function createApp() {
   app.use("/api/v1/happy-hours-elasticity", happyHoursElasticityRouter);
   app.use("/api/v1/happy-hours-fraud-guard", happyHoursFraudGuardRouter);
   app.use("/api/v1/happy-hours-inventory-aware", happyHoursInventoryAwareRouter);
+  app.use("/api/v1/happy-hours-lead-time", happyHoursLeadTimeRouter);
   app.use("/api/v1/happy-hours-lifecycle", happyHoursLifecycleRouter);
   app.use("/api/v1/happy-hours-market-aware", happyHoursMarketAwareRouter);
   app.use("/api/v1/happy-hours-offer-health", happyHoursOfferHealthRouter);
@@ -431,6 +433,7 @@ export function createApp() {
   app.use("/api/happy-hours-elasticity", happyHoursElasticityRouter);
   app.use("/api/happy-hours-fraud-guard", happyHoursFraudGuardRouter);
   app.use("/api/happy-hours-inventory-aware", happyHoursInventoryAwareRouter);
+  app.use("/api/happy-hours-lead-time", happyHoursLeadTimeRouter);
   app.use("/api/happy-hours-lifecycle", happyHoursLifecycleRouter);
   app.use("/api/happy-hours-market-aware", happyHoursMarketAwareRouter);
   app.use("/api/happy-hours-offer-health", happyHoursOfferHealthRouter);

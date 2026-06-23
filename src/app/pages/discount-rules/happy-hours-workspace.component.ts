@@ -16,6 +16,7 @@ import { ElasticityProfitPricingComponent } from './elasticity-profit-pricing.co
 import { HappyHoursFraudGuardComponent } from './fraud-guard.component';
 import { HappyHoursControlTowerComponent } from './happy-hours-control-tower.component';
 import { InventoryAwareOffersComponent } from './inventory-aware-offers.component';
+import { LeadTimeOffersComponent } from './lead-time-offers.component';
 import { MarketAwareOffersComponent } from './market-aware-offers.component';
 import { OfferAutoSunsetComponent } from './offer-auto-sunset.component';
 import { OfferHealthScoreComponent } from './offer-health-score.component';
@@ -48,6 +49,7 @@ type WorkspaceKey =
   | 'weatherEvent'
   | 'marketAware'
   | 'channelAware'
+  | 'leadTime'
   | 'incentives'
   | 'lifecycle'
   | 'roi'
@@ -97,6 +99,7 @@ type WorkspaceItem = {
     HappyHoursFraudGuardComponent,
     HappyHoursControlTowerComponent,
     InventoryAwareOffersComponent,
+    LeadTimeOffersComponent,
     MarketAwareOffersComponent,
     OfferAutoSunsetComponent,
     OfferHealthScoreComponent,
@@ -138,6 +141,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
     { key: 'weatherEvent', label: 'Weather/Event Offers', source: 'weather + local events + demand', note: 'rain/festival pricing', value: (m) => `${m.weatherEvent || 0}`, status: (m) => Number(m.weatherEventRisk || 0) ? 'warn' : 'ready' },
     { key: 'marketAware', label: 'Market-Aware Offers', source: 'competitor prices + occupancy', note: 'market-match pricing', value: (m) => `${m.marketAware || 0}`, status: (m) => Number(m.marketAbove || 0) ? 'warn' : 'ready' },
     { key: 'channelAware', label: 'Channel-Aware Offers', source: 'source channel + fee + conversion', note: 'source-wise pricing', value: (m) => `${m.channelAware || 0}`, status: (m) => Number(m.channelRisk || 0) ? 'warn' : 'ready' },
+    { key: 'leadTime', label: 'Lead-Time Offers', source: 'booking lead time + occupancy', note: 'last-minute fill', value: (m) => `${m.leadTime || 0}`, status: (m) => Number(m.leadTimeUrgent || 0) ? 'warn' : 'ready' },
     { key: 'incentives', label: 'Staff Incentives', source: 'staffDiscountIncentives', note: 'conversion payout', value: (m) => `${m.incentives || 0}`, status: () => 'ready' },
     { key: 'lifecycle', label: 'Offer Lifecycle', source: 'offer lifecycle + ROI', note: 'idea to report', value: (m) => `${m.lifecycle || 0}`, status: () => 'ready' },
     { key: 'roi', label: 'Offer ROI Score', source: 'offerRoiEvents', note: 'business result', value: (m) => `${m.roiOffers || 0} offers`, status: (m) => m.roiOffers ? 'live' : 'ready' },
@@ -183,6 +187,7 @@ export class HappyHoursWorkspaceComponent implements OnInit {
       weatherEvent: this.safeRows('happy-hours-weather-event/suggestions', { limit: 25 }),
       marketAware: this.safeRows('happy-hours-market-aware/suggestions', { limit: 25 }),
       channelAware: this.safeRows('happy-hours-channel-aware/suggestions', { limit: 25 }),
+      leadTime: this.safeRows('happy-hours-lead-time/suggestions', { limit: 25 }),
       incentives: this.safeRows('happy-hours-control-tower/staff-incentives'),
       audiences: this.safeRows('happy-hours-campaign-audiences'),
       lifecycle: this.safeRows('happy-hours-lifecycle'),
@@ -218,6 +223,8 @@ export class HappyHoursWorkspaceComponent implements OnInit {
           marketAbove: this.rowCount(result.marketAware?.rows?.filter((row) => row['marketPosition'] === 'above_market')),
           channelAware: this.rowCount(result.channelAware),
           channelRisk: this.rowCount(result.channelAware?.rows?.filter((row) => row['channelRisk'] === 'high_fee_channel')),
+          leadTime: this.rowCount(result.leadTime),
+          leadTimeUrgent: this.rowCount(result.leadTime?.rows?.filter((row) => row['leadTimeBucket'] === 'urgent_2h' || row['leadTimeBucket'] === 'same_day')),
           incentives: this.rowCount(result.incentives),
           audiences: this.rowCount(result.audiences),
           lifecycle: this.rowCount(result.lifecycle),
