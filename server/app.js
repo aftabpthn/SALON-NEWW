@@ -160,6 +160,7 @@ import { staffSelfRouter } from "./routes/staff-self.routes.js";
 import { superAdminRouter } from "./routes/super-admin.routes.js";
 import { terminalRouter } from "./routes/terminal.routes.js";
 import { whatsappRouter } from "./routes/whatsapp.routes.js";
+import { whatsappWebhookRouter } from "./routes/whatsapp-webhook.routes.js";
 import { waitlistRouter } from "./routes/waitlist.routes.js";
 import { whiteLabelRouter } from "./routes/white-label.routes.js";
 import { workflowEngineRouter } from "./routes/workflow-engine.routes.js";
@@ -372,6 +373,8 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, service: "Aura Salon CRM/POS API", timestamp: new Date().toISOString() });
   });
+
+  app.use("/api", whatsappWebhookRouter);
 
   const legacyApiAuth = env.nodeEnv === "production" ? authenticateJwt() : (_req, _res, next) => next();
   app.use("/api", calendarPublicRouter);

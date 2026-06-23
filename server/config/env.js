@@ -19,5 +19,11 @@ export const env = {
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   openaiModel: process.env.OPENAI_MODEL || "gpt-4.1-mini",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
-  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest"
+  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest",
+  whatsappProvider: process.env.WHATSAPP_PROVIDER || "local",
+  whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+  whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+  whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
+  whatsappWebhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "aura_whatsapp_verify_2026",
+  metaGraphVersion: process.env.META_GRAPH_VERSION || "v20.0"
 };

@@ -1,6 +1,7 @@
 import { db } from "../../db.js";
 import { whatsappAutomationService } from "../../services/whatsapp-automation.service.js";
 import { whatsappTemplateService } from "../../services/whatsapp-template.service.js";
+import { sendAndTrack } from "../../services/whatsapp/whatsapp-sender.service.js";
 
 function parseJson(value, fallback = []) {
   try {
@@ -91,5 +92,14 @@ export async function run(job) {
       missingVariables: rendered.missingVariables || []
     }
   }, access);
-  return { success: true, messageId: message.id, threadId: thread.id };
+
+  const sendResult = await sendAndTrack(phone, rendered.body, {
+    messageId: message.id,
+    tenantId: job.tenantId,
+    templateName: payload.template || "",
+    language: rendered.language,
+    previewUrl: payload.previewUrl
+  });
+
+  return { success: true, messageId: message.id, threadId: thread.id, sendResult };
 }
