@@ -638,14 +638,23 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
               <span>Client</span>
               <input
                 id="appointment-client-input"
-                list="appointment-client-options"
                 [value]="clientSearch()"
                 (input)="setClientSearch($any($event.target).value)"
+                (focus)="setClientSearch(clientSearch())"
+                (blur)="closeAppointmentClientSearchSoon()"
                 placeholder="Search / select client"
               />
-              <datalist id="appointment-client-options">
-                <option *ngFor="let client of clients()" [value]="clientOptionLabel(client)"></option>
-              </datalist>
+              <div class="appointment-search-results" *ngIf="showAppointmentClientResults()">
+                <button
+                  type="button"
+                  *ngFor="let client of filteredAppointmentClients()"
+                  (mousedown)="$event.preventDefault()"
+                  (click)="selectAppointmentClient(client)"
+                >
+                  <strong>{{ client.name || client.fullName || 'Client' }}</strong>
+                  <span>{{ client.phone || client.mobile || client.email || client.id }}</span>
+                </button>
+              </div>
             </label>
 
             <label class="field">
@@ -2251,6 +2260,54 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       min-width: 0;
     }
 
+    .drawer-booking-form .field {
+      position: relative;
+    }
+
+    .appointment-search-results {
+      position: absolute;
+      z-index: 90;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      display: grid;
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.16);
+      padding: 6px;
+    }
+
+    .appointment-search-results button {
+      display: grid;
+      gap: 2px;
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      padding: 8px 10px;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .appointment-search-results button:hover {
+      background: #effaf7;
+    }
+
+    .appointment-search-results strong {
+      font-size: 13px;
+    }
+
+    .appointment-search-results span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: none;
+    }
+
     .drawer-time-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.4fr) minmax(130px, 0.6fr);
@@ -2632,6 +2689,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
   readonly rescheduleAt = signal('');
   readonly rescheduleStaffId = signal('');
   readonly clientSearch = signal('');
+  readonly appointmentClientSearchActive = signal(false);
   readonly staffSearch = signal('');
   readonly serviceSearch = signal('');
   readonly formRevision = signal(0);
@@ -3485,8 +3543,32 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
 
   setClientSearch(value: string): void {
     this.clientSearch.set(value);
+    this.appointmentClientSearchActive.set(true);
     const match = this.clients().find((client) => this.optionMatches(value, client.id, this.clientOptionLabel(client)));
     this.form.patchValue({ clientId: match?.id || '' });
+  }
+
+  selectAppointmentClient(client: ApiRecord): void {
+    this.clientSearch.set(this.clientOptionLabel(client));
+    this.appointmentClientSearchActive.set(false);
+    this.form.patchValue({ clientId: client.id || '' });
+  }
+
+  showAppointmentClientResults(): boolean {
+    return this.appointmentClientSearchActive() && this.clientSearch().trim().length > 0 && this.filteredAppointmentClients().length > 0;
+  }
+
+  closeAppointmentClientSearchSoon(): void {
+    window.setTimeout(() => this.appointmentClientSearchActive.set(false), 120);
+  }
+
+  filteredAppointmentClients(): ApiRecord[] {
+    const query = this.normalizeSearch(this.clientSearch());
+    if (!query) return [];
+    return this.clients()
+      .filter((client) => this.clientMatchesAdvancedSearch(client, query))
+      .sort((a, b) => this.clientAdvancedSearchScore(b, query) - this.clientAdvancedSearchScore(a, query))
+      .slice(0, 25);
   }
 
   setStaffSearch(value: string): void {
@@ -4955,6 +5037,61 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
   private optionMatches(value: string, id: unknown, label: string): boolean {
     const needle = String(value || '').trim().toLowerCase();
     return !!needle && (needle === String(id || '').trim().toLowerCase() || needle === label.trim().toLowerCase());
+  }
+
+  private clientMatchesAdvancedSearch(client: ApiRecord, query: string): boolean {
+    const name = this.normalizeSearch(client.name || client.fullName || '');
+    const haystack = this.normalizeSearch([
+      client.name,
+      client.fullName,
+      client.phone,
+      client.mobile,
+      client.contact,
+      client.email,
+      client.clientCode,
+      client.code,
+      client.id
+    ].filter(Boolean).join(' '));
+    const compactQuery = this.compactSearch(query);
+    return haystack.includes(query)
+      || (Boolean(compactQuery) && this.compactSearch(haystack).includes(compactQuery))
+      || this.searchLettersExistInName(name, query);
+  }
+
+  private clientAdvancedSearchScore(client: ApiRecord, query: string): number {
+    const name = this.normalizeSearch(client.name || client.fullName || '');
+    const haystack = this.normalizeSearch(`${client.name || ''} ${client.fullName || ''} ${client.phone || ''} ${client.mobile || ''} ${client.email || ''}`);
+    const compactQuery = this.compactSearch(query);
+    let score = 0;
+    if (name === query) score += 100;
+    if (name.startsWith(query)) score += 80;
+    if (compactQuery && this.compactSearch(name).startsWith(compactQuery)) score += 75;
+    if (haystack.includes(query)) score += 45;
+    if (this.searchLettersExistInName(name, query)) score += 30;
+    return score;
+  }
+
+  private searchLettersExistInName(name: string, query: string): boolean {
+    const letters = this.compactSearch(query).split('');
+    if (!letters.length || letters.some((letter) => /\d/.test(letter))) return false;
+    const counts = new Map<string, number>();
+    for (const letter of this.compactSearch(name)) {
+      counts.set(letter, (counts.get(letter) || 0) + 1);
+    }
+    return letters.every((letter) => {
+      const next = (counts.get(letter) || 0) - 1;
+      if (next < 0) return false;
+      counts.set(letter, next);
+      return true;
+    });
+  }
+
+  private normalizeSearch(value: unknown): string {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+  }
+
+  private compactSearch(value: unknown): string {
+    return this.normalizeSearch(value).replace(/\s+/g, '');
   }
 
   private topForMinutes(minutes: number): number {

@@ -427,8 +427,7 @@ const STATUS_TONES: Record<string, string> = {
                 </button>
               </div>
             </div>
-            <small class="picker-meta" *ngIf="bookingClientSearch() && bookingClientSearch().length < 2">Type 2 characters to search clients.</small>
-            <small class="picker-empty" *ngIf="bookingClientSearchActive() && bookingClientSearch().length >= 2 && !filteredClients().length">No client match found.</small>
+            <small class="picker-empty" *ngIf="bookingClientSearchActive() && bookingClientSearch().length >= 1 && !filteredClients().length">No client match found.</small>
           </label>
           <label><span>Status</span><select formControlName="status"><option *ngFor="let status of statusOptions" [value]="status">{{ label(status) }}</option></select></label>
           <label><span>Notes</span><textarea formControlName="notes" rows="2"></textarea></label>
@@ -1090,7 +1089,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   readonly allStaffChoices = computed(() => this.visibleStaff());
   readonly filteredClients = computed(() => {
     const query = this.normalizeSearch(this.bookingClientSearch());
-    if (query.length < 2) return [];
+    if (query.length < 1) return [];
     return this.smartFilterApiRecords(this.clients(), query, (client, index) => [
       client.name,
       this.initials(client.name),
@@ -1365,7 +1364,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   }
 
   showBookingClientResults(): boolean {
-    return this.bookingClientSearchActive() && this.bookingClientSearch().trim().length >= 2 && this.filteredClients().length > 0;
+    return this.bookingClientSearchActive() && this.bookingClientSearch().trim().length >= 1 && this.filteredClients().length > 0;
   }
 
   closeBookingClientSearchSoon(): void {
@@ -1592,13 +1591,14 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   private smartSearchScore(fields: unknown[], query: string): number {
     const normalizedFields = fields.map((field) => this.normalizeSearch(field)).filter(Boolean);
-    const compactQuery = query.replace(/\s+/g, '');
+    const compactQuery = this.compactSearch(query);
     const digitQuery = this.phoneDigits(query);
-    if (normalizedFields.some((field) => field === query || field.replace(/\s+/g, '') === compactQuery)) return 120;
+    if (normalizedFields.some((field) => field === query || this.compactSearch(field) === compactQuery)) return 120;
     if (digitQuery && normalizedFields.some((field) => this.phoneDigits(field).includes(digitQuery))) return 110;
-    if (normalizedFields.some((field) => field.startsWith(query) || field.replace(/\s+/g, '').startsWith(compactQuery))) return 95;
-    if (normalizedFields.some((field) => field.includes(query) || field.replace(/\s+/g, '').includes(compactQuery))) return 80;
+    if (normalizedFields.some((field) => field.startsWith(query) || this.compactSearch(field).startsWith(compactQuery))) return 95;
+    if (normalizedFields.some((field) => field.includes(query) || this.compactSearch(field).includes(compactQuery))) return 80;
     if (normalizedFields.some((field) => this.smartSearchDistance(field, query) <= this.smartSearchTolerance(query))) return 54;
+    if (normalizedFields.some((field) => this.searchLettersExistInField(field, query))) return 42;
     return 0;
   }
 
@@ -1639,6 +1639,25 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   private normalizeSearch(value: unknown): string {
     return String(value || '').toLowerCase().trim();
+  }
+
+  private compactSearch(value: unknown): string {
+    return this.normalizeSearch(value).replace(/[^a-z0-9]+/g, '');
+  }
+
+  private searchLettersExistInField(field: string, query: string): boolean {
+    const letters = this.compactSearch(query).split('');
+    if (!letters.length || letters.some((letter) => /\d/.test(letter))) return false;
+    const counts = new Map<string, number>();
+    for (const letter of this.compactSearch(field)) {
+      counts.set(letter, (counts.get(letter) || 0) + 1);
+    }
+    return letters.every((letter) => {
+      const next = (counts.get(letter) || 0) - 1;
+      if (next < 0) return false;
+      counts.set(letter, next);
+      return true;
+    });
   }
 
   async createBooking(): Promise<void> {

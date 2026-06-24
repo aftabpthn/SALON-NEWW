@@ -2216,10 +2216,32 @@ export class PosComponent implements OnInit, OnDestroy {
     const query = this.normalizeSearch(this.productSearchText);
     if (!query) return this.products().slice(0, 25);
     return this.products()
-      .filter((product) =>
-        this.normalizeSearch(`${product.name || ''} ${product.category || ''} ${product.brand || ''} ${product.sku || ''} ${product.barcode || ''}`).includes(query)
-      )
+      .filter((product) => this.productMatchesSearchQuery(product, query))
+      .sort((a, b) => this.productSearchScore(b, query) - this.productSearchScore(a, query))
       .slice(0, 25);
+  }
+
+  private productMatchesSearchQuery(product: ApiRecord, query: string): boolean {
+    const haystack = this.normalizeSearch(`${product.name || ''} ${product.category || ''} ${product.brand || ''} ${product.sku || ''} ${product.barcode || ''}`);
+    if (haystack.includes(query)) return true;
+    const compactQuery = this.compactSearch(query);
+    return Boolean(compactQuery)
+      && (this.compactSearch(haystack).includes(compactQuery)
+        || this.searchLettersExistInName(this.normalizeSearch(product.name || ''), query));
+  }
+
+  private productSearchScore(product: ApiRecord, query: string): number {
+    const name = this.normalizeSearch(product.name || '');
+    const haystack = this.normalizeSearch(`${product.name || ''} ${product.category || ''} ${product.brand || ''} ${product.sku || ''} ${product.barcode || ''}`);
+    const compactQuery = this.compactSearch(query);
+    let score = 0;
+    if (name === query) score += 100;
+    if (name.startsWith(query)) score += 80;
+    if (compactQuery && this.compactSearch(name).startsWith(compactQuery)) score += 75;
+    if (haystack.includes(query)) score += 45;
+    if (this.searchLettersExistInName(name, query)) score += 30;
+    if (Number(product.stock || 0) > 0) score += 2;
+    return score;
   }
 
   showClientResults(): boolean {
