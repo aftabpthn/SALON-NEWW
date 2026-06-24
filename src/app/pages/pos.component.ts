@@ -190,8 +190,7 @@ type PackageRedeemRow = {
                   role="button"
                   tabindex="0"
                   *ngFor="let client of clientSearchResults()"
-                  (mousedown)="$event.preventDefault()"
-                  (click)="selectClient(client)"
+                  (mousedown)="selectClientFromResult($event, client)"
                   (keydown.enter)="selectClient(client)"
                 >
                   <span class="client-avatar">{{ clientInitial(client) }}</span>
@@ -223,7 +222,7 @@ type PackageRedeemRow = {
                     target="_blank"
                     rel="noopener"
                     aria-label="WhatsApp client"
-                    (mousedown)="$event.preventDefault()"
+                    (mousedown)="$event.preventDefault(); $event.stopPropagation()"
                     (click)="$event.stopPropagation()"
                   >
                     WA
@@ -233,7 +232,7 @@ type PackageRedeemRow = {
                     *ngIf="clientCallHref(client)"
                     [href]="clientCallHref(client)"
                     aria-label="Call client"
-                    (mousedown)="$event.preventDefault()"
+                    (mousedown)="$event.preventDefault(); $event.stopPropagation()"
                     (click)="$event.stopPropagation()"
                   >
                     Call
@@ -3067,6 +3066,11 @@ export class PosComponent implements OnInit, OnDestroy {
     this.unpaidReceiveMode = this.activePaymentModes()[0]?.id || 'cash';
     this.unpaidReceiveMessage.set('');
     this.loadMembershipIntelligence(client.id);
+  }
+
+  selectClientFromResult(event: MouseEvent, client: ApiRecord): void {
+    event.preventDefault();
+    this.selectClient(client);
   }
 
   handleClientSearchKeydown(event: KeyboardEvent): void {
