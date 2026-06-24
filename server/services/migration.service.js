@@ -376,6 +376,7 @@ export const migrationService = {
   },
   startLargeJob(jobId, payload, access) {
     requireLargeMigrationJob(jobId, access);
+    assertLargeJobReadyForImport(jobId, payload, access);
     updateDirectRow("migration_large_jobs", jobId, { status: "processing", workerId: "", lockedAt: "", heartbeatAt: "", startedAt: now(), failureReason: "" }, access);
     const result = processLargeJobStagedChunks(jobId, payload, access);
     auditMigration("migration.large_job.started", { jobId, result }, access);
@@ -384,6 +385,7 @@ export const migrationService = {
 
   resumeLargeJob(jobId, payload, access) {
     requireLargeMigrationJob(jobId, access);
+    assertLargeJobReadyForImport(jobId, payload, access);
     updateDirectRow("migration_large_jobs", jobId, { status: "processing", workerId: "", lockedAt: "", heartbeatAt: "", failureReason: "" }, access);
     const result = processLargeJobStagedChunks(jobId, payload, access);
     auditMigration("migration.large_job.resumed", { jobId, result }, access);
@@ -2354,6 +2356,11 @@ function assertLargeChunkImportable(chunk) {
   }
 }
 
+function migrationJobNotReady(message) {
+  const error = badRequest(message);
+  error.code = "MIGRATION_JOB_NOT_READY";
+  return error;
+}
 function badRequest(message) {
   const error = new Error(message);
   error.status = 400;
@@ -2493,16 +2500,18 @@ function processQueuedLargeMigrationJobs(payload = {}, access = {}) {
       continue;
     }
     try {
+      assertLargeJobReadyForImport(job.id, worker, jobAccess);
       const result = processLargeJobStagedChunks(job.id, worker, jobAccess);
       const releasedJob = releaseLargeMigrationJob(job.id, worker, jobAccess);
       results.push({ jobId: job.id, ok: true, claimed: true, processedChunks: result.processedChunks, status: releasedJob?.status || result.job?.status || "processing" });
     } catch (error) {
+      const notReady = error.code === "MIGRATION_JOB_NOT_READY";
       updateDirectRow("migration_large_jobs", job.id, {
-        status: "failed",
+        status: notReady ? "paused" : "failed",
         workerId: "",
         lockedAt: "",
         heartbeatAt: "",
-        failedAt: now(),
+        failedAt: notReady ? "" : now(),
         failureReason: error.message || "Worker failed"
       }, jobAccess);
       results.push({ jobId: job.id, ok: false, claimed: true, message: error.message });
@@ -2605,6 +2614,20 @@ function workerAccessForJob(job, access = {}) {
     branchIds: job.branchId ? [job.branchId] : access.branchIds || [],
     workerId: access.workerId || ""
   };
+}
+function assertLargeJobReadyForImport(jobId, payload = {}, access) {
+  const chunks = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId ORDER BY chunkNumber ASC").all({ tenantId: access.tenantId, jobId }).map(deserializeDirectRow);
+  if (!chunks.length) throw migrationJobNotReady("Large migration job has no chunks to import.");
+  const readyStatuses = new Set(["analyzed", "analyzed_with_errors", "failed"]);
+  const closedStatuses = new Set(["imported", "imported_with_errors", "rolled_back", "cancelled"]);
+  const readyChunks = chunks.filter((chunk) => readyStatuses.has(chunk.status));
+  const blockingChunks = chunks.filter((chunk) => !readyStatuses.has(chunk.status) && !closedStatuses.has(chunk.status));
+  if (blockingChunks.length && payload.allowPartialImport !== true) {
+    const numbers = blockingChunks.slice(0, 10).map((chunk) => chunk.chunkNumber).join(", ");
+    throw migrationJobNotReady(`Large migration job has ${blockingChunks.length} chunk(s) not analyzed yet (${numbers}). Analyze all chunks or pass allowPartialImport to import only ready chunks.`);
+  }
+  if (!readyChunks.length) throw migrationJobNotReady("Large migration job has no analyzed chunks ready for import.");
+  return { totalChunks: chunks.length, readyChunks: readyChunks.length, blockingChunks: blockingChunks.length };
 }
 function processLargeJobStagedChunks(jobId, payload, access) {
   const maxChunks = Math.max(1, Math.min(100, integer(payload.maxChunks, 10)));
