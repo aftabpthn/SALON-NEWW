@@ -242,6 +242,13 @@ migrationRouter.get(
     res.json(job);
   })
 );
+migrationRouter.get(
+  "/migration/jobs/:id/recovery",
+  requirePermission("read", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.jobRecovery(req.params.id, req.access));
+  })
+);
 
 migrationRouter.post(
   "/migration/analyze",
@@ -290,4 +297,5 @@ migrationRouter.post(
     res.json(migrationService.rollbackLast(req.access, req.body || {}));
   })
 );
+
 

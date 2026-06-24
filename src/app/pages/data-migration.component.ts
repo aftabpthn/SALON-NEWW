@@ -82,6 +82,18 @@ type LargeMigrationJob = {
   reconciliations?: LargeReconciliationSnapshot[];
 };
 
+type MigrationRecoveryReport = {
+  status: string;
+  blockers: string[];
+  summary: { totalRows: number; importedRows: number; failedRows: number; warningRows: number; retryCandidates: number; missingLiveTargets: number; batches: number };
+  failedRows: Array<{ rowKey: string; resource: string; sourceExternalId?: string; message: string; retryable: boolean; retryReason: string }>;
+  warningRows: Array<{ rowKey: string; resource: string; sourceExternalId?: string; message: string; retryable: boolean; retryReason: string }>;
+  retryCandidates: Array<{ rowKey: string; resource: string; sourceExternalId?: string; message: string; retryable: boolean; retryReason: string }>;
+  rollbackPlan?: { recommended: boolean; endpoint: string; batches: Array<{ batchId: string; status: string; resource: string; importedRows: number; errorRows: number; createdAt?: string }> };
+  idMapCoverage?: Record<string, Record<string, number>>;
+  missingLiveTargets?: Array<{ rowKey: string; resource: string; sourceExternalId?: string; targetId?: string; message: string }>;
+  nextActions: string[];
+};
 @Component({
   selector: 'app-data-migration',
   standalone: true,
@@ -625,6 +637,7 @@ type LargeMigrationJob = {
                 <td>{{ job.errorRows }}</td>
                 <td>
                   <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadJobDetail(job.id)">Open</button>
+                  <button class="ghost-button" type="button" [disabled]="loading()" (click)="loadJobRecovery(job.id)">Recovery</button>
                   <button class="danger-button" [disabled]="job.status === 'rolled_back' || loading()" (click)="rollback(job.id)">Rollback</button>
                 </td>
               </tr>
@@ -638,7 +651,11 @@ type LargeMigrationJob = {
               <span class="eyebrow">Job Drilldown</span>
               <h2>{{ job.fileName || job.id }}</h2>
             </div>
-            <button class="ghost-button" type="button" (click)="selectedJob.set(null)">Close</button>
+            <div class="action-row tight">
+              <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadJobRecovery(job.id)">Recovery</button>
+              <button class="ghost-button" type="button" [disabled]="!selectedJobRecovery()" (click)="exportRecoveryReport()">Export recovery</button>
+              <button class="ghost-button" type="button" (click)="closeJobDetail()">Close</button>
+            </div>
           </div>
           <div class="control-strip compact">
             <article><span>Total</span><strong>{{ job.totalRows }}</strong><small>Rows</small></article>
@@ -661,6 +678,45 @@ type LargeMigrationJob = {
             </table>
           </div>
         </div>
+          <div class="recovery-panel" *ngIf="selectedJobRecovery() as recovery">
+            <div class="panel-head">
+              <div>
+                <span class="eyebrow">Recovery Control</span>
+                <h2>{{ recovery.status | titlecase }}</h2>
+              </div>
+              <span class="status-pill" [class.danger]="recovery.blockers.length">{{ recovery.blockers.length || 0 }} blocker(s)</span>
+            </div>
+            <div class="recovery-grid">
+              <article><span>Failed rows</span><strong>{{ recovery.summary.failedRows }}</strong><small>{{ recovery.summary.retryCandidates }} retry candidates</small></article>
+              <article><span>Warnings</span><strong>{{ recovery.summary.warningRows }}</strong><small>Manual review queue</small></article>
+              <article><span>Missing targets</span><strong>{{ recovery.summary.missingLiveTargets }}</strong><small>Live table proof</small></article>
+              <article><span>Rollback batches</span><strong>{{ recovery.rollbackPlan?.batches?.length || 0 }}</strong><small>{{ recovery.rollbackPlan?.recommended ? 'Rollback recommended' : 'Rollback optional' }}</small></article>
+            </div>
+            <div class="action-row">
+              <button class="secondary-button" type="button" [disabled]="!recoveryFailedRows().length" (click)="exportRecoveryFailedRows()">Export failed rows</button>
+              <button class="danger-button" type="button" [disabled]="!recovery.rollbackPlan?.recommended || loading()" (click)="rollbackRecoveryJob()">Rollback affected job</button>
+            </div>
+            <div class="recovery-list" *ngIf="recoveryNextActions().length">
+              <article *ngFor="let action of recoveryNextActions(); let i = index">
+                <strong>{{ i + 1 }}</strong>
+                <span>{{ action }}</span>
+              </article>
+            </div>
+            <div class="table-wrap dense" *ngIf="recoveryFailedRows().length">
+              <table>
+                <thead><tr><th>Row</th><th>Resource</th><th>Legacy ID</th><th>Reason</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of recoveryFailedRows()">
+                    <td>{{ row.rowKey }}</td>
+                    <td>{{ row.resource }}</td>
+                    <td>{{ row.sourceExternalId || '-' }}</td>
+                    <td>{{ row.message }}</td>
+                    <td>{{ row.retryReason }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
       </section>
     </section>
   `,
@@ -761,6 +817,14 @@ type LargeMigrationJob = {
     .approval-list article.approved { border-left-color: #10b981; background: #f0fdf4; }
     .approval-list article.rejected { border-left-color: #ef4444; background: #fef2f2; }
     .job-detail { margin-top: 14px; display: grid; gap: 12px; }
+    .recovery-panel { margin-top: 14px; border: 1px solid #d7e6e2; border-radius: 8px; padding: 12px; background: #f8fffd; display: grid; gap: 12px; }
+    .recovery-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .recovery-grid article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; background: #ffffff; display: grid; gap: 4px; }
+    .recovery-grid span, .recovery-grid small, .recovery-list span { color: #64748b; }
+    .recovery-grid strong { font-size: 22px; }
+    .recovery-list { display: grid; gap: 8px; }
+    .recovery-list article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; background: #ffffff; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: center; }
+    .recovery-list strong { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; background: #eff6ff; color: #1d4ed8; }
     .control-strip.compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .worker-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
     .proof-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
@@ -796,7 +860,7 @@ type LargeMigrationJob = {
       .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
-      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid { grid-template-columns: 1fr; }
+      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid, .recovery-grid { grid-template-columns: 1fr; }
       .command-header h1 { font-size: 28px; }
       .panel-head { align-items: flex-start; flex-direction: column; }
       .mapping-toolbar, .mapping-list article, .duplicate-list article, .ops-queue, .worker-settings { grid-template-columns: 1fr; }
@@ -862,6 +926,7 @@ export class DataMigrationComponent implements OnInit {
   reconciliationResult = signal<any | null>(null);
   approvals = signal<ApprovalRecord[]>([]);
   selectedJob = signal<any | null>(null);
+  selectedJobRecovery = signal<MigrationRecoveryReport | null>(null);
   migrationProgress = signal(0);
   liveClientStats = signal({ total: 0, migrated: 0 });
   sandboxMode = signal(true);
@@ -893,6 +958,8 @@ export class DataMigrationComponent implements OnInit {
   recentApprovals = computed(() => this.approvals().slice(0, 5));
   duplicatePreviewRows = computed(() => this.duplicateRows().slice(0, 8));
   selectedJobRows = computed(() => (this.selectedJob()?.rows || []).slice(0, 200));
+  recoveryFailedRows = computed(() => this.selectedJobRecovery()?.failedRows?.slice(0, 50) || []);
+  recoveryNextActions = computed(() => this.selectedJobRecovery()?.nextActions || []);
   reconciliationLines = computed<ReconciliationLine[]>(() => this.reconciliationResult()?.lines || []);
   largeJobChunks = computed(() => this.largeJob()?.chunks || []);
   latestLargeReconciliation = computed(() => this.largeJob()?.reconciliations?.[0] || null);
@@ -1111,6 +1178,7 @@ export class DataMigrationComponent implements OnInit {
     this.duplicateDecisions.set({});
     this.reconciliationResult.set(null);
     this.selectedJob.set(null);
+    this.selectedJobRecovery.set(null);
     this.largeJob.set(null);
     this.lastWorkerResult.set(null);
     this.csvStagedRows.set(0);
@@ -1539,6 +1607,58 @@ export class DataMigrationComponent implements OnInit {
       if (row?.fields && Object.keys(row.fields).length) return row.fields;
       return row?.payload || row;
     }).filter((row) => row && Object.keys(row).length);
+  }
+  closeJobDetail(): void {
+    this.selectedJob.set(null);
+    this.selectedJobRecovery.set(null);
+  }
+
+  async loadJobRecovery(jobId: string): Promise<void> {
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const [job, recovery] = await Promise.all([
+        firstValueFrom(this.api.get<any>('migration/jobs', jobId)),
+        firstValueFrom(this.api.get<MigrationRecoveryReport>('migration/jobs', `${jobId}/recovery`))
+      ]);
+      this.selectedJob.set(job || null);
+      this.selectedJobRecovery.set(recovery || null);
+      this.message.set(recovery?.blockers?.length ? 'Recovery report loaded with blockers.' : 'Recovery report loaded.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to load recovery report.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  exportRecoveryReport(): void {
+    const report = this.selectedJobRecovery();
+    const job = this.selectedJob();
+    if (!report || !job) return;
+    const blob = new Blob([JSON.stringify({ jobId: job.id, fileName: job.fileName, exportedAt: new Date().toISOString(), report }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `migration-recovery-${job.id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    this.message.set('Recovery report exported.');
+  }
+
+  exportRecoveryFailedRows(): void {
+    const rows = this.recoveryFailedRows().map((row) => ({
+      rowKey: row.rowKey,
+      resource: row.resource,
+      sourceExternalId: row.sourceExternalId || '',
+      message: row.message,
+      retryReason: row.retryReason
+    }));
+    this.downloadCsv('migration-recovery-failed-rows.csv', rows);
+  }
+  async rollbackRecoveryJob(): Promise<void> {
+    const job = this.selectedJob();
+    if (!job?.id) return;
+    await this.rollback(job.id);
   }
   async rollback(jobId: string): Promise<void> {
     if (!confirm('Rollback selected import records delete karega. Continue?')) return;
@@ -1984,5 +2104,11 @@ export class DataMigrationComponent implements OnInit {
     return `${row.sourceSheet || 'sheet'}:${row.sourceRowNumber || row.targetId || row.sourceExternalId || 'row'}`;
   }
 }
+
+
+
+
+
+
 
 

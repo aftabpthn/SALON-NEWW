@@ -493,7 +493,7 @@ export const migrationService = {
       completedAt: now(),
       failureReason: ""
     }, access);
-    updateMigrationRow("migration_import_batches", batchId, { status: "completed", summary }, { tenantId: access.tenantId });
+    updateMigrationRow("migration_import_batches", batchId, { status: result.errorRows ? "completed_with_errors" : "completed", summary }, { tenantId: access.tenantId });
     recomputeLargeJobTotals(job.id, access);
     auditMigration("migration.large_job.chunk_imported", { jobId, batchId, chunkId: chunk.id, chunkNumber: chunk.chunkNumber, summary }, access);
     return { job: largeMigrationJob(jobId, access), batchId, chunk: directChunk(chunk.id, access), summary };
@@ -586,6 +586,10 @@ export const migrationService = {
       .all(id, access.tenantId)
       .map((row) => deserializeJson(row, ["payload", "raw", "errors", "warnings"]));
     return { ...deserializeJson(job, ["summary", "mapping", "settings"]), rows };
+  },
+
+  jobRecovery(id, access) {
+    return migrationJobRecovery(id, access);
   },
 
   onboarding(access) {
@@ -1527,6 +1531,118 @@ function rollbackImports(access, filters = {}) {
   return { ok: true, deleted, batchIds };
 }
 
+function migrationJobRecovery(jobId, access) {
+  const job = db.prepare("SELECT * FROM migration_jobs WHERE id = @jobId AND tenantId = @tenantId").get({ jobId, tenantId: access.tenantId });
+  if (!job) throw badRequest("Migration job not found.");
+  const rows = db.prepare(`
+    SELECT * FROM migration_row_results
+    WHERE tenantId = @tenantId AND jobId = @jobId
+    ORDER BY sourceSheet, sourceRowNumber, createdAt
+  `).all({ tenantId: access.tenantId, jobId }).map((row) => deserializeJson(row, ["payload", "raw", "errors", "warnings"]));
+  const batches = db.prepare(`
+    SELECT * FROM migration_import_batches
+    WHERE tenantId = @tenantId AND jobId = @jobId
+    ORDER BY createdAt DESC
+  `).all({ tenantId: access.tenantId, jobId }).map((row) => deserializeJson(row, ["summary", "filters"]));
+  const idMapRows = db.prepare(`
+    SELECT resource, linkType, COUNT(*) AS rows
+    FROM migration_id_map
+    WHERE tenantId = @tenantId AND jobId = @jobId
+    GROUP BY resource, linkType
+  `).all({ tenantId: access.tenantId, jobId });
+  const failedRows = rows.filter((row) => row.status === "error" || row.action === "failed").map(recoveryRowSummary);
+  const warningRows = rows.filter((row) => row.status === "warning" || row.action === "skipped" || row.action === "merged").map(recoveryRowSummary);
+  const missingLiveTargets = rows
+    .filter((row) => row.targetId && ["created", "merged", "linked"].includes(row.action) && !migrationTargetExists(row, access))
+    .map(recoveryRowSummary);
+  const importedRows = rows.filter((row) => row.targetId && ["created", "merged", "linked"].includes(row.action)).length;
+  const retryCandidates = failedRows.filter((row) => row.retryable);
+  const rollbackBatches = batches.filter((batch) => batch.status !== "rolled_back").map((batch) => ({
+    batchId: batch.id,
+    status: batch.status,
+    resource: batch.resource,
+    importedRows: Number(batch.summary?.importedRows || 0),
+    errorRows: Number(batch.summary?.errorRows || 0),
+    createdAt: batch.createdAt
+  }));
+  const blockers = [];
+  if (failedRows.length) blockers.push("failed_rows_present");
+  if (missingLiveTargets.length) blockers.push("missing_live_targets");
+  if (batches.some((batch) => batch.status === "importing")) blockers.push("batch_still_importing");
+  return {
+    job: deserializeJson(job, ["summary", "mapping", "settings"]),
+    status: blockers.length ? "attention_required" : "recoverable",
+    blockers,
+    summary: {
+      totalRows: rows.length,
+      importedRows,
+      failedRows: failedRows.length,
+      warningRows: warningRows.length,
+      retryCandidates: retryCandidates.length,
+      missingLiveTargets: missingLiveTargets.length,
+      batches: batches.length
+    },
+    failedRows: failedRows.slice(0, 500),
+    warningRows: warningRows.slice(0, 500),
+    retryCandidates: retryCandidates.slice(0, 500),
+    rollbackPlan: {
+      recommended: Boolean(importedRows && (failedRows.length || missingLiveTargets.length)),
+      batches: rollbackBatches,
+      endpoint: `/migration/jobs/${jobId}/rollback`
+    },
+    idMapCoverage: rowsByPair(idMapRows, "resource", "linkType"),
+    missingLiveTargets: missingLiveTargets.slice(0, 500),
+    nextActions: recoveryNextActions({ failedRows, missingLiveTargets, rollbackBatches })
+  };
+}
+
+function recoveryRowSummary(row) {
+  const errors = Array.isArray(row.errors) ? row.errors : [];
+  const warnings = Array.isArray(row.warnings) ? row.warnings : [];
+  const message = cleanText(row.message || errors.join(", ") || warnings.join(", "));
+  const retryable = row.action === "failed" || row.status === "error";
+  return {
+    rowKey: `${row.sourceSheet}:${row.sourceRowNumber}`,
+    resource: row.resource,
+    sourceSheet: row.sourceSheet,
+    sourceRowNumber: row.sourceRowNumber,
+    sourceExternalId: row.sourceExternalId,
+    action: row.action,
+    status: row.status,
+    targetId: row.targetId,
+    message,
+    errors,
+    warnings,
+    retryable,
+    retryReason: retryable ? recoveryRetryReason(message) : "manual_review"
+  };
+}
+
+function recoveryRetryReason(message = "") {
+  if (/reference|could not be resolved|unknown/i.test(message)) return "fix_parent_mapping_then_retry";
+  if (/duplicate|already/i.test(message)) return "choose_duplicate_decision";
+  if (/required|invalid|date|amount|phone|email/i.test(message)) return "fix_source_row_then_retry";
+  return "inspect_row_error";
+}
+
+function migrationTargetExists(row, access) {
+  const table = RESOURCE_TEMPLATES[row.resource]?.table;
+  if (!table || !row.targetId) return false;
+  try {
+    const columns = new Set(columnsFor(table));
+    const tenantSql = columns.has("tenantId") ? " AND tenantId = @tenantId" : "";
+    return Boolean(db.prepare(`SELECT id FROM ${table} WHERE id = @id${tenantSql} LIMIT 1`).get({ id: row.targetId, tenantId: access.tenantId }));
+  } catch {
+    return false;
+  }
+}
+
+function recoveryNextActions({ failedRows, missingLiveTargets, rollbackBatches }) {
+  if (missingLiveTargets.length) return ["Run rollback for affected batch", "Re-run analyze after checking live target tables", "Import again after proof check passes"];
+  if (failedRows.length) return ["Download failed row report", "Fix source rows or parent mappings", "Re-run analyze", "Import corrected rows only"];
+  if (rollbackBatches.length) return ["Run reconciliation proof", "Export proof report", "Mark migration complete"];
+  return ["No recovery action needed"];
+}
 function findRollbackBatches(access, filters) {
   const where = ["tenantId = @tenantId", "status <> 'rolled_back'", "rolledBackAt = ''"];
   const params = { tenantId: access.tenantId };
@@ -2462,7 +2578,7 @@ function importStagedLargeJobChunk(jobId, chunkNumber, payload, access) {
     completedAt: now(),
     failureReason: ""
   }, access);
-  updateMigrationRow("migration_import_batches", batchId, { status: "completed", summary }, { tenantId: access.tenantId });
+  updateMigrationRow("migration_import_batches", batchId, { status: result.errorRows ? "completed_with_errors" : "completed", summary }, { tenantId: access.tenantId });
   syncStagingImportResults(job.id, chunk.id, batchId, access);
   recomputeLargeJobTotals(job.id, access);
   auditMigration("migration.large_job.staged_chunk_imported", { jobId, batchId, chunkId: chunk.id, chunkNumber: chunk.chunkNumber, summary }, access);
@@ -2877,6 +2993,8 @@ function withBusyRetry(fn, attempts = 12) {
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
+
+
 
 
 
