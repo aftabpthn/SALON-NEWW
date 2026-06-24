@@ -181,7 +181,7 @@ const STATUS_TONES: Record<string, string> = {
         </section>
 
         <section class="summary-strip">
-          <article><span>Booked</span><strong>{{ summaryValue('booked') }}</strong><small>scheduled</small></article>
+          <article><span>Booked</span><strong>{{ pageAppointmentCount() }}</strong><small>on page</small></article>
           <article><span>Arrived</span><strong>{{ summaryValue('arrived') }}</strong><small>front desk</small></article>
           <article><span>In service</span><strong>{{ summaryValue('inService') }}</strong><small>chair busy</small></article>
           <article><span>Completed</span><strong>{{ summaryValue('completed') }}</strong><small>ready to bill</small></article>
@@ -1160,6 +1160,9 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     for (const cards of map.values()) cards.sort((a, b) => a.top - b.top);
     return map;
   });
+  readonly pageAppointmentCount = computed(() =>
+    Array.from(this.appointmentCardsByStaff().values()).reduce((total, cards) => total + cards.length, 0)
+  );
 
   readonly shiftBlocksByStaff = computed(() => this.groupBlocks((this.context()?.schedules || []).map((row) => this.shiftBlock(row))));
   readonly unavailableBlocksByStaff = computed(() => this.groupBlocks(this.unavailableRosterBlocks()));
