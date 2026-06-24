@@ -84,8 +84,8 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
           <table class="zenoti-products-table">
             <thead>
               <tr>
-                <th>Code</th>
                 <th>Name</th>
+                <th>SKU / Info</th>
                 <th>Brand</th>
                 <th>Category</th>
                 <th>Subcategory</th>
@@ -102,8 +102,8 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
             </thead>
             <tbody>
               <tr *ngFor="let product of filteredProducts()" (click)="selectInventoryProduct(product)" [class.active]="selectedProductId() === product.id">
-                <td>{{ productCode(product) }}</td>
-                <td><button class="zenoti-link-button" type="button">{{ product.name }}</button><small>{{ product.sku || product.id }}</small></td>
+                <td><button class="zenoti-link-button" type="button">{{ product.name }}</button><small>{{ product.category || productBusinessUnit(product) }}</small></td>
+                <td><strong class="product-sku-code">{{ productCode(product) }}</strong><small>{{ productType(product) }} - {{ productAmount(product) }}</small></td>
                 <td>{{ productBrand(product) }}</td>
                 <td>{{ product.category || '-' }}</td>
                 <td>{{ product.subcategory || product.subCategory || '-' }}</td>
@@ -1035,6 +1035,13 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       overflow: hidden;
       color: #64748b;
       text-overflow: ellipsis;
+    }
+
+    .product-sku-code {
+      display: block;
+      color: #1f2933;
+      font-size: 0.82rem;
+      font-weight: 800;
     }
 
     .zenoti-link-button {
