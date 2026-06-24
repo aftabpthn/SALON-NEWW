@@ -2811,7 +2811,7 @@ export class ClientDetailComponent implements OnInit {
       case 'wallet':
         return this.filteredClientWalletLedgerRows().length > 0;
       case 'notes':
-        return !!(this.frontDeskNotes || this.internalNotes || this.followUpNotes || (client && this.clientNoteHistory(client).length));
+        return !!(this.frontDeskNotes || this.internalNotes || this.followUpNotes || this.clientAppointmentNoteHistory().length || (client && this.clientNoteHistory(client).length));
       case 'treatments':
         return !!(client && this.clientConsultationHistory(client).length);
       case 'documents':
@@ -4162,6 +4162,7 @@ export class ClientDetailComponent implements OnInit {
   }
 
   clientNoteHistory(client: ApiRecord): ClientNoteHistoryRow[] {
+    const appointmentNotes = this.clientAppointmentNoteHistory();
     const history = this.readRecordList(client.noteHistory || client.notesHistory || client.notesLog || client.interactions)
       .map((item) => ({
         date: this.dateTimeLabel(item.date || item.createdAt || item.created_at || item.updatedAt),
@@ -4169,14 +4170,25 @@ export class ClientDetailComponent implements OnInit {
         author: String(item.author || item.userName || item.createdByName || item.staffName || 'AuraShine OS'),
         note: String(item.note || item.notes || item.message || item.text || item.comment || '-')
       }));
-    if (history.length) return history;
     const current = this.combinedClientNotes().trim() || String(client.notes || '').trim();
-    return current ? [{
+    const currentRow = current ? [{
       date: this.dateTimeLabel(client.updatedAt || client.updated_at || client.createdAt),
       type: 'Current Notes',
       author: 'Client profile',
       note: current
     }] : [];
+    return [...appointmentNotes, ...history, ...currentRow];
+  }
+
+  private clientAppointmentNoteHistory(): ClientNoteHistoryRow[] {
+    return this.clientAppointments()
+      .filter((appointment) => String(appointment.notes || appointment.note || '').trim())
+      .map((appointment) => ({
+        date: this.dateTimeLabel(appointment.startAt || appointment.startTime || appointment.start_time || appointment.date || appointment.createdAt),
+        type: 'Appointment Note',
+        author: this.appointmentStaffLabel(appointment),
+        note: String(appointment.notes || appointment.note || '').trim()
+      }));
   }
 
   clientConsultationHistory(client: ApiRecord): ClientConsultationHistoryRow[] {

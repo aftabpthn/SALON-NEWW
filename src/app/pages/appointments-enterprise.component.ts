@@ -1383,6 +1383,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const selected = this.clients().find((client) => this.bookingClientOption(client) === next);
     this.bookingForm.patchValue({ clientId: selected?.id || '' }, { emitEvent: false });
     if (selected?.id) {
+      this.applyClientProfileNoteToBooking(selected);
       this.loadClientServiceHistory(String(selected.id));
     } else {
       this.clearClientServiceHistory();
@@ -1392,6 +1393,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   selectBookingClient(client: ApiRecord): void {
     this.bookingClientSearch.set(this.bookingClientOption(client));
     this.bookingForm.patchValue({ clientId: client.id || '' }, { emitEvent: false });
+    this.applyClientProfileNoteToBooking(client);
     this.bookingClientSearchActive.set(false);
     this.loadClientServiceHistory(String(client.id || ''));
   }
@@ -1965,7 +1967,8 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       }));
       this.applyAppointmentPatch(id, { ...updated, notes });
       this.setAppointmentNoteDraftValue({ ...appointment, id }, notes);
-      this.showNotice('Appointment note saved');
+      await this.syncAppointmentNoteToClientProfile(appointment, notes);
+      this.showNotice('Appointment note saved to client profile');
     } catch (error) {
       this.error.set(this.api.errorText(error, 'Unable to save appointment note'));
     } finally {
@@ -2176,7 +2179,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   clientProfileNoteSummary(clientId: string): string {
     const client = this.clientById().get(clientId);
-    const raw = String(client?.notes || client?.note || '').trim();
+    const raw = this.clientProfileNoteText(client);
     if (!raw) return '';
     const summary = raw
       .replace(/(^|\n)(Front desk notes|Internal notes|Follow-up notes):\s*/gi, '$1$2: ')
@@ -2550,6 +2553,23 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     return String(appointment?.notes || appointment?.note || '');
   }
 
+  private clientProfileNoteText(client: ApiRecord | undefined): string {
+    return String(client?.notes || client?.note || '').trim();
+  }
+
+  private clientFrontDeskNote(client: ApiRecord | undefined): string {
+    const notes = this.clientProfileNoteText(client);
+    return this.sectionFromClientNotes(notes, 'Front desk notes') || notes;
+  }
+
+  private applyClientProfileNoteToBooking(client: ApiRecord): void {
+    if (this.editingAppointmentId()) return;
+    const current = String(this.bookingForm.value.notes || '').trim();
+    if (current) return;
+    const note = this.clientFrontDeskNote(client).trim();
+    if (note) this.bookingForm.patchValue({ notes: note }, { emitEvent: false });
+  }
+
   private setAppointmentNoteDraftValue(appointment: ApiRecord, value: string): void {
     const id = this.appointmentKey(appointment);
     if (!id) return;
@@ -2568,6 +2588,47 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     if (selected && String(selected.id || '') === id) {
       this.selectedAppointment.set({ ...selected, ...patch });
     }
+  }
+
+  private async syncAppointmentNoteToClientProfile(appointment: ApiRecord, notes: string): Promise<void> {
+    const clientId = String(appointment.clientId || '').trim();
+    const client = this.clientById().get(clientId);
+    const nextNote = String(notes || '').trim();
+    if (!clientId || !client || !nextNote) return;
+    const nextNotes = this.mergeClientFrontDeskNotes(this.clientProfileNoteText(client), nextNote);
+    if (nextNotes === this.clientProfileNoteText(client)) return;
+    const updated = await firstValueFrom(this.api.update<ApiRecord>('clients', clientId, { notes: nextNotes }));
+    this.applyClientPatch(clientId, { ...updated, notes: nextNotes });
+  }
+
+  private applyClientPatch(id: string, patch: ApiRecord): void {
+    const current = this.context();
+    if (!current) return;
+    this.context.set({
+      ...current,
+      clients: current.clients.map((client) => String(client.id || '') === id ? { ...client, ...patch } : client)
+    });
+  }
+
+  private mergeClientFrontDeskNotes(existingNotes: string, frontDeskNote: string): string {
+    const existing = String(existingNotes || '').trim();
+    const frontDesk = String(frontDeskNote || '').trim();
+    const hasSections = /(^|\n)(Front desk notes|Internal notes|Follow-up notes):/i.test(existing);
+    const internal = this.sectionFromClientNotes(existing, 'Internal notes') || (!hasSections && existing && existing !== frontDesk ? existing : '');
+    const followUp = this.sectionFromClientNotes(existing, 'Follow-up notes');
+    return [
+      ['Front desk notes', frontDesk],
+      ['Internal notes', internal],
+      ['Follow-up notes', followUp]
+    ]
+      .filter(([, value]) => String(value || '').trim())
+      .map(([label, value]) => `${label}:\n${String(value).trim()}`)
+      .join('\n\n');
+  }
+
+  private sectionFromClientNotes(notes: string, label: string): string {
+    const pattern = new RegExp(`${label}:\\s*([\\s\\S]*?)(?=\\n\\n(?:Front desk notes|Internal notes|Follow-up notes):|$)`, 'i');
+    return String(notes || '').match(pattern)?.[1]?.trim() || '';
   }
 
   private dateInput(date: Date): string {
