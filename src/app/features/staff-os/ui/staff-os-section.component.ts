@@ -2004,12 +2004,14 @@ type StaffPhotoUploadResponse = { url?: string };
     .attendance-workspace .field {
       min-width: 0;
     }
-    .camera-panel { align-content: start; overflow: hidden; }
-    .camera-stage { border: 1px solid #d9e5de; border-radius: 8px; background: #f7faf8; width: 100%; max-width: 100%; min-height: 260px; overflow: hidden; display: grid; place-items: center; }
+    .camera-panel { display: flex; flex-direction: column; overflow: hidden; }
+    .physical-panel { display: flex; flex-direction: column; }
+    .camera-stage { border: 1px solid #d9e5de; border-radius: 8px; background: #f7faf8; width: 100%; max-width: 100%; min-height: 260px; overflow: hidden; display: grid; place-items: center; flex-shrink: 0; }
     .camera-stage video { display: block; width: 100%; max-width: 100%; height: 100%; min-height: 260px; object-fit: cover; background: #10201a; }
     .camera-stage .hidden { display: none; }
     .camera-placeholder { color: #60766d; font-weight: 800; }
-    .camera-form { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+    .camera-form { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); flex: 1; display: grid; align-content: start; }
+    .manual-form { flex: 1; display: grid; }
     .device-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; align-items: end; }
     .gateway-form, .mapping-form, .consent-form, .payroll-form { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
     .attendance-workspace .field,
@@ -2042,6 +2044,7 @@ type StaffPhotoUploadResponse = { url?: string };
       padding: 0;
       border: 0;
       background: transparent;
+      margin-top: auto;
     }
     .attendance-workspace .camera-form .drawer-actions .refresh,
     .attendance-workspace .camera-form .drawer-actions .primary {
