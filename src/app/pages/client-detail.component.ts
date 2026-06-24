@@ -156,7 +156,16 @@ type ClientPersonalDetailsForm = {
                 <span class="badge">{{ clientRiskLevel() }}</span>
                 <span class="badge" *ngFor="let tag of clientTags(client); trackBy: trackValue">{{ tag }}</span>
               </div>
-              <div class="client360-header-facts">
+              <div class="client360-header-actions">
+                <button class="ghost-button mini" type="button" *ngIf="!profileDetailsEditing()" (click)="startProfileDetailsEdit(client)">Edit details</button>
+                <ng-container *ngIf="profileDetailsEditing()">
+                  <button class="primary-button mini" type="button" (click)="savePersonalDetails()" [disabled]="personalSaving()">
+                    {{ personalSaving() ? 'Saving...' : 'Save details' }}
+                  </button>
+                  <button class="ghost-button mini" type="button" (click)="cancelProfileDetailsEdit(client)" [disabled]="personalSaving()">Cancel</button>
+                </ng-container>
+              </div>
+              <div class="client360-header-facts" *ngIf="!profileDetailsEditing(); else profileHeaderEdit">
                 <div><span>Mobile</span><strong>{{ client.phone || client.mobile || '-' }}</strong></div>
                 <div><span>Email</span><strong>{{ client.email || 'No email' }}</strong></div>
                 <div><span>Gender</span><strong>{{ client.gender || '-' }}</strong></div>
@@ -167,6 +176,26 @@ type ClientPersonalDetailsForm = {
                 <div><span>Last visit</span><strong>{{ lastVisitLabel() }}</strong></div>
                 <div><span>Source</span><strong>{{ clientSourceLabel(client) }}</strong></div>
               </div>
+              <ng-template #profileHeaderEdit>
+                <div class="client360-inline-edit-grid">
+                  <label class="field"><span>Name</span><input [(ngModel)]="personalDetails.name" placeholder="Client name" /></label>
+                  <label class="field"><span>Mobile</span><input [(ngModel)]="personalDetails.phone" placeholder="Mobile number" /></label>
+                  <label class="field"><span>Email</span><input type="email" [(ngModel)]="personalDetails.email" placeholder="Email address" /></label>
+                  <label class="field">
+                    <span>Gender</span>
+                    <select [(ngModel)]="personalDetails.gender">
+                      <option value="">Not set</option>
+                      <option>Female</option>
+                      <option>Male</option>
+                      <option>Non-binary</option>
+                      <option>Prefer not to say</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Birthday</span><input type="date" [(ngModel)]="personalDetails.birthday" /></label>
+                  <label class="field"><span>Anniversary</span><input type="date" [(ngModel)]="personalDetails.anniversary" /></label>
+                  <label class="field"><span>Source</span><input [(ngModel)]="personalDetails.source" placeholder="Walk-in, Instagram, referral" /></label>
+                </div>
+              </ng-template>
             </div>
           </div>
           <div class="profile-stats client360-health-card">
@@ -1978,6 +2007,19 @@ type ClientPersonalDetailsForm = {
       margin-top: 0;
     }
 
+    .client360-header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .client360-header-actions .mini {
+      padding: 8px 11px;
+      min-height: 36px;
+      font-size: 0.8rem;
+    }
+
     .client360-header-facts {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2009,6 +2051,36 @@ type ClientPersonalDetailsForm = {
       margin-top: 4px;
       color: #0f172a;
       overflow-wrap: anywhere;
+    }
+
+    .client360-inline-edit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    .client360-inline-edit-grid .field {
+      margin: 0;
+      display: grid;
+      gap: 5px;
+      color: #64748b;
+      font-size: 0.76rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .client360-inline-edit-grid input,
+    .client360-inline-edit-grid select {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid #d9e3ec;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.94);
+      padding: 10px 12px;
+      color: #0f172a;
+      font: inherit;
+      text-transform: none;
     }
 
     .client360-health-card {
@@ -2626,6 +2698,7 @@ export class ClientDetailComponent implements OnInit {
   readonly notesMessage = signal('');
   readonly personalSaving = signal(false);
   readonly personalMessage = signal('');
+  readonly profileDetailsEditing = signal(false);
   readonly activeHistoryTab = signal('overview');
   readonly appointmentStatusOptions = ['booked', 'completed', 'cancelled', 'rescheduled', 'no-show'];
   readonly historyTabs = [
@@ -2680,6 +2753,16 @@ export class ClientDetailComponent implements OnInit {
 
   selectHistoryTab(tabId: string): void {
     this.activeHistoryTab.set(tabId);
+  }
+
+  startProfileDetailsEdit(client: ApiRecord): void {
+    this.personalDetails = this.personalDetailsFormFromClient(client);
+    this.profileDetailsEditing.set(true);
+  }
+
+  cancelProfileDetailsEdit(client: ApiRecord): void {
+    this.personalDetails = this.personalDetailsFormFromClient(client);
+    this.profileDetailsEditing.set(false);
   }
 
   activeHistoryTabLabel(): string {
@@ -2929,6 +3012,7 @@ export class ClientDetailComponent implements OnInit {
         this.client.set(updated);
         this.personalDetails = this.personalDetailsFormFromClient(updated);
         this.personalSaving.set(false);
+        this.profileDetailsEditing.set(false);
         this.personalMessage.set('Personal details saved.');
       },
       error: (error) => {

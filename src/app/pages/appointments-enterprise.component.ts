@@ -436,6 +436,9 @@ const STATUS_TONES: Record<string, string> = {
           </label>
           <label><span>Status</span><select formControlName="status"><option *ngFor="let status of statusOptions" [value]="status">{{ label(status) }}</option></select></label>
           <label><span>Notes</span><textarea formControlName="notes" rows="2"></textarea></label>
+          <p class="inline-hint client-booking-note" *ngIf="selectedBookingClientProfileNote() as clientNotes">
+            <strong>Client profile note:</strong> {{ clientNotes }}
+          </p>
 
           <section class="previous-service-panel" *ngIf="selectedBookingClientId()">
             <div class="service-line-head">
@@ -659,9 +662,24 @@ const STATUS_TONES: Record<string, string> = {
                 <h4>Payment Mode</h4>
                 <strong>{{ appointmentPaymentMode(appointment) }}</strong>
               </article>
-              <article class="bill-panel">
-                <h4>Notes :</h4>
-                <p>{{ appointment.notes || appointment.note || 'No notes added.' }}</p>
+              <article class="bill-panel appointment-notes-panel">
+                <div class="bill-panel-head">
+                  <h4>Notes :</h4>
+                  <button class="ghost-button mini" type="button" (click)="saveAppointmentNote(appointment)" [disabled]="appointmentNoteSavingId() === appointment.id">
+                    {{ appointmentNoteSavingId() === appointment.id ? 'Saving' : 'Save note' }}
+                  </button>
+                </div>
+                <textarea
+                  class="appointment-note-box"
+                  [value]="appointmentNoteDraft(appointment)"
+                  (input)="setAppointmentNoteDraft(appointment, $any($event.target).value)"
+                  placeholder="Appointment note add/edit"
+                  rows="3"
+                ></textarea>
+                <p class="client-note-preview" *ngIf="clientProfileNoteSummary(appointment.clientId) as clientNotes">
+                  <strong>Client profile note</strong>
+                  <span>{{ clientNotes }}</span>
+                </p>
               </article>
               <article class="bill-panel">
                 <h4>Staff Alert :</h4>
@@ -899,6 +917,13 @@ const STATUS_TONES: Record<string, string> = {
     .avatar.large { width: 42px; height: 42px; font-size: 18px; background: #ede9fe; color: #4c1d95; }
     .bill-panel h4, .service-bill-card h4 { margin: 0 0 10px; color: #070044; font-size: 18px; }
     .bill-panel p { margin: 0; color: #334155; }
+    .bill-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .bill-panel-head h4 { margin: 0; }
+    .appointment-notes-panel { display: grid; gap: 10px; }
+    .appointment-note-box { min-height: 92px; resize: vertical; text-transform: none; }
+    .client-note-preview { display: grid; gap: 4px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; padding: 10px; }
+    .client-note-preview strong { color: #166534; font-size: 12px; text-transform: uppercase; }
+    .client-note-preview span { color: #334155; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
     .bill-status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .bill-status-row select { min-height: 40px; max-width: 160px; background: #9bd8c5; border-color: #0f766e; }
     .bill-lines { display: grid; gap: 10px; }
@@ -946,6 +971,8 @@ const STATUS_TONES: Record<string, string> = {
     .inline-hint { margin: 0; border-radius: 10px; padding: 10px 12px; font-weight: 900; }
     .inline-hint.danger { background: #fee2e2; color: #991b1b; }
     .inline-hint.success { background: #dcfce7; color: #166534; }
+    .client-booking-note { border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; text-transform: none; line-height: 1.35; }
+    .client-booking-note strong { color: #14532d; }
     .two-col, .status-grid, .notify-box, .pulse-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .notify-box { border: 1px solid #dbe7e4; border-radius: 12px; padding: 12px; }
     .notify-box label { display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 14px; color: #172033; }
@@ -1001,6 +1028,8 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   readonly error = signal('');
   readonly notice = signal('');
   readonly billingStatusChecking = signal(false);
+  readonly appointmentNoteSavingId = signal('');
+  readonly appointmentNoteDrafts = signal<Record<string, string>>({});
   readonly lastBookedClientId = signal('');
   readonly showClientHistoryToastAction = computed(() => !!this.lastBookedClientId() && this.notice().toLowerCase().includes('appointment'));
   readonly waitlistError = signal('');
@@ -1918,9 +1947,30 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   openAppointment(appointment: ApiRecord): void {
     this.selectedAppointment.set(appointment);
+    this.setAppointmentNoteDraftValue(appointment, this.appointmentNoteText(appointment));
     this.appointmentDetailTab.set('booking');
     this.drawer.set('appointment');
     void this.refreshAppointmentBillingStatus(appointment);
+  }
+
+  async saveAppointmentNote(appointment: ApiRecord): Promise<void> {
+    const id = this.appointmentKey(appointment);
+    if (!id) return;
+    const notes = this.appointmentNoteDraft(appointment).trim();
+    this.appointmentNoteSavingId.set(id);
+    try {
+      const updated = await firstValueFrom(this.api.update<ApiRecord>('appointments', id, {
+        notes,
+        version: appointment.version || 1
+      }));
+      this.applyAppointmentPatch(id, { ...updated, notes });
+      this.setAppointmentNoteDraftValue({ ...appointment, id }, notes);
+      this.showNotice('Appointment note saved');
+    } catch (error) {
+      this.error.set(this.api.errorText(error, 'Unable to save appointment note'));
+    } finally {
+      this.appointmentNoteSavingId.set('');
+    }
   }
 
   async setStatus(appointment: ApiRecord, status: string): Promise<void> {
@@ -2112,6 +2162,33 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   appointmentBillingLabel(appointment: ApiRecord): string {
     if (this.appointmentBillingLocked(appointment)) return 'Already billed';
     return this.label(String(appointment.status || 'booked'));
+  }
+
+  appointmentNoteDraft(appointment: ApiRecord): string {
+    const id = this.appointmentKey(appointment);
+    const drafts = this.appointmentNoteDrafts();
+    return id && Object.prototype.hasOwnProperty.call(drafts, id) ? drafts[id] : this.appointmentNoteText(appointment);
+  }
+
+  setAppointmentNoteDraft(appointment: ApiRecord, value: string): void {
+    this.setAppointmentNoteDraftValue(appointment, value);
+  }
+
+  clientProfileNoteSummary(clientId: string): string {
+    const client = this.clientById().get(clientId);
+    const raw = String(client?.notes || client?.note || '').trim();
+    if (!raw) return '';
+    const summary = raw
+      .replace(/(^|\n)(Front desk notes|Internal notes|Follow-up notes):\s*/gi, '$1$2: ')
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(' | ');
+    return summary.length > 240 ? `${summary.slice(0, 237)}...` : summary;
+  }
+
+  selectedBookingClientProfileNote(): string {
+    return this.clientProfileNoteSummary(this.selectedBookingClientId());
   }
 
   appointmentActionOptions(appointment: ApiRecord): AppointmentActionOption[] {
@@ -2463,6 +2540,34 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   private normalizedAppointmentStatus(value: unknown): string {
     return String(value || '').trim().toLowerCase().replace(/_/g, '-');
+  }
+
+  private appointmentKey(appointment: ApiRecord): string {
+    return String(appointment?.id || '');
+  }
+
+  private appointmentNoteText(appointment: ApiRecord): string {
+    return String(appointment?.notes || appointment?.note || '');
+  }
+
+  private setAppointmentNoteDraftValue(appointment: ApiRecord, value: string): void {
+    const id = this.appointmentKey(appointment);
+    if (!id) return;
+    this.appointmentNoteDrafts.update((drafts) => ({ ...drafts, [id]: value }));
+  }
+
+  private applyAppointmentPatch(id: string, patch: ApiRecord): void {
+    const current = this.context();
+    if (current) {
+      this.context.set({
+        ...current,
+        appointments: current.appointments.map((row) => String(row.id || '') === id ? { ...row, ...patch } : row)
+      });
+    }
+    const selected = this.selectedAppointment();
+    if (selected && String(selected.id || '') === id) {
+      this.selectedAppointment.set({ ...selected, ...patch });
+    }
   }
 
   private dateInput(date: Date): string {
