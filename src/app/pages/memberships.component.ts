@@ -46,7 +46,7 @@ type MembershipEnterpriseReport = {
   exportRows?: ApiRecord[];
 };
 
-type MembershipDeskTab = 'overview' | 'plans' | 'active' | 'audit' | 'commission' | 'risk' | 'reports' | 'selfService' | 'reminders' | 'autoRenew' | 'giftcards';
+type MembershipDeskTab = 'overview' | 'plans' | 'active' | 'audit' | 'commission' | 'risk' | 'reports' | 'reminders' | 'autoRenew' | 'giftcards';
 type MembershipReportTab = 'actionQueue' | 'activeMembers' | 'expiringSoon' | 'renewalRevenue' | 'cancelledMemberships' | 'staffWiseSales' | 'planWiseProfitability' | 'creditLiability' | 'autoRenewFailedPayments' | 'upgradeDowngrade' | 'discountLeakage';
 type LifecycleAction = 'renew' | 'upgrade' | 'downgrade' | 'cancel';
 type PlanLifecycleDialog = {
@@ -94,9 +94,6 @@ type PlanLifecycleDialog = {
         </button>
         <button type="button" [class.active]="activeTab() === 'reports'" (click)="setTab('reports')">
           Reports <span>{{ enterpriseReport().exportRows?.length || 0 }}</span>
-        </button>
-        <button type="button" [class.active]="activeTab() === 'selfService'" (click)="setTab('selfService')">
-          Self-service <span>{{ selfServiceRequests().length }}</span>
         </button>
         <button type="button" [class.active]="activeTab() === 'reminders'" (click)="setTab('reminders')">
           Reminders <span>{{ reminders().length }}</span>
@@ -839,154 +836,6 @@ type PlanLifecycleDialog = {
             <ng-template #noDiscountReport><div class="empty-panel compact-empty"><strong>No discount leakage.</strong></div></ng-template>
           </section>
         </div>
-      </section>
-
-      <section class="panel" *ngIf="activeTab() === 'selfService'">
-        <div class="section-title">
-          <div>
-            <span class="eyebrow">Phase 9 client self-service</span>
-            <h2>Membership self-service control center</h2>
-          </div>
-          <div class="inline-actions">
-            <button class="ghost-button mini" type="button" (click)="loadSelfServiceSummary()" [disabled]="saving()">Load summary</button>
-            <button class="ghost-button mini" type="button" (click)="refreshSelfServiceRequests()" [disabled]="saving()">Refresh requests</button>
-          </div>
-        </div>
-
-        <section class="report-filter-grid self-service-filter-grid">
-          <label class="field">
-            <span>Client</span>
-            <select [(ngModel)]="selfServiceClientId" (ngModelChange)="onSelfServiceClientChanged()">
-              <option value="">Select client</option>
-              <option *ngFor="let client of clients()" [value]="client.id">{{ clientWalletOption(client) }}</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Membership</span>
-            <select [(ngModel)]="selfServiceMembershipId">
-              <option value="">Auto active membership</option>
-              <option *ngFor="let membership of selectedSelfServiceClientMemberships()" [value]="membership.id">
-                {{ membership['planName'] || membership['planId'] || membership.id }} · {{ membershipDaysLeftLabel(membership) }}
-              </option>
-            </select>
-          </label>
-          <label class="field full">
-            <span>Generated status link</span>
-            <input [value]="selfServiceLastLink || selfServiceSummary()?.['statusLink']?.['link'] || ''" readonly placeholder="Generate status link for client" />
-          </label>
-        </section>
-
-        <div class="self-service-grid">
-          <section class="form-panel report-card">
-            <h3>Remaining credits view</h3>
-            <div class="wallet-snapshot-grid" *ngIf="selfServiceSummary() as summary; else noSelfServiceSummary">
-              <div><span>Client</span><b>{{ summary['client']?.['name'] || summary['client']?.['id'] || '-' }}</b></div>
-              <div><span>Active plan</span><b>{{ summary['wallet']?.['activePlanName'] || 'None' }}</b></div>
-              <div><span>Remaining credits</span><b>{{ summary['remainingCredits'] || 0 }}</b></div>
-              <div><span>Expiry</span><b>{{ summary['expiryDate'] || '-' }} · {{ summary['daysLeft'] ?? '-' }}d</b></div>
-              <div><span>Wallet balance</span><b>{{ (summary['wallet']?.['walletBalance'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</b></div>
-              <div><span>Provider readiness</span><b>{{ summary['providerReadiness']?.['paymentProviderConfigured'] ? 'Configured' : 'Placeholder only' }}</b></div>
-            </div>
-            <ng-template #noSelfServiceSummary>
-              <div class="empty-panel compact-empty">
-                <strong>No client loaded.</strong>
-                <span>Select a client and load summary to show membership status, wallet and credits.</span>
-              </div>
-            </ng-template>
-          </section>
-
-          <section class="form-panel report-card">
-            <h3>Client-ready actions</h3>
-            <div class="quick-grid">
-              <article class="action-card">
-                <strong>Status link</strong>
-                <span>Creates a client membership status link record with token and expiry.</span>
-                <button class="ghost-button mini" type="button" (click)="createSelfServiceStatusLink()" [disabled]="saving() || !selfServiceClientId">Generate link</button>
-              </article>
-              <article class="action-card">
-                <strong>WhatsApp summary</strong>
-                <span>Prepares manual-copy WhatsApp membership summary. No provider send unless configured.</span>
-                <button class="ghost-button mini" type="button" (click)="createWhatsAppSummary()" [disabled]="saving() || !selfServiceClientId">Prepare summary</button>
-              </article>
-              <article class="action-card">
-                <strong>Renew payment link</strong>
-                <span>Creates provider placeholder request only. Membership is not extended.</span>
-                <button class="ghost-button mini" type="button" (click)="createSelfServiceRenewLink()" [disabled]="saving() || !selfServiceMembershipId">Create request</button>
-              </article>
-              <article class="action-card">
-                <strong>Payment method update</strong>
-                <span>Creates a vault placeholder request. No card/bank data is stored.</span>
-                <button class="ghost-button mini" type="button" (click)="createSelfServicePaymentMethodUpdate()" [disabled]="saving() || !selfServiceMembershipId">Create request</button>
-              </article>
-            </div>
-            <div class="enterprise-control-box">
-              <span class="eyebrow">Enterprise controls</span>
-              <strong>Manual credit adjustment</strong>
-              <div class="inline-form control-inline-form">
-                <label class="field">
-                  <span>Credit delta</span>
-                  <input type="number" [(ngModel)]="selfServiceCreditDelta" />
-                </label>
-                <label class="field">
-                  <span>Reason</span>
-                  <input [(ngModel)]="selfServiceCreditReason" placeholder="Mandatory approval reason" />
-                </label>
-                <button class="ghost-button mini" type="button" (click)="createManualCreditAdjustmentRequest()" [disabled]="saving() || !selfServiceMembershipId || !selfServiceCreditReason.trim()">Request approval</button>
-              </div>
-            </div>
-            <label class="field">
-              <span>Cancellation reason</span>
-              <textarea [(ngModel)]="selfServiceCancelReason" placeholder="Reason is mandatory. Approval required before cancellation/refund."></textarea>
-            </label>
-            <button class="ghost-button danger-text" type="button" (click)="createSelfServiceCancelRequest()" [disabled]="saving() || !selfServiceMembershipId || !selfServiceCancelReason.trim()">Request cancellation approval</button>
-          </section>
-
-          <section class="form-panel report-card">
-            <h3>Expiry reminders</h3>
-            <div class="quick-grid" *ngIf="selfServiceSummary()?.['expiryReminders']?.length; else noSelfServiceReminders">
-              <article class="action-card" *ngFor="let reminder of selfServiceSummary()?.['expiryReminders']">
-                <strong>{{ reminder['reminderType'] || 'reminder' }}</strong>
-                <span>{{ reminder['dueOn'] || '-' }} · {{ reminder['status'] || 'queued' }}</span>
-              </article>
-            </div>
-            <ng-template #noSelfServiceReminders>
-              <div class="empty-panel compact-empty"><strong>No expiry reminders.</strong><span>Generate reminders from the reminders tab to populate this queue.</span></div>
-            </ng-template>
-          </section>
-
-          <section class="form-panel report-card">
-            <h3>WhatsApp preview</h3>
-            <textarea class="readonly-textarea" readonly [value]="selfServiceSummary()?.['whatsappSummary'] || 'Load a client summary to preview WhatsApp text.'"></textarea>
-          </section>
-        </div>
-
-        <section class="form-panel report-card request-queue-card">
-          <h3>Self-service request queue</h3>
-          <div class="table-wrap compact-table" *ngIf="selfServiceRequests().length; else noSelfServiceRequests">
-            <table>
-              <thead><tr><th>When</th><th>Client</th><th>Type</th><th>Status</th><th>Approval</th><th>Reason</th><th>Action</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let request of selfServiceRequests()">
-                  <td>{{ request['createdAt'] | date: 'short' }}</td>
-                  <td>{{ clientName(request['clientId']) }}</td>
-                  <td>{{ selfServiceLabel(request['requestType']) }}</td>
-                  <td><span class="badge" [class.danger]="request['status'] === 'pending_approval'">{{ selfServiceLabel(request['status']) }}</span></td>
-                  <td>{{ request['approvalRequired'] ? 'Owner/manager' : 'Not required' }}</td>
-                  <td>{{ request['reason'] || '-' }}<small *ngIf="request['requestPayload']?.['controls']?.length">{{ request['requestPayload']['controls'][0]?.label }}</small></td>
-                  <td>
-                    <div class="inline-actions">
-                      <button class="ghost-button mini" type="button" (click)="approveSelfServiceRequest(request)" [disabled]="saving() || request['status'] !== 'pending_approval'">Approve</button>
-                      <button class="ghost-button mini danger-text" type="button" (click)="rejectSelfServiceRequest(request)" [disabled]="saving() || request['status'] !== 'pending_approval'">Reject</button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <ng-template #noSelfServiceRequests>
-            <div class="empty-panel compact-empty"><strong>No self-service requests yet.</strong><span>Status links, renewal placeholders, payment updates and cancellation approvals will appear here.</span></div>
-          </ng-template>
-        </section>
       </section>
 
       <section class="panel" *ngIf="activeTab() === 'giftcards'">
@@ -2393,9 +2242,8 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       report: this.safeList<MembershipReport>('membership-enterprise/reports/revenue'),
       commission: this.safeList<MembershipCommissionReport>('membership-enterprise/reports/commission'),
       risk: this.safeList<MembershipRiskReport>('membership-enterprise/reports/risk'),
-      enterpriseReport: this.safeList<MembershipEnterpriseReport>('membership-enterprise/reports/enterprise', this.reportFilterParams()),
-      selfServiceRequests: this.safeList<ApiRecord[]>('membership-enterprise/self-service/requests', { limit: 100 })
-    }).subscribe(({ plans, memberships, clients, staff, giftCards, ledger, reminders, autoRenew, report, commission, risk, enterpriseReport, selfServiceRequests }) => {
+      enterpriseReport: this.safeList<MembershipEnterpriseReport>('membership-enterprise/reports/enterprise', this.reportFilterParams())
+    }).subscribe(({ plans, memberships, clients, staff, giftCards, ledger, reminders, autoRenew, report, commission, risk, enterpriseReport }) => {
       const livePlans = (plans || []).map((plan) => this.normalizePlan(plan));
       if (livePlans.length) {
         this.membershipPlans.set(livePlans);
@@ -2413,8 +2261,6 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       this.commissionReport.set(commission || {});
       this.riskReport.set(risk || {});
       this.enterpriseReport.set(enterpriseReport || {});
-      this.selfServiceRequests.set(selfServiceRequests || []);
-      this.ensureSelfServiceDefaults();
       this.loading.set(false);
     });
   }
