@@ -8,6 +8,7 @@ import { ensureEnterpriseSchedulerSchema } from "./enterprise-scheduler-schema.s
 import { resourceService } from "./resource.service.js";
 import { securityService } from "./security.service.js";
 import { smartBookingService } from "./smart-booking.service.js";
+import { staffOsService } from "./staff-os.service.js";
 import { tenantService } from "./tenant.service.js";
 
 const ACTIVE_STAFF_STATUSES = new Set(["", "active", "available", "on-roll", "onroll", "probation"]);
@@ -81,6 +82,26 @@ function camelSchedule(row = {}) {
 }
 
 function normalizeStaff(row = {}, source = "staff") {
+  if (source === "staff_os") {
+    const fullName = row.fullName || row.full_name || [row.firstName, row.lastName].filter(Boolean).join(" ");
+    const displayName = fullName || row.name || row.employeeCode || row.employee_code || row.id;
+    const role = row.designation || row.role || row.staffCategoryName || row.staff_category_name || row.department || "Staff";
+    return {
+      id: row.id,
+      name: displayName,
+      shortName: row.shortName || row.employeeCode || row.employee_code || initials(displayName),
+      branchId: row.branchId || row.branch_id || "",
+      role,
+      status: row.status || "active",
+      phone: row.mobile || row.phone || row.contact || "",
+      avatar: row.profilePhoto || row.profile_photo || row.avatar || row.photoUrl || "",
+      employeeCode: row.employeeCode || row.employee_code || "",
+      staffCategoryName: row.staffCategoryName || row.staff_category_name || "",
+      designation: row.designation || "",
+      department: row.department || "",
+      source
+    };
+  }
   if (source === "staff_master") {
     return {
       id: row.id,
@@ -118,6 +139,23 @@ function initials(value) {
 
 function activeStaff(row = {}) {
   return ACTIVE_STAFF_STATUSES.has(String(row.status || "").trim().toLowerCase());
+}
+
+function staffMatchesSearch(row = {}, search = "") {
+  const text = String(search || "").trim().toLowerCase();
+  if (!text) return true;
+  return [
+    row.name,
+    row.shortName,
+    row.role,
+    row.phone,
+    row.mobile,
+    row.employeeCode,
+    row.staffCategoryName,
+    row.designation,
+    row.department,
+    row.id
+  ].filter(Boolean).join(" ").toLowerCase().includes(text);
 }
 
 function branchFrom(query = {}, access = {}) {
@@ -474,19 +512,29 @@ export class EnterpriseSchedulerService {
 
   staff(branchId, access, search = "") {
     const rows = [];
-    const legacy = repositories.staff
-      .list({ branchId, limit: 5000 }, tenantService.accessScope(access, "staff"))
-      .filter(activeStaff)
-      .map((row) => normalizeStaff(row, "staff"));
-    rows.push(...legacy);
-    if (tableExists("staff_master")) {
-      const masterRows = db.prepare(`SELECT * FROM staff_master
-        WHERE tenant_id = @tenantId AND branch_id = @branchId AND lower(COALESCE(status, 'active')) IN ('active', 'available', 'on-roll', 'onroll', 'probation')
-        ORDER BY full_name LIMIT 5000`).all({ tenantId: access.tenantId, branchId });
-      rows.push(...masterRows.map((row) => normalizeStaff(row, "staff_master")));
+    try {
+      rows.push(...staffOsService
+        .listStaff({ branchId, status: "active", limit: 200 }, access)
+        .filter(activeStaff)
+        .map((row) => normalizeStaff(row, "staff_os")));
+    } catch (error) {
+      console.warn("Appointment scheduler live staff source failed", error?.message || error);
+    }
+    if (!rows.length) {
+      const legacy = repositories.staff
+        .list({ branchId, limit: 5000 }, tenantService.accessScope(access, "staff"))
+        .filter(activeStaff)
+        .map((row) => normalizeStaff(row, "staff"));
+      rows.push(...legacy);
+      if (tableExists("staff_master")) {
+        const masterRows = db.prepare(`SELECT * FROM staff_master
+          WHERE tenant_id = @tenantId AND branch_id = @branchId AND lower(COALESCE(status, 'active')) IN ('active', 'available', 'on-roll', 'onroll', 'probation')
+          ORDER BY full_name LIMIT 5000`).all({ tenantId: access.tenantId, branchId });
+        rows.push(...masterRows.map((row) => normalizeStaff(row, "staff_master")));
+      }
     }
     return uniqueById(rows)
-      .filter((row) => !search || `${row.name} ${row.role} ${row.phone}`.toLowerCase().includes(search))
+      .filter((row) => staffMatchesSearch(row, search))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
