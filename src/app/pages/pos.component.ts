@@ -71,6 +71,18 @@ type ClientSearchIndex = {
   duplicate: boolean;
 };
 
+type PackageRedeemRow = {
+  id: string;
+  membershipId: string;
+  packageName: string;
+  serviceId: string;
+  serviceName: string;
+  pendingQty: number;
+  totalQty: number;
+  expiry: string;
+  status: 'active' | 'expired';
+};
+
 @Component({
   selector: 'app-pos',
   standalone: true,
@@ -257,6 +269,56 @@ type ClientSearchIndex = {
               <div class="package-billing-alert__meta">
                 <span>Credits {{ packageNotice.credits }}</span>
                 <span>Expiry {{ packageNotice.expiry }}</span>
+              </div>
+            </section>
+            <section class="package-redeem-panel" *ngIf="selectedClientPackageRows().length">
+              <div class="package-redeem-header">
+                <strong>Package redemption</strong>
+                <small>{{ selectedClientPackageRows().length }} package service row(s)</small>
+              </div>
+              <div class="package-redeem-grid package-redeem-grid--head">
+                <span>Package</span>
+                <span>Service</span>
+                <span>Pending Qty</span>
+                <span>Redeem Qty</span>
+                <span>Staff</span>
+                <span>Action</span>
+              </div>
+              <div
+                class="package-redeem-grid"
+                [class.package-redeem-grid--expired]="row.status === 'expired'"
+                *ngFor="let row of selectedClientPackageRows()"
+              >
+                <strong>{{ row.packageName }}</strong>
+                <span>{{ row.serviceName }}</span>
+                <span>{{ row.pendingQty }}</span>
+                <input
+                  type="number"
+                  min="0"
+                  [max]="row.pendingQty"
+                  [ngModel]="packageRedeemQty(row)"
+                  (ngModelChange)="setPackageRedeemQty(row, $event)"
+                  [ngModelOptions]="{ standalone: true }"
+                  [disabled]="row.status === 'expired'"
+                />
+                <select
+                  [ngModel]="packageRedeemStaff(row)"
+                  (ngModelChange)="setPackageRedeemStaff(row, $event)"
+                  [ngModelOptions]="{ standalone: true }"
+                  [disabled]="row.status === 'expired'"
+                >
+                  <option value="">Use invoice staff</option>
+                  <option *ngFor="let person of staff()" [value]="person.id">{{ person.name }}</option>
+                </select>
+                <button
+                  class="ghost-button mini"
+                  type="button"
+                  (click)="redeemPackageRow(row)"
+                  [disabled]="row.status === 'expired' || packageRedeemQty(row) <= 0"
+                >
+                  Redeem
+                </button>
+                <small class="package-redeem-expiry">Expiry {{ row.expiry }}</small>
               </div>
             </section>
             <label class="field billing-date-field">
@@ -1310,6 +1372,69 @@ type ClientSearchIndex = {
       color: #92400e;
     }
 
+    :host .package-redeem-panel {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 8px;
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      padding: 10px;
+      background: #ede9fe;
+    }
+
+    :host .package-redeem-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      color: #111827;
+    }
+
+    :host .package-redeem-header small,
+    :host .package-redeem-expiry {
+      color: #475569;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    :host .package-redeem-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 1.35fr 0.65fr 0.7fr 1.2fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    :host .package-redeem-grid--head {
+      padding: 0 8px;
+      color: #1f2937;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    :host .package-redeem-grid input,
+    :host .package-redeem-grid select {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: #fff;
+      color: #0f172a;
+    }
+
+    :host .package-redeem-grid--expired {
+      opacity: 0.72;
+      background: #fff7ed;
+    }
+
+    :host .package-redeem-expiry {
+      grid-column: 1 / -1;
+    }
+
     :host .client-result-main mark {
       padding: 0 1px;
       border-radius: 3px;
@@ -1465,6 +1590,8 @@ export class PosComponent implements OnInit, OnDestroy {
   creditsUsed = 0;
   membershipId = '';
   benefitServiceMappings: BenefitServiceMapping[] = [];
+  packageRedeemQuantities: Record<string, number> = {};
+  packageRedeemStaffIds: Record<string, string> = {};
   clientSearchText = '';
   staffSearchText = '';
   serviceSearchText = '';
@@ -2513,7 +2640,22 @@ export class PosComponent implements OnInit, OnDestroy {
   redeemableBenefits(): ApiRecord[] {
     const wallet = this.membershipEligibility()?.['wallet'] as ApiRecord | undefined;
     const rows = Array.isArray(wallet?.['memberships']) ? wallet['memberships'] as ApiRecord[] : [];
-    return rows.filter((benefit) => this.redeemableBenefitRemainingCredits(benefit) > 0);
+    const clientId = String(this.form.value.clientId || '');
+    const localPackages: ApiRecord[] = this.clientPackageRecords(clientId)
+      .filter((membership) => this.packageStatus(membership) === 'active')
+      .map((membership) => ({
+        ...membership,
+        membershipId: membership.id,
+        entitlementType: 'package',
+        planName: membership.planName || this.packageDisplayName(membership)
+      }));
+    const byId = new Map<string, ApiRecord>();
+    for (const benefit of [...rows, ...localPackages]) {
+      const id = String(benefit['membershipId'] || benefit['id'] || '');
+      if (!id || this.redeemableBenefitRemainingCredits(benefit) <= 0) continue;
+      byId.set(id, { ...benefit, membershipId: id });
+    }
+    return [...byId.values()];
   }
 
   redeemableServiceLines(): Array<{ lineIndex: number; serviceId: string; serviceName: string; staffName: string; finalAmount: number }> {
@@ -2674,6 +2816,17 @@ export class PosComponent implements OnInit, OnDestroy {
       return JSON.parse(String(value));
     } catch {
       return null;
+    }
+  }
+
+  private readJsonArray(value: unknown): unknown[] {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(String(value));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
     }
   }
 
@@ -4135,6 +4288,14 @@ export class PosComponent implements OnInit, OnDestroy {
     ).length;
   }
 
+  selectedClientPackageRows(): PackageRedeemRow[] {
+    const clientId = String(this.form.value.clientId || '');
+    if (!clientId) return [];
+    return this.clientPackageRecords(clientId)
+      .sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))
+      .flatMap((membership) => this.packageCreditRows(membership));
+  }
+
   selectedClientPackageNotice(): { status: 'active' | 'expired'; title: string; summary: string; credits: string; expiry: string } | null {
     const clientId = String(this.form.value.clientId || '');
     if (!clientId) return null;
@@ -4167,6 +4328,86 @@ export class PosComponent implements OnInit, OnDestroy {
     );
   }
 
+  private packageCreditRows(membership: ApiRecord): PackageRedeemRow[] {
+    const credits = this.packageServiceCredits(membership);
+    const status = this.packageStatus(membership);
+    const packageName = this.packageDisplayName(membership);
+    const expiry = membership.validityDate ? this.dateLabel(membership.validityDate) : 'No expiry';
+    if (!credits.length) {
+      const pendingQty = this.packageRemainingCredits(membership);
+      return [{
+        id: `${membership.id || membership.membershipId || packageName}:package`,
+        membershipId: String(membership.id || membership.membershipId || ''),
+        packageName,
+        serviceId: '',
+        serviceName: 'Package credit',
+        pendingQty,
+        totalQty: this.packageTotalCredits(membership),
+        expiry,
+        status
+      }];
+    }
+    return credits.map((credit, index) => {
+      const serviceId = String(credit.serviceId || credit.service_id || credit.id || '');
+      const service = this.services().find((item) => String(item.id || '') === serviceId);
+      const qty = Math.max(0, Number(credit.remaining ?? credit.creditsRemaining ?? credit.credits ?? credit.quantity ?? 0));
+      return {
+        id: `${membership.id || membership.membershipId || packageName}:${serviceId || index}`,
+        membershipId: String(membership.id || membership.membershipId || ''),
+        packageName,
+        serviceId,
+        serviceName: String(credit.serviceName || credit.name || service?.name || serviceId || 'Package service'),
+        pendingQty: Math.min(qty, this.packageRemainingCredits(membership) || qty),
+        totalQty: Number(credit.credits ?? credit.quantity ?? qty),
+        expiry,
+        status
+      };
+    });
+  }
+
+  packageRedeemQty(row: PackageRedeemRow): number {
+    const current = this.packageRedeemQuantities[row.id];
+    if (current !== undefined) return Math.min(Math.max(0, Number(current || 0)), row.pendingQty);
+    return row.status === 'active' && row.pendingQty > 0 ? 1 : 0;
+  }
+
+  setPackageRedeemQty(row: PackageRedeemRow, value: number | string): void {
+    this.packageRedeemQuantities[row.id] = Math.min(row.pendingQty, Math.max(0, Math.floor(Number(value || 0))));
+  }
+
+  packageRedeemStaff(row: PackageRedeemRow): string {
+    return this.packageRedeemStaffIds[row.id] || String(this.form.value.staffId || '');
+  }
+
+  setPackageRedeemStaff(row: PackageRedeemRow, staffId: string): void {
+    this.packageRedeemStaffIds[row.id] = String(staffId || '');
+  }
+
+  redeemPackageRow(row: PackageRedeemRow): void {
+    const credits = this.packageRedeemQty(row);
+    if (row.status === 'expired' || credits <= 0) return;
+    const staffId = this.packageRedeemStaff(row);
+    let lineIndex = this.items().findIndex((item) => item.type === 'service' && String(item.id || '') === row.serviceId);
+    if (lineIndex < 0 && row.serviceId) {
+      this.addService(row.serviceId, staffId);
+      lineIndex = this.items().findIndex((item) => item.type === 'service' && String(item.id || '') === row.serviceId);
+    }
+    if (lineIndex < 0) {
+      this.error.set('Package service is not available in POS service master.');
+      return;
+    }
+    const line = this.redeemableServiceLines().find((item) => item.lineIndex === lineIndex);
+    this.membershipId = row.membershipId;
+    this.creditsUsed = credits;
+    this.benefitServiceMappings = [{
+      lineIndex,
+      serviceId: row.serviceId,
+      serviceName: line?.serviceName || row.serviceName,
+      credits
+    }];
+    this.dataHint.set(`${row.packageName} package redeem selected: ${credits} credit(s) for ${row.serviceName}.`);
+  }
+
   private packageStatus(membership: ApiRecord): 'active' | 'expired' {
     const today = new Date().toISOString().slice(0, 10);
     const status = String(membership.status || '').toLowerCase();
@@ -4180,17 +4421,24 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   private packageRemainingCredits(membership: ApiRecord): number {
-    const direct = Number(membership.creditsRemaining ?? membership.credits_remaining ?? 0);
-    if (direct > 0) return direct;
-    const credits = Array.isArray(membership.serviceCredits) ? membership.serviceCredits : [];
+    if (membership.creditsRemaining !== undefined || membership.credits_remaining !== undefined) {
+      return Math.max(0, Number(membership.creditsRemaining ?? membership.credits_remaining ?? 0));
+    }
+    const credits = this.packageServiceCredits(membership);
     return credits.reduce((sum, credit) => sum + Number(credit.remaining ?? credit.creditsRemaining ?? credit.credits ?? credit.quantity ?? 0), 0);
   }
 
   private packageTotalCredits(membership: ApiRecord): number {
     const direct = Number(membership.planCredits ?? membership.plan_credits ?? 0);
     if (direct > 0) return direct;
-    const credits = Array.isArray(membership.serviceCredits) ? membership.serviceCredits : [];
+    const credits = this.packageServiceCredits(membership);
     return credits.reduce((sum, credit) => sum + Number(credit.credits ?? credit.quantity ?? credit.remaining ?? credit.creditsRemaining ?? 0), 0);
+  }
+
+  private packageServiceCredits(membership: ApiRecord): ApiRecord[] {
+    if (Array.isArray(membership.serviceCredits)) return membership.serviceCredits as ApiRecord[];
+    const parsed = this.readJsonArray(membership.serviceCredits || membership.service_credits || []);
+    return parsed.filter((credit) => credit && typeof credit === 'object') as ApiRecord[];
   }
 
   private packageSortTime(membership: ApiRecord): number {
