@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { columnsFor, db, insertRow, listRows, updateRow } from "../db.js";
 import { securityService } from "./security.service.js";
 
@@ -404,7 +404,12 @@ export const migrationService = {
     const chunkNumber = Math.max(1, integer(payload.chunkNumber, integer(payload.index, 0)));
     const totalRows = integer(payload.totalRows, Array.isArray(payload.rows) ? payload.rows.length : 0);
     const existing = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId AND chunkNumber = @chunkNumber").get({ tenantId: access.tenantId, jobId, chunkNumber });
-    if (existing) assertLargeChunkMutable(deserializeDirectRow(existing), "registered again");
+    const incomingChecksum = cleanText(payload.checksum || "");
+    if (existing) {
+      const existingChunk = deserializeDirectRow(existing);
+      assertLargeChunkMutable(existingChunk, "registered again");
+      assertLargeChunkChecksum(existingChunk, incomingChecksum, "registered again");
+    }
     const id = existing?.id || cleanText(payload.id) || makeId("mchunk");
     const row = {
       id,
@@ -416,7 +421,7 @@ export const migrationService = {
       rowEnd: integer(payload.rowEnd, 0),
       status: existing?.status || "pending",
       totalRows,
-      checksum: cleanText(payload.checksum || ""),
+      checksum: incomingChecksum || cleanText(existing?.checksum || ""),
       payloadRef: cleanText(payload.payloadRef || ""),
       summary: payload.summary || { totalRows }
     };
@@ -430,17 +435,19 @@ export const migrationService = {
   stageLargeJobCsvChunk(jobId, chunkNumber, payload, access) {
     const rows = parseCsvChunkRows(payload);
     if (!rows.length) throw badRequest("CSV chunk has no data rows.");
+    const checksum = verifiedCsvChunkChecksum(payload);
     this.registerLargeJobChunk(jobId, {
       chunkNumber,
       totalRows: rows.length,
       rowStart: integer(payload.rowStart, 0),
       rowEnd: integer(payload.rowEnd, integer(payload.rowStart, 0) + rows.length - 1),
       sourceSheet: cleanText(payload.sourceSheet || "csv"),
-      checksum: cleanText(payload.checksum || "")
+      checksum
     }, access);
     return this.analyzeLargeJobChunk(jobId, chunkNumber, {
       ...payload,
       rows,
+      checksum,
       sourceSheet: cleanText(payload.sourceSheet || "csv")
     }, access);
   },
@@ -448,6 +455,7 @@ export const migrationService = {
     const job = requireLargeMigrationJob(jobId, access);
     const chunk = requireLargeMigrationChunk(jobId, chunkNumber, access);
     assertLargeChunkMutable(chunk, "analyzed again");
+    assertLargeChunkChecksum(chunk, cleanText(payload.checksum || ""), "analyzed again");
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
     if (!rows.length) throw badRequest("rows are required for chunk analysis.");
     const preview = previewPayload(largeChunkPayload(job, payload, rows), access, { persist: false, dryRun: true, jobId: job.id });
@@ -921,6 +929,21 @@ function previewPayload(payload, access, { persist, dryRun, jobId = "" }) {
   if (persist) persistPreview(response, access, dryRun);
   auditMigration(dryRun ? "migration.dry_run.completed" : "migration.preview.completed", { summary }, access);
   return response;
+}
+
+function verifiedCsvChunkChecksum(payload = {}) {
+  const checksum = csvChunkChecksum(payload);
+  const provided = cleanText(payload.checksum || "");
+  if (provided && provided !== checksum) {
+    throw badRequest("CSV chunk checksum does not match uploaded content.");
+  }
+  return checksum;
+}
+
+function csvChunkChecksum(payload = {}) {
+  const header = Array.isArray(payload.header) ? payload.header.map((item) => cleanText(item)) : [];
+  const csvText = String(payload.csvText || "").replace(/^\uFEFF/, "");
+  return createHash("sha256").update(JSON.stringify({ header, csvText }), "utf8").digest("hex");
 }
 
 function parseCsvChunkRows(payload = {}) {
@@ -2314,6 +2337,11 @@ const LARGE_CHUNK_LOCKED_STATUSES = new Set(["imported", "rolled_back", "cancell
 function assertLargeChunkMutable(chunk, action) {
   if (!chunk || !LARGE_CHUNK_LOCKED_STATUSES.has(chunk.status)) return;
   throw badRequest(`Chunk ${chunk.chunkNumber} is ${chunk.status} and cannot be ${action}. Create a new migration job or rollback before retrying.`);
+}
+
+function assertLargeChunkChecksum(chunk, checksum, action) {
+  if (!chunk || !chunk.checksum || !checksum || chunk.checksum === checksum) return;
+  throw badRequest(`Chunk ${chunk.chunkNumber} checksum changed and cannot be ${action}. Upload it as a new chunk or create a new migration job.`);
 }
 
 function assertLargeChunkImportable(chunk) {
