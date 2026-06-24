@@ -1,5 +1,5 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit, effect, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, effect, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, distinctUntilChanged, forkJoin, of, Subscription } from 'rxjs';
@@ -81,6 +81,14 @@ type PackageRedeemRow = {
   totalQty: number;
   expiry: string;
   status: 'active' | 'expired';
+};
+
+type PackageClientNotice = {
+  status: 'active' | 'expired';
+  title: string;
+  summary: string;
+  credits: string;
+  expiry: string;
 };
 
 @Component({
@@ -285,7 +293,7 @@ type PackageRedeemRow = {
               <div
                 class="package-redeem-grid"
                 [class.package-redeem-grid--expired]="row.status === 'expired'"
-                *ngFor="let row of selectedClientPackageRows()"
+                *ngFor="let row of selectedClientPackageRows(); trackBy: trackPackageRedeemRow"
               >
                 <strong>{{ row.packageName }}</strong>
                 <span>{{ row.serviceName }}</span>
@@ -1639,6 +1647,36 @@ export class PosComponent implements OnInit, OnDestroy {
   private branchSyncReady = false;
   private clientSearchTimer = 0;
   private readonly clientSearchIndex = new Map<string, ClientSearchIndex>();
+  private readonly selectedClientId = signal('');
+  readonly selectedClientPackageRecords = computed<ApiRecord[]>(() => {
+    const clientId = this.selectedClientId();
+    return clientId ? this.clientPackageRecords(clientId) : [];
+  });
+  readonly selectedClientPackageRows = computed<PackageRedeemRow[]>(() => [...this.selectedClientPackageRecords()]
+    .sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))
+    .flatMap((membership) => this.packageCreditRows(membership)));
+  readonly selectedClientPackageNotice = computed<PackageClientNotice | null>(() => {
+    const packages = [...this.selectedClientPackageRecords()];
+    if (!packages.length) return null;
+    const active = packages
+      .filter((membership) => this.packageStatus(membership) === 'active')
+      .sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))[0];
+    const selected = active || packages.sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))[0];
+    const status = this.packageStatus(selected);
+    const creditsRemaining = this.packageRemainingCredits(selected);
+    const totalCredits = this.packageTotalCredits(selected);
+    const expiry = selected.validityDate ? this.dateLabel(selected.validityDate) : 'No expiry';
+    const title = this.packageDisplayName(selected);
+    return {
+      status,
+      title,
+      summary: status === 'active'
+        ? `${title} active hai. Billing me package redeem kar sakte ho.`
+        : `${title} expire/used ho gaya hai. Renewal ya new package sale check karo.`,
+      credits: totalCredits > 0 ? `${creditsRemaining}/${totalCredits}` : String(creditsRemaining),
+      expiry
+    };
+  });
 
   constructor(
     private readonly api: ApiService,
@@ -2035,6 +2073,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.bookingAdvanceInfo.set(null);
     this.bookingAdvanceLoading.set(false);
     this.bookingAdvanceAppliedAmount.set(0);
+    this.selectedClientId.set('');
     this.form.patchValue({ clientId: '', staffId: '', appointmentId: '', invoiceDate: this.todayDateInput() }, { emitEvent: false });
     const invoiceText = invoiceNumber ? ` Invoice ${invoiceNumber} already exists.` : '';
     this.dataHint.set(`Appointment ${appointmentId} is already billed.${invoiceText} POS will not reopen it.`);
@@ -2053,6 +2092,7 @@ export class PosComponent implements OnInit, OnDestroy {
     if (client) {
       this.selectClient(client);
     } else {
+      this.selectedClientId.set(clientId);
       this.form.patchValue({ clientId }, { emitEvent: false });
       this.clientSearchText = clientId;
     }
@@ -3009,6 +3049,7 @@ export class PosComponent implements OnInit, OnDestroy {
       this.selectClient(selected);
       return;
     }
+    this.selectedClientId.set('');
     this.form.patchValue({ clientId: '' }, { emitEvent: false });
     const trimmed = this.clientSearchText.trim();
     if (!trimmed) {
@@ -3050,11 +3091,14 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   selectClient(client: ApiRecord): void {
+    const clientId = String(client.id || '');
     this.clientSearchText = this.clientOption(client);
     this.clientSearchPending.set(false);
-    this.debouncedClientQuery.set(this.clientSearchText);
-    this.refreshClientSearchResults();
-    this.form.patchValue({ clientId: client.id }, { emitEvent: false });
+    this.debouncedClientQuery.set('');
+    this.clientSearchResults.set([client]);
+    this.activeClientResultIndex.set(0);
+    this.selectedClientId.set(clientId);
+    this.form.patchValue({ clientId }, { emitEvent: false });
     this.clientSearchActive = false;
     this.creditsUsed = 0;
     this.membershipId = '';
@@ -3065,7 +3109,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.unpaidReceiveAmount = 0;
     this.unpaidReceiveMode = this.activePaymentModes()[0]?.id || 'cash';
     this.unpaidReceiveMessage.set('');
-    this.loadMembershipIntelligence(client.id);
+    if (clientId) this.loadMembershipIntelligence(clientId);
   }
 
   selectClientFromResult(event: Event, client: ApiRecord): void {
@@ -3363,9 +3407,7 @@ export class PosComponent implements OnInit, OnDestroy {
   useWalkinClient(): void {
     const existing = this.clients().find((client) => this.normalizeSearch(`${client.name} ${client.phone}`) === 'walk in client 0000000000' || this.normalizeSearch(client.name || '').includes('walk'));
     if (existing) {
-      this.clientSearchText = this.clientOption(existing);
-      this.form.patchValue({ clientId: existing.id }, { emitEvent: false });
-      this.loadMembershipIntelligence(existing.id);
+      this.selectClient(existing);
       return;
     }
     const branchId = this.form.value.branchId || this.appState.selectedBranchId() || 'branch_hyd';
@@ -3381,9 +3423,7 @@ export class PosComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: (client) => {
         this.clients.update((clients) => [client, ...clients]);
-        this.clientSearchText = this.clientOption(client);
-        this.form.patchValue({ clientId: client.id }, { emitEvent: false });
-        this.loadMembershipIntelligence(client.id);
+        this.selectClient(client);
       },
       error: (error) => this.error.set(error?.error?.error || 'Unable to create walk-in client')
     });
@@ -3886,6 +3926,7 @@ export class PosComponent implements OnInit, OnDestroy {
       return;
     }
     this.currentHoldId = draft.currentHoldId || '';
+    this.selectedClientId.set(String(draft.clientId || ''));
     this.form.patchValue({
       clientId: draft.clientId || '',
       branchId: draft.branchId || this.form.value.branchId || '',
@@ -3949,6 +3990,7 @@ export class PosComponent implements OnInit, OnDestroy {
       return;
     }
     this.currentHoldId = draft.id;
+    this.selectedClientId.set(String(draft.clientId || ''));
     this.form.patchValue({
       clientId: draft.clientId || '',
       branchId: draft.branchId || this.form.value.branchId || '',
@@ -4008,6 +4050,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.productSearchActive = false;
     this.membershipEligibility.set(null);
     this.membershipSuggestion.set(null);
+    this.selectedClientId.set('');
     this.form.patchValue({ clientId: '', staffId: '', appointmentId: '', invoiceDate: this.todayDateInput() }, { emitEvent: false });
     this.clearCoupon();
   }
@@ -4245,6 +4288,7 @@ export class PosComponent implements OnInit, OnDestroy {
     this.tipDraft = { staffId: '', paymentMode: this.activePaymentModes()[0]?.id || 'cash', amount: 0, note: '' };
     this.unpaidReceiveAmount = 0;
     this.unpaidReceiveMessage.set('');
+    this.selectedClientId.set('');
     this.form.patchValue({ clientId: '', staffId: '', appointmentId: '', invoiceDate: this.todayDateInput() }, { emitEvent: false });
     this.invoice.set(null);
     this.generatedInvoiceSettlement.set(null);
@@ -4315,37 +4359,8 @@ export class PosComponent implements OnInit, OnDestroy {
     ).length;
   }
 
-  selectedClientPackageRows(): PackageRedeemRow[] {
-    const clientId = String(this.form.value.clientId || '');
-    if (!clientId) return [];
-    return this.clientPackageRecords(clientId)
-      .sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))
-      .flatMap((membership) => this.packageCreditRows(membership));
-  }
-
-  selectedClientPackageNotice(): { status: 'active' | 'expired'; title: string; summary: string; credits: string; expiry: string } | null {
-    const clientId = String(this.form.value.clientId || '');
-    if (!clientId) return null;
-    const packages = this.clientPackageRecords(clientId);
-    if (!packages.length) return null;
-    const active = packages
-      .filter((membership) => this.packageStatus(membership) === 'active')
-      .sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))[0];
-    const selected = active || packages.sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))[0];
-    const status = this.packageStatus(selected);
-    const creditsRemaining = this.packageRemainingCredits(selected);
-    const totalCredits = this.packageTotalCredits(selected);
-    const expiry = selected.validityDate ? this.dateLabel(selected.validityDate) : 'No expiry';
-    const title = this.packageDisplayName(selected);
-    return {
-      status,
-      title,
-      summary: status === 'active'
-        ? `${title} active hai. Billing me package redeem kar sakte ho.`
-        : `${title} expire/used ho gaya hai. Renewal ya new package sale check karo.`,
-      credits: totalCredits > 0 ? `${creditsRemaining}/${totalCredits}` : String(creditsRemaining),
-      expiry
-    };
+  trackPackageRedeemRow(_index: number, row: PackageRedeemRow): string {
+    return row.id;
   }
 
   private clientPackageRecords(clientId: string): ApiRecord[] {
