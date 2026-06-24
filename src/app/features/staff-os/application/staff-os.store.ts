@@ -105,6 +105,10 @@ export class StaffOsStore {
     return this.api.updateStaffStatus(staff.id, { status, version: staff.version });
   }
 
+  uploadStaffPhoto(payload: ApiRecord) {
+    return this.api.uploadStaffPhoto(payload);
+  }
+
   createTask(payload: Record<string, unknown>) {
     return this.api.createTask(payload);
   }

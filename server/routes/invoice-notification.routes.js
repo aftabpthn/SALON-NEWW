@@ -21,6 +21,15 @@ invoiceNotificationRouter.put(
   })
 );
 
+invoiceNotificationRouter.post(
+  "/invoice-notifications/profile/media",
+  requirePermission("write", () => "settings"),
+  asyncHandler((req, res) => {
+    const publicBaseUrl = `${req.protocol}://${req.get("host")}`;
+    res.status(201).json(invoiceNotificationService.uploadProfileMedia(req.body, req.access, { publicBaseUrl }));
+  })
+);
+
 invoiceNotificationRouter.get(
   "/invoice-notifications/queue",
   requirePermission("read", () => "notifications"),

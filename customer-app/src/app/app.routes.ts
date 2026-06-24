@@ -34,6 +34,10 @@ export const routes: Routes = [
         loadComponent: () => import("./features/search/search.page").then((m) => m.SearchPage)
       },
       {
+        path: "consultation",
+        loadComponent: () => import("./features/consultation/live-consultation.page").then((m) => m.LiveConsultationPage)
+      },
+      {
         path: "bookings",
         canActivate: [customerAuthGuard],
         loadComponent: () => import("./features/bookings/bookings.page").then((m) => m.BookingsPage)

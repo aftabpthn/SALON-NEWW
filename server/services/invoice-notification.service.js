@@ -1,4 +1,6 @@
-import { db } from "../db.js";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataDir, db } from "../db.js";
 import { badRequest, notFound } from "../utils/app-error.js";
 import { realtimeService } from "./realtime.service.js";
 import { securityService } from "./security.service.js";
@@ -7,6 +9,20 @@ import { tenantService } from "./tenant.service.js";
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
 const money = (value) => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+const MAX_BUSINESS_MEDIA_BYTES = 5 * 1024 * 1024;
+const BUSINESS_MEDIA_MIME_EXTENSIONS = new Map([
+  ["image/jpeg", ".jpg"],
+  ["image/jpg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+  ["image/gif", ".gif"],
+  ["image/avif", ".avif"],
+  ["image/heic", ".heic"],
+  ["image/heif", ".heif"],
+  ["image/bmp", ".bmp"],
+  ["image/tiff", ".tiff"]
+]);
+const BUSINESS_MEDIA_EXTENSIONS = new Set([...BUSINESS_MEDIA_MIME_EXTENSIONS.values(), ".jpeg"]);
 
 function parseJson(value, fallback) {
   if (Array.isArray(value) || (value && typeof value === "object")) return value;
@@ -178,6 +194,38 @@ function invoicePdfFileName(invoice = {}) {
   return `${raw}.pdf`;
 }
 
+function safePathSegment(value, fallback) {
+  const segment = String(value || fallback || "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80);
+  return segment || fallback;
+}
+
+function mediaExtension(payload = {}) {
+  const mimeType = String(payload.mimeType || "").toLowerCase();
+  const nameMatch = String(payload.fileName || "").toLowerCase().match(/\.(jpe?g|png|webp|gif|avif|hei[cf]|bmp|tiff?)$/);
+  const rawExtension = nameMatch?.[1] || "";
+  const normalizedExtension = rawExtension === "jpeg" ? "jpg" : rawExtension === "tif" ? "tiff" : rawExtension;
+  const extension = normalizedExtension ? `.${normalizedExtension}` : "";
+  if (extension && BUSINESS_MEDIA_EXTENSIONS.has(extension)) return extension;
+  return BUSINESS_MEDIA_MIME_EXTENSIONS.get(mimeType) || "";
+}
+
+function imageSignatureMatches(buffer, mimeType) {
+  if (mimeType === "image/jpeg" || mimeType === "image/jpg") return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (mimeType === "image/png") return buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  if (mimeType === "image/gif") return buffer.subarray(0, 3).toString("ascii") === "GIF";
+  if (mimeType === "image/webp") return buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  if (mimeType === "image/bmp") return buffer.subarray(0, 2).toString("ascii") === "BM";
+  if (mimeType === "image/tiff") {
+    const head = buffer.subarray(0, 4);
+    return head.equals(Buffer.from([0x49, 0x49, 0x2a, 0x00])) || head.equals(Buffer.from([0x4d, 0x4d, 0x00, 0x2a]));
+  }
+  if (["image/avif", "image/heic", "image/heif"].includes(mimeType)) {
+    const brand = buffer.subarray(4, 16).toString("ascii");
+    return brand.includes("ftyp") && /avif|heic|heif|mif1|msf1/.test(brand);
+  }
+  return false;
+}
+
 export class InvoiceNotificationService {
   defaultProfile(access = {}, branchId = "") {
     const tenantId = access.tenantId || "tenant_aura";
@@ -306,6 +354,51 @@ export class InvoiceNotificationService {
     securityService.audit({ action: "invoice.notification_profile.saved", targetType: "business_notification_profile", targetId: next.id, details: { branchId } }, access);
     realtimeService.broadcast("invoice:notification_profile_updated", { branchId }, { tenantId, branchId });
     return this.getProfile({ branchId }, access);
+  }
+
+  uploadProfileMedia(payload = {}, access = {}, options = {}) {
+    const tenantId = access.tenantId;
+    const branchId = payload.branchId || access.branchId || "";
+    if (branchId) tenantService.assertBranchAccess(access, branchId);
+
+    const kind = payload.kind === "gallery" ? "gallery" : "cover";
+    const mimeType = String(payload.mimeType || "").toLowerCase();
+    const extension = mediaExtension(payload);
+    if (!mimeType.startsWith("image/") || !extension) {
+      throw badRequest("Only JPG, PNG and common photo files are allowed");
+    }
+
+    const rawData = String(payload.dataUrl || payload.content || "");
+    const base64 = (rawData.includes(",") ? rawData.split(",").pop() : rawData).replace(/\s+/g, "");
+    if (!base64 || !/^[a-zA-Z0-9+/=]+$/.test(base64)) {
+      throw badRequest("Image file is required");
+    }
+
+    const buffer = Buffer.from(base64, "base64");
+    if (!buffer.length || buffer.length > MAX_BUSINESS_MEDIA_BYTES) {
+      throw badRequest("Image size must be 5 MB or less");
+    }
+    if (!imageSignatureMatches(buffer, mimeType)) {
+      throw badRequest("Uploaded file is not a valid photo");
+    }
+
+    const tenantSegment = safePathSegment(tenantId, "tenant");
+    const branchSegment = safePathSegment(branchId || "all", "all");
+    const uploadDir = join(dataDir, "uploads", "business-media", tenantSegment, branchSegment);
+    const fileName = `${kind}_${Date.now()}_${makeId("img")}${extension}`;
+    mkdirSync(uploadDir, { recursive: true });
+    writeFileSync(join(uploadDir, fileName), buffer, { flag: "wx" });
+
+    const path = `/uploads/business-media/${tenantSegment}/${branchSegment}/${fileName}`;
+    const publicBaseUrl = String(options.publicBaseUrl || "").replace(/\/+$/, "");
+    const url = publicBaseUrl ? `${publicBaseUrl}${path}` : path;
+    securityService.audit({
+      action: "invoice.notification_profile.media_uploaded",
+      targetType: "business_notification_profile",
+      targetId: branchId || tenantId,
+      details: { branchId, kind, fileName: String(payload.fileName || ""), mimeType, sizeBytes: buffer.length, url }
+    }, access);
+    return { url, path, kind, mimeType, sizeBytes: buffer.length, branchId };
   }
 
   listQueue(query = {}, access = {}) {

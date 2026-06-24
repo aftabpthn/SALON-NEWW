@@ -46,6 +46,16 @@ type ReconciliationLine = {
   status: string;
 };
 
+
+type LargeReconciliationSnapshot = {
+  id: string;
+  status: 'passed' | 'warning' | 'failed' | string;
+  snapshotType?: string;
+  createdAt?: string;
+  expected?: any;
+  actual?: any;
+  differences?: Array<{ code?: string; severity?: string; resource?: string; expected?: number; actual?: number; missing?: number; message?: string }>;
+};
 type ApprovalRecord = {
   id: string;
   jobId?: string;
@@ -55,6 +65,21 @@ type ApprovalRecord = {
   submittedAt?: string;
   reviewedAt?: string;
   summary?: any;
+};
+type LargeMigrationJob = {
+  id: string;
+  status: string;
+  totalRows?: number;
+  processedRows?: number;
+  validRows?: number;
+  importedRows?: number;
+  skippedRows?: number;
+  errorRows?: number;
+  warningRows?: number;
+  chunkSize?: number;
+  resumeToken?: string;
+  chunks?: Array<{ id: string; chunkNumber: number; status: string; totalRows: number; importedRows?: number; errorRows?: number; warningRows?: number }>;
+  reconciliations?: LargeReconciliationSnapshot[];
 };
 
 @Component({
@@ -170,6 +195,106 @@ type ApprovalRecord = {
             <small>{{ risk.detail }}</small>
           </article>
         </aside>
+      </section>
+
+
+      <section class="grid two">
+        <article class="panel worker-panel">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Large Migration Worker</span>
+              <h2>Chunked import queue</h2>
+            </div>
+            <span class="status-pill" [class.danger]="largeJob()?.status === 'failed'">{{ largeJob()?.status || 'Not prepared' }}</span>
+          </div>
+          <div class="control-strip compact">
+            <article><span>Job ID</span><strong>{{ largeJob()?.id || '-' }}</strong><small>{{ largeJob()?.resumeToken || 'Create a staged job from analyzed data' }}</small></article>
+            <article><span>Rows</span><strong>{{ largeJob()?.totalRows || summary()?.totalRows || 0 }}</strong><small>{{ largeJob()?.processedRows || 0 }} processed</small></article>
+            <article><span>Imported</span><strong>{{ largeJob()?.importedRows || 0 }}</strong><small>{{ largeJob()?.skippedRows || 0 }} skipped</small></article>
+            <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeJobChunks().length }} chunks tracked · {{ csvStagedRows() }} staged rows</small></article>
+          </div>
+          <div class="worker-settings">
+            <label>
+              <span>Chunk size</span>
+              <input type="number" min="100" max="50000" step="100" [ngModel]="largeChunkSize()" (ngModelChange)="largeChunkSize.set(numberInput($event, 5000))" />
+            </label>
+            <label>
+              <span>Chunks per tick</span>
+              <input type="number" min="1" max="100" [ngModel]="largeMaxChunks()" (ngModelChange)="largeMaxChunks.set(numberInput($event, 5))" />
+            </label>
+          </div>
+          <div class="action-row">
+            <button class="secondary-button" type="button" [disabled]="!canPrepareLargeMigration() || loading()" (click)="prepareLargeMigrationJob()">Prepare chunk 1</button>
+            <button class="secondary-button" type="button" [disabled]="!isCsvFileSelected() || loading()" (click)="stageCsvMigrationChunks()">Stage CSV chunks</button>
+            <button class="primary-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="queueLargeMigrationJob()">Queue worker</button>
+            <button class="secondary-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="runWorkerTick()">Run worker tick</button>
+            <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="refreshLargeJobStatus()">Refresh</button>
+            <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="pauseLargeMigrationJob()">Pause</button>
+            <button class="secondary-button" type="button" [disabled]="!largeJob() || loading()" (click)="retryFailedLargeMigrationChunks()">Retry failed</button>
+            <button class="danger-button" type="button" [disabled]="!largeJob() || loading()" (click)="cancelLargeMigrationJob()">Cancel</button>
+            <button class="ghost-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="resumeLargeMigrationJob()">Resume now</button>
+          </div>
+          <p class="muted" *ngIf="!importApprovalReady()">Owner approval required before queued import writes into live modules.</p>
+          <div class="chunk-list" *ngIf="largeJobChunks().length">
+            <article *ngFor="let chunk of largeJobChunks()" [class.done]="chunk.status === 'imported'" [class.danger]="chunk.status === 'failed' || chunk.status === 'imported_with_errors'">
+              <strong>Chunk {{ chunk.chunkNumber }}</strong>
+              <span>{{ chunk.status }}</span>
+              <small>{{ chunk.importedRows || 0 }}/{{ chunk.totalRows || 0 }} imported · {{ chunk.errorRows || 0 }} errors</small>
+            </article>
+          </div>
+        </article>
+
+        <article class="panel proof-panel">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Migration Proof</span>
+              <h2>Reconciliation sign-off</h2>
+            </div>
+            <span class="status-pill" [class.danger]="latestLargeReconciliation()?.status === 'warning'">{{ latestLargeReconciliation()?.status || 'Not checked' }}</span>
+          </div>
+          <div class="proof-grid">
+            <article>
+              <span>Snapshot</span>
+              <strong>{{ latestLargeReconciliation()?.id || '-' }}</strong>
+              <small>{{ latestLargeReconciliation()?.snapshotType || 'Run proof check after import' }}</small>
+            </article>
+            <article>
+              <span>Differences</span>
+              <strong>{{ largeReconciliationDifferences().length }}</strong>
+              <small>{{ latestLargeReconciliation()?.createdAt || 'No audit snapshot yet' }}</small>
+            </article>
+          </div>
+          <div class="action-row">
+            <button class="primary-button" type="button" [disabled]="!largeJob() || loading()" (click)="runLargeJobReconciliation()">Run proof check</button>
+            <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="refreshLargeJobStatus()">Refresh proof</button>
+            <button class="secondary-button" type="button" [disabled]="!latestLargeReconciliation() || loading()" (click)="downloadLargeReconciliationReport()">Export proof</button>
+          </div>
+          <div class="checklist compact-checklist">
+            <label *ngFor="let item of largeMigrationChecklist()">
+              <input type="checkbox" [checked]="item.done" disabled />
+              <span>{{ item.label }}</span>
+            </label>
+            <label>
+              <input type="checkbox" [checked]="!!latestLargeReconciliation()" disabled />
+              <span>Reconciliation snapshot saved</span>
+            </label>
+          </div>
+          <div class="result-box" *ngIf="lastWorkerResult()">
+            <span>Last worker result</span>
+            <strong>{{ lastWorkerResult()?.checkedJobs || lastWorkerResult()?.processedChunks || 0 }} unit(s) processed</strong>
+            <small>{{ lastWorkerResultText() }}</small>
+          </div>
+          <div class="difference-list" *ngIf="largeReconciliationDifferences().length; else noLargeReconDiffs">
+            <article *ngFor="let diff of largeReconciliationDifferences()" [class.danger]="diff.severity === 'critical'">
+              <strong>{{ diff.code || 'difference' }}</strong>
+              <span>{{ diff.message || 'Review this migration proof difference.' }}</span>
+              <small>{{ diff.resource || 'all resources' }} · expected {{ diff.expected ?? '-' }} · actual {{ diff.actual ?? '-' }}</small>
+            </article>
+          </div>
+          <ng-template #noLargeReconDiffs>
+            <p class="muted">No proof differences recorded for the latest snapshot.</p>
+          </ng-template>
+        </article>
       </section>
 
       <section class="grid three">
@@ -637,6 +762,20 @@ type ApprovalRecord = {
     .approval-list article.rejected { border-left-color: #ef4444; background: #fef2f2; }
     .job-detail { margin-top: 14px; display: grid; gap: 12px; }
     .control-strip.compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .worker-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .proof-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .proof-grid article, .difference-list article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; display: grid; gap: 4px; background: #ffffff; }
+    .proof-grid span, .difference-list span, .difference-list small { color: #64748b; }
+    .proof-grid strong { font-size: 18px; word-break: break-word; }
+    .compact-checklist { margin-top: 10px; }
+    .difference-list { display: grid; gap: 8px; margin-top: 10px; }
+    .difference-list article { border-left: 4px solid #f59e0b; background: #fffbeb; }
+    .difference-list article.danger { border-left-color: #ef4444; background: #fef2f2; }
+    .chunk-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-top: 12px; }
+    .chunk-list article { border: 1px solid #d7e6e2; border-left: 4px solid #94a3b8; border-radius: 8px; padding: 10px; display: grid; gap: 4px; background: #ffffff; }
+    .chunk-list article.done { border-left-color: #10b981; background: #f0fdf4; }
+    .chunk-list article.danger { border-left-color: #ef4444; background: #fef2f2; }
+    .chunk-list span, .chunk-list small { color: #64748b; }
     tr.selected td { background: #eff6ff; }
     .segmented { display: inline-flex; border: 1px solid #cfe0dc; border-radius: 8px; overflow: hidden; }
     .segmented button { border: 0; border-radius: 0; min-height: 34px; background: #ffffff; }
@@ -657,10 +796,10 @@ type ApprovalRecord = {
       .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
-      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article { grid-template-columns: 1fr; }
+      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid { grid-template-columns: 1fr; }
       .command-header h1 { font-size: 28px; }
       .panel-head { align-items: flex-start; flex-direction: column; }
-      .mapping-toolbar, .mapping-list article, .duplicate-list article, .ops-queue { grid-template-columns: 1fr; }
+      .mapping-toolbar, .mapping-list article, .duplicate-list article, .ops-queue, .worker-settings { grid-template-columns: 1fr; }
     }
   `]
 })
@@ -731,6 +870,13 @@ export class DataMigrationComponent implements OnInit {
   assistantQuestion = signal('');
   assistantAnswer = signal('');
   approvalDebug = signal('');
+  largeJob = signal<LargeMigrationJob | null>(null);
+  largeChunkSize = signal(5000);
+  largeMaxChunks = signal(5);
+  lastWorkerResult = signal<any | null>(null);
+  csvStagedRows = signal(0);
+  csvStagedChunks = signal(0);
+  private selectedSourceFile: File | null = null;
   private readonly emptyTemplateColumns: MigrationTemplate['columns'] = [];
   private relevantMappingsCacheKey = '';
   private relevantMappingsCacheSource: any[] | null = null;
@@ -748,6 +894,9 @@ export class DataMigrationComponent implements OnInit {
   duplicatePreviewRows = computed(() => this.duplicateRows().slice(0, 8));
   selectedJobRows = computed(() => (this.selectedJob()?.rows || []).slice(0, 200));
   reconciliationLines = computed<ReconciliationLine[]>(() => this.reconciliationResult()?.lines || []);
+  largeJobChunks = computed(() => this.largeJob()?.chunks || []);
+  latestLargeReconciliation = computed(() => this.largeJob()?.reconciliations?.[0] || null);
+  largeReconciliationDifferences = computed(() => this.latestLargeReconciliation()?.differences || []);
   completionChecklist = computed(() => this.onboarding()?.completionChecklist || [
     { label: 'Upload source file', done: Boolean(this.fileBase64()) },
     { label: 'Run analyze', done: Boolean(this.summary()) },
@@ -952,11 +1101,7 @@ export class DataMigrationComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      this.error.set('File must be under 20MB. Split large migrations before upload.');
-      input.value = '';
-      return;
-    }
+    this.selectedSourceFile = file;
     this.fileName.set(file.name);
     this.fileSize.set(file.size);
     this.error.set('');
@@ -966,6 +1111,21 @@ export class DataMigrationComponent implements OnInit {
     this.duplicateDecisions.set({});
     this.reconciliationResult.set(null);
     this.selectedJob.set(null);
+    this.largeJob.set(null);
+    this.lastWorkerResult.set(null);
+    this.csvStagedRows.set(0);
+    this.csvStagedChunks.set(0);
+    this.fileBase64.set('');
+    if (file.size > 20 * 1024 * 1024 && !this.isCsvFile(file)) {
+      this.error.set('Excel files over 20MB must be exported as CSV for chunked migration.');
+      input.value = '';
+      this.selectedSourceFile = null;
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      this.message.set('Large CSV selected. Use Stage CSV chunks for worker import.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => this.fileBase64.set(String(reader.result || '').split(',').pop() || '');
     reader.onerror = () => this.error.set('File read failed.');
@@ -992,6 +1152,394 @@ export class DataMigrationComponent implements OnInit {
     await this.loadJobs();
   }
 
+  numberInput(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  largeJobProgress(): number {
+    const job = this.largeJob();
+    const total = Number(job?.totalRows || 0);
+    if (!total) return 0;
+    return Math.max(0, Math.min(100, Math.round(((Number(job?.importedRows || 0) + Number(job?.skippedRows || 0) + Number(job?.errorRows || 0)) / total) * 100)));
+  }
+
+  largeMigrationChecklist(): Array<{ label: string; done: boolean }> {
+    return [
+      { label: 'Source file uploaded', done: this.canPrepareLargeMigration() },
+      { label: 'Analyze completed', done: Boolean(this.summary()) },
+      { label: 'No critical errors', done: Boolean(this.summary()) && !this.hasCriticalErrors() },
+      { label: 'Chunk 1 staged', done: Boolean(this.largeJobChunks().length) },
+      { label: 'Owner approval received', done: this.importApprovalReady() },
+      { label: 'Worker queued or completed', done: ['queued', 'processing', 'completed'].includes(String(this.largeJob()?.status || '')) }
+    ];
+  }
+
+  lastWorkerResultText(): string {
+    const result = this.lastWorkerResult();
+    if (!result) return '';
+    const first = Array.isArray(result.results) ? result.results[0] : result;
+    if (!first) return 'No queued jobs were ready.';
+    return first.ok === false ? first.message || 'Worker failed.' : `${first.status || this.largeJob()?.status || 'processed'} · ${first.processedChunks || 0} chunk(s)`;
+  }
+
+  async prepareLargeMigrationJob(): Promise<void> {
+    if (!this.canPrepareLargeMigration()) {
+      this.error.set('Select an Excel or CSV file first.');
+      return;
+    }
+    if (!this.fileBase64() && this.isCsvFileSelected()) {
+      await this.stageCsvMigrationChunks();
+      return;
+    }
+    if (!this.summary()) await this.analyze();
+    const rows = this.previewChunkRows();
+    if (!rows.length) {
+      this.error.set('Analyze did not return preview rows to stage. Re-run Analyze and try again.');
+      return;
+    }
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const job = await firstValueFrom(this.api.post<LargeMigrationJob>('migration/large-jobs', {
+        sourceSoftware: this.sourceSoftware,
+        resource: this.resource || 'auto',
+        fileName: this.fileName(),
+        fileSizeBytes: this.fileSize(),
+        totalRows: this.summary()?.totalRows || rows.length,
+        chunkSize: this.largeChunkSize(),
+        mapping: Object.fromEntries(this.mappingDraft().filter((row) => row.sourceColumn).map((row) => [row.sourceColumn, row.targetField]))
+      }));
+      const registered = await firstValueFrom(this.api.post<LargeMigrationJob>(`migration/large-jobs/${job.id}/chunks`, {
+        chunkNumber: 1,
+        totalRows: rows.length,
+        rowStart: 1,
+        rowEnd: rows.length,
+        sourceSheet: this.previewRows()[0]?.sourceSheet || 'preview'
+      }));
+      const analyzed = await firstValueFrom(this.api.post<any>(`migration/large-jobs/${job.id}/chunks/1/analyze`, {
+        rows,
+        duplicateDecisions: this.duplicateDecisions()
+      }));
+      this.largeJob.set(analyzed.job || registered || job);
+      this.message.set('Large migration chunk 1 staged. Queue worker after approval.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to prepare large migration job.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  canPrepareLargeMigration(): boolean {
+    return Boolean(this.fileBase64()) || this.isCsvFileSelected();
+  }
+
+  isCsvFileSelected(): boolean {
+    return this.isCsvFile(this.selectedSourceFile);
+  }
+
+  async stageCsvMigrationChunks(): Promise<void> {
+    const file = this.selectedSourceFile;
+    if (!this.isCsvFile(file)) {
+      this.error.set('Select a CSV file for multi-chunk staging.');
+      return;
+    }
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      this.message.set('Reading CSV and staging chunks...');
+      const text = await file.text();
+      const rows = this.parseCsvRows(text);
+      if (!rows.length) {
+        this.error.set('CSV has no data rows to stage.');
+        return;
+      }
+      const chunkSize = Math.max(100, this.largeChunkSize());
+      const job = await firstValueFrom(this.api.post<LargeMigrationJob>('migration/large-jobs', {
+        sourceSoftware: this.sourceSoftware,
+        resource: this.resource || 'auto',
+        fileName: this.fileName(),
+        fileSizeBytes: this.fileSize(),
+        totalRows: rows.length,
+        chunkSize,
+        mapping: Object.fromEntries(this.mappingDraft().filter((row) => row.sourceColumn).map((row) => [row.sourceColumn, row.targetField]))
+      }));
+      let latest: LargeMigrationJob = job;
+      for (let index = 0; index < rows.length; index += chunkSize) {
+        const chunkNumber = Math.floor(index / chunkSize) + 1;
+        const chunkRows = rows.slice(index, index + chunkSize);
+        await firstValueFrom(this.api.post<LargeMigrationJob>(`migration/large-jobs/${job.id}/chunks`, {
+          chunkNumber,
+          totalRows: chunkRows.length,
+          rowStart: index + 1,
+          rowEnd: index + chunkRows.length,
+          sourceSheet: 'csv'
+        }));
+        const analyzed = await firstValueFrom(this.api.post<any>(`migration/large-jobs/${job.id}/chunks/${chunkNumber}/analyze`, {
+          rows: chunkRows,
+          duplicateDecisions: this.duplicateDecisions()
+        }));
+        latest = analyzed.job || latest;
+        this.largeJob.set(latest);
+        this.csvStagedRows.set(Math.min(rows.length, index + chunkRows.length));
+        this.csvStagedChunks.set(chunkNumber);
+        this.migrationProgress.set(Math.round((this.csvStagedRows() / rows.length) * 65));
+      }
+      this.largeJob.set(latest);
+      this.summary.set({
+        totalRows: rows.length,
+        validRows: Number(latest.validRows || 0),
+        warningRows: Number(latest.warningRows || 0),
+        errorRows: Number(latest.errorRows || 0),
+        duplicateRows: 0,
+        affectedRecords: Number(latest.validRows || 0) + Number(latest.warningRows || 0),
+        byEntity: {}
+      });
+      this.previewRows.set(rows.slice(0, 500));
+      this.message.set(`${rows.length} CSV rows staged across ${this.csvStagedChunks()} chunk(s). Submit approval, then queue worker.`);
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to stage CSV chunks.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private isCsvFile(file: File | null): file is File {
+    return Boolean(file && (file.name.toLowerCase().endsWith('.csv') || file.type === 'text/csv'));
+  }
+
+  private parseCsvRows(text: string): Record<string, string>[] {
+    const records = this.parseCsvRecords(text.replace(/^\uFEFF/, ''));
+    const headers = (records.shift() || []).map((header) => String(header || '').trim());
+    if (!headers.length) return [];
+    return records
+      .filter((record) => record.some((value) => String(value || '').trim()))
+      .map((record) => Object.fromEntries(headers.map((header, index) => [header || `column${index + 1}`, record[index] ?? ''])));
+  }
+
+  private parseCsvRecords(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let quoted = false;
+    for (let index = 0; index < text.length; index++) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (quoted) {
+        if (char === '"' && next === '"') {
+          field += '"';
+          index++;
+        } else if (char === '"') {
+          quoted = false;
+        } else {
+          field += char;
+        }
+        continue;
+      }
+      if (char === '"') {
+        quoted = true;
+      } else if (char === ',') {
+        row.push(field);
+        field = '';
+      } else if (char === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else if (char !== '\r') {
+        field += char;
+      }
+    }
+    row.push(field);
+    if (row.some((value) => value !== '') || field) rows.push(row);
+    return rows;
+  }
+  async queueLargeMigrationJob(): Promise<void> {
+    const job = this.largeJob();
+    if (!job) return;
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const queued = await firstValueFrom(this.api.post<LargeMigrationJob>(`migration/large-jobs/${job.id}/queue`, {
+        maxChunks: this.largeMaxChunks(),
+        stopOnError: true,
+        migrationMode: true
+      }));
+      this.largeJob.set(queued);
+      this.message.set('Large migration queued. Worker will process staged chunks.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to queue large migration job.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async runWorkerTick(): Promise<void> {
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const result = await firstValueFrom(this.api.post<any>('migration/large-jobs/worker/tick', {
+        maxJobs: 1,
+        maxChunks: this.largeMaxChunks()
+      }));
+      this.lastWorkerResult.set(result);
+      await this.refreshLargeJob();
+      this.message.set('Worker tick completed.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Worker tick failed.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async refreshLargeJobStatus(): Promise<void> {
+    await this.refreshLargeJob();
+    this.message.set('Large migration status refreshed.');
+  }
+
+  async pauseLargeMigrationJob(): Promise<void> {
+    const job = this.largeJob();
+    if (!job) return;
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const paused = await firstValueFrom(this.api.post<LargeMigrationJob>(`migration/large-jobs/${job.id}/pause`, { reason: 'operator pause from command center' }));
+      this.largeJob.set(paused);
+      this.message.set('Large migration paused. Resume when ready.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to pause large migration.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async cancelLargeMigrationJob(): Promise<void> {
+    const job = this.largeJob();
+    if (!job) return;
+    if (!confirm('Cancel this large migration job? Imported chunks will remain; pending chunks will be cancelled.')) return;
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const cancelled = await firstValueFrom(this.api.post<LargeMigrationJob>(`migration/large-jobs/${job.id}/cancel`, { reason: 'operator cancel from command center' }));
+      this.largeJob.set(cancelled);
+      this.message.set('Large migration cancelled.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to cancel large migration.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async retryFailedLargeMigrationChunks(): Promise<void> {
+    const job = this.largeJob();
+    if (!job) return;
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const retry = await firstValueFrom(this.api.post<LargeMigrationJob>(`migration/large-jobs/${job.id}/retry-failed`, {}));
+      this.largeJob.set(retry);
+      this.message.set('Failed chunks reset for retry. Queue or resume the worker.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to retry failed chunks.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+  async resumeLargeMigrationJob(): Promise<void> {
+    const job = this.largeJob();
+    if (!job) return;
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const result = await firstValueFrom(this.api.post<any>(`migration/large-jobs/${job.id}/resume`, {
+        maxChunks: this.largeMaxChunks(),
+        stopOnError: true,
+        migrationMode: true
+      }));
+      this.lastWorkerResult.set(result);
+      this.largeJob.set(result.job || this.largeJob());
+      this.message.set('Large migration resume completed.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to resume large migration.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async runLargeJobReconciliation(): Promise<void> {
+    const job = this.largeJob();
+    if (!job) return;
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const result = await firstValueFrom(this.api.post<{ job: LargeMigrationJob; snapshot: LargeReconciliationSnapshot }>(`migration/large-jobs/${job.id}/reconcile`, {
+        snapshotType: 'post_import_operator_check'
+      }));
+      this.largeJob.set(result.job || this.largeJob());
+      this.message.set(`Proof check saved: ${result.snapshot.status || 'completed'}.`);
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to run migration proof check.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+  downloadLargeReconciliationReport(): void {
+    const job = this.largeJob();
+    const snapshot = this.latestLargeReconciliation();
+    if (!job || !snapshot) {
+      this.error.set('Run proof check before exporting the migration report.');
+      return;
+    }
+    const report = {
+      generatedAt: new Date().toISOString(),
+      tenantScope: 'current tenant and branch headers',
+      job: {
+        id: job.id,
+        status: job.status,
+        totalRows: job.totalRows || 0,
+        processedRows: job.processedRows || 0,
+        importedRows: job.importedRows || 0,
+        skippedRows: job.skippedRows || 0,
+        errorRows: job.errorRows || 0,
+        warningRows: job.warningRows || 0,
+        chunkSize: job.chunkSize || 0,
+        resumeToken: job.resumeToken || ''
+      },
+      chunks: job.chunks || [],
+      reconciliation: snapshot,
+      handover: {
+        status: snapshot.status,
+        differences: snapshot.differences || [],
+        clientNote: 'Use this proof file with the import batch and rollback history for migration sign-off.'
+      }
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `migration-proof-${job.id}-${snapshot.id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    this.message.set('Migration proof report exported.');
+  }
+  private async refreshLargeJob(): Promise<void> {
+    const job = this.largeJob();
+    if (!job?.id) return;
+    try {
+      const fresh = await firstValueFrom(this.api.get<LargeMigrationJob>('migration/large-jobs', job.id));
+      this.largeJob.set(fresh);
+    } catch {
+      // Keep the visible local job state if refresh fails.
+    }
+  }
+
+  private previewChunkRows(): any[] {
+    return this.previewRows().map((row) => {
+      if (row?.raw && Object.keys(row.raw).length) return row.raw;
+      if (row?.fields && Object.keys(row.fields).length) return row.fields;
+      return row?.payload || row;
+    }).filter((row) => row && Object.keys(row).length);
+  }
   async rollback(jobId: string): Promise<void> {
     if (!confirm('Rollback selected import records delete karega. Continue?')) return;
     try {
@@ -1436,3 +1984,5 @@ export class DataMigrationComponent implements OnInit {
     return `${row.sourceSheet || 'sheet'}:${row.sourceRowNumber || row.targetId || row.sourceExternalId || 'row'}`;
   }
 }
+
+

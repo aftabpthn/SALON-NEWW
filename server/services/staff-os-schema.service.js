@@ -33,6 +33,7 @@ export function ensureStaffOsSchema() {
     db.exec(migration);
   }
   ensureLegacyStaffManagementTables();
+  ensureColumn("staff", "image", "TEXT DEFAULT ''");
   ensureColumn("warehouse_snapshots", "tenant_id", "TEXT NOT NULL DEFAULT 'tenant_aura'");
   ensureColumn("warehouse_snapshots", "branch_id", "TEXT DEFAULT ''");
   ensureColumn("warehouse_snapshots", "snapshot_type", "TEXT DEFAULT ''");

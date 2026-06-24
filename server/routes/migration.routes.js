@@ -62,6 +62,124 @@ migrationRouter.post(
   })
 );
 
+migrationRouter.post(
+  "/migration/large-jobs/worker/tick",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.processQueuedLargeJobs(req.body || {}, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.status(201).json(migrationService.createLargeJob(req.body, req.access));
+  })
+);
+
+
+
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/pause",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.pauseLargeJob(req.params.id, req.body || {}, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/cancel",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.cancelLargeJob(req.params.id, req.body || {}, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/retry-failed",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.retryFailedLargeJobChunks(req.params.id, req.body || {}, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/queue",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.queueLargeJob(req.params.id, req.body || {}, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/start",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.startLargeJob(req.params.id, req.body || {}, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/resume",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.resumeLargeJob(req.params.id, req.body || {}, req.access));
+  })
+);
+
+migrationRouter.get(
+  "/migration/large-jobs/:id",
+  requirePermission("read", migrationResource),
+  asyncHandler((req, res) => {
+    const job = migrationService.largeJob(req.params.id, req.access);
+    if (!job) {
+      res.status(404).json({ message: "Large migration job not found" });
+      return;
+    }
+    res.json(job);
+  })
+);
+
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/reconcile",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.status(201).json(migrationService.reconcileLargeJob(req.params.id, req.body || {}, req.access));
+  })
+);
+migrationRouter.post(
+  "/migration/large-jobs/:id/chunks",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.status(201).json(migrationService.registerLargeJobChunk(req.params.id, req.body, req.access));
+  })
+);
+
+migrationRouter.post(
+  "/migration/large-jobs/:id/chunks/:chunkNumber/analyze",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.analyzeLargeJobChunk(req.params.id, req.params.chunkNumber, req.body, req.access));
+  })
+);
+migrationRouter.post(
+  "/migration/large-jobs/:id/chunks/:chunkNumber/import",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.status(201).json(migrationService.importLargeJobChunk(req.params.id, req.params.chunkNumber, req.body, req.access));
+  })
+);
+migrationRouter.post(
+  "/migration/large-jobs/:id/chunks/:chunkNumber/import-staged",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.status(201).json(migrationService.importLargeJobStagedChunk(req.params.id, req.params.chunkNumber, req.body || {}, req.access));
+  })
+);
+
 migrationRouter.get(
   "/migration/approvals",
   requirePermission("read", migrationResource),
@@ -172,3 +290,4 @@ migrationRouter.post(
     res.json(migrationService.rollbackLast(req.access, req.body || {}));
   })
 );
+

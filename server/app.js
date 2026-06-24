@@ -2,11 +2,13 @@ import cors from "cors";
 import express from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import "./db.js";
+import { dataDir } from "./db.js";
 import "./migrations/add-happy-hours-to-invoices.js";
 import "./jobs/flash-sale-monitor.js";
 import "./jobs/demand-snapshot.job.js";
 import "./jobs/offer-auto-sunset.job.js";
+import "./jobs/migration-large-import.worker.js";
+import "./jobs/daily-report-email.job.js";
 import { env } from "./config/env.js";
 import { initializeDatabaseRuntime } from "./utils/db-init.js";
 import { ensureAppointmentSystemSchema } from "./services/appointment-schema.service.js";
@@ -37,6 +39,7 @@ import { ensureTwoFactorSchema } from "./services/two-factor-schema.service.js";
 import { ensureSecurityAlertsSchema } from "./services/security-alerts-schema.service.js";
 import { ensureSecurityBlocklistSchema } from "./services/security-blocklist-schema.service.js";
 import { ensureSecurityAdvancedSchema } from "./services/security-advanced-schema.service.js";
+import { ensureMigrationStagingSchema } from "./services/migration-staging-schema.service.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { authenticateJwt } from "./middleware/auth.js";
 import { mobileApiContext } from "./middleware/mobile-response.js";
@@ -131,6 +134,7 @@ import { invoiceNotificationRouter } from "./routes/invoice-notification.routes.
 import { inventoryIntelligenceRouter } from "./routes/inventory-intelligence.routes.js";
 import { legacyRevenueRouter } from "./routes/legacy-revenue.routes.js";
 import { localizationPreferenceRouter } from "./routes/localization-preference.routes.js";
+import { liveConsultationRouter } from "./routes/live-consultation.routes.js";
 import { membershipEnterpriseRouter } from "./routes/membership-enterprise.routes.js";
 import { migrationRouter } from "./routes/migration.routes.js";
 import { mobileRouter } from "./routes/mobile.routes.js";
@@ -197,6 +201,7 @@ export function createApp() {
   ensureSecurityAlertsSchema();
   ensureSecurityBlocklistSchema();
   ensureSecurityAdvancedSchema();
+  ensureMigrationStagingSchema();
   const app = express();
   app.disable("x-powered-by");
   app.set("etag", false);
@@ -211,6 +216,7 @@ export function createApp() {
       }
     })
   );
+  app.use("/uploads", express.static(join(dataDir, "uploads"), { maxAge: "7d" }));
   app.use(express.json({
     limit: env.requestBodyLimit,
     verify: (req, _res, buf) => {
@@ -253,6 +259,7 @@ export function createApp() {
   app.use("/api/v1", publicBookingProfileRouter);
   app.use("/api/v1", customerAuthRouter);
   app.use("/api/v1", customerMarketplaceRouter);
+  app.use("/api/v1", liveConsultationRouter);
   app.use("/api/v1", bookingPaymentsPublicRouter);
   app.use("/api/v1", paymentPublicRouter);
   app.use("/api/v1", calendarPublicRouter);
@@ -365,6 +372,21 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, service: "Aura Salon CRM/POS API", timestamp: new Date().toISOString() });
   });
+  app.get("/", (_req, res) => {
+    res.json({
+      ok: true,
+      service: "Aura Salon CRM/POS API",
+      message: "API server is running. Open the Angular apps from their dev-server ports.",
+      links: {
+        health: "/api/health",
+        versions: "/api/versions",
+        app: "http://127.0.0.1:4300",
+        customerApp: "http://127.0.0.1:4310"
+      },
+      timestamp: new Date().toISOString()
+    });
+  });
+
 
   const legacyApiAuth = env.nodeEnv === "production" ? authenticateJwt() : (_req, _res, next) => next();
   app.use("/api", calendarPublicRouter);
@@ -374,6 +396,7 @@ export function createApp() {
   app.use("/api", publicBookingProfileRouter);
   app.use("/api", customerAuthRouter);
   app.use("/api", customerMarketplaceRouter);
+  app.use("/api", liveConsultationRouter);
   app.use("/api", reputationPublicRouter);
   app.use("/api", billingHealthRouter);
   app.use("/api", cashDrawerEodPublicRouter);

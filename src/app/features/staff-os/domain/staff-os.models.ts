@@ -20,6 +20,7 @@ export interface StaffOsStaff {
   staffCategoryScope?: string;
   department?: string;
   designation?: string;
+  profilePhoto?: string;
   employeeDetails?: StaffOsEmployeeDetails | null;
   version: number;
   createdAt?: string;

@@ -2,7 +2,7 @@ import { Component } from "@angular/core";
 import { RouterLink, RouterLinkActive } from "@angular/router";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, fingerPrintOutline, homeOutline, locationOutline, lockClosedOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline } from "ionicons/icons";
+import { calendarOutline, fingerPrintOutline, homeOutline, locationOutline, lockClosedOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
 
 @Component({
@@ -38,6 +38,7 @@ import { AuthService } from "../../core/auth.service";
       <div class="nav-links">
         <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
         <a routerLink="/tabs/search" routerLinkActive="active">Discover</a>
+        <a routerLink="/tabs/consultation" routerLinkActive="active">Consult</a>
         <a routerLink="/tabs/offers" routerLinkActive="active">Offers</a>
         <a routerLink="/tabs/bookings" routerLinkActive="active">Bookings</a>
         <a routerLink="/tabs/rewards" routerLinkActive="active">Hub</a>
@@ -66,6 +67,10 @@ import { AuthService } from "../../core/auth.service";
         <ion-tab-button tab="search" href="/tabs/search">
           <ion-icon name="search-outline"></ion-icon>
           <ion-label>Discover</ion-label>
+        </ion-tab-button>
+        <ion-tab-button tab="consultation" href="/tabs/consultation">
+          <ion-icon name="sparkles-outline"></ion-icon>
+          <ion-label>Consult</ion-label>
         </ion-tab-button>
         <ion-tab-button tab="bookings" href="/tabs/bookings">
           <ion-icon name="calendar-outline"></ion-icon>
@@ -327,7 +332,7 @@ import { AuthService } from "../../core/auth.service";
 })
 export class TabsPage {
   constructor(readonly auth: AuthService) {
-    addIcons({ homeOutline, searchOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline });
+    addIcons({ homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline });
   }
 
   unlock() {

@@ -230,22 +230,6 @@ interface ProfessionalResult {
         </section>
 
         <div class="search-shell">
-          <aside class="filter-panel premium-card">
-            <h2>Refine discovery</h2>
-            @for (chip of flatFilterOptions(); track chip.key) {
-              <button type="button" [class.active]="activeFilters().includes(chip.key)" [disabled]="chip.disabled" (click)="setFilter(chip.key)">
-                <span>{{ chip.label }}</span>
-                <small>{{ chip.description }}</small>
-              </button>
-            }
-            <div class="map-preview">
-              <ion-icon name="map-outline"></ion-icon>
-              <strong>Live map view</strong>
-              <span>OpenStreetMap tiles, venue pins, clustering and distance sorting are active.</span>
-              <ion-button size="small" fill="outline" class="secondary-button" (click)="useLocation()">Use my area</ion-button>
-            </div>
-          </aside>
-
           <section class="results-panel">
             <div class="result-meta">
               <div>
@@ -604,69 +588,6 @@ interface ProfessionalResult {
     .search-shell {
       display: grid;
       gap: 20px;
-    }
-
-    .filter-panel {
-      display: none;
-      align-self: start;
-      padding: 16px;
-      position: sticky;
-      top: 98px;
-      max-height: calc(100vh - 130px);
-      overflow-y: auto;
-    }
-
-    .filter-panel h2 {
-      margin: 0 0 14px;
-      font-size: 1.2rem;
-      letter-spacing: -0.035em;
-    }
-
-    .filter-panel button {
-      width: 100%;
-      display: grid;
-      gap: 4px;
-      margin-bottom: 10px;
-      padding: 13px 14px;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      color: var(--text);
-      background: var(--surface);
-      text-align: left;
-    }
-
-    .filter-panel button.active {
-      color: #ffffff;
-      border-color: transparent;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2));
-    }
-
-    .filter-panel button span {
-      font-weight: 900;
-    }
-
-    .filter-panel button small {
-      color: inherit;
-      opacity: 0.72;
-    }
-
-    .map-preview {
-      display: grid;
-      gap: 8px;
-      margin-top: 14px;
-      padding: 14px;
-      border-radius: 20px;
-      color: #8B5CF6;
-      background: var(--pink-soft);
-    }
-
-    .map-preview ion-icon {
-      font-size: 1.4rem;
-    }
-
-    .map-preview span {
-      color: #6B7280;
-      line-height: 1.4;
     }
 
     .discovery-row {
@@ -1072,14 +993,6 @@ interface ProfessionalResult {
     @media (min-width: 1024px) {
       .sticky-search {
         top: 104px;
-      }
-
-      .search-shell {
-        grid-template-columns: 290px minmax(0, 1fr);
-      }
-
-      .filter-panel {
-        display: block;
       }
 
       .chip-row {
@@ -1753,10 +1666,6 @@ interface ProfessionalResult {
         grid-template-columns: 1fr;
       }
 
-      .filter-panel {
-        display: none;
-      }
-
       .results {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -2405,23 +2314,6 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.mapErrorTitle.set("");
     this.mapError.set("");
     this.removeLocationDependentState();
-    void this.executeSearch();
-  }
-
-  setFilter(value: FilterKey) {
-    const filters = this.normalizedFilterList(value === "anytime" ? [] : [value]);
-    if (value === "nearest" && !this.hasUsableLocation()) {
-      this.activeFilters.set(filters.filter((item) => item !== "nearest"));
-      this.filter.set("open");
-      this.filterPanelOpen.set(false);
-      this.sortPanelOpen.set(false);
-      this.useLocation();
-      return;
-    }
-    this.filter.set(filters[0] || "open");
-    this.activeFilters.set(filters);
-    this.filterPanelOpen.set(false);
-    this.sortPanelOpen.set(false);
     void this.executeSearch();
   }
 

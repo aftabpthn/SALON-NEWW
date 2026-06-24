@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild, computed, effect, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { finalize, switchMap } from 'rxjs';
+import { finalize, firstValueFrom, switchMap } from 'rxjs';
 import { ApiRecord } from '../../../core/api.service';
 import { AppStateService } from '../../../core/state/app-state.service';
 import { StaffOsStore } from '../application/staff-os.store';
@@ -39,6 +39,7 @@ type IncentiveSlabDraft = {
   incentiveAmount: number;
 };
 type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
+type StaffPhotoUploadResponse = { url?: string };
 
 @Component({
   selector: 'app-staff-os-section',
@@ -532,6 +533,24 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
                 </select>
                 <small *ngIf="fieldInvalid('branchId')">Branch is required.</small>
               </label>
+
+              <section class="staff-photo-field full">
+                <div class="staff-photo-preview">
+                  <img *ngIf="staffPhotoPreview(); else staffPhotoFallback" [src]="staffPhotoPreview()" alt="Staff photo preview" />
+                  <ng-template #staffPhotoFallback><span>{{ staffInitialsPreview() }}</span></ng-template>
+                </div>
+                <div class="staff-photo-actions">
+                  <strong>Staff photo</strong>
+                  <span>Upload from gallery or file manager. JPG, PNG and common photo files.</span>
+                  <div class="photo-button-row">
+                    <input #staffPhotoInput type="file" [accept]="staffImageAccept" (change)="uploadStaffPhoto($event)" hidden />
+                    <button type="button" class="refresh" (click)="staffPhotoInput.click()" [disabled]="staffPhotoUploading()">
+                      {{ staffPhotoUploading() ? 'Uploading...' : 'Upload photo' }}
+                    </button>
+                    <button *ngIf="staffPhotoPreview()" type="button" class="refresh photo-remove" (click)="removeStaffPhoto()" [disabled]="staffPhotoUploading()">Remove photo</button>
+                  </div>
+                </div>
+              </section>
 
               <label class="field">
                 <span>First name</span>
@@ -2075,6 +2094,14 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .field { display: grid; grid-template-columns: 165px minmax(0, 1fr); align-items: center; gap: 10px; font-weight: 800; color: #34483f; font-size: 13px; }
     .field.full, .staff-form > .full, .staff-form .state { grid-column: 1 / 3; }
     .field.full { grid-template-columns: 165px minmax(0, 1fr); }
+    .staff-photo-field { align-items: center; background: #f7fbfa; border: 1px solid #d7e2df; border-radius: 8px; display: grid; gap: 14px; grid-template-columns: 92px minmax(0, 1fr); padding: 12px; }
+    .staff-photo-preview { align-items: center; background: #eaf5f2; border: 1px solid #cfe1dd; border-radius: 8px; color: #0f5f56; display: grid; font-size: 22px; font-weight: 900; height: 84px; justify-items: center; overflow: hidden; width: 84px; }
+    .staff-photo-preview img { display: block; height: 100%; object-fit: cover; width: 100%; }
+    .staff-photo-actions { display: grid; gap: 6px; min-width: 0; }
+    .staff-photo-actions strong { color: #0f172a; }
+    .staff-photo-actions > span { color: #526173; font-size: 12px; font-weight: 700; }
+    .photo-button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .photo-remove { background: #fff8f7; border-color: #f5b7b1; color: #b42318; }
     .login-provision { display: grid; grid-column: 1 / 3; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #b6d8cf; border-radius: 8px; background: #f0fbf7; }
     .login-provision > div, .login-provision .check-field { grid-column: 1 / -1; }
     .check-field { align-items: center; border: 1px solid #edf2ef; border-radius: 8px; color: #34483f; display: grid; font-size: 13px; font-weight: 800; gap: 8px; grid-template-columns: auto 1fr; min-height: 43px; padding: 10px 11px; }
@@ -2199,6 +2226,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   private cameraStream: MediaStream | null = null;
   readonly addStaffOpen = signal(false);
   readonly addStaffSaving = signal(false);
+  readonly staffPhotoUploading = signal(false);
   readonly addStaffError = signal('');
   readonly staffActionError = signal('');
   readonly statusChanging = signal('');
@@ -2281,8 +2309,11 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
       { label: 'Training', to: '/staff-os/training-center' }
     ]
   };
+  readonly staffImageAccept = 'image/jpeg,image/jpg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,image/bmp,image/tiff';
+  private readonly maxStaffPhotoBytes = 5 * 1024 * 1024;
   readonly staffForm = this.fb.group({
     branchId: ['', Validators.required],
+    profilePhoto: [''],
     firstName: ['', [Validators.required, Validators.minLength(2)]],
     lastName: [''],
     shortName: [''],
@@ -3353,7 +3384,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   openAddStaff(): void {
     const branchId = this.staffForm.get('branchId')?.value || this.defaultBranchId(this.branchOptions());
     this.addStaffError.set('');
-    this.staffForm.patchValue({ branchId, employeeCode: this.nextStaffEmployeeCode(branchId) });
+    this.staffForm.patchValue({ branchId, employeeCode: this.nextStaffEmployeeCode(branchId), profilePhoto: '' });
     this.detailTab.set('core');
     this.addStaffOpen.set(true);
   }
@@ -3404,6 +3435,90 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
     return Boolean(control && control.invalid && (control.dirty || control.touched));
   }
 
+  staffPhotoPreview(): string {
+    return String(this.staffForm.get('profilePhoto')?.value || '');
+  }
+
+  staffInitialsPreview(): string {
+    const first = String(this.staffForm.get('firstName')?.value || '').trim();
+    const last = String(this.staffForm.get('lastName')?.value || '').trim();
+    return `${first.charAt(0)}${last.charAt(0) || first.charAt(1) || ''}`.toUpperCase() || 'ST';
+  }
+
+  async uploadStaffPhoto(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    const branchId = String(this.staffForm.get('branchId')?.value || '');
+    if (!branchId) {
+      this.addStaffError.set('Photo upload se pehle branch select karein.');
+      this.detailTab.set('core');
+      return;
+    }
+    if (!this.isSupportedStaffPhoto(file)) {
+      this.addStaffError.set('Only JPG, PNG and common photo files are allowed.');
+      return;
+    }
+    if (file.size > this.maxStaffPhotoBytes) {
+      this.addStaffError.set('Staff photo size must be 5 MB or less.');
+      return;
+    }
+
+    this.staffPhotoUploading.set(true);
+    this.addStaffError.set('');
+    try {
+      const dataUrl = await this.readFileAsDataUrl(file);
+      const response = await firstValueFrom(this.store.uploadStaffPhoto({
+        branchId,
+        fileName: file.name,
+        mimeType: file.type || this.mimeTypeFromFileName(file.name),
+        sizeBytes: file.size,
+        dataUrl
+      })) as StaffPhotoUploadResponse;
+      const url = String(response.url || '');
+      if (!url) throw new Error('Photo upload did not return a URL');
+      this.staffForm.patchValue({ profilePhoto: url });
+      this.staffForm.get('profilePhoto')?.markAsDirty();
+    } catch (error: unknown) {
+      this.addStaffError.set(this.staffPhotoError(error, 'Unable to upload staff photo'));
+    } finally {
+      this.staffPhotoUploading.set(false);
+    }
+  }
+
+  removeStaffPhoto(): void {
+    this.staffForm.patchValue({ profilePhoto: '' });
+    this.staffForm.get('profilePhoto')?.markAsDirty();
+  }
+
+  private isSupportedStaffPhoto(file: File): boolean {
+    const mimeType = file.type || this.mimeTypeFromFileName(file.name);
+    return this.staffImageAccept.split(',').includes(mimeType);
+  }
+
+  private mimeTypeFromFileName(fileName: string): string {
+    const extension = fileName.toLowerCase().match(/\.(jpe?g|png|webp|gif|avif|hei[cf]|bmp|tiff?)$/)?.[1] || '';
+    if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+    if (extension === 'tif' || extension === 'tiff') return 'image/tiff';
+    return extension ? `image/${extension}` : '';
+  }
+
+  private readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Unable to read photo file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private staffPhotoError(error: unknown, fallback: string): string {
+    const apiError = error as { error?: { error?: string; message?: string }; message?: string };
+    return apiError?.error?.error || apiError?.error?.message || apiError?.message || fallback;
+  }
+
   saveStaff(): void {
     if (this.staffForm.invalid) {
       this.staffForm.markAllAsTouched();
@@ -3430,6 +3545,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
       email: value.email || value.contactEmail,
       gender: value.gender,
       dob: value.birthDate,
+      profilePhoto: value.profilePhoto,
       joiningDate: value.joiningDate,
       roleId: value.roleId,
       staffCategoryId: value.staffCategoryId,
@@ -3916,6 +4032,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   private defaultStaffFormValue(branchId = ''): Record<string, unknown> {
     return {
       branchId,
+      profilePhoto: '',
       firstName: '',
       lastName: '',
       shortName: '',

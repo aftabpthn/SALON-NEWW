@@ -161,7 +161,7 @@ const RESOURCE_TEMPLATES = {
   appointments: {
     table: "appointments",
     required: ["clientId", "staffId", "branchId", "startAt"],
-    fields: ["originalRecordId", "clientId", "clientName", "clientPhone", "staffId", "staffName", "serviceIds", "serviceName", "branchId", "branchName", "startAt", "endAt", "status", "source", "chair", "notes", "createdAt"]
+    fields: ["originalRecordId", "clientId", "clientName", "clientPhone", "staffId", "staffName", "serviceId", "serviceIds", "serviceName", "branchId", "branchName", "startAt", "endAt", "status", "source", "chair", "notes", "createdAt"]
   },
   sales: {
     table: "sales",
@@ -277,6 +277,230 @@ export const migrationService = {
     };
   },
 
+  createLargeJob(payload, access) {
+    const sourceSoftware = sourceKey(payload.sourceSoftware);
+    const resource = canonicalResource(payload.resource || "") || "auto";
+    const chunkSize = Math.max(100, Math.min(50000, integer(payload.chunkSize, 5000)));
+    const id = cleanText(payload.id) || makeId("mlg");
+    insertDirectRow("migration_large_jobs", {
+      id,
+      tenantId: access.tenantId,
+      branchId: cleanText(payload.branchId || access.branchId || ""),
+      sourceSoftware,
+      resource,
+      fileName: cleanText(payload.fileName || "large-migration"),
+      fileSizeBytes: integer(payload.fileSizeBytes, 0),
+      status: "draft",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: "",
+      totalRows: integer(payload.totalRows, 0),
+      chunkSize,
+      mapping: payload.mapping || {},
+      settings: importSettings({ ...payload, sourceSoftware }),
+      summary: { totalRows: integer(payload.totalRows, 0), chunkSize, resource, sourceSoftware },
+      resumeToken: `job:${id}:chunk:0`,
+      createdBy: access.userId || "system"
+    });
+    auditMigration("migration.large_job.created", { jobId: id, resource, sourceSoftware, chunkSize }, access);
+    return largeMigrationJob(id, access);
+  },
+
+  pauseLargeJob(jobId, payload, access) {
+    requireLargeMigrationJob(jobId, access);
+    const reason = cleanText(payload.reason || "operator pause");
+    updateDirectRow("migration_large_jobs", jobId, {
+      status: "paused",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: "",
+      failureReason: reason,
+      resumeToken: `job:${jobId}:paused:${now()}`
+    }, access);
+    auditMigration("migration.large_job.paused", { jobId, reason }, access);
+    return largeMigrationJob(jobId, access);
+  },
+
+  cancelLargeJob(jobId, payload, access) {
+    requireLargeMigrationJob(jobId, access);
+    const reason = cleanText(payload.reason || "operator cancel");
+    const cancelable = cancelLargeJobChunks(jobId, access);
+    updateDirectRow("migration_large_jobs", jobId, {
+      status: "cancelled",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: "",
+      failureReason: reason,
+      completedAt: now(),
+      resumeToken: `job:${jobId}:cancelled:${now()}`
+    }, access);
+    auditMigration("migration.large_job.cancelled", { jobId, reason, chunks: cancelable }, access);
+    return largeMigrationJob(jobId, access);
+  },
+
+  retryFailedLargeJobChunks(jobId, payload, access) {
+    requireLargeMigrationJob(jobId, access);
+    const reset = resetFailedLargeJobChunks(jobId, access, payload);
+    recomputeLargeJobTotals(jobId, access);
+    updateDirectRow("migration_large_jobs", jobId, {
+      status: reset ? "queued" : "paused",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: "",
+      failureReason: reset ? "" : "No failed chunks to retry",
+      failedAt: "",
+      resumeToken: `job:${jobId}:retry:${now()}`
+    }, access);
+    auditMigration("migration.large_job.retry_failed", { jobId, reset }, access);
+    return largeMigrationJob(jobId, access);
+  },
+  queueLargeJob(jobId, payload, access) {
+    const job = requireLargeMigrationJob(jobId, access);
+    const settings = { ...parseJsonField(job.settings, {}), worker: workerSettings(payload) };
+    updateDirectRow("migration_large_jobs", jobId, {
+      status: "queued",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: "",
+      settings,
+      failureReason: "",
+      failedAt: "",
+      resumeToken: `job:${jobId}:queued:${now()}`
+    }, access);
+    auditMigration("migration.large_job.queued", { jobId, settings: settings.worker }, access);
+    return largeMigrationJob(jobId, access);
+  },
+
+  processQueuedLargeJobs(payload = {}, access = {}) {
+    return processQueuedLargeMigrationJobs(payload, access);
+  },
+  startLargeJob(jobId, payload, access) {
+    requireLargeMigrationJob(jobId, access);
+    updateDirectRow("migration_large_jobs", jobId, { status: "processing", workerId: "", lockedAt: "", heartbeatAt: "", startedAt: now(), failureReason: "" }, access);
+    const result = processLargeJobStagedChunks(jobId, payload, access);
+    auditMigration("migration.large_job.started", { jobId, result }, access);
+    return result;
+  },
+
+  resumeLargeJob(jobId, payload, access) {
+    requireLargeMigrationJob(jobId, access);
+    updateDirectRow("migration_large_jobs", jobId, { status: "processing", workerId: "", lockedAt: "", heartbeatAt: "", failureReason: "" }, access);
+    const result = processLargeJobStagedChunks(jobId, payload, access);
+    auditMigration("migration.large_job.resumed", { jobId, result }, access);
+    return result;
+  },
+  largeJob(id, access) {
+    return largeMigrationJob(id, access);
+  },
+
+  reconcileLargeJob(jobId, payload = {}, access) {
+    const snapshot = createLargeJobReconciliation(jobId, payload, access);
+    auditMigration("migration.large_job.reconciled", { jobId, snapshotId: snapshot.id, status: snapshot.status, differences: snapshot.differences.length }, access);
+    return { job: largeMigrationJob(jobId, access), snapshot };
+  },
+
+  registerLargeJobChunk(jobId, payload, access) {
+    const job = requireLargeMigrationJob(jobId, access);
+    const chunkNumber = Math.max(1, integer(payload.chunkNumber, integer(payload.index, 0)));
+    const totalRows = integer(payload.totalRows, Array.isArray(payload.rows) ? payload.rows.length : 0);
+    const existing = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId AND chunkNumber = @chunkNumber").get({ tenantId: access.tenantId, jobId, chunkNumber });
+    const id = existing?.id || cleanText(payload.id) || makeId("mchunk");
+    const row = {
+      id,
+      tenantId: access.tenantId,
+      jobId,
+      chunkNumber,
+      sourceSheet: cleanText(payload.sourceSheet || payload.sheetName || ""),
+      rowStart: integer(payload.rowStart, 0),
+      rowEnd: integer(payload.rowEnd, 0),
+      status: existing?.status || "pending",
+      totalRows,
+      checksum: cleanText(payload.checksum || ""),
+      payloadRef: cleanText(payload.payloadRef || ""),
+      summary: payload.summary || { totalRows }
+    };
+    if (existing) updateDirectRow("migration_file_chunks", id, row, access);
+    else insertDirectRow("migration_file_chunks", row);
+    recomputeLargeJobTotals(job.id, access);
+    auditMigration("migration.large_job.chunk_registered", { jobId, chunkId: id, chunkNumber, totalRows }, access);
+    return largeMigrationJob(jobId, access);
+  },
+
+  analyzeLargeJobChunk(jobId, chunkNumber, payload, access) {
+    const job = requireLargeMigrationJob(jobId, access);
+    const chunk = requireLargeMigrationChunk(jobId, chunkNumber, access);
+    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    if (!rows.length) throw badRequest("rows are required for chunk analysis.");
+    const preview = previewPayload(largeChunkPayload(job, payload, rows), access, { persist: false, dryRun: true, jobId: job.id });
+    replaceStagingRows(job.id, chunk.id, chunk.chunkNumber, preview, access, payload.duplicateDecisions || {});
+    updateDirectRow("migration_file_chunks", chunk.id, {
+      status: preview.summary.errorRows ? "analyzed_with_errors" : "analyzed",
+      processedRows: preview.summary.totalRows,
+      validRows: preview.summary.validRows,
+      warningRows: preview.summary.warningRows,
+      errorRows: preview.summary.errorRows,
+      summary: preview.summary,
+      completedAt: now(),
+      failureReason: ""
+    }, access);
+    recomputeLargeJobTotals(job.id, access);
+    auditMigration("migration.large_job.chunk_analyzed", { jobId, chunkId: chunk.id, chunkNumber: chunk.chunkNumber, summary: preview.summary }, access);
+    return { job: largeMigrationJob(jobId, access), chunk: directChunk(chunk.id, access), summary: preview.summary, rows: preview.rows };
+  },
+
+  importLargeJobChunk(jobId, chunkNumber, payload, access) {
+    const job = requireLargeMigrationJob(jobId, access);
+    const chunk = requireLargeMigrationChunk(jobId, chunkNumber, access);
+    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    if (!rows.length) throw badRequest("rows are required for chunk import.");
+    const preview = previewPayload(largeChunkPayload(job, payload, rows), access, { persist: false, dryRun: false, jobId: job.id });
+    const gate = migrationApprovalGate(access, preview.summary);
+    if ((!gate.allowed || preview.summary.errorRows) && payload.skipApprovalGate !== true) {
+      throw badRequest(`Final chunk import blocked: ${gate.reason}`);
+    }
+    const batchId = makeId("batch");
+    const sourceSoftware = job.sourceSoftware || sourceKey(payload.sourceSoftware);
+    insertMigrationRow("migration_import_batches", {
+      id: batchId,
+      tenantId: access.tenantId,
+      jobId,
+      sourceSoftware,
+      resource: job.resource || payload.resource || "auto",
+      branchId: job.branchId || access.branchId || "",
+      status: "importing",
+      summary: preview.summary,
+      filters: { branchId: job.branchId || access.branchId || "", resource: job.resource || payload.resource || "auto", chunkNumber: chunk.chunkNumber }
+    });
+    const importTx = db.transaction(() => importPreviewRows(preview, {
+      access,
+      batchId,
+      jobId,
+      sourceSoftware,
+      migrationMode: payload.migrationMode !== false,
+      duplicateDecisions: payload.duplicateDecisions || {}
+    }));
+    const result = withBusyRetry(() => importTx());
+    const summary = { ...preview.summary, ...result, completedAt: now(), chunkNumber: chunk.chunkNumber };
+    updateDirectRow("migration_file_chunks", chunk.id, {
+      status: result.errorRows ? "imported_with_errors" : "imported",
+      processedRows: preview.summary.totalRows,
+      validRows: preview.summary.validRows,
+      warningRows: result.warningRows,
+      errorRows: result.errorRows,
+      importedRows: result.importedRows,
+      skippedRows: result.skippedRows,
+      summary,
+      completedAt: now(),
+      failureReason: ""
+    }, access);
+    updateMigrationRow("migration_import_batches", batchId, { status: "completed", summary }, { tenantId: access.tenantId });
+    recomputeLargeJobTotals(job.id, access);
+    auditMigration("migration.large_job.chunk_imported", { jobId, batchId, chunkId: chunk.id, chunkNumber: chunk.chunkNumber, summary }, access);
+    return { job: largeMigrationJob(jobId, access), batchId, chunk: directChunk(chunk.id, access), summary };
+  },
+  importLargeJobStagedChunk(jobId, chunkNumber, payload, access) {
+    return importStagedLargeJobChunk(jobId, chunkNumber, payload, access);
+  },
   submitApproval(payload, access) {
     ensureMigrationApprovalSchema();
     const id = makeId("mapr");
@@ -434,7 +658,7 @@ export const migrationService = {
       filters: { branchId, resource: payload.resource || "auto" }
     }));
 
-    const importTx = db.transaction(() => importPreviewRows(preview, { access, batchId, jobId, sourceSoftware, migrationMode: payload.migrationMode !== false }));
+    const importTx = db.transaction(() => importPreviewRows(preview, { access, batchId, jobId, sourceSoftware, migrationMode: payload.migrationMode !== false, duplicateDecisions: payload.duplicateDecisions || {} }));
     const result = withBusyRetry(() => importTx());
     const finalSummary = { ...preview.summary, ...result, completedAt: now() };
     withBusyRetry(() => updateMigrationRow("migration_jobs", jobId, {
@@ -645,17 +869,19 @@ function buildResumeToken(preview = {}) {
 }
 
 
-function previewPayload(payload, access, { persist, dryRun }) {
+function previewPayload(payload, access, { persist, dryRun, jobId = "" }) {
   const parsed = parsePayload(payload);
   const sourceSoftware = sourceKey(payload.sourceSoftware);
   const normalized = normalizeParsedRows(parsed, payload, access, sourceSoftware);
   const context = createContext(access, normalized);
   const summary = emptySummary(sourceSoftware, parsed.fileName, dryRun);
+  const relationJobId = jobId || cleanText(payload.jobId);
   const seen = new Set();
   const rows = normalized.map((row) => {
-    const checked = validatePreparedRow(row, context, seen);
-    addSummary(summary, row.resource, checked);
-    return { ...row, ...checked, sourceSoftware };
+    const resolved = { ...row, payload: resolveMigrationRelations(row.payload, row, { access, jobId: relationJobId }) };
+    const checked = validatePreparedRow(resolved, context, seen);
+    addSummary(summary, resolved.resource, checked);
+    return { ...resolved, ...checked, sourceSoftware };
   });
   summary.affectedRecords = summary.validRows + summary.warningRows;
   summary.byBranch = branchSummary(rows);
@@ -712,6 +938,20 @@ function normalizeParsedRows(parsed, payload, access, sourceSoftware) {
   return rows.sort((a, b) => RESOURCE_ORDER.indexOf(a.resource) - RESOURCE_ORDER.indexOf(b.resource));
 }
 
+function dependencyOrderedRows(rows = []) {
+  return [...(rows || [])].sort((left, right) => {
+    const byResource = resourceRank(left.resource) - resourceRank(right.resource);
+    if (byResource) return byResource;
+    const bySheet = cleanText(left.sourceSheet).localeCompare(cleanText(right.sourceSheet));
+    if (bySheet) return bySheet;
+    return Number(left.sourceRowNumber || 0) - Number(right.sourceRowNumber || 0);
+  });
+}
+
+function resourceRank(resource) {
+  const index = RESOURCE_ORDER.indexOf(resource);
+  return index >= 0 ? index : RESOURCE_ORDER.length;
+}
 function prepareRow({ raw, mapping, resource, sourceSheet, sourceRowNumber, access, sourceSoftware }) {
   const fields = {};
   for (const [column, field] of Object.entries(mapping)) {
@@ -921,6 +1161,66 @@ function buildPayload(resource, fields, { branchId }) {
   return {};
 }
 
+function resolveMigrationRelations(payload = {}, row = {}, { access = {}, jobId = "" } = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const resolved = { ...payload };
+  const translate = (resource, value) => translateMigrationId(resource, value, { access, jobId });
+
+  if (["memberships", "appointments", "sales", "invoices"].includes(row.resource)) {
+    resolved.clientId = translate("clients", resolved.clientId);
+  }
+  if (["appointments", "sales", "invoices"].includes(row.resource)) {
+    resolved.staffId = translate("staff", resolved.staffId);
+  }
+  if (row.resource === "appointments") {
+    resolved.serviceIds = (Array.isArray(resolved.serviceIds) ? resolved.serviceIds : splitList(resolved.serviceIds))
+      .map((id) => translate("services", id))
+      .filter(Boolean);
+  }
+  if (row.resource === "inventory") {
+    resolved.productId = translate("products", resolved.productId);
+  }
+  if (row.resource === "invoices") {
+    resolved.saleId = translate("sales", resolved.saleId);
+  }
+  if (row.resource === "payments") {
+    resolved.invoiceId = translate("invoices", resolved.invoiceId || resolved.invoiceNumber);
+  }
+  return resolved;
+}
+
+function translateMigrationId(resource, value, { access = {}, jobId = "" } = {}) {
+  const sourceExternalId = cleanText(value);
+  if (!sourceExternalId || !access.tenantId) return sourceExternalId;
+  const mapped = findMigrationTargetId(resource, sourceExternalId, { access, jobId });
+  return mapped || sourceExternalId;
+}
+
+function findMigrationTargetId(resource, sourceExternalId, { access = {}, jobId = "" } = {}) {
+  try {
+    const params = {
+      tenantId: access.tenantId,
+      jobId: cleanText(jobId),
+      resource,
+      sourceExternalId
+    };
+    if (params.jobId) {
+      const scoped = db.prepare(`
+        SELECT targetId FROM migration_id_map
+        WHERE tenantId = @tenantId AND jobId = @jobId AND resource = @resource AND sourceExternalId = @sourceExternalId
+        ORDER BY updatedAt DESC LIMIT 1
+      `).get(params);
+      if (scoped?.targetId) return scoped.targetId;
+    }
+    return db.prepare(`
+      SELECT targetId FROM migration_id_map
+      WHERE tenantId = @tenantId AND resource = @resource AND sourceExternalId = @sourceExternalId
+      ORDER BY updatedAt DESC LIMIT 1
+    `).get(params)?.targetId || "";
+  } catch {
+    return "";
+  }
+}
 function validatePreparedRow(row, context, seen) {
   const errors = [];
   const warnings = [];
@@ -959,19 +1259,20 @@ function duplicateFor(row, context, seen) {
   const fileKey = `${row.resource}:${cleanText(row.sourceExternalId || payload.invoiceNumber || payload.phone || payload.sku || payload.name).toLowerCase()}`;
   if (seen.has(fileKey)) return "duplicate row in uploaded file";
   seen.add(fileKey);
-  if (row.resource === "clients" && findClient({ ...payload, sourceExternalId: row.sourceExternalId }, context, { strongOnly: true })) return "client already exists";
-  if (row.resource === "staff" && context.staff.some((item) => (payload.phone && normalizePhone(item.phone) === payload.phone) || (payload.email && same(item.email, payload.email)))) return "staff already exists";
-  if (row.resource === "services" && context.services.some((item) => same(item.name, payload.name))) return "service already exists";
-  if (row.resource === "products" && context.products.some((item) => same(item.sku, payload.sku) && item.branchId === payload.branchId)) return "product SKU already exists in branch";
+  const liveContext = { ...context, clients: liveOnly(context.clients), staff: liveOnly(context.staff), services: liveOnly(context.services), products: liveOnly(context.products), invoices: liveOnly(context.invoices) };
+  if (row.resource === "clients" && findClient({ ...payload, sourceExternalId: row.sourceExternalId }, liveContext, { strongOnly: true })) return "client already exists";
+  if (row.resource === "staff" && liveContext.staff.some((item) => (payload.phone && normalizePhone(item.phone) === payload.phone) || (payload.email && same(item.email, payload.email)))) return "staff already exists";
+  if (row.resource === "services" && liveContext.services.some((item) => same(item.name, payload.name))) return "service already exists";
+  if (row.resource === "products" && liveContext.products.some((item) => same(item.sku, payload.sku) && item.branchId === payload.branchId)) return "product SKU already exists in branch";
   if (row.resource === "vendors" && context.vendors.some((item) => same(item.name, payload.name))) return "vendor already exists";
-  if (row.resource === "invoices" && context.invoices.some((item) => same(item.invoiceNumber, payload.invoiceNumber))) return "invoice number already exists";
+  if (row.resource === "invoices" && liveContext.invoices.some((item) => same(item.invoiceNumber, payload.invoiceNumber))) return "invoice number already exists";
   return "";
 }
 
 function importPreviewRows(preview, options) {
-  const context = createContext(options.access, preview.rows);
+  const context = createContext(options.access);
   const counters = { importedRows: 0, skippedRows: 0, warningRows: 0, errorRows: 0, byResource: {} };
-  for (const row of preview.allRows || preview.rows) {
+  for (const row of dependencyOrderedRows(preview.allRows || preview.rows)) {
     const resourceCounter = counters.byResource[row.resource] || { imported: 0, skipped: 0, warnings: 0, errors: 0 };
     let result = { action: "skipped", targetId: "", status: row.status, message: row.message };
     if (row.status === "error") {
@@ -1000,6 +1301,7 @@ function importPreviewRows(preview, options) {
       }
     }
     counters.byResource[row.resource] = resourceCounter;
+    recordMigrationIdMap(row, result, options);
     insertMigrationRow("migration_row_results", {
       tenantId: options.access.tenantId,
       jobId: options.jobId,
@@ -1022,12 +1324,30 @@ function importPreviewRows(preview, options) {
   return counters;
 }
 
-function importOne(row, { access, batchId, sourceSoftware, migrationMode, context }) {
-  const payload = row.payload;
-  const meta = migrationMode ? migrationMeta(row, batchId, sourceSoftware) : {};
+function importOne(row, { access, batchId, sourceSoftware, migrationMode, context, duplicateDecisions = {}, jobId = "" }) {
+  const payload = resolveMigrationRelations(row.payload, row, { access, jobId });
+  const meta = { ...(migrationMode ? migrationMeta(row, batchId, sourceSoftware) : {}), tenantId: access.tenantId };
   if (row.resource === "clients") {
     const existing = findClient({ ...payload, sourceExternalId: row.sourceExternalId }, context, { strongOnly: true });
-    if (existing) return { action: "skipped", targetId: existing.id, status: "warning", message: "Client already exists" };
+    if (existing) {
+      const decision = duplicateDecisionFor(row, duplicateDecisions);
+      if (decision === "keep") {
+        const created = insertRow("clients", { ...payload, ...meta, notes: [payload.notes, `Kept separate during migration from ${existing.id}`].filter(Boolean).join(" | ") });
+        context.clients.push(created);
+        indexClientRecord(context, created);
+        return { action: "created", targetId: created.id, status: "warning", message: "Duplicate client kept as separate record" };
+      }
+      if (decision === "merge") {
+        const updated = mergeImportedClient(existing, payload, meta, access);
+        Object.assign(existing, updated);
+        indexClientRecord(context, existing);
+        return { action: "merged", targetId: existing.id, status: "warning", message: "Client merged with existing record" };
+      }
+      if (decision === "link") {
+        return { action: "linked", targetId: existing.id, status: "warning", message: "Client linked to existing record" };
+      }
+      return { action: "skipped", targetId: existing.id, status: "warning", message: "Client already exists" };
+    }
     const created = insertRow("clients", { ...payload, ...meta });
     context.clients.push(created);
     indexClientRecord(context, created);
@@ -1283,15 +1603,37 @@ function createContext(access, pendingRows = []) {
   const vendors = listRows("suppliers", scope);
   const invoices = listRows("invoices", scope);
   const sales = listRows("sales", scope);
-  for (const row of pendingRows || []) {
-    if (row.resource === "invoices" && row.payload.invoiceNumber) invoices.push({ id: "", invoiceNumber: row.payload.invoiceNumber, pending: true });
-  }
+  addPendingDependencyReferences({ clients, staff, services, products, invoices, sales }, pendingRows);
   const context = { access, branches, clients, staff, services, products, vendors, invoices, sales };
   context.clientIndex = { phone: new Map(), email: new Map(), name: new Map() };
   for (const client of clients) indexClientRecord(context, client);
   return context;
 }
 
+function addPendingDependencyReferences(context, pendingRows = []) {
+  for (const row of pendingRows || []) {
+    const payload = row.payload || {};
+    const sourceExternalId = cleanText(row.sourceExternalId);
+    if (!sourceExternalId) continue;
+    if (row.resource === "clients") {
+      context.clients.push({ ...payload, id: sourceExternalId, originalRecordId: sourceExternalId, pending: true });
+    } else if (row.resource === "staff") {
+      context.staff.push({ ...payload, id: sourceExternalId, originalRecordId: sourceExternalId, pending: true });
+    } else if (row.resource === "services") {
+      context.services.push({ ...payload, id: sourceExternalId, originalRecordId: sourceExternalId, pending: true });
+    } else if (row.resource === "products") {
+      context.products.push({ ...payload, id: sourceExternalId, originalRecordId: sourceExternalId, pending: true });
+    } else if (row.resource === "sales") {
+      context.sales.push({ ...payload, id: sourceExternalId, originalRecordId: sourceExternalId, pending: true });
+    } else if (row.resource === "invoices") {
+      context.invoices.push({ ...payload, id: sourceExternalId || payload.invoiceNumber, originalRecordId: sourceExternalId, pending: true });
+    }
+  }
+}
+
+function liveOnly(rows = []) {
+  return rows.filter((row) => !row.pending);
+}
 function resolveBranchId(fields, access) {
   const explicit = cleanText(fields.branchId);
   if (explicit) return explicit;
@@ -1862,6 +2204,650 @@ function exampleFor(field) {
   return examples[field] || "";
 }
 
+function cancelLargeJobChunks(jobId, access) {
+  const ts = now();
+  const result = db.prepare(`
+    UPDATE migration_file_chunks
+       SET status = 'cancelled', failureReason = 'operator cancel', completedAt = @ts, updatedAt = @ts
+     WHERE tenantId = @tenantId
+       AND jobId = @jobId
+       AND status NOT IN ('imported', 'rolled_back', 'cancelled')
+  `).run({ tenantId: access.tenantId, jobId, ts });
+  db.prepare(`
+    UPDATE migration_staging_rows
+       SET status = 'cancelled', updatedAt = @ts
+     WHERE tenantId = @tenantId
+       AND jobId = @jobId
+       AND status NOT IN ('imported', 'created', 'merged', 'linked')
+  `).run({ tenantId: access.tenantId, jobId, ts });
+  return result.changes || 0;
+}
+
+function resetFailedLargeJobChunks(jobId, access, payload = {}) {
+  const chunkNumber = integer(payload.chunkNumber, 0);
+  const where = ["tenantId = @tenantId", "jobId = @jobId", "status IN ('failed', 'imported_with_errors')"];
+  const params = { tenantId: access.tenantId, jobId, ts: now() };
+  if (chunkNumber) {
+    where.push("chunkNumber = @chunkNumber");
+    params.chunkNumber = chunkNumber;
+  }
+  const result = db.prepare(`
+    UPDATE migration_file_chunks
+       SET status = CASE WHEN errorRows > 0 THEN 'analyzed_with_errors' ELSE 'analyzed' END,
+           failureReason = '', failedAt = '', updatedAt = @ts
+     WHERE ${where.join(" AND ")}
+  `).run(params);
+  return result.changes || 0;
+}
+function processQueuedLargeMigrationJobs(payload = {}, access = {}) {
+  const maxJobs = Math.max(1, Math.min(20, integer(payload.maxJobs, 3)));
+  const workerId = workerIdFor(payload, access);
+  const lockTimeoutMs = Math.max(60000, Math.min(3600000, integer(payload.lockTimeoutMs, 120000)));
+  const staleBefore = new Date(Date.now() - lockTimeoutMs).toISOString();
+  const params = { limit: maxJobs, staleBefore };
+  const tenantWhere = access.tenantId ? "AND tenantId = @tenantId" : "";
+  if (access.tenantId) params.tenantId = access.tenantId;
+  const rows = db.prepare(`
+    SELECT * FROM migration_large_jobs
+    WHERE (status = 'queued' OR (status = 'processing' AND (workerId = '' OR lockedAt = '' OR lockedAt < @staleBefore))) ${tenantWhere}
+    ORDER BY createdAt ASC
+    LIMIT @limit
+  `).all(params).map(deserializeDirectRow);
+  const results = [];
+  for (const job of rows) {
+    const jobAccess = workerAccessForJob(job, { ...access, workerId });
+    const settings = parseJsonField(job.settings, {});
+    const worker = { ...settings.worker, ...payload, workerId, lockTimeoutMs, workerTick: true };
+    if (!claimLargeMigrationJob(job, worker, jobAccess)) {
+      results.push({ jobId: job.id, ok: false, claimed: false, status: job.status });
+      continue;
+    }
+    try {
+      const result = processLargeJobStagedChunks(job.id, worker, jobAccess);
+      const releasedJob = releaseLargeMigrationJob(job.id, worker, jobAccess);
+      results.push({ jobId: job.id, ok: true, claimed: true, processedChunks: result.processedChunks, status: releasedJob?.status || result.job?.status || "processing" });
+    } catch (error) {
+      updateDirectRow("migration_large_jobs", job.id, {
+        status: "failed",
+        workerId: "",
+        lockedAt: "",
+        heartbeatAt: "",
+        failedAt: now(),
+        failureReason: error.message || "Worker failed"
+      }, jobAccess);
+      results.push({ jobId: job.id, ok: false, claimed: true, message: error.message });
+    }
+  }
+  return { ok: true, workerId, checkedJobs: rows.length, results, ranAt: now() };
+}
+function workerSettings(payload = {}) {
+  return {
+    maxChunks: Math.max(1, Math.min(100, integer(payload.maxChunks, 5))),
+    stopOnError: payload.stopOnError !== false,
+    skipApprovalGate: payload.skipApprovalGate === true,
+    migrationMode: payload.migrationMode !== false,
+    queuedBy: cleanText(payload.queuedBy || "")
+  };
+}
+
+
+function workerIdFor(payload = {}, access = {}) {
+  const explicit = cleanText(payload.workerId || access.workerId || "");
+  return explicit || `migration-worker-${process.pid || "local"}`;
+}
+
+function claimLargeMigrationJob(job, worker, access) {
+  const ts = now();
+  const lockTimeoutMs = Math.max(60000, Math.min(3600000, integer(worker.lockTimeoutMs, 120000)));
+  const staleBefore = new Date(Date.now() - lockTimeoutMs).toISOString();
+  const result = db.prepare(`
+    UPDATE migration_large_jobs
+       SET status = 'processing',
+           workerId = @workerId,
+           lockedAt = @ts,
+           heartbeatAt = @ts,
+           startedAt = CASE WHEN startedAt = '' THEN @ts ELSE startedAt END,
+           failureReason = '',
+           updatedAt = @ts
+     WHERE id = @id
+       AND tenantId = @tenantId
+       AND status IN ('queued', 'processing')
+       AND (status = 'queued' OR workerId = @workerId OR workerId = '' OR lockedAt = '' OR lockedAt < @staleBefore)
+  `).run({ id: job.id, tenantId: access.tenantId, workerId: worker.workerId, ts, staleBefore });
+  return (result.changes || 0) > 0;
+}
+
+function heartbeatLargeMigrationJob(jobId, access, workerId) {
+  if (!workerId) return;
+  const ts = now();
+  db.prepare(`
+    UPDATE migration_large_jobs
+       SET lockedAt = @ts, heartbeatAt = @ts, updatedAt = @ts
+     WHERE id = @jobId
+       AND tenantId = @tenantId
+       AND status = 'processing'
+       AND workerId = @workerId
+  `).run({ jobId, tenantId: access.tenantId, workerId, ts });
+}
+
+function releaseLargeMigrationJob(jobId, worker, access) {
+  recomputeLargeJobTotals(jobId, access);
+  const job = largeMigrationJob(jobId, access);
+  if (!job) return job;
+  if (job.workerId && job.workerId !== worker.workerId) return job;
+  if (!["processing", "queued"].includes(job.status)) {
+    updateDirectRow("migration_large_jobs", jobId, { workerId: "", lockedAt: "", heartbeatAt: "" }, access);
+    return largeMigrationJob(jobId, access);
+  }
+  const remaining = db.prepare(`
+    SELECT COUNT(*) AS total
+      FROM migration_file_chunks
+     WHERE tenantId = @tenantId
+       AND jobId = @jobId
+       AND status IN ('analyzed', 'analyzed_with_errors', 'failed')
+  `).get({ tenantId: access.tenantId, jobId })?.total || 0;
+  if (remaining > 0) {
+    updateDirectRow("migration_large_jobs", jobId, {
+      status: "queued",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: "",
+      resumeToken: `job:${jobId}:queued:${now()}`
+    }, access);
+  } else {
+    updateDirectRow("migration_large_jobs", jobId, {
+      status: "paused",
+      failureReason: "No analyzed chunks ready",
+      workerId: "",
+      lockedAt: "",
+      heartbeatAt: ""
+    }, access);
+  }
+  return largeMigrationJob(jobId, access);
+}
+function workerAccessForJob(job, access = {}) {
+  return {
+    tenantId: job.tenantId,
+    branchId: job.branchId || access.branchId || "",
+    requestedBranchId: job.branchId || access.requestedBranchId || access.branchId || "",
+    userId: access.userId || "migration-worker",
+    role: access.role || "owner",
+    branchIds: job.branchId ? [job.branchId] : access.branchIds || [],
+    workerId: access.workerId || ""
+  };
+}
+function processLargeJobStagedChunks(jobId, payload, access) {
+  const maxChunks = Math.max(1, Math.min(100, integer(payload.maxChunks, 10)));
+  const stopOnError = payload.stopOnError !== false;
+  const chunks = db.prepare(`
+    SELECT * FROM migration_file_chunks
+    WHERE tenantId = @tenantId
+      AND jobId = @jobId
+      AND status IN ('analyzed', 'analyzed_with_errors', 'failed')
+    ORDER BY chunkNumber ASC
+    LIMIT @limit
+  `).all({ tenantId: access.tenantId, jobId, limit: maxChunks }).map(deserializeDirectRow);
+  const results = [];
+  for (const chunk of chunks) {
+    try {
+      heartbeatLargeMigrationJob(jobId, access, payload.workerId);
+      results.push(importStagedLargeJobChunk(jobId, chunk.chunkNumber, payload, access));
+      heartbeatLargeMigrationJob(jobId, access, payload.workerId);
+    } catch (error) {
+      updateDirectRow("migration_file_chunks", chunk.id, {
+        status: "failed",
+        failedAt: now(),
+        failureReason: error.message || "Chunk import failed"
+      }, access);
+      updateDirectRow("migration_large_jobs", jobId, {
+        status: "failed",
+        workerId: "",
+        lockedAt: "",
+        heartbeatAt: "",
+        failedAt: now(),
+        failureReason: error.message || "Large migration failed"
+      }, access);
+      results.push({ chunkNumber: chunk.chunkNumber, ok: false, message: error.message });
+      if (stopOnError) break;
+    }
+  }
+  recomputeLargeJobTotals(jobId, access);
+  const job = largeMigrationJob(jobId, access);
+  return { job, processedChunks: results.length, results };
+}
+
+function importStagedLargeJobChunk(jobId, chunkNumber, payload, access) {
+  const job = requireLargeMigrationJob(jobId, access);
+  const chunk = requireLargeMigrationChunk(jobId, chunkNumber, access);
+  if (!["analyzed", "analyzed_with_errors", "failed"].includes(chunk.status)) {
+    throw badRequest(`Chunk ${chunk.chunkNumber} must be analyzed before staged import.`);
+  }
+  const preview = stagedPreviewForChunk(job, chunk, access);
+  if (!preview.allRows.length) throw badRequest("No staged rows found for this chunk.");
+  const gate = migrationApprovalGate(access, preview.summary);
+  if ((!gate.allowed || preview.summary.errorRows) && payload.skipApprovalGate !== true) {
+    throw badRequest(`Final staged chunk import blocked: ${gate.reason}`);
+  }
+  const batchId = makeId("batch");
+  insertMigrationRow("migration_import_batches", {
+    id: batchId,
+    tenantId: access.tenantId,
+    jobId,
+    sourceSoftware: job.sourceSoftware,
+    resource: job.resource || "auto",
+    branchId: job.branchId || access.branchId || "",
+    status: "importing",
+    summary: preview.summary,
+    filters: { branchId: job.branchId || access.branchId || "", resource: job.resource || "auto", chunkNumber: chunk.chunkNumber }
+  });
+  const importTx = db.transaction(() => importPreviewRows(preview, {
+    access,
+    batchId,
+    jobId,
+    sourceSoftware: job.sourceSoftware,
+    migrationMode: payload.migrationMode !== false,
+    duplicateDecisions: stagedDuplicateDecisions(job.id, chunk.id, access)
+  }));
+  const result = withBusyRetry(() => importTx());
+  const summary = { ...preview.summary, ...result, completedAt: now(), chunkNumber: chunk.chunkNumber };
+  updateDirectRow("migration_file_chunks", chunk.id, {
+    status: result.errorRows ? "imported_with_errors" : "imported",
+    processedRows: preview.summary.totalRows,
+    validRows: preview.summary.validRows,
+    warningRows: result.warningRows,
+    errorRows: result.errorRows,
+    importedRows: result.importedRows,
+    skippedRows: result.skippedRows,
+    summary,
+    completedAt: now(),
+    failureReason: ""
+  }, access);
+  updateMigrationRow("migration_import_batches", batchId, { status: "completed", summary }, { tenantId: access.tenantId });
+  syncStagingImportResults(job.id, chunk.id, batchId, access);
+  recomputeLargeJobTotals(job.id, access);
+  auditMigration("migration.large_job.staged_chunk_imported", { jobId, batchId, chunkId: chunk.id, chunkNumber: chunk.chunkNumber, summary }, access);
+  return { ok: true, job: largeMigrationJob(jobId, access), batchId, chunk: directChunk(chunk.id, access), summary };
+}
+
+function stagedPreviewForChunk(job, chunk, access) {
+  const stagedRows = db.prepare(`
+    SELECT * FROM migration_staging_rows
+    WHERE tenantId = @tenantId AND jobId = @jobId AND chunkId = @chunkId
+    ORDER BY sourceRowNumber ASC
+  `).all({ tenantId: access.tenantId, jobId: job.id, chunkId: chunk.id }).map(deserializeDirectRow);
+  const rows = dependencyOrderedRows(stagedRows.map((row) => ({
+    resource: row.resource,
+    entity: row.resource,
+    sourceSheet: row.sourceSheet,
+    sourceRowNumber: row.sourceRowNumber,
+    sourceExternalId: row.sourceExternalId,
+    status: row.status,
+    action: row.action,
+    targetId: row.targetId,
+    message: row.status === "error" ? (row.errors || []).join(", ") : (row.warnings || []).join(", ") || "Ready to import",
+    duplicate: Boolean(row.duplicateKey),
+    payload: row.payload || {},
+    raw: row.raw || {},
+    errors: row.errors || [],
+    warnings: row.warnings || []
+  })));
+  const summary = summarizePreparedRows(rows, job.sourceSoftware, job.fileName, false);
+  const response = { sourceSoftware: job.sourceSoftware, fileName: job.fileName, mapping: parseJsonField(job.mapping, {}), unmatchedColumns: [], summary, rows: rows.slice(0, 500) };
+  Object.defineProperty(response, "allRows", { value: rows, enumerable: false });
+  return response;
+}
+
+function summarizePreparedRows(rows, sourceSoftware, fileName, dryRun) {
+  const summary = emptySummary(sourceSoftware, fileName, dryRun);
+  for (const row of rows) addSummary(summary, row.resource, row);
+  summary.affectedRecords = summary.validRows + summary.warningRows;
+  summary.byBranch = branchSummary(rows);
+  return summary;
+}
+
+function stagedDuplicateDecisions(jobId, chunkId, access) {
+  const rows = db.prepare(`
+    SELECT sourceSheet, sourceRowNumber, sourceExternalId, duplicateKey, duplicateDecision
+    FROM migration_staging_rows
+    WHERE tenantId = @tenantId AND jobId = @jobId AND chunkId = @chunkId AND duplicateDecision <> ''
+  `).all({ tenantId: access.tenantId, jobId, chunkId });
+  const decisions = {};
+  for (const row of rows) {
+    decisions[`${row.sourceSheet}:${row.sourceRowNumber}`] = row.duplicateDecision;
+    if (row.sourceExternalId) decisions[row.sourceExternalId] = row.duplicateDecision;
+    if (row.duplicateKey) decisions[row.duplicateKey] = row.duplicateDecision;
+  }
+  return decisions;
+}
+
+function syncStagingImportResults(jobId, chunkId, batchId, access) {
+  const results = db.prepare(`
+    SELECT sourceSheet, sourceRowNumber, sourceExternalId, action, targetId, status
+    FROM migration_row_results
+    WHERE tenantId = @tenantId AND jobId = @jobId AND batchId = @batchId
+  `).all({ tenantId: access.tenantId, jobId, batchId });
+  const update = db.prepare(`
+    UPDATE migration_staging_rows
+       SET action = @action, targetId = @targetId, status = @status, updatedAt = @updatedAt
+     WHERE tenantId = @tenantId AND jobId = @jobId AND chunkId = @chunkId
+       AND sourceSheet = @sourceSheet AND sourceRowNumber = @sourceRowNumber
+  `);
+  for (const row of results) {
+    update.run({
+      tenantId: access.tenantId,
+      jobId,
+      chunkId,
+      sourceSheet: row.sourceSheet,
+      sourceRowNumber: row.sourceRowNumber,
+      action: row.action,
+      targetId: row.targetId,
+      status: row.status,
+      updatedAt: now()
+    });
+  }
+}
+function largeChunkPayload(job, payload, rows) {
+  return {
+    ...payload,
+    sourceSoftware: job.sourceSoftware || payload.sourceSoftware,
+    resource: job.resource === "auto" ? payload.resource || "auto" : job.resource,
+    mapping: payload.mapping || parseJsonField(job.mapping, {}),
+    fileName: job.fileName,
+    rows
+  };
+}
+
+
+function createLargeJobReconciliation(jobId, payload = {}, access) {
+  const job = requireLargeMigrationJob(jobId, access);
+  const branchId = cleanText(payload.branchId || job.branchId || access.branchId || "");
+  const chunks = db.prepare(`
+    SELECT status, COUNT(*) AS chunks, COALESCE(SUM(totalRows), 0) AS totalRows,
+           COALESCE(SUM(processedRows), 0) AS processedRows,
+           COALESCE(SUM(importedRows), 0) AS importedRows,
+           COALESCE(SUM(skippedRows), 0) AS skippedRows,
+           COALESCE(SUM(errorRows), 0) AS errorRows
+      FROM migration_file_chunks
+     WHERE tenantId = @tenantId AND jobId = @jobId
+     GROUP BY status
+  `).all({ tenantId: access.tenantId, jobId });
+  const staged = db.prepare(`
+    SELECT resource, status, COUNT(*) AS rows
+      FROM migration_staging_rows
+     WHERE tenantId = @tenantId AND jobId = @jobId
+     GROUP BY resource, status
+  `).all({ tenantId: access.tenantId, jobId });
+  const results = db.prepare(`
+    SELECT resource, action, status, COUNT(*) AS rows
+      FROM migration_row_results
+     WHERE tenantId = @tenantId AND jobId = @jobId
+     GROUP BY resource, action, status
+  `).all({ tenantId: access.tenantId, jobId });
+  const idMap = db.prepare(`
+    SELECT resource, linkType, COUNT(*) AS rows
+      FROM migration_id_map
+     WHERE tenantId = @tenantId AND jobId = @jobId
+     GROUP BY resource, linkType
+  `).all({ tenantId: access.tenantId, jobId });
+  const live = liveTargetPresence(jobId, access);
+  const expected = {
+    job: {
+      id: job.id,
+      status: job.status,
+      sourceSoftware: job.sourceSoftware,
+      resource: job.resource,
+      totalRows: Number(job.totalRows || 0),
+      validRows: Number(job.validRows || 0),
+      warningRows: Number(job.warningRows || 0),
+      errorRows: Number(job.errorRows || 0),
+      importedRows: Number(job.importedRows || 0),
+      skippedRows: Number(job.skippedRows || 0)
+    },
+    chunks: rowsByKey(chunks, "status"),
+    staged: rowsByPair(staged, "resource", "status"),
+    importedTargetIds: Number(idMap.reduce((sum, row) => sum + Number(row.rows || 0), 0))
+  };
+  const actual = {
+    results: rowsByPair(results, "resource", "action"),
+    resultStatuses: rowsByPair(results, "resource", "status"),
+    idMap: rowsByPair(idMap, "resource", "linkType"),
+    live
+  };
+  const differences = reconciliationDifferences(expected, actual, job, live);
+  const snapshot = insertDirectRow("migration_reconciliation_snapshots", {
+    id: cleanText(payload.id) || makeId("mrecon"),
+    tenantId: access.tenantId,
+    jobId,
+    branchId,
+    snapshotType: cleanText(payload.snapshotType || "post_import"),
+    expected,
+    actual,
+    differences,
+    status: differences.length ? "warning" : "passed"
+  });
+  return snapshot;
+}
+
+function rowsByKey(rows, key) {
+  return Object.fromEntries(rows.map((row) => [cleanText(row[key] || "unknown"), Number(row.rows || row.chunks || 0)]));
+}
+
+function rowsByPair(rows, left, right) {
+  const out = {};
+  for (const row of rows) {
+    const group = cleanText(row[left] || "unknown");
+    const item = cleanText(row[right] || "unknown");
+    out[group] = out[group] || {};
+    out[group][item] = Number(row.rows || 0);
+  }
+  return out;
+}
+
+function liveTargetPresence(jobId, access) {
+  const rows = db.prepare(`
+    SELECT resource, targetTable, targetId
+      FROM migration_id_map
+     WHERE tenantId = @tenantId AND jobId = @jobId AND targetId <> ''
+  `).all({ tenantId: access.tenantId, jobId });
+  const out = {};
+  for (const row of rows) {
+    const templateTable = RESOURCE_TEMPLATES[row.resource]?.table || "";
+    if (!templateTable || templateTable !== row.targetTable) continue;
+    out[row.resource] = out[row.resource] || { mapped: 0, present: 0, missing: 0 };
+    out[row.resource].mapped += 1;
+    const found = db.prepare(`SELECT id FROM ${templateTable} WHERE tenantId = @tenantId AND id = @id LIMIT 1`).get({ tenantId: access.tenantId, id: row.targetId });
+    if (found) out[row.resource].present += 1;
+    else out[row.resource].missing += 1;
+  }
+  return out;
+}
+
+function reconciliationDifferences(expected, actual, job, live) {
+  const differences = [];
+  const resultImported = sumNested(actual.results, ["created", "merged", "linked"]);
+  const jobImported = Number(job.importedRows || 0);
+  if (jobImported !== resultImported) {
+    differences.push({ code: "import_count_mismatch", severity: "warning", expected: jobImported, actual: resultImported, message: "Job imported rows do not match row result created/merged/linked count." });
+  }
+  const errorResults = sumNested(actual.resultStatuses, ["error"]);
+  if (Number(job.errorRows || 0) !== errorResults && errorResults > 0) {
+    differences.push({ code: "error_count_mismatch", severity: "critical", expected: Number(job.errorRows || 0), actual: errorResults, message: "Error row count differs from row result errors." });
+  }
+  for (const [resource, counts] of Object.entries(live)) {
+    if (counts.missing > 0) {
+      differences.push({ code: "missing_live_targets", severity: "critical", resource, expected: counts.mapped, actual: counts.present, missing: counts.missing, message: "Some mapped target records are missing from live tables." });
+    }
+  }
+  if (Number(job.totalRows || 0) > 0 && Number(job.processedRows || 0) < Number(job.totalRows || 0) && ["completed", "processing"].includes(job.status)) {
+    differences.push({ code: "incomplete_processing", severity: "warning", expected: Number(job.totalRows || 0), actual: Number(job.processedRows || 0), message: "Not all source rows have been processed yet." });
+  }
+  return differences;
+}
+
+function sumNested(groups, keys) {
+  let total = 0;
+  for (const values of Object.values(groups || {})) {
+    for (const key of keys) total += Number(values[key] || 0);
+  }
+  return total;
+}
+function largeMigrationJob(id, access) {
+  const row = db.prepare("SELECT * FROM migration_large_jobs WHERE id = @id AND tenantId = @tenantId").get({ id, tenantId: access.tenantId });
+  if (!row) return null;
+  const chunks = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId ORDER BY chunkNumber ASC").all({ tenantId: access.tenantId, jobId: id }).map(deserializeDirectRow);
+  const reconciliations = db.prepare("SELECT * FROM migration_reconciliation_snapshots WHERE tenantId = @tenantId AND jobId = @jobId ORDER BY createdAt DESC LIMIT 20").all({ tenantId: access.tenantId, jobId: id }).map(deserializeDirectRow);
+  return { ...deserializeDirectRow(row), chunks, reconciliations };
+}
+
+function requireLargeMigrationJob(id, access) {
+  const job = largeMigrationJob(id, access);
+  if (!job) throw badRequest("Large migration job not found.");
+  return job;
+}
+
+function requireLargeMigrationChunk(jobId, chunkNumber, access) {
+  const chunk = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId AND chunkNumber = @chunkNumber").get({
+    tenantId: access.tenantId,
+    jobId,
+    chunkNumber: integer(chunkNumber, 0)
+  });
+  if (!chunk) throw badRequest("Large migration chunk not found.");
+  return deserializeDirectRow(chunk);
+}
+
+function directChunk(id, access) {
+  const chunk = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND id = @id").get({ tenantId: access.tenantId, id });
+  return chunk ? deserializeDirectRow(chunk) : null;
+}
+
+function replaceStagingRows(jobId, chunkId, chunkNumber, preview, access, duplicateDecisions = {}) {
+  db.prepare("DELETE FROM migration_staging_rows WHERE tenantId = @tenantId AND jobId = @jobId AND chunkId = @chunkId").run({ tenantId: access.tenantId, jobId, chunkId });
+  for (const row of preview.allRows || preview.rows || []) {
+    insertDirectRow("migration_staging_rows", {
+      tenantId: access.tenantId,
+      jobId,
+      chunkId,
+      chunkNumber,
+      resource: row.resource,
+      sourceSheet: row.sourceSheet,
+      sourceRowNumber: row.sourceRowNumber,
+      sourceExternalId: row.sourceExternalId,
+      status: row.status,
+      duplicateKey: row.duplicate || /duplicate|already/i.test(String(row.message || "")) ? duplicateKeyFor(row) : "",
+      duplicateDecision: duplicateDecisionFor(row, duplicateDecisions),
+      payload: row.payload,
+      raw: row.raw,
+      errors: row.errors || [],
+      warnings: row.warnings || []
+    });
+  }
+}
+
+function recomputeLargeJobTotals(jobId, access) {
+  const totals = db.prepare(`
+    SELECT
+      COALESCE(SUM(totalRows), 0) totalRows,
+      COALESCE(SUM(processedRows), 0) processedRows,
+      COALESCE(SUM(validRows), 0) validRows,
+      COALESCE(SUM(warningRows), 0) warningRows,
+      COALESCE(SUM(errorRows), 0) errorRows,
+      COALESCE(SUM(importedRows), 0) importedRows,
+      COALESCE(SUM(skippedRows), 0) skippedRows,
+      COALESCE(MAX(chunkNumber), 0) currentChunk
+    FROM migration_file_chunks
+    WHERE tenantId = @tenantId AND jobId = @jobId
+  `).get({ tenantId: access.tenantId, jobId });
+  const imported = Number(totals.importedRows || 0);
+  const processed = Number(totals.processedRows || 0);
+  const total = Number(totals.totalRows || 0);
+  const status = imported > 0 && processed >= total && total > 0 ? "completed" : processed > 0 ? "processing" : "draft";
+  updateDirectRow("migration_large_jobs", jobId, {
+    ...totals,
+    status,
+    summary: totals,
+    resumeToken: `job:${jobId}:chunk:${totals.currentChunk || 0}`,
+    completedAt: status === "completed" ? now() : ""
+  }, access);
+}
+
+function insertDirectRow(table, data) {
+  const ts = now();
+  const row = directBindData({ id: data.id || makeId("migrow"), createdAt: ts, updatedAt: ts, ...data });
+  const columns = Object.keys(row);
+  const placeholders = columns.map((column) => `@${column}`);
+  db.prepare(`INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`).run(row);
+  return deserializeDirectRow(row);
+}
+
+function updateDirectRow(table, id, data, access) {
+  const row = directBindData({ ...data, updatedAt: now() });
+  delete row.id;
+  delete row.tenantId;
+  const keys = Object.keys(row);
+  if (!keys.length) return null;
+  const params = { ...row, id, tenantId: access.tenantId };
+  db.prepare(`UPDATE ${table} SET ${keys.map((key) => `${key} = @${key}`).join(", ")} WHERE id = @id AND tenantId = @tenantId`).run(params);
+  return params;
+}
+
+function directBindData(data = {}) {
+  return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined).map(([key, value]) => [key, jsonBind(value)]));
+}
+
+function deserializeDirectRow(row = {}) {
+  return deserializeJson(row, ["mapping", "settings", "summary", "payload", "raw", "errors", "warnings", "expected", "actual", "differences"]);
+}
+
+function parseJsonField(value, fallback) {
+  try {
+    return typeof value === "string" ? JSON.parse(value || "") : value ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function duplicateKeyFor(row) {
+  return `${row.resource}:${cleanText(row.sourceExternalId || row.payload?.phone || row.payload?.email || row.payload?.name || row.sourceRowNumber).toLowerCase()}`;
+}
+
+function duplicateDecisionFor(row, decisions = {}) {
+  const keys = [`${row.sourceSheet}:${row.sourceRowNumber}`, row.sourceExternalId, duplicateKeyFor(row)].filter(Boolean);
+  const value = keys.map((key) => cleanKey(decisions[key])).find(Boolean) || "";
+  return ["merge", "keep", "link", "skip"].includes(value) ? value : "";
+}
+
+function mergeImportedClient(existing, payload, meta, access) {
+  const next = { ...meta };
+  for (const key of ["name", "phone", "email", "gender", "birthday", "anniversary", "branchId"]) {
+    if (empty(existing[key]) && !empty(payload[key])) next[key] = payload[key];
+  }
+  const existingNotes = cleanText(existing.notes);
+  const incomingNotes = cleanText(payload.notes);
+  if (incomingNotes && !existingNotes.includes(incomingNotes)) next.notes = [existingNotes, incomingNotes].filter(Boolean).join(" | ");
+  return updateRow("clients", existing.id, next, { tenantId: access.tenantId });
+}
+
+function recordMigrationIdMap(row, result, options) {
+  if (!result?.targetId || !["created", "merged", "linked"].includes(result.action)) return;
+  const sourceExternalId = cleanText(row.sourceExternalId);
+  if (!sourceExternalId) return;
+  try {
+    insertDirectRow("migration_id_map", {
+      tenantId: options.access.tenantId,
+      jobId: options.jobId || "",
+      sourceSoftware: options.sourceSoftware || "",
+      resource: row.resource,
+      sourceExternalId,
+      targetId: result.targetId,
+      targetTable: RESOURCE_TEMPLATES[row.resource]?.table || row.resource,
+      branchId: row.payload?.branchId || options.access.branchId || "",
+      linkType: result.action,
+      confidence: result.action === "linked" ? 95 : 100
+    });
+  } catch {
+    // Id-map is useful for relationships, but duplicate map writes must not fail the import transaction.
+  }
+}
 function deserializeJson(row, keys) {
   const out = { ...row };
   for (const key of keys) {
@@ -1891,3 +2877,10 @@ function withBusyRetry(fn, attempts = 12) {
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
+
+
+
+
+
+
+

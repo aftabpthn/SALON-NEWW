@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { db } from "../db.js";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dataDir, db } from "../db.js";
 import { badRequest, conflict, forbidden, notFound } from "../utils/app-error.js";
 import { jobQueueService } from "./job-queue.service.js";
 import { realtimeService } from "./realtime.service.js";
@@ -22,6 +24,20 @@ const targetAssigneeTypes = new Set(["staff", "branch", "standard"]);
 const allowanceDeductionTypes = new Set(["allowance", "deduction"]);
 const finePenaltyRuleTypes = new Set(["manual", "late_count", "absent_day", "half_day", "short_hours", "no_clock_out", "weekend_penalty", "sandwich_penalty", "unpaid_week_off"]);
 const finePenaltyApplyModes = new Set(["per_occurrence", "fixed"]);
+const MAX_STAFF_MEDIA_BYTES = 5 * 1024 * 1024;
+const STAFF_MEDIA_MIME_EXTENSIONS = new Map([
+  ["image/jpeg", ".jpg"],
+  ["image/jpg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+  ["image/gif", ".gif"],
+  ["image/avif", ".avif"],
+  ["image/heic", ".heic"],
+  ["image/heif", ".heif"],
+  ["image/bmp", ".bmp"],
+  ["image/tiff", ".tiff"]
+]);
+const STAFF_MEDIA_EXTENSIONS = new Set([...STAFF_MEDIA_MIME_EXTENSIONS.values(), ".jpeg"]);
 
 function normalizeAccess(access = {}) {
   if (!access.tenantId) throw forbidden("Tenant context is required");
@@ -203,6 +219,38 @@ function normalizeFinePenaltyApplyMode(value = "per_occurrence") {
 function deriveCode(value = "", fallbackPrefix = "ST") {
   const compact = String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "");
   return (compact || `${fallbackPrefix}${Date.now().toString().slice(-4)}`).slice(0, 12);
+}
+
+function safePathSegment(value, fallback) {
+  const segment = String(value || fallback || "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80);
+  return segment || fallback;
+}
+
+function mediaExtension(payload = {}) {
+  const mimeType = String(payload.mimeType || "").toLowerCase();
+  const nameMatch = String(payload.fileName || "").toLowerCase().match(/\.(jpe?g|png|webp|gif|avif|hei[cf]|bmp|tiff?)$/);
+  const rawExtension = nameMatch?.[1] || "";
+  const normalizedExtension = rawExtension === "jpeg" ? "jpg" : rawExtension === "tif" ? "tiff" : rawExtension;
+  const extension = normalizedExtension ? `.${normalizedExtension}` : "";
+  if (extension && STAFF_MEDIA_EXTENSIONS.has(extension)) return extension;
+  return STAFF_MEDIA_MIME_EXTENSIONS.get(mimeType) || "";
+}
+
+function imageSignatureMatches(buffer, mimeType) {
+  if (mimeType === "image/jpeg" || mimeType === "image/jpg") return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (mimeType === "image/png") return buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  if (mimeType === "image/gif") return buffer.subarray(0, 3).toString("ascii") === "GIF";
+  if (mimeType === "image/webp") return buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  if (mimeType === "image/bmp") return buffer.subarray(0, 2).toString("ascii") === "BM";
+  if (mimeType === "image/tiff") {
+    const head = buffer.subarray(0, 4);
+    return head.equals(Buffer.from([0x49, 0x49, 0x2a, 0x00])) || head.equals(Buffer.from([0x4d, 0x4d, 0x00, 0x2a]));
+  }
+  if (["image/avif", "image/heic", "image/heif"].includes(mimeType)) {
+    const brand = buffer.subarray(4, 16).toString("ascii");
+    return brand.includes("ftyp") && /avif|heic|heif|mif1|msf1/.test(brand);
+  }
+  return false;
 }
 
 function rowToStaff(row) {
@@ -1083,6 +1131,7 @@ function staffIdentityForLogin(row) {
     fullName: row.full_name,
     mobile: row.mobile,
     email: row.email,
+    profilePhoto: row.profile_photo,
     roleId: row.role_id,
     designation: row.designation,
     status: row.status
@@ -1138,6 +1187,52 @@ function buildEmployeeDetailsPayload(staffId, branchId, payload = {}, access, ex
 }
 
 export class StaffOsService {
+  uploadStaffPhoto(payload = {}, access = {}, options = {}) {
+    access = normalizeAccess(access);
+    requireManager(access);
+    const branchId = pickBranch(payload, access);
+    assertBranch(access, branchId);
+
+    const mimeType = String(payload.mimeType || "").toLowerCase();
+    const extension = mediaExtension(payload);
+    if (!mimeType.startsWith("image/") || !extension) {
+      throw badRequest("Only JPG, PNG and common photo files are allowed");
+    }
+
+    const rawData = String(payload.dataUrl || payload.content || "");
+    const base64 = (rawData.includes(",") ? rawData.split(",").pop() : rawData).replace(/\s+/g, "");
+    if (!base64 || !/^[a-zA-Z0-9+/=]+$/.test(base64)) {
+      throw badRequest("Staff photo is required");
+    }
+
+    const buffer = Buffer.from(base64, "base64");
+    if (!buffer.length || buffer.length > MAX_STAFF_MEDIA_BYTES) {
+      throw badRequest("Staff photo size must be 5 MB or less");
+    }
+    if (!imageSignatureMatches(buffer, mimeType)) {
+      throw badRequest("Uploaded file is not a valid photo");
+    }
+
+    const tenantSegment = safePathSegment(access.tenantId, "tenant");
+    const branchSegment = safePathSegment(branchId, "branch");
+    const uploadDir = join(dataDir, "uploads", "staff-media", tenantSegment, branchSegment);
+    const fileName = `staff_${Date.now()}_${makeId("img")}${extension}`;
+    mkdirSync(uploadDir, { recursive: true });
+    writeFileSync(join(uploadDir, fileName), buffer, { flag: "wx" });
+
+    const path = `/uploads/staff-media/${tenantSegment}/${branchSegment}/${fileName}`;
+    const publicBaseUrl = String(options.publicBaseUrl || "").replace(/\/+$/, "");
+    const url = publicBaseUrl ? `${publicBaseUrl}${path}` : path;
+    this.writeAudit("staff.photo_uploaded", "staff_master", payload.staffId || "new", access, {
+      branchId,
+      fileName: String(payload.fileName || ""),
+      mimeType,
+      sizeBytes: buffer.length,
+      url
+    });
+    return { url, path, mimeType, sizeBytes: buffer.length, branchId };
+  }
+
   listStaff(query = {}, access) {
     access = normalizeAccess(access);
     const params = {

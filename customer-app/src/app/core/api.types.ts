@@ -134,6 +134,80 @@ export interface Business {
   paymentModes?: ("pay_at_venue" | "online")[];
 }
 
+export interface LiveConsultationPhoto {
+  name: string;
+  type: string;
+  sizeBytes: number;
+  dataUrl: string;
+}
+
+export interface LiveConsultationBusinessContext {
+  id: string;
+  slug: string;
+  businessName: string;
+  category?: string;
+  description?: string;
+  address?: string;
+  area?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  phone?: string;
+  mapsUrl?: string;
+  ratingAverage?: number;
+  ratingCount?: number;
+  distanceKm?: number;
+  isOpen?: boolean;
+  hoursLabel?: string;
+  nextAvailableSlot?: string;
+  startingPricePaise?: number;
+  popularService?: string;
+  services: Pick<ServiceItem, "id" | "name" | "category" | "description" | "pricePaise" | "durationMinutes">[];
+}
+
+export interface LiveConsultationRequest {
+  message: string;
+  goals: string[];
+  location?: { label?: string; lat?: number; lng?: number } | null;
+  photos: LiveConsultationPhoto[];
+  businesses: LiveConsultationBusinessContext[];
+}
+
+export interface LiveConsultationSalonRecommendation {
+  businessName: string;
+  slug: string;
+  reason: string;
+  location: string;
+  distanceKm?: number;
+  rating?: number;
+  openStatus?: string;
+  nextStep?: string;
+}
+
+export interface LiveConsultationServiceRecommendation {
+  name: string;
+  businessName: string;
+  slug: string;
+  priceLabel: string;
+  durationLabel: string;
+  reason: string;
+}
+
+export interface LiveConsultationResponse {
+  consultationId: string;
+  createdAt: string;
+  mode: "groq" | "local" | string;
+  provider: "groq" | "local_rules" | string;
+  providerWarning?: string;
+  answer: string;
+  actionPlan: string[];
+  recommendedSalons: LiveConsultationSalonRecommendation[];
+  recommendedServices: LiveConsultationServiceRecommendation[];
+  locationInsights: string[];
+  followUpQuestions: string[];
+  safetyNote: string;
+}
+
 export interface AvailabilityQuery {
   serviceId: string;
   staffId?: string;

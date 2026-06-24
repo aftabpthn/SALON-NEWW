@@ -63,6 +63,10 @@ export class StaffOsApi {
     return this.api.patch<StaffOsStaff>(`staff-os/staff/${id}/status`, payload);
   }
 
+  uploadStaffPhoto(payload: ApiRecord): Observable<ApiRecord> {
+    return this.api.post<ApiRecord>('staff-os/staff/media', payload);
+  }
+
   staffCategories(params: ApiRecord = {}): Observable<StaffOsStaffCategory[]> {
     return this.api.list<StaffOsStaffCategory[]>('staff-os/staff-categories', params);
   }

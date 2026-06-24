@@ -300,6 +300,7 @@ function staffMember(person, serviceIds = []) {
     title: person.role || "Professional",
     rating: Number(performance.rating || 0),
     specialty: assigned.length ? assigned.join(", ") : person.role || "",
+    image: person.image || "",
     nextAvailable: "",
     bookableServiceIds: assigned.length ? assigned : serviceIds
   };

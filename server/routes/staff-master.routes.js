@@ -61,6 +61,10 @@ staffMasterRouter.get("/staff-os/bulk-employee-update", route((req, res) => res.
 staffMasterRouter.post("/staff-os/bulk-employee-update", route((req, res) => res.json(staffMasterService.applyBulkEmployeeUpdate(req.body, req.access))));
 staffMasterRouter.get("/staff-os/staff", route((req, res) => res.json(staffMasterService.listStaff(req.query, req.access))));
 staffMasterRouter.post("/staff-os/staff", route((req, res) => res.status(201).json(staffMasterService.createStaff(req.body, req.access))));
+staffMasterRouter.post("/staff-os/staff/media", route((req, res) => {
+  const publicBaseUrl = `${req.protocol}://${req.get("host")}`;
+  res.status(201).json(staffMasterService.uploadStaffPhoto(req.body, req.access, { publicBaseUrl }));
+}));
 staffMasterRouter.get("/staff-os/staff/:id", route((req, res) => res.json(staffMasterService.getStaff(req.params.id, req.access))));
 staffMasterRouter.patch("/staff-os/staff/:id", route((req, res) => res.json(staffMasterService.updateStaff(req.params.id, req.body, req.access))));
 staffMasterRouter.patch("/staff-os/staff/:id/status", route((req, res) => res.json(staffMasterService.updateStaffStatus(req.params.id, req.body, req.access))));

@@ -128,6 +128,7 @@ export class StaffLoginService {
       phone: staff.mobile || "",
       email: staff.email || "",
       branchId: staff.branchId,
+      image: staff.profilePhoto || staff.profile_photo || existing?.image || "",
       shift: "",
       status: staff.status || "active",
       assignedServices: "[]",
@@ -140,14 +141,14 @@ export class StaffLoginService {
     if (existing) {
       db.prepare(`UPDATE staff
         SET name = @name, role = @role, phone = @phone, email = @email, branchId = @branchId,
-            status = @status, updatedAt = @updatedAt
+            image = @image, status = @status, updatedAt = @updatedAt
         WHERE id = @id`).run(row);
     } else {
       db.prepare(`INSERT INTO staff (
-        id, name, role, phone, email, branchId, shift, status, assignedServices,
+        id, name, role, phone, email, branchId, image, shift, status, assignedServices,
         commissionRule, attendance, performance, createdAt, updatedAt
       ) VALUES (
-        @id, @name, @role, @phone, @email, @branchId, @shift, @status, @assignedServices,
+        @id, @name, @role, @phone, @email, @branchId, @image, @shift, @status, @assignedServices,
         @commissionRule, @attendance, @performance, @createdAt, @updatedAt
       )`).run(row);
     }
