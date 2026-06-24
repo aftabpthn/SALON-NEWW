@@ -31,6 +31,10 @@ export type PosMembershipPlan = {
   price: number;
   discountPercent: number;
   productDiscountPercent?: number;
+  planType?: 'discount' | 'prepaid_credit' | string;
+  creditAmount?: number;
+  bonusAmount?: number;
+  benefitPercent?: number;
   gstRate?: number;
   validityDays: number;
   includedServices?: unknown[];

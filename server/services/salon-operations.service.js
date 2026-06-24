@@ -418,6 +418,11 @@ function normalizeSaleItems(items = [], access) {
       discountPercent: Number(item.discountPercent || 0),
       validityDays: Number(item.validityDays || 0),
       serviceCredits: Array.isArray(item.serviceCredits) ? item.serviceCredits : [],
+      planType: item.planType || "",
+      planCredits: Number(item.planCredits || 0),
+      creditsRemaining: Number(item.creditsRemaining || item.planCredits || 0),
+      bonusAmount: Number(item.bonusAmount || 0),
+      benefitRules: item.benefitRules && typeof item.benefitRules === "object" ? item.benefitRules : {},
       packageCredits: Array.isArray(item.packageCredits) ? item.packageCredits : [],
       giftCode: item.giftCode || "",
       expiryDate: item.expiryDate || ""
@@ -430,19 +435,20 @@ function createSoldEntitlements({ clientId, branchId, saleId, items = [], access
   const soldDate = dayKey(soldAt) || now().slice(0, 10);
   for (const item of items) {
     if (item.type === "membership") {
+      const membershipCredits = Math.max(0, Number(item.creditsRemaining || item.planCredits || 0));
       created.push(repositories.memberships.create({
         id: makeId("mem"),
         clientId,
         planName: item.name,
         price: money(item.price),
-        planCredits: 0,
-        creditsRemaining: 0,
+        planCredits: membershipCredits,
+        creditsRemaining: membershipCredits,
         serviceCredits: item.serviceCredits?.length ? item.serviceCredits : [{ type: "bill_discount", percent: Number(item.discountPercent || 0), planId: item.id || "" }],
         validityDate: addDays(item.validityDays || 365, soldAt),
         autoRenew: 0,
         loyaltyMultiplier: 1,
         status: "active",
-        redeemHistory: [{ date: soldDate, saleId, type: "membership_sale", planId: item.id || "" }],
+        redeemHistory: [{ date: soldDate, saleId, type: "membership_sale", planId: item.id || "", planType: item.planType || "discount", credits: membershipCredits, paidAmount: money(item.price), bonusAmount: money(item.bonusAmount || 0) }],
         branchId,
         createdAt: soldAt,
         updatedAt: soldAt

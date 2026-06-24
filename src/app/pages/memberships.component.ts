@@ -195,11 +195,29 @@ type PlanLifecycleDialog = {
             <button class="ghost-button mini" type="button" *ngIf="editingPlanId()" (click)="resetPlanForm()">New plan</button>
           </div>
           <form [formGroup]="planForm" (ngSubmit)="savePlan()">
+            <label class="field">
+              <span>Membership type</span>
+              <select formControlName="planType">
+                <option value="discount">Discount card</option>
+                <option value="prepaid_credit">Prepaid value credit</option>
+              </select>
+            </label>
             <label class="field"><span>Plan name</span><input formControlName="name" placeholder="Aura Gold 30%" /></label>
             <label class="field"><span>Plan code</span><input formControlName="code" placeholder="aura_gold" /></label>
-            <label class="field"><span>Selling price</span><input type="number" formControlName="price" /></label>
-            <label class="field"><span>Service discount %</span><input type="number" formControlName="discountPercent" /></label>
-            <label class="field"><span>Product discount %</span><input type="number" formControlName="productDiscountPercent" /></label>
+            <label class="field"><span>{{ isPrepaidPlanForm() ? 'You pay' : 'Selling price' }}</span><input type="number" formControlName="price" /></label>
+            <label class="field" *ngIf="!isPrepaidPlanForm()"><span>Service discount %</span><input type="number" formControlName="discountPercent" /></label>
+            <label class="field" *ngIf="!isPrepaidPlanForm()"><span>Product discount %</span><input type="number" formControlName="productDiscountPercent" /></label>
+            <ng-container *ngIf="isPrepaidPlanForm()">
+              <label class="field"><span>We add</span><input type="number" formControlName="bonusAmount" /></label>
+              <label class="field"><span>You get credit</span><input type="number" formControlName="creditAmount" /></label>
+              <label class="field"><span>Benefit %</span><input type="number" formControlName="benefitPercent" /></label>
+              <div class="field full inline-actions">
+                <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(20000, 4800, 150)">20k -> 24.8k</button>
+                <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(30000, 8700, 210)">30k -> 38.7k</button>
+                <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(40000, 13600, 270)">40k -> 53.6k</button>
+                <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(50000, 20000, 365)">50k -> 70k</button>
+              </div>
+            </ng-container>
             <label class="field"><span>GST %</span><input type="number" formControlName="gstRate" /></label>
             <label class="field"><span>Validity days</span><input type="number" formControlName="validityDays" /></label>
             <label class="field">
@@ -227,7 +245,7 @@ type PlanLifecycleDialog = {
             <article class="action-card plan-card" *ngFor="let plan of membershipPlans()">
               <div>
                 <strong>{{ plan.name }}</strong>
-                <span>{{ plan.price | currency: 'INR':'symbol':'1.0-0' }} · {{ plan.discountPercent }}% service · {{ plan.productDiscountPercent || 0 }}% product</span>
+                <span>{{ planSummary(plan) }}</span>
               </div>
               <div class="plan-meta">
                 <span>{{ plan.validityDays }} days</span>
@@ -1884,12 +1902,16 @@ export class MembershipsComponent implements OnInit {
   readonly planForm = this.fb.group({
     id: [''],
     version: [1],
+    planType: ['discount'],
     code: [''],
     name: ['Aura Gold 30%', Validators.required],
     description: ['Every bill discount plan'],
     price: [2999, Validators.required],
     discountPercent: [30, Validators.required],
     productDiscountPercent: [0],
+    creditAmount: [0],
+    bonusAmount: [0],
+    benefitPercent: [0],
     gstRate: [18],
     validityDays: [365, Validators.required],
     includedServicesText: ['[]'],
@@ -2010,13 +2032,31 @@ export class MembershipsComponent implements OnInit {
       this.saving.set(false);
       return;
     }
+    const planType = String(this.planForm.value.planType || 'discount');
+    const price = Number(this.planForm.value.price || 0);
+    const bonusAmount = Math.max(0, Number(this.planForm.value.bonusAmount || 0));
+    const creditAmount = Math.max(0, Number(this.planForm.value.creditAmount || 0) || price + bonusAmount);
+    const benefitPercent = Number(this.planForm.value.benefitPercent || 0) || (price > 0 ? Math.round((Math.max(0, creditAmount - price) / price) * 100) : 0);
+    if (planType === 'prepaid_credit') {
+      benefitRules = {
+        ...benefitRules,
+        planType,
+        prepaidCredit: true,
+        creditAmount,
+        bonusAmount: Math.max(0, creditAmount - price || bonusAmount),
+        benefitPercent,
+        redemptionMode: 'prepaid_credit'
+      };
+    } else {
+      benefitRules = { ...benefitRules, planType };
+    }
     const payload = {
       code: this.planForm.value.code,
       name: this.planForm.value.name,
       description: this.planForm.value.description,
-      price: Number(this.planForm.value.price || 0),
-      discountPercent: Number(this.planForm.value.discountPercent || 0),
-      productDiscountPercent: Number(this.planForm.value.productDiscountPercent || 0),
+      price,
+      discountPercent: planType === 'prepaid_credit' ? 0 : Number(this.planForm.value.discountPercent || 0),
+      productDiscountPercent: planType === 'prepaid_credit' ? 0 : Number(this.planForm.value.productDiscountPercent || 0),
       gstRate: Number(this.planForm.value.gstRate || 18),
       validityDays: Number(this.planForm.value.validityDays || 365),
       includedServices,
@@ -2043,15 +2083,20 @@ export class MembershipsComponent implements OnInit {
 
   editPlan(plan: PosMembershipPlan): void {
     this.editingPlanId.set(plan.id);
+    const planType = this.membershipPlanType(plan);
     this.planForm.patchValue({
       id: plan.id,
       version: plan.version || 1,
+      planType,
       code: plan.code || '',
       name: plan.name,
       description: plan.description || '',
       price: plan.price,
       discountPercent: plan.discountPercent,
       productDiscountPercent: plan.productDiscountPercent || 0,
+      creditAmount: plan.creditAmount || 0,
+      bonusAmount: plan.bonusAmount || 0,
+      benefitPercent: plan.benefitPercent || 0,
       gstRate: plan.gstRate || 18,
       validityDays: plan.validityDays,
       includedServicesText: JSON.stringify(plan.includedServices || [], null, 2),
@@ -2065,12 +2110,16 @@ export class MembershipsComponent implements OnInit {
     this.planForm.reset({
       id: '',
       version: 1,
+      planType: 'discount',
       code: '',
       name: 'Aura Gold 30%',
       description: 'Every bill discount plan',
       price: 2999,
       discountPercent: 30,
       productDiscountPercent: 0,
+      creditAmount: 0,
+      bonusAmount: 0,
+      benefitPercent: 0,
       gstRate: 18,
       validityDays: 365,
       includedServicesText: '[]',
@@ -2085,11 +2134,19 @@ export class MembershipsComponent implements OnInit {
     const value = this.membershipForm.value;
     const plan = this.membershipPlans().find((item) => item.id === value.planId);
     const staff = this.staffById(String(value.staffId || ''));
+    const planCredits = this.membershipPlanType(plan) === 'prepaid_credit'
+      ? this.membershipPlanCreditAmount(plan)
+      : Number(value.planCredits || 0);
+    const serviceCredits = this.membershipPlanType(plan) === 'prepaid_credit'
+      ? [{ type: 'prepaid_credit', credits: planCredits, remaining: planCredits, planId: plan?.id || '', bonusAmount: this.membershipPlanBonusAmount(plan), benefitPercent: plan?.benefitPercent || 0 }]
+      : undefined;
     this.api.post('membership-enterprise/sell', {
       ...value,
       staffName: staff ? this.staffName(staff.id) : '',
       price: plan?.price || 0,
-      paidAmount: Number(value.paidAmount || plan?.price || 0)
+      paidAmount: Number(value.paidAmount || plan?.price || 0),
+      planCredits,
+      serviceCredits
     }).subscribe({
       next: (result) => {
         this.message.set('Client membership ledger saved and POS eligibility updated.');
@@ -3119,12 +3176,64 @@ export class MembershipsComponent implements OnInit {
     return String(value ?? '').replace(/[()\\]/g, ' ').replace(/[^\x20-\x7E]/g, ' ');
   }
 
+  isPrepaidPlanForm(): boolean {
+    return String(this.planForm.value.planType || 'discount') === 'prepaid_credit';
+  }
+
+  applyPrepaidPreset(price: number, bonusAmount: number, validityDays: number): void {
+    this.planForm.patchValue({
+      planType: 'prepaid_credit',
+      price,
+      bonusAmount,
+      creditAmount: price + bonusAmount,
+      benefitPercent: price > 0 ? Math.round((bonusAmount / price) * 100) : 0,
+      discountPercent: 0,
+      productDiscountPercent: 0,
+      validityDays
+    });
+  }
+
+  planSummary(plan: PosMembershipPlan): string {
+    if (this.membershipPlanType(plan) === 'prepaid_credit') {
+      return `Pay ${this.moneyLabel(plan.price)} · Get ${this.moneyLabel(this.membershipPlanCreditAmount(plan))} credit · ${plan.benefitPercent || 0}% bonus`;
+    }
+    return `${this.moneyLabel(plan.price)} · ${plan.discountPercent}% service · ${plan.productDiscountPercent || 0}% product`;
+  }
+
+  private membershipPlanType(plan: PosMembershipPlan | null | undefined): string {
+    const rules = plan?.benefitRules || {};
+    return String(plan?.planType || rules['planType'] || (rules['prepaidCredit'] ? 'prepaid_credit' : 'discount'));
+  }
+
+  private membershipPlanCreditAmount(plan: PosMembershipPlan | null | undefined): number {
+    const rules = plan?.benefitRules || {};
+    return Math.max(0, Number(plan?.creditAmount || rules['creditAmount'] || rules['credits'] || 0));
+  }
+
+  private membershipPlanBonusAmount(plan: PosMembershipPlan | null | undefined): number {
+    const rules = plan?.benefitRules || {};
+    return Math.max(0, Number(plan?.bonusAmount || rules['bonusAmount'] || Math.max(0, this.membershipPlanCreditAmount(plan) - Number(plan?.price || 0))));
+  }
+
+  private moneyLabel(value: number): string {
+    return `₹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
+  }
+
   private normalizePlan(plan: PosMembershipPlan): PosMembershipPlan {
+    const benefitRules = plan.benefitRules || {};
+    const planType = String(plan.planType || benefitRules['planType'] || (benefitRules['prepaidCredit'] ? 'prepaid_credit' : 'discount'));
+    const price = Number(plan.price || 0);
+    const creditAmount = Math.max(0, Number(plan.creditAmount || benefitRules['creditAmount'] || 0));
+    const bonusAmount = Math.max(0, Number(plan.bonusAmount || benefitRules['bonusAmount'] || Math.max(0, creditAmount - price)));
     return {
       ...plan,
-      price: Number(plan.price || 0),
+      price,
       discountPercent: Number(plan.discountPercent || 0),
       productDiscountPercent: Number(plan.productDiscountPercent || 0),
+      planType,
+      creditAmount,
+      bonusAmount,
+      benefitPercent: Number(plan.benefitPercent || benefitRules['benefitPercent'] || (price > 0 ? Math.round((bonusAmount / price) * 100) : 0)),
       gstRate: Number(plan.gstRate || 18),
       validityDays: Number(plan.validityDays || 365),
       status: plan.status || (plan.active === false ? 'inactive' : 'active'),

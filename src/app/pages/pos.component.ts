@@ -27,6 +27,11 @@ type SaleItem = {
   discountSource?: ItemDiscountSource;
   validityDays?: number;
   serviceCredits?: ApiRecord[];
+  planType?: string;
+  planCredits?: number;
+  creditsRemaining?: number;
+  bonusAmount?: number;
+  benefitRules?: ApiRecord;
   packageCredits?: ApiRecord[];
   giftCode?: string;
   expiryDate?: string;
@@ -535,7 +540,7 @@ type PackageClientNotice = {
               <span>Membership sale</span>
               <select #membershipPlanSelect>
                 <option value="">Choose membership</option>
-                <option *ngFor="let plan of activeMembershipPlans()" [value]="plan.id">{{ plan.name }} - ₹{{ plan.price }} / {{ plan.discountPercent }}% every bill</option>
+                <option *ngFor="let plan of activeMembershipPlans()" [value]="plan.id">{{ membershipPlanLabel(plan) }}</option>
               </select>
             </label>
             <button class="ghost-button" type="button" (click)="addMembershipPlan(membershipPlanSelect.value); membershipPlanSelect.value = ''">Add</button>
@@ -3603,6 +3608,15 @@ export class PosComponent implements OnInit, OnDestroy {
   addMembershipPlan(id: string): void {
     const plan = this.membershipPlans().find((item) => item.id === id);
     if (!plan) return;
+    const planType = this.membershipPlanType(plan);
+    const creditAmount = this.membershipPlanCreditAmount(plan);
+    const bonusAmount = this.membershipPlanBonusAmount(plan);
+    const serviceCredits = planType === 'prepaid_credit'
+      ? [{ type: 'prepaid_credit', credits: creditAmount, remaining: creditAmount, planId: plan.id, bonusAmount, benefitPercent: plan.benefitPercent || 0 }]
+      : [
+          { type: 'bill_discount', percent: Number(plan.discountPercent || 0), planId: plan.id },
+          { type: 'product_discount', percent: Number(plan.productDiscountPercent || 0), planId: plan.id }
+        ];
     this.items.update((items) => [
       ...items,
       {
@@ -3613,12 +3627,14 @@ export class PosComponent implements OnInit, OnDestroy {
         price: Number(plan.price || 0),
         gstRate: 18,
         ...this.defaultItemStaff(),
-        discountPercent: Number(plan.discountPercent || 0),
+        discountPercent: planType === 'prepaid_credit' ? 0 : Number(plan.discountPercent || 0),
         validityDays: Number(plan.validityDays || 365),
-        serviceCredits: [
-          { type: 'bill_discount', percent: Number(plan.discountPercent || 0), planId: plan.id },
-          { type: 'product_discount', percent: Number(plan.productDiscountPercent || 0), planId: plan.id }
-        ]
+        planType,
+        planCredits: planType === 'prepaid_credit' ? creditAmount : 0,
+        creditsRemaining: planType === 'prepaid_credit' ? creditAmount : 0,
+        bonusAmount,
+        benefitRules: plan.benefitRules || {},
+        serviceCredits
       }
     ]);
     this.normalizeBenefitServiceMappings();
@@ -4747,17 +4763,48 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   private normalizeMembershipPlan(plan: PosMembershipPlan): PosMembershipPlan {
+    const benefitRules = plan.benefitRules || {};
+    const planType = String(plan.planType || benefitRules['planType'] || (benefitRules['prepaidCredit'] ? 'prepaid_credit' : 'discount'));
+    const price = Number(plan.price || 0);
+    const creditAmount = Math.max(0, Number(plan.creditAmount || benefitRules['creditAmount'] || 0));
+    const bonusAmount = Math.max(0, Number(plan.bonusAmount || benefitRules['bonusAmount'] || Math.max(0, creditAmount - price)));
     return {
       ...plan,
-      price: Number(plan.price || 0),
+      price,
       discountPercent: Number(plan.discountPercent || 0),
       productDiscountPercent: Number(plan.productDiscountPercent || 0),
+      planType,
+      creditAmount,
+      bonusAmount,
+      benefitPercent: Number(plan.benefitPercent || benefitRules['benefitPercent'] || (price > 0 ? Math.round((bonusAmount / price) * 100) : 0)),
       gstRate: Number(plan.gstRate || 18),
       validityDays: Number(plan.validityDays || 365),
       active: plan.active !== false && plan.status !== 'inactive',
       status: plan.status || (plan.active === false ? 'inactive' : 'active'),
       createdAt: plan.createdAt || new Date().toISOString()
     };
+  }
+
+  membershipPlanLabel(plan: PosMembershipPlan): string {
+    if (this.membershipPlanType(plan) === 'prepaid_credit') {
+      return `${plan.name} - Pay ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get ₹${Math.round(this.membershipPlanCreditAmount(plan)).toLocaleString('en-IN')} credit`;
+    }
+    return `${plan.name} - ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / ${Number(plan.discountPercent || 0)}% every bill`;
+  }
+
+  private membershipPlanType(plan: PosMembershipPlan | null | undefined): string {
+    const rules = plan?.benefitRules || {};
+    return String(plan?.planType || rules['planType'] || (rules['prepaidCredit'] ? 'prepaid_credit' : 'discount'));
+  }
+
+  private membershipPlanCreditAmount(plan: PosMembershipPlan | null | undefined): number {
+    const rules = plan?.benefitRules || {};
+    return Math.max(0, Number(plan?.creditAmount || rules['creditAmount'] || rules['credits'] || 0));
+  }
+
+  private membershipPlanBonusAmount(plan: PosMembershipPlan | null | undefined): number {
+    const rules = plan?.benefitRules || {};
+    return Math.max(0, Number(plan?.bonusAmount || rules['bonusAmount'] || Math.max(0, this.membershipPlanCreditAmount(plan) - Number(plan?.price || 0))));
   }
 
   private membershipDaysLeft(membership: ApiRecord): number {

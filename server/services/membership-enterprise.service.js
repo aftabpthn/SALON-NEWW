@@ -353,7 +353,13 @@ export class MembershipEnterpriseService {
     const expiresOn = payload.validityDate || addDays(takenDate, validityDays);
     const planName = payload.planName || plan?.name || "Membership";
     const discountPercent = Number(payload.discountPercent ?? plan?.discountPercent ?? 0);
-    const credits = Number(payload.planCredits ?? 0);
+    const planRules = plan?.benefitRules && typeof plan.benefitRules === "object" ? plan.benefitRules : {};
+    const isPrepaidCredit = payload.planType === "prepaid_credit" || planRules.planType === "prepaid_credit" || planRules.prepaidCredit === true;
+    const credits = Number(payload.planCredits ?? (isPrepaidCredit ? planRules.creditAmount : 0) ?? 0);
+    const bonusAmount = Number(payload.bonusAmount ?? (isPrepaidCredit ? planRules.bonusAmount : 0) ?? 0);
+    const serviceCredits = payload.serviceCredits || (isPrepaidCredit
+      ? [{ type: "prepaid_credit", credits, remaining: credits, planId: plan?.id || "", bonusAmount, benefitPercent: Number(planRules.benefitPercent || 0) }]
+      : [{ type: "bill_discount", percent: discountPercent, planId: plan?.id || "" }]);
     const membership = repositories.memberships.create({
       id: makeId("mem"),
       clientId: payload.clientId,
@@ -361,12 +367,12 @@ export class MembershipEnterpriseService {
       price: money(payload.price ?? plan?.price ?? 0),
       planCredits: credits,
       creditsRemaining: credits,
-      serviceCredits: payload.serviceCredits || [{ type: "bill_discount", percent: discountPercent, planId: plan?.id || "" }],
+      serviceCredits,
       validityDate: expiresOn,
       autoRenew: payload.autoRenew ? 1 : 0,
       loyaltyMultiplier: Number(payload.loyaltyMultiplier || 1),
       status: "active",
-      redeemHistory: [{ date: takenDate, type: "membership_sale", planId: plan?.id || "", invoiceId: payload.invoiceId || "", saleId: payload.saleId || "" }],
+      redeemHistory: [{ date: takenDate, type: "membership_sale", planId: plan?.id || "", planType: isPrepaidCredit ? "prepaid_credit" : "discount", credits, bonusAmount, invoiceId: payload.invoiceId || "", saleId: payload.saleId || "" }],
       branchId
     }, scope(access));
     this.ledger({
