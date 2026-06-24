@@ -1994,7 +1994,7 @@ type StaffPhotoUploadResponse = { url?: string };
     .attendance-stats span { color: #60766d; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .attendance-stats strong { font-size: 24px; color: #10201a; }
     .attendance-stats small { color: #60766d; }
-    .attendance-workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 14px; align-items: start; min-width: 0; }
+    .attendance-workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 14px; min-width: 0; }
     .attendance-wide { grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); }
     .attendance-command,
     .attendance-workspace,
