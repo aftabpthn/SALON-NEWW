@@ -3946,6 +3946,7 @@ export class PosComponent implements OnInit, OnDestroy {
     settlementPreview?: { advance: number; counter: number; due: number; walletCredit: number }
   ): void {
     const benefitRedeem = this.readJsonObject(result.sale?.membershipRedeem);
+    const invoiceNumber = String(result.invoice?.invoiceNumber || result.invoice?.id || 'Invoice');
     this.invoice.set(result.invoice);
     this.generatedInvoiceSettlement.set(settlementPreview || this.currentSettlementPreview());
     this.generatedInvoiceBenefitRedeem.set(Number(benefitRedeem?.['creditsUsed'] || 0) > 0 ? benefitRedeem : null);
@@ -3983,9 +3984,14 @@ export class PosComponent implements OnInit, OnDestroy {
     this.unpaidReceiveAmount = 0;
     this.unpaidReceiveMessage.set('');
     this.form.patchValue({ clientId: '', staffId: '', appointmentId: '', invoiceDate: this.todayDateInput() }, { emitEvent: false });
+    this.invoice.set(null);
+    this.generatedInvoiceSettlement.set(null);
+    this.generatedInvoiceBenefitRedeem.set(null);
     this.saving.set(false);
-    this.clearPosRouteSelection(() => this.load());
-    if (message) window.setTimeout(() => this.dataHint.set(message), 600);
+    this.clearPosRouteSelection(() => {
+      this.load();
+      this.dataHint.set(message || `${invoiceNumber} generated. Fresh POS bill ready.`);
+    });
   }
 
   private clearPosRouteSelection(onFinally?: () => void): void {
