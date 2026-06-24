@@ -1,5 +1,5 @@
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Observable, catchError, forkJoin, of } from 'rxjs';
@@ -185,15 +185,92 @@ type PlanLifecycleDialog = {
         </article>
       </section>
 
-      <div class="two-grid compact-workbench" *ngIf="activeTab() === 'plans'">
-        <section class="form-panel sticky-panel">
-          <div class="section-title compact-title">
-            <div>
-              <span class="eyebrow">{{ editingPlanId() ? 'Edit plan' : 'Plan master' }}</span>
-              <h2>{{ editingPlanId() ? 'Update membership plan' : 'Create membership plan' }}</h2>
-            </div>
-            <button class="ghost-button mini" type="button" *ngIf="editingPlanId()" (click)="resetPlanForm()">New plan</button>
+      <section class="plan-reference-layout" *ngIf="activeTab() === 'plans'">
+        <button class="floating-add" type="button" (click)="openPlanDrawer()" aria-label="Add membership plan">+</button>
+        <header class="plans-title">
+          <h1>Plans</h1>
+          <p>
+            Create discount cards and prepaid value-credit plans for POS sale. Membership plan history stays connected with
+            clients, invoices and redemption.
+          </p>
+        </header>
+
+        <div class="list-controls">
+          <label class="show-control">
+            <span>Show</span>
+            <select [ngModel]="planShowLimit()" (ngModelChange)="planShowLimit.set(numberValue($event))">
+              <option [ngValue]="10">10</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+            </select>
+          </label>
+          <label class="search-pill">
+            <span class="sr-only">Search plans</span>
+            <input [ngModel]="planQuery()" (ngModelChange)="planQuery.set($event)" placeholder="Search" />
+          </label>
+        </div>
+
+        <div class="plan-table-wrap">
+          <table class="plan-table">
+            <thead>
+              <tr>
+                <th class="check-col"><input type="checkbox" aria-label="Select all plans" /></th>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Sold</th>
+                <th>Status</th>
+                <th class="action-col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let plan of visibleMembershipPlans()">
+                <td class="check-col"><input type="checkbox" [attr.aria-label]="'Select ' + plan.name" /></td>
+                <td>
+                  <div class="plan-name-cell">
+                    <span class="plan-avatar">{{ planInitial(plan) }}</span>
+                    <div>
+                      <strong>{{ plan.name }}</strong>
+                      <small>{{ planSummary(plan) }}</small>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ plan.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ planSoldCount(plan) }}</td>
+                <td><span class="status-pill">{{ plan.status || (plan.active ? 'Active' : 'Inactive') }}</span></td>
+                <td class="action-cell">
+                  <button class="dots-button" type="button" (click)="togglePlanAction(plan, $event)" aria-label="Plan actions">...</button>
+                  <div class="action-menu" *ngIf="openPlanActionId() === plan.id">
+                    <button type="button" (click)="editPlan(plan)">Edit</button>
+                    <a [routerLink]="['/memberships', plan.id]" (click)="openPlanActionId.set('')">360</a>
+                    <button type="button" (click)="markPlanInactive(plan)">Inactive Status</button>
+                  </div>
+                </td>
+              </tr>
+              <tr *ngIf="!visibleMembershipPlans().length">
+                <td class="empty-row" colspan="6">No plan found. Plus button se discount ya prepaid credit plan banao.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <footer class="list-footer">
+          <span>Showing 1 to {{ visibleMembershipPlans().length }} of {{ filteredMembershipPlans().length }} Entries</span>
+          <div class="pager">
+            <button type="button" disabled>Previous</button>
+            <button class="active" type="button">1</button>
+            <button type="button" disabled>Next</button>
           </div>
+        </footer>
+      </section>
+
+      <div class="plan-drawer-shell" *ngIf="showPlanDrawer()">
+        <button class="drawer-scrim" type="button" (click)="closePlanDrawer()" aria-label="Close plan drawer"></button>
+        <aside class="plan-drawer">
+          <div class="drawer-title">
+            <button class="icon-button" type="button" (click)="closePlanDrawer()">×</button>
+            <h2>{{ editingPlanId() ? 'Update Plan' : 'Add New Plan' }}</h2>
+          </div>
+          <p class="drawer-help">Create normal discount memberships or prepaid value-credit plans. POS me sale hone ke baad client membership ledger live update hoga.</p>
           <form [formGroup]="planForm" (ngSubmit)="savePlan()">
             <label class="field">
               <span>Membership type</span>
@@ -232,33 +309,7 @@ type PlanLifecycleDialog = {
             <label class="field full"><span>Benefit rules JSON</span><textarea formControlName="benefitRulesText" placeholder='{"maxDiscount":1000,"blackoutDates":[]}'></textarea></label>
             <button class="primary-button" type="submit" [disabled]="planForm.invalid || saving()">{{ editingPlanId() ? 'Save changes' : 'Save plan' }}</button>
           </form>
-        </section>
-
-        <section class="panel compact-panel">
-          <div class="section-title">
-            <div>
-              <span class="eyebrow">Plans visible in POS</span>
-              <h2>Membership plan master</h2>
-            </div>
-          </div>
-          <div class="quick-grid plan-grid">
-            <article class="action-card plan-card" *ngFor="let plan of membershipPlans()">
-              <div>
-                <strong>{{ plan.name }}</strong>
-                <span>{{ planSummary(plan) }}</span>
-              </div>
-              <div class="plan-meta">
-                <span>{{ plan.validityDays }} days</span>
-                <span>{{ plan.status || (plan.active ? 'active' : 'inactive') }}</span>
-                <span>v{{ plan.version || 1 }}</span>
-              </div>
-              <div class="inline-actions">
-                <button class="ghost-button mini" type="button" (click)="editPlan(plan)">Edit</button>
-                <a class="ghost-button mini" [routerLink]="['/memberships', plan.id]">360</a>
-              </div>
-            </article>
-          </div>
-        </section>
+        </aside>
       </div>
 
       <div class="two-grid compact-workbench" *ngIf="activeTab() === 'sell'">
@@ -1462,6 +1513,347 @@ type PlanLifecycleDialog = {
       margin-top: 18px;
     }
 
+    .plan-reference-layout {
+      position: relative;
+      min-height: calc(100vh - 260px);
+      padding: 18px 24px 28px;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+    }
+
+    .plans-title h1 {
+      margin: 0 0 8px;
+      color: #111827;
+      font-size: 28px;
+      line-height: 1.15;
+    }
+
+    .plans-title p {
+      max-width: 780px;
+      margin: 0;
+      color: #4b5563;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .floating-add {
+      position: absolute;
+      top: 22px;
+      right: 28px;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 50%;
+      background: #24262b;
+      color: #fff;
+      font-size: 30px;
+      line-height: 1;
+      box-shadow: 0 14px 24px rgba(15, 23, 42, 0.2);
+      cursor: pointer;
+    }
+
+    .list-controls,
+    .list-footer,
+    .pager,
+    .plan-name-cell,
+    .action-cell {
+      display: flex;
+      align-items: center;
+    }
+
+    .list-controls {
+      justify-content: space-between;
+      gap: 16px;
+      margin: 42px 0 18px;
+    }
+
+    .show-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .show-control select {
+      width: 72px;
+      min-height: 36px;
+      border-color: #d1d5db;
+      border-radius: 4px;
+      padding: 6px 28px 6px 10px;
+    }
+
+    .search-pill {
+      width: min(100%, 250px);
+    }
+
+    .search-pill input {
+      min-height: 38px;
+      border-color: #d1d5db;
+      border-radius: 999px;
+      padding: 8px 34px 8px 14px;
+      background: #fff;
+    }
+
+    .plan-table-wrap {
+      overflow: visible;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .plan-table {
+      width: 100%;
+      min-width: 820px;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .plan-table th,
+    .plan-table td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px 14px;
+      background: #fff;
+      color: #111827;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .plan-table th {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: none;
+    }
+
+    .plan-table .check-col {
+      width: 42px;
+      text-align: center;
+    }
+
+    .plan-table .action-col {
+      width: 128px;
+      text-align: right;
+    }
+
+    .plan-table th:last-child,
+    .plan-table td:last-child {
+      padding-right: 32px;
+    }
+
+    .plan-table input[type="checkbox"] {
+      width: 15px;
+      min-height: 15px;
+      padding: 0;
+      border-radius: 2px;
+    }
+
+    .plan-name-cell {
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .plan-avatar {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      border-radius: 50%;
+      background: #111827;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .plan-name-cell strong,
+    .plan-name-cell small {
+      display: block;
+    }
+
+    .plan-name-cell small {
+      max-width: 560px;
+      color: #6b7280;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      min-width: 96px;
+      justify-content: center;
+      border-radius: 3px;
+      background: #79cfad;
+      color: #fff;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: capitalize;
+    }
+
+    .action-cell {
+      position: relative;
+      justify-content: flex-end;
+    }
+
+    .dots-button {
+      width: 34px;
+      height: 30px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: #fff;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .action-menu {
+      position: absolute;
+      top: 34px;
+      right: 32px;
+      z-index: 5;
+      min-width: 150px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      background: #fff;
+      box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+      padding: 4px 0;
+    }
+
+    .action-menu button,
+    .action-menu a {
+      display: block;
+      width: 100%;
+      min-height: 34px;
+      border: 0;
+      background: #fff;
+      color: #111827;
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      text-decoration: none;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .action-menu button:hover,
+    .action-menu a:hover {
+      background: #f3f4f6;
+    }
+
+    .empty-row {
+      text-align: center;
+      color: #6b7280;
+      height: 90px;
+    }
+
+    .list-footer {
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 18px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .pager {
+      gap: 8px;
+    }
+
+    .pager button {
+      min-width: 42px;
+      min-height: 36px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: #fff;
+      color: #6b7280;
+      font: inherit;
+    }
+
+    .pager button.active {
+      border-color: #111827;
+      color: #111827;
+      font-weight: 800;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+
+    .plan-drawer-shell {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .drawer-scrim {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(15, 23, 42, 0.62);
+    }
+
+    .plan-drawer {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 500px);
+      min-height: 100vh;
+      overflow: auto;
+      padding: 18px;
+      background: #fff;
+      box-shadow: -24px 0 60px rgba(15, 23, 42, 0.22);
+    }
+
+    .drawer-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .drawer-title h2 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .icon-button {
+      border: 0;
+      background: transparent;
+      color: #111827;
+      font: inherit;
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .drawer-help {
+      margin: 0 0 14px;
+      padding: 12px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .plan-drawer form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .plan-drawer .full,
+    .plan-drawer button[type='submit'] {
+      grid-column: 1 / -1;
+    }
+
     .compact-workbench {
       align-items: start;
       grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.25fr);
@@ -1876,6 +2268,10 @@ export class MembershipsComponent implements OnInit {
   readonly error = signal('');
   readonly message = signal('');
   readonly activeTab = signal<MembershipDeskTab>('overview');
+  readonly showPlanDrawer = signal(false);
+  readonly planQuery = signal('');
+  readonly planShowLimit = signal(10);
+  readonly openPlanActionId = signal('');
   readonly renewalMembership = signal<ApiRecord | null>(null);
   readonly lifecycleDialog = signal<PlanLifecycleDialog | null>(null);
   readonly prorationLoading = signal(false);
@@ -1966,6 +2362,19 @@ export class MembershipsComponent implements OnInit {
     note: ['']
   });
 
+  readonly filteredMembershipPlans = computed(() => {
+    const term = this.planQuery().trim().toLowerCase();
+    const rows = [...this.membershipPlans()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    if (!term) return rows;
+    return rows.filter((plan) => [
+      plan.name,
+      plan.code,
+      this.planSummary(plan),
+      plan.status || (plan.active ? 'active' : 'inactive')
+    ].join(' ').toLowerCase().includes(term));
+  });
+  readonly visibleMembershipPlans = computed(() => this.filteredMembershipPlans().slice(0, Math.max(1, this.planShowLimit())));
+
   constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder, private readonly posSettings: PosSettingsService) {}
 
   ngOnInit(): void {
@@ -2016,6 +2425,17 @@ export class MembershipsComponent implements OnInit {
 
   setTab(tab: MembershipDeskTab): void {
     this.activeTab.set(tab);
+  }
+
+  openPlanDrawer(): void {
+    this.resetPlanForm();
+    this.showPlanDrawer.set(true);
+  }
+
+  closePlanDrawer(): void {
+    this.showPlanDrawer.set(false);
+    this.openPlanActionId.set('');
+    if (!this.editingPlanId()) this.resetPlanForm();
   }
 
   savePlan(): void {
@@ -2071,6 +2491,7 @@ export class MembershipsComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.message.set(this.editingPlanId() ? 'Membership plan updated.' : 'Membership plan created.');
+        this.showPlanDrawer.set(false);
         this.resetPlanForm();
         this.load();
       },
@@ -2082,6 +2503,8 @@ export class MembershipsComponent implements OnInit {
   }
 
   editPlan(plan: PosMembershipPlan): void {
+    this.openPlanActionId.set('');
+    this.showPlanDrawer.set(true);
     this.editingPlanId.set(plan.id);
     const planType = this.membershipPlanType(plan);
     this.planForm.patchValue({
@@ -3174,6 +3597,43 @@ export class MembershipsComponent implements OnInit {
 
   private pdfText(value: unknown): string {
     return String(value ?? '').replace(/[()\\]/g, ' ').replace(/[^\x20-\x7E]/g, ' ');
+  }
+
+  togglePlanAction(plan: PosMembershipPlan, event: Event): void {
+    event.stopPropagation();
+    this.openPlanActionId.set(this.openPlanActionId() === plan.id ? '' : plan.id);
+  }
+
+  markPlanInactive(plan: PosMembershipPlan): void {
+    this.openPlanActionId.set('');
+    this.api.patch<PosMembershipPlan>(`membership-enterprise/plans/${plan.id}`, {
+      ...plan,
+      status: 'inactive',
+      active: false
+    }).subscribe({
+      next: () => {
+        this.message.set(`${plan.name} inactive ho gaya.`);
+        this.load();
+      },
+      error: (error) => this.error.set(error?.error?.error || error?.message || 'Unable to update plan status')
+    });
+  }
+
+  planInitial(plan: PosMembershipPlan): string {
+    return String(plan.name || 'P').trim().charAt(0).toUpperCase() || 'P';
+  }
+
+  planSoldCount(plan: PosMembershipPlan): number {
+    return this.memberships().filter((membership) => {
+      const planId = String(membership['planId'] || membership['membershipPlanId'] || membership['plan_id'] || '');
+      const planName = String(membership['planName'] || membership['name'] || '').toLowerCase();
+      return planId === plan.id || (!!planName && planName === String(plan.name || '').toLowerCase());
+    }).length;
+  }
+
+  numberValue(value: unknown): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   isPrepaidPlanForm(): boolean {
