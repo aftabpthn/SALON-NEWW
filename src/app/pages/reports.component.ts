@@ -254,8 +254,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .report-link-card {
-      background: #fff;
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 8px;
       color: inherit;
       display: grid;
@@ -280,8 +280,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     .status-grid article {
-      background: #f8fffc;
-      border: 1px solid #cce9df;
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 14px;
     }

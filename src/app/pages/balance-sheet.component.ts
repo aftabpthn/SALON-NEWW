@@ -964,7 +964,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
     </section>
   `,
   styles: [`
-    :host { --ink:#0f1b2d; --muted:#5b6b82; --line:#e3eaf3; --bg:#ffffff; --soft:#f5f9ff; --brand:#1d4ed8; --brandink:#152033; --good:#0f9d58; --warn:#e8910c; --bad:#d6453d; --asset:#1d4ed8; --liab:#e8910c; --equity:#0f9d58; }
+    :host { --soft:#f5f9ff; --brand:#1d4ed8; --brandink:#152033; --good:#0f9d58; --warn:#e8910c; --bad:#d6453d; --asset:#1d4ed8; --liab:#e8910c; --equity:#0f9d58; }
     .bs { padding: 20px; display: grid; gap: 16px; color: var(--ink); font-feature-settings: "tnum" 1; }
     .masthead { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; padding: 22px 24px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(135deg, #f7faff, #ffffff 60%); }
     .kicker { text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 800; color: var(--brand); }

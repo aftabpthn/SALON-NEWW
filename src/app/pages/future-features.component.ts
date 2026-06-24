@@ -236,12 +236,7 @@ type WorkflowOption = {
     }
 
     .future-command-page {
-      --future-ink: #121a2a;
-      --future-muted: #64748b;
-      --future-teal: #0f766e;
-      --future-green: #0f8a5f;
-      --future-gold: #c4841a;
-      color: var(--future-ink);
+      color: var(--ink);
     }
 
     .future-hero {
@@ -297,7 +292,7 @@ type WorkflowOption = {
 
     .future-hero p {
       max-width: 820px;
-      color: var(--future-muted);
+      color: var(--muted);
       font-size: 1.02rem;
       font-weight: 750;
       line-height: 1.6;
@@ -376,13 +371,13 @@ type WorkflowOption = {
     .action-link small,
     .workflow-map-card p,
     .interconnect-strip span {
-      color: var(--future-muted);
+      color: var(--muted);
       font-weight: 800;
     }
 
     .source-node em,
     .action-link span {
-      color: var(--future-teal);
+      color: var(--teal);
       font-style: normal;
       font-weight: 950;
     }
@@ -391,7 +386,7 @@ type WorkflowOption = {
       width: 12px;
       height: 12px;
       border-radius: 999px;
-      background: var(--future-green);
+      background: var(--green);
       box-shadow: 0 0 0 7px rgba(15, 138, 95, .12);
     }
 
@@ -445,7 +440,7 @@ type WorkflowOption = {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      color: var(--future-gold);
+      color: var(--amber);
       font-size: .75rem;
       font-weight: 950;
       text-transform: uppercase;
@@ -453,7 +448,7 @@ type WorkflowOption = {
     }
 
     .workflow-card-head em {
-      color: var(--future-teal);
+      color: var(--teal);
       font-style: normal;
     }
 
@@ -464,7 +459,7 @@ type WorkflowOption = {
     }
 
     .strong-copy {
-      color: var(--future-muted);
+      color: var(--muted);
       font-weight: 800;
       line-height: 1.6;
     }

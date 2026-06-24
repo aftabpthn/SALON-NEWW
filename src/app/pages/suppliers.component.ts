@@ -560,7 +560,7 @@ interface SupplierCommandRow {
       width: 14px;
       min-height: 8px;
       border-radius: 6px 6px 2px 2px;
-      background: linear-gradient(180deg, #0f766e, #6ee7b7);
+      background: linear-gradient(180deg, var(--teal), #6ee7b7);
     }
 
     .supplier-form {
@@ -696,7 +696,7 @@ interface SupplierCommandRow {
     }
 
     .ghost-button.danger {
-      color: #b42318;
+      color: var(--red);
       border-color: rgba(180, 35, 24, 0.28);
       background: #fff;
     }

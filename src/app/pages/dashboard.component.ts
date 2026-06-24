@@ -185,7 +185,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     </section>
   `,
   styles: [`
-    :host ::ng-deep .metrics-grid {
+    .metrics-grid {
       grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 
@@ -289,12 +289,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       color: var(--muted);
     }
 
-    :host ::ng-deep .action-card {
+    .action-card {
       min-height: 82px;
     }
 
-    @media (max-width: 1260px) {
-      :host ::ng-deep .metrics-grid,
+    @media (max-width: 1280px) {
+      .metrics-grid,
       .dashboard-hub-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -304,8 +304,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       }
     }
 
-    @media (max-width: 760px) {
-      :host ::ng-deep .metrics-grid,
+    @media (max-width: 768px) {
+      .metrics-grid,
       .dashboard-hub-grid {
         grid-template-columns: 1fr;
       }

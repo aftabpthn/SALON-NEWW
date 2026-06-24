@@ -29,12 +29,12 @@ type KpiTone = string | string[] | Set<string> | { [klass: string]: unknown } | 
       position: relative;
       width: 100%;
       min-width: 0;
-      min-height: 88px;
+      min-height: var(--kpi-min-height, 88px);
       height: 100%;
       display: grid;
       align-content: start;
-      gap: 6px;
-      padding: 14px 16px 12px;
+      gap: var(--kpi-gap, 6px);
+      padding: var(--kpi-padding, 14px 16px 12px);
       overflow: hidden;
       cursor: pointer;
       text-decoration: none;
@@ -69,11 +69,13 @@ type KpiTone = string | string[] | Set<string> | { [klass: string]: unknown } | 
     .metric-card ::ng-deep strong {
       white-space: nowrap;
       line-height: 1.15;
+      font-size: var(--kpi-strong-size, inherit);
     }
 
     .metric-card ::ng-deep small {
       white-space: nowrap;
       line-height: 1.25;
+      font-size: var(--kpi-small-size, inherit);
     }
   `]
 })

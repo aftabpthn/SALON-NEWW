@@ -1043,14 +1043,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   styles: [`
     /* ---- Typography foundation (font fix) ---- */
     :host {
-      --font-display: 'Inter', 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      --ink: #172033;
-      --muted: #64748b;
-      --teal: #0f8f7f;
-      --teal-deep: #0f766e;
-      --line: #d9e7e4;
-      --soft: #f8fbfa;
       display: block;
       min-width: 0;
       width: 100%;

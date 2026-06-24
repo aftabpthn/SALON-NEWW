@@ -411,27 +411,18 @@ type AiTool = {
   styles: [`
     :host {
       display: block;
-      --ai-ink: #111827;
-      --ai-muted: #64748b;
-      --ai-line: #dbe7e4;
-      --ai-teal: #0f766e;
-      --ai-green: #166534;
-      --ai-amber: #b7791f;
-      --ai-red: #b42318;
-      --ai-surface: rgba(255, 255, 255, .88);
-      --ai-shadow: 0 24px 70px rgba(15, 23, 42, .10);
     }
 
     .ai-command-page {
-      color: var(--ai-ink);
+      color: var(--ink);
     }
 
     .ai-hero,
     .panel,
     .ai-kpi {
-      border: 1px solid var(--ai-line);
-      background: var(--ai-surface);
-      box-shadow: var(--ai-shadow);
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: var(--shadow-lg);
     }
 
     .ai-hero {
@@ -465,7 +456,7 @@ type AiTool = {
 
     .ai-hero p {
       max-width: 720px;
-      color: var(--ai-muted);
+      color: var(--muted);
       font-size: 17px;
       font-weight: 750;
       line-height: 1.55;
@@ -497,7 +488,7 @@ type AiTool = {
     .category-tabs button,
     .safety-strip,
     .badge {
-      border: 1px solid color-mix(in srgb, var(--ai-teal) 22%, var(--ai-line));
+      border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--line));
       background: rgba(255, 255, 255, .72);
       color: #12433f;
       border-radius: 999px;
@@ -561,7 +552,7 @@ type AiTool = {
     .result-metrics span,
     .approval-checklist small,
     .raw-json summary {
-      color: var(--ai-muted);
+      color: var(--muted);
       font-size: 12px;
       font-weight: 850;
     }
@@ -574,7 +565,7 @@ type AiTool = {
     }
 
     .ai-kpi small {
-      color: var(--ai-muted);
+      color: var(--muted);
       font-weight: 750;
     }
 
@@ -604,7 +595,7 @@ type AiTool = {
 
     .ai-search input {
       width: 100%;
-      border: 1px solid var(--ai-line);
+      border: 1px solid var(--line);
       border-radius: 16px;
       padding: 12px 14px;
       font: inherit;
@@ -645,12 +636,12 @@ type AiTool = {
       align-items: center;
       width: 100%;
       text-align: left;
-      border: 1px solid var(--ai-line);
+      border: 1px solid var(--line);
       border-radius: 18px;
       padding: 12px;
       background: #fff;
       cursor: pointer;
-      color: var(--ai-ink);
+      color: var(--ink);
     }
 
     .workflow-card.active {
@@ -669,7 +660,7 @@ type AiTool = {
     }
 
     .workflow-card em {
-      color: var(--ai-teal);
+      color: var(--teal);
       font-size: 11px;
       font-style: normal;
       font-weight: 950;
@@ -702,7 +693,7 @@ type AiTool = {
     }
 
     .command-header p {
-      color: var(--ai-muted);
+      color: var(--muted);
       font-weight: 750;
     }
 
@@ -715,7 +706,7 @@ type AiTool = {
     .task-badges .warn,
     .warning-text,
     .task-health-list .warn {
-      color: var(--ai-red);
+      color: var(--red);
     }
 
     .enterprise-form {
@@ -731,7 +722,7 @@ type AiTool = {
     .field {
       display: grid;
       gap: 7px;
-      color: var(--ai-muted);
+      color: var(--muted);
       font-size: 12px;
       font-weight: 900;
     }
@@ -740,11 +731,11 @@ type AiTool = {
     .field select,
     .field textarea {
       width: 100%;
-      border: 1px solid var(--ai-line);
+      border: 1px solid var(--line);
       border-radius: 16px;
       padding: 12px 13px;
       background: #fff;
-      color: var(--ai-ink);
+      color: var(--ink);
       font: inherit;
       font-weight: 750;
     }
@@ -761,7 +752,7 @@ type AiTool = {
     }
 
     .safety-strip strong {
-      color: var(--ai-ink);
+      color: var(--ink);
     }
 
     .form-actions {
@@ -784,7 +775,7 @@ type AiTool = {
     .answer-card,
     .action-card,
     .mini-feed div {
-      border: 1px solid var(--ai-line);
+      border: 1px solid var(--line);
       border-radius: 18px;
       background: #fff;
       padding: 14px;
@@ -810,7 +801,7 @@ type AiTool = {
       display: flex;
       justify-content: space-between;
       gap: 10px;
-      border-bottom: 1px dashed var(--ai-line);
+      border-bottom: 1px dashed var(--line);
       padding-bottom: 8px;
       font-size: 12px;
       font-weight: 850;
@@ -820,7 +811,7 @@ type AiTool = {
       display: grid;
       gap: 10px;
       margin-top: 16px;
-      border-top: 1px solid var(--ai-line);
+      border-top: 1px solid var(--line);
       padding-top: 14px;
     }
 
@@ -853,14 +844,14 @@ type AiTool = {
     }
 
     .registry-list div {
-      border-bottom: 1px dashed var(--ai-line);
+      border-bottom: 1px dashed var(--line);
       padding-bottom: 8px;
       font-size: 12px;
       font-weight: 850;
     }
 
     .registry-list small {
-      color: var(--ai-muted);
+      color: var(--muted);
     }
 
     .ai-result-grid {
@@ -911,7 +902,7 @@ type AiTool = {
     .action-card span,
     .action-card small {
       margin-top: 6px;
-      color: var(--ai-muted);
+      color: var(--muted);
       font-weight: 750;
     }
 
@@ -937,7 +928,7 @@ type AiTool = {
     }
 
     .raw-json {
-      border: 1px solid var(--ai-line);
+      border: 1px solid var(--line);
       border-radius: 18px;
       padding: 12px;
       background: #f8fafc;
@@ -956,9 +947,9 @@ type AiTool = {
       min-height: 260px;
       place-content: center;
       text-align: center;
-      border: 1px dashed var(--ai-line);
+      border: 1px dashed var(--line);
       border-radius: 22px;
-      color: var(--ai-muted);
+      color: var(--muted);
       font-weight: 850;
     }
 
@@ -974,7 +965,7 @@ type AiTool = {
 
     .table-wrap table small {
       display: block;
-      color: var(--ai-muted);
+      color: var(--muted);
       max-width: 650px;
     }
 

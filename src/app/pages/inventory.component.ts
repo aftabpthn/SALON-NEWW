@@ -514,7 +514,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
     }
 
     .command-metric.amber { border-top-color: #b26b00; }
-    .command-metric.red { border-top-color: #b42318; }
+    .command-metric.red { border-top-color: var(--red); }
     .command-metric.blue { border-top-color: #2f5dcc; }
     .command-metric.purple { border-top-color: #6f3fc8; }
     .command-metric.black { border-top-color: #162033; }
@@ -576,7 +576,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
     .inventory-module-card.amber { border-top-color: #b26b00; }
     .inventory-module-card.green { border-top-color: #177245; }
     .inventory-module-card.violet { border-top-color: #6f3fc8; }
-    .inventory-module-card.red { border-top-color: #b42318; }
+    .inventory-module-card.red { border-top-color: var(--red); }
     .inventory-module-card.slate { border-top-color: #475569; }
     .inventory-module-card.black { border-top-color: #162033; }
     .inventory-module-card.orange { border-top-color: #d95f02; }
@@ -738,18 +738,12 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       padding-bottom: 10px;
     }
 
-    :host ::ng-deep .inventory-kpis aura-kpi-card .metric-card {
-      min-height: 72px;
-      padding: 10px 12px;
-      gap: 3px;
-    }
-
-    :host ::ng-deep .inventory-kpis aura-kpi-card .metric-card strong {
-      font-size: 1.25rem;
-    }
-
-    :host ::ng-deep .inventory-kpis aura-kpi-card .metric-card small {
-      font-size: 0.72rem;
+    .inventory-kpis aura-kpi-card {
+      --kpi-min-height: 72px;
+      --kpi-padding: 10px 12px;
+      --kpi-gap: 3px;
+      --kpi-strong-size: 1.25rem;
+      --kpi-small-size: 0.72rem;
     }
 
     .desk-tabs {
@@ -882,7 +876,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       position: sticky;
       top: 0;
       z-index: 2;
-      background: #f6f8f8;
+      background: var(--surface-2);
     }
 
     .compact-feed {

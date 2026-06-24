@@ -471,7 +471,7 @@ type ReceiveItem = {
     }
 
     .danger {
-      color: #b42318;
+      color: var(--red);
       border-color: rgba(180, 35, 24, 0.32);
     }
 

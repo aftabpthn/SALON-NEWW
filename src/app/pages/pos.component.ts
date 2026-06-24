@@ -929,7 +929,7 @@ type ClientSearchIndex = {
     }
 
     :host .settlement-preview-metrics span {
-      color: #0f766e;
+      color: var(--teal);
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
@@ -1146,7 +1146,7 @@ type ClientSearchIndex = {
       transform: translateY(-50%);
       border: 0;
       border-radius: 999px;
-      color: #0f766e;
+      color: var(--teal);
       background: rgba(15, 118, 110, 0.1);
       font-weight: 900;
       cursor: pointer;
@@ -1185,7 +1185,7 @@ type ClientSearchIndex = {
       place-items: center;
       border-radius: 999px;
       color: #f8fafc;
-      background: linear-gradient(135deg, #0f766e, #2563eb);
+      background: linear-gradient(135deg, var(--teal), #2563eb);
       font-weight: 900;
     }
 
@@ -1247,7 +1247,7 @@ type ClientSearchIndex = {
     :host .client-call-button {
       padding: 8px 12px;
       border-radius: 999px;
-      color: #0f766e;
+      color: var(--teal);
       background: rgba(15, 118, 110, 0.1);
       font-size: 12px;
       font-weight: 900;
