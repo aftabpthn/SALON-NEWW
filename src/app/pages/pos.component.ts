@@ -3628,6 +3628,10 @@ export class PosComponent implements OnInit, OnDestroy {
     if (!draft) {
       return;
     }
+    if (!this.shouldRestoreActiveBillingDraft()) {
+      this.posSettings.clearActiveBillingDraft();
+      return;
+    }
     this.currentHoldId = draft.currentHoldId || '';
     this.form.patchValue({
       clientId: draft.clientId || '',
@@ -3675,6 +3679,11 @@ export class PosComponent implements OnInit, OnDestroy {
     this.loadBookingAdvanceSuggestion(String(draft.appointmentId || ''), { preserveApplied: true });
     if (draft.clientId) this.loadMembershipIntelligence(draft.clientId);
     this.dataHint.set('Unsaved POS bill restored. Checkout, hold or clear the bill to remove this draft.');
+  }
+
+  private shouldRestoreActiveBillingDraft(): boolean {
+    const params = this.route.snapshot.queryParamMap;
+    return params.get('restoreDraft') === '1';
   }
 
   private restorePendingHold(): void {
