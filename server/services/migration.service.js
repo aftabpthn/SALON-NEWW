@@ -404,6 +404,7 @@ export const migrationService = {
     const chunkNumber = Math.max(1, integer(payload.chunkNumber, integer(payload.index, 0)));
     const totalRows = integer(payload.totalRows, Array.isArray(payload.rows) ? payload.rows.length : 0);
     const existing = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId AND chunkNumber = @chunkNumber").get({ tenantId: access.tenantId, jobId, chunkNumber });
+    if (existing) assertLargeChunkMutable(deserializeDirectRow(existing), "registered again");
     const id = existing?.id || cleanText(payload.id) || makeId("mchunk");
     const row = {
       id,
@@ -446,6 +447,7 @@ export const migrationService = {
   analyzeLargeJobChunk(jobId, chunkNumber, payload, access) {
     const job = requireLargeMigrationJob(jobId, access);
     const chunk = requireLargeMigrationChunk(jobId, chunkNumber, access);
+    assertLargeChunkMutable(chunk, "analyzed again");
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
     if (!rows.length) throw badRequest("rows are required for chunk analysis.");
     const preview = previewPayload(largeChunkPayload(job, payload, rows), access, { persist: false, dryRun: true, jobId: job.id });
@@ -468,6 +470,7 @@ export const migrationService = {
   importLargeJobChunk(jobId, chunkNumber, payload, access) {
     const job = requireLargeMigrationJob(jobId, access);
     const chunk = requireLargeMigrationChunk(jobId, chunkNumber, access);
+    assertLargeChunkImportable(chunk);
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
     if (!rows.length) throw badRequest("rows are required for chunk import.");
     const preview = previewPayload(largeChunkPayload(job, payload, rows), access, { persist: false, dryRun: false, jobId: job.id });
@@ -2304,6 +2307,23 @@ function progressFor(job) {
   const total = Number(job.totalRows || 0);
   if (!total) return 0;
   return Math.round(((Number(job.importedRows || 0) + Number(job.skippedRows || 0) + Number(job.errorRows || 0)) / total) * 100);
+}
+
+const LARGE_CHUNK_LOCKED_STATUSES = new Set(["imported", "rolled_back", "cancelled"]);
+
+function assertLargeChunkMutable(chunk, action) {
+  if (!chunk || !LARGE_CHUNK_LOCKED_STATUSES.has(chunk.status)) return;
+  throw badRequest(`Chunk ${chunk.chunkNumber} is ${chunk.status} and cannot be ${action}. Create a new migration job or rollback before retrying.`);
+}
+
+function assertLargeChunkImportable(chunk) {
+  if (!chunk) return;
+  if (chunk.status === "imported") {
+    throw badRequest(`Chunk ${chunk.chunkNumber} is already imported and cannot be imported again.`);
+  }
+  if (["rolled_back", "cancelled"].includes(chunk.status)) {
+    throw badRequest(`Chunk ${chunk.chunkNumber} is ${chunk.status} and cannot be imported.`);
+  }
 }
 
 function badRequest(message) {
