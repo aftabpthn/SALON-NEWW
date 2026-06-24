@@ -3721,7 +3721,7 @@ export class ClientDetailComponent implements OnInit {
 
   private packageRedemptionHistory(item: ApiRecord, sale?: ApiRecord): ClientPackageRedemption[] {
     const raw = [
-      ...this.readRecordList(item.redemptions || item.redemptionHistory || item.usageHistory),
+      ...this.readRecordList(item.redemptions || item.redeemHistory || item.redemptionHistory || item.usageHistory),
       ...this.readRecordList(sale?.packageRedemptions || sale?.redemptions)
     ];
     return raw.map((entry, index) => {

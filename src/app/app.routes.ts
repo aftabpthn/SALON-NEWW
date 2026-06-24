@@ -121,34 +121,7 @@ export const routes: Routes = [
   { path: 'memberships/self-service/:token', loadComponent: () => import('./pages/membership-self-service.component').then(m => m.MembershipSelfServiceComponent), title: 'Membership Self Service' },
   { path: 'memberships/:id', loadComponent: () => import('./pages/membership-360.component').then(m => m.Membership360Component), title: 'Membership 360' },
   { path: 'memberships', loadComponent: () => import('./pages/memberships.component').then(m => m.MembershipsComponent), title: 'Memberships & Loyalty' },
-  {
-    path: 'packages',
-    component: ModulePageComponent,
-    title: 'Packages',
-    data: {
-      entity: 'packages',
-      title: 'Service Packages',
-      subtitle: 'Create real prepaid package definitions connected to services, credits, validity and loyalty rules.',
-      createLabel: 'Add package',
-      columns: [
-        { key: 'name', label: 'Package' },
-        { key: 'price', label: 'Price', type: 'currency' },
-        { key: 'validityDays', label: 'Validity days' },
-        { key: 'branchId', label: 'Branch' },
-        { key: 'status', label: 'Status', type: 'badge' }
-      ],
-      fields: [
-        { key: 'name', label: 'Package name', required: true },
-        { key: 'description', label: 'Description' },
-        { key: 'price', label: 'Price', type: 'number', required: true },
-        { key: 'validityDays', label: 'Validity days', type: 'number', defaultValue: 90 },
-        { key: 'branchId', label: 'Branch ID' },
-        { key: 'serviceIds', label: 'Service IDs JSON', type: 'json', defaultValue: [] },
-        { key: 'packageCredits', label: 'Package credits JSON', type: 'json', defaultValue: [] },
-        { key: 'rules', label: 'Rules JSON', type: 'json', defaultValue: {} }
-      ]
-    }
-  },
+  { path: 'packages', loadComponent: () => import('./pages/packages.component').then(m => m.PackagesComponent), title: 'Packages' },
   { path: 'staff/my-work', loadComponent: () => import('./pages/staff-my-work.component').then(m => m.StaffMyWorkComponent), title: 'My Staff Work', canActivate: [permissionGuard], data: { permission: 'read:appointments' } },
   { path: 'staff/connected-modules', loadComponent: () => import('./pages/staff-connected-modules.component').then(m => m.StaffConnectedModulesComponent), title: 'Staff Connected Modules', canActivate: [permissionGuard], data: { permission: 'read:staff' } },
   { path: 'staff', pathMatch: 'full', redirectTo: 'staff-os/employee-masters' },
