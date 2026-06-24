@@ -65,25 +65,6 @@ interface EngagementDetail extends ApiRecord {
   imports: [CommonModule, FormsModule, DatePipe, StateComponent],
   template: `
     <section class="engagement-page zenoti-engagement-page">
-      <section class="zenoti-header">
-        <div class="center-line">
-          <strong>malad</strong>
-          <div class="header-actions">
-            <button class="zenoti-button" type="button" (click)="openReportsDrawer()" [disabled]="loading()">Reports</button>
-            <button class="zenoti-button" type="button" (click)="openProviderDrawer()" [disabled]="loading()">Providers</button>
-            <button class="zenoti-button" type="button" (click)="openAuditDrawer()" [disabled]="loading()">Audit ledger</button>
-          </div>
-        </div>
-        <select class="command-select" aria-label="Engagement quick action" (change)="openEngagementQuickAction($event)">
-          <option>I want to ...</option>
-          <option value="recovery">Open recovery board</option>
-          <option value="reviews">Open review center</option>
-          <option value="risk">Open risk signals</option>
-          <option value="sla">Open SLA board</option>
-          <option value="reports">Open reports</option>
-        </select>
-      </section>
-
       <div class="zenoti-page-heading">
         <div>
           <h1>Engagement Command Center</h1>

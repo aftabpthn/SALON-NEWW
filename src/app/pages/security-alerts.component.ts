@@ -12,22 +12,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="alerts-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="zenoti-header">
-        <strong>malad</strong>
-        <div class="header-actions">
-          <a class="zenoti-button" routerLink="/security-policy-center">Policy Center</a>
-          <a class="zenoti-button" routerLink="/security-blocklist">Blocklist</a>
-          <a class="zenoti-button" routerLink="/security">Security</a>
-        </div>
-        <select (change)="runQuickAction($event)" aria-label="Security alert quick actions">
-          <option>I want to ...</option>
-          <option value="refresh">Refresh alert queue</option>
-          <option value="critical">Review critical first</option>
-          <option value="policy">Open policy center</option>
-          <option value="blocklist">Open blocklist</option>
-        </select>
-      </div>
-
       <div class="page-heading">
         <div>
           <h1>Security alerts</h1>

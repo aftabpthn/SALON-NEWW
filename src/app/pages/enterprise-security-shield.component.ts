@@ -16,22 +16,6 @@ type ShieldLayer = {
   imports: [CommonModule, RouterLink],
   template: `
     <section class="shield-workspace">
-      <div class="zenoti-header">
-        <strong>malad</strong>
-        <div class="header-actions">
-          <a class="zenoti-button" routerLink="/security-policy-center">Policy Center</a>
-          <a class="zenoti-button" routerLink="/security-blocklist">Blocklist</a>
-          <a class="zenoti-button" routerLink="/security-alerts">Alerts</a>
-        </div>
-        <select aria-label="Security shield quick actions">
-          <option>I want to ...</option>
-          <option>Review active defense</option>
-          <option>Open policy center</option>
-          <option>Check device trust</option>
-          <option>Review audit evidence</option>
-        </select>
-      </div>
-
       <div class="page-heading">
         <div>
           <h1>Enterprise Security Shield</h1>

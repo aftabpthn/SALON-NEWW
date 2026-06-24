@@ -13,24 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="summary() as summary">
-        <div class="zenoti-header">
-          <div class="center-line">
-            <strong>malad</strong>
-            <div class="header-actions">
-              <button type="button" class="zenoti-button">Campaigns</button>
-              <button type="button" class="zenoti-button">WhatsApp</button>
-              <button type="button" class="zenoti-button" (click)="load()">Refresh</button>
-            </div>
-          </div>
-          <select class="command-select" aria-label="Marketing quick action">
-            <option>I want to ...</option>
-            <option>Generate campaign</option>
-            <option>Preview segment</option>
-            <option>Create WhatsApp sequence</option>
-            <option>Create email template</option>
-          </select>
-        </div>
-
         <div class="page-heading">
           <div>
             <h1>Marketing automation</h1>

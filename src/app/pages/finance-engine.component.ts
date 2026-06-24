@@ -10,22 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
   template: `
     <section class="finance-workspace">
-      <section class="quick-actions" aria-label="Finance actions">
-        <div class="branch-label">malad</div>
-        <div class="quick-buttons">
-          <button type="button" (click)="openDrawer()" [disabled]="Boolean(summary()?.drawer)">Open drawer</button>
-          <button type="button" (click)="closeDrawer()" [disabled]="!summary()?.drawer">Close drawer</button>
-          <button type="button" (click)="load()">Refresh</button>
-        </div>
-        <select aria-label="Finance command">
-          <option>I want to ...</option>
-          <option>Close day</option>
-          <option>Add expense</option>
-          <option>Collect partial payment</option>
-          <option>Review outstanding</option>
-        </select>
-      </section>
-
       <section class="page-title">
         <div>
           <h1>Finance</h1>

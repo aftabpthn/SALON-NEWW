@@ -24,21 +24,6 @@ type StaffSelfDashboard = {
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <section class="staff-workspace">
-      <section class="quick-actions" aria-label="Staff work actions">
-        <div class="branch-label">malad</div>
-        <div class="quick-buttons">
-          <a routerLink="/appointments">Calendar</a>
-          <a routerLink="/staff-os/mobile-preview">Mobile preview</a>
-          <button type="button" (click)="load()">Refresh</button>
-        </div>
-        <select aria-label="Staff work command">
-          <option>I want to ...</option>
-          <option>View live appointments</option>
-          <option>Check completed work</option>
-          <option>Open staff history</option>
-        </select>
-      </section>
-
       <section class="page-title">
         <div>
           <h1>My Work</h1>

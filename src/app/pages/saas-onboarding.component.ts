@@ -11,24 +11,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
   template: `
     <section class="saas-workspace">
-      <section class="zenoti-header">
-        <div class="center-line">
-          <strong>malad</strong>
-          <div class="header-actions">
-            <button class="zenoti-button" type="button" (click)="load()">Tenant health</button>
-            <button class="zenoti-button" type="button">Billing</button>
-            <button class="zenoti-button" type="button">Domains</button>
-          </div>
-        </div>
-        <select class="command-select" aria-label="SaaS quick action" (change)="runQuickAction($event)">
-          <option>I want to ...</option>
-          <option value="refresh">Refresh SaaS context</option>
-          <option value="tenant">Create tenant from form</option>
-          <option value="domain">Add domain mapping</option>
-          <option value="starter">Switch to first plan</option>
-        </select>
-      </section>
-
       <div class="page-heading">
         <div>
           <h1>SaaS control plane</h1>

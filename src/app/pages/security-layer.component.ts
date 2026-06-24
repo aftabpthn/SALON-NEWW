@@ -12,22 +12,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="security-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="zenoti-header">
-        <strong>malad</strong>
-        <div class="header-actions">
-          <button type="button" class="zenoti-button">Audit logs</button>
-          <button type="button" class="zenoti-button">Permissions</button>
-          <button type="button" class="zenoti-button">Backups</button>
-        </div>
-        <select (change)="runQuickAction($event)" aria-label="Security quick actions">
-          <option>I want to ...</option>
-          <option value="refresh">Refresh security summary</option>
-          <option value="permission">Prepare permission save</option>
-          <option value="session">Prepare front desk session</option>
-          <option value="backup">Create manual backup</option>
-        </select>
-      </div>
-
       <div class="page-heading">
         <div>
           <h1>Enterprise security</h1>

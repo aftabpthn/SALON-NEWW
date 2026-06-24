@@ -10,24 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="permissions-workspace">
-      <section class="zenoti-header">
-        <div class="center-line">
-          <strong>malad</strong>
-          <div class="header-actions">
-            <button class="zenoti-button" type="button" (click)="load()">Role library</button>
-            <button class="zenoti-button" type="button">Access matrix</button>
-            <button class="zenoti-button" type="button">Audit ready</button>
-          </div>
-        </div>
-        <select class="command-select" aria-label="Permission quick action" (change)="runQuickAction($event)">
-          <option>I want to ...</option>
-          <option value="refresh">Refresh matrix</option>
-          <option value="save">Save custom role</option>
-          <option value="owner">Use owner role key</option>
-          <option value="manager">Use manager role key</option>
-        </select>
-      </section>
-
       <div class="page-heading">
         <div>
           <h1>Permission matrix</h1>

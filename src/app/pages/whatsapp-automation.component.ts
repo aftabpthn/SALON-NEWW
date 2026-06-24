@@ -10,26 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
   template: `
     <section class="whatsapp-workspace">
-      <section class="zenoti-header">
-        <div class="center-line">
-          <strong>malad</strong>
-          <div class="header-actions">
-            <button class="zenoti-button" type="button" (click)="reminders()">Reminders</button>
-            <button class="zenoti-button" type="button" (click)="paymentReminders()">Payments</button>
-            <button class="zenoti-button" type="button" (click)="campaignBroadcast()">Broadcast</button>
-          </div>
-        </div>
-        <select class="command-select" aria-label="WhatsApp quick action" (change)="runQuickAction($event)">
-          <option>I want to ...</option>
-          <option value="inbound">Process inbound</option>
-          <option value="qualify">Qualify lead</option>
-          <option value="booking">Send booking confirmation</option>
-          <option value="reminders">Queue reminders</option>
-          <option value="missed">Create missed-call follow-up</option>
-          <option value="birthday">Send birthday wishes</option>
-        </select>
-      </section>
-
       <div class="page-heading">
         <div>
           <h1>WhatsApp automation engine</h1>

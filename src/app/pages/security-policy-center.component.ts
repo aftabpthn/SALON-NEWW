@@ -13,23 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="policy-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="zenoti-header">
-        <strong>malad</strong>
-        <div class="header-actions">
-          <a class="zenoti-button" routerLink="/security-alerts">Alerts</a>
-          <a class="zenoti-button" routerLink="/security-blocklist">Blocklist</a>
-          <a class="zenoti-button" routerLink="/security">Security</a>
-        </div>
-        <select (change)="runQuickAction($event)" aria-label="Security policy quick actions">
-          <option>I want to ...</option>
-          <option value="refresh">Refresh policy center</option>
-          <option value="save">Save policies</option>
-          <option value="risk">Evaluate risk</option>
-          <option value="devices">Refresh access devices</option>
-          <option value="alerts">Open alerts</option>
-        </select>
-      </div>
-
       <div class="page-heading">
         <div>
           <h1>Security Policy Center</h1>

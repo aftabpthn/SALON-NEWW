@@ -10,22 +10,6 @@ import { ComplianceRouteMeta } from '../domain/compliance.models';
   imports: [CommonModule, RouterLink],
   template: `
     <section class="compliance-page">
-      <section class="quick-actions" aria-label="Compliance actions">
-        <div class="branch-label">malad</div>
-        <div class="quick-buttons">
-          <a routerLink="/compliance/reports">Reports</a>
-          <a routerLink="/compliance/calendar">Calendar</a>
-          <button type="button" (click)="store.loadDashboard()">Refresh</button>
-        </div>
-        <select aria-label="Compliance command">
-          <option>I want to ...</option>
-          <option>Check PF filing</option>
-          <option>Review ESI challan</option>
-          <option>Export compliance report</option>
-          <option>Close financial year</option>
-        </select>
-      </section>
-
       <section class="page-title">
         <div>
           <h1>{{ meta().title }}</h1>

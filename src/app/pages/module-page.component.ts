@@ -37,19 +37,6 @@ type PageConfig = {
   template: `
     <section class="page-stack" [class.zenoti-module-page]="isZenotiPage()" *ngIf="config">
       <ng-container *ngIf="isZenotiPage(); else defaultHero">
-        <section class="zenoti-header">
-          <div class="center-line">
-            <strong>malad</strong>
-            <div class="header-actions">
-              <button class="zenoti-button" type="button" *ngFor="let filter of zenotiHeaderFilters()" (click)="query = filter.query">{{ filter.label }}</button>
-            </div>
-          </div>
-          <select class="command-select" aria-label="Module quick action" (change)="runZenotiAction($event)">
-            <option>I want to ...</option>
-            <option *ngFor="let action of zenotiQuickActions()" [value]="action.value">{{ action.label }}</option>
-          </select>
-        </section>
-
         <div class="zenoti-page-heading">
           <div>
             <h1>{{ config.title }}</h1>
