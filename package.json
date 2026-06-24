@@ -20,13 +20,14 @@
     "start": "node server/index.js"
   },
   "dependencies": {
-    "@angular/animations": "^20.3.15",
-    "@angular/common": "^20.3.15",
-    "@angular/compiler": "^20.3.15",
-    "@angular/core": "^20.3.15",
-    "@angular/forms": "^20.3.15",
-    "@angular/platform-browser": "^20.3.15",
-    "@angular/router": "^20.3.15",
+    "@angular/animations": "20.3.25",
+    "@angular/common": "20.3.25",
+    "@angular/compiler": "20.3.25",
+    "@angular/compiler-cli": "20.3.25",
+    "@angular/core": "20.3.25",
+    "@angular/forms": "20.3.25",
+    "@angular/platform-browser": "20.3.25",
+    "@angular/router": "20.3.25",
     "better-sqlite3": "^12.4.6",
     "cors": "^2.8.5",
     "express": "^5.2.1",
@@ -38,10 +39,10 @@
     "zone.js": "^0.15.1"
   },
   "devDependencies": {
-    "@angular/build": "^20.3.15",
-    "@angular/cli": "^20.3.15",
+    "@angular/build": "20.3.30",
+    "@angular/cli": "20.3.30",
     "@types/three": "^0.184.1",
-    "concurrently": "^9.2.1",
+    "concurrently": "9.2.3",
     "typescript": "~5.9.3"
   }
 }
