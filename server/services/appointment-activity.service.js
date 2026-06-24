@@ -84,6 +84,11 @@ function number(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function money(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
 function normalizeAction(action) {
   const upper = String(action || "").trim().toUpperCase().replace(/[-\s]+/g, "_");
   return APPOINTMENT_ACTIVITY_ACTIONS[upper] ? upper : APPOINTMENT_ACTIVITY_ACTIONS.MODIFIED;
@@ -346,6 +351,64 @@ function buildWhere(query = {}, access = {}) {
   return { where, params };
 }
 
+function appointmentDate(value = "") {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function appointmentWithinFilters(appointment = {}, query = {}) {
+  const startAt = appointmentDate(appointment.startAt || appointment.createdAt);
+  if (query.from) {
+    const from = new Date(`${String(query.from).slice(0, 10)}T00:00:00.000Z`).getTime();
+    if (startAt < from) return false;
+  }
+  if (query.to) {
+    const to = new Date(`${String(query.to).slice(0, 10)}T23:59:59.999Z`).getTime();
+    if (startAt > to) return false;
+  }
+  if (query.clientId && appointment.clientId !== query.clientId) return false;
+  if (query.staffId && appointment.staffId !== query.staffId) return false;
+  if (query.status && String(appointment.status || "").toLowerCase() !== String(query.status).toLowerCase()) return false;
+  return true;
+}
+
+function paymentStatusFor(invoice = {}) {
+  if (!invoice?.id) return "not_billed";
+  const total = money(invoice.total ?? invoice.grandTotal ?? invoice.grand_total);
+  const paid = money(invoice.paid ?? invoice.paidAmount ?? invoice.paid_amount);
+  const balance = money(invoice.balance ?? invoice.dueAmount ?? invoice.due_amount ?? total - paid);
+  if (balance <= 0) return "paid";
+  if (paid > 0) return "partial";
+  return "unpaid";
+}
+
+function registerProblemFlags({ appointment = {}, invoice = {}, timeline = [] } = {}) {
+  const flags = [];
+  const status = String(appointment.status || "").toLowerCase();
+  if (["completed", "billed", "paid"].includes(status) && !invoice?.id) flags.push("Completed but invoice missing");
+  if (["cancelled", "canceled", "no-show"].includes(status)) {
+    const hasReason = timeline.some((row) => row.reason) || appointment.cancelReason || appointment.cancellationReason || appointment.reason;
+    if (!hasReason) flags.push("Cancelled without reason");
+  }
+  if (invoice?.id && money(invoice.balance ?? invoice.dueAmount ?? invoice.due_amount) > 0) flags.push("Payment pending");
+  if (!timeline.length) flags.push("No activity timeline");
+  return flags;
+}
+
+function messageStatusFor(appointmentId, messageRows = []) {
+  const rows = messageRows.filter((row) => {
+    const payload = parseJson(row.payload, {});
+    return payload.appointmentId === appointmentId;
+  });
+  if (!rows.length) return { status: "not_sent", count: 0, latestAt: "" };
+  const latest = rows.sort((a, b) => appointmentDate(b.createdAt) - appointmentDate(a.createdAt))[0];
+  return { status: latest.status || "queued", count: rows.length, latestAt: latest.createdAt || "" };
+}
+
+function appointmentSource(appointment = {}, firstActivity = {}) {
+  return text(appointment.sourceChannel || appointment.source || firstActivity.source || "manual");
+}
+
 export const appointmentActivityService = {
   classifyUpdate,
 
@@ -534,6 +597,119 @@ export const appointmentActivityService = {
         riskReason: row.riskReason,
         suggestedAction: row.suggestedAction
       }))
+    };
+  },
+
+  register(query = {}, access = {}) {
+    const branchId = query.branchId || access.branchId || "";
+    if (branchId) tenantService.assertBranchAccess(access, branchId);
+    const appointmentScope = scope(access, branchId);
+    const appointments = repositories.appointments
+      .list({ branchId, limit: Math.min(Math.max(Number(query.limit || 1000), 1), 5000) }, appointmentScope)
+      .filter((appointment) => appointmentWithinFilters(appointment, query));
+    const activityRows = this.list({ branchId, limit: 5000 }, access);
+    const activitiesByAppointment = new Map();
+    for (const activity of activityRows) {
+      const rows = activitiesByAppointment.get(activity.appointmentId) || [];
+      rows.push(activity);
+      activitiesByAppointment.set(activity.appointmentId, rows);
+    }
+    const invoiceScope = tenantService.accessScope(access || {}, "invoices");
+    if (branchId) invoiceScope.branchId = branchId;
+    const salesScope = tenantService.accessScope(access || {}, "sales");
+    if (branchId) salesScope.branchId = branchId;
+    const invoices = repositories.invoices.list({ branchId, limit: 5000 }, invoiceScope);
+    const sales = repositories.sales.list({ branchId, limit: 5000 }, salesScope);
+    const saleById = new Map(sales.map((sale) => [sale.id, sale]));
+    const invoiceByAppointment = new Map();
+    for (const invoice of invoices) {
+      const directAppointmentId = text(invoice.appointmentId || invoice.appointment_id);
+      const saleAppointmentId = text(saleById.get(invoice.saleId)?.appointmentId || saleById.get(invoice.saleId)?.appointment_id);
+      const appointmentId = directAppointmentId || saleAppointmentId;
+      if (appointmentId && !invoiceByAppointment.has(appointmentId)) invoiceByAppointment.set(appointmentId, invoice);
+    }
+    const messageScope = tenantService.accessScope(access || {}, "messageLogs");
+    if (branchId) messageScope.branchId = branchId;
+    const messageRows = repositories.messageLogs.list({ branchId, limit: 5000 }, messageScope);
+
+    let rows = appointments.map((appointment) => {
+      const timeline = (activitiesByAppointment.get(appointment.id) || []).sort((a, b) => appointmentDate(a.createdAt) - appointmentDate(b.createdAt));
+      const firstActivity = timeline[0] || {};
+      const latestActivity = timeline[timeline.length - 1] || {};
+      const client = appointment.clientId ? repositories.clients.getById(appointment.clientId, { tenantId: access.tenantId }) : null;
+      const staff = appointment.staffId ? repositories.staff.getById(appointment.staffId, { tenantId: access.tenantId }) : null;
+      const branch = appointment.branchId ? repositories.branches.getById(appointment.branchId, { tenantId: access.tenantId }) : null;
+      const invoice = invoiceByAppointment.get(appointment.id) || {};
+      const serviceNames = normalizeServiceIds(appointment.serviceIds)
+        .map((id) => repositories.services.getById(id)?.name || id)
+        .join(", ");
+      const total = money(invoice.total ?? invoice.grandTotal ?? invoice.grand_total);
+      const paid = money(invoice.paid ?? invoice.paidAmount ?? invoice.paid_amount);
+      const balance = money(invoice.balance ?? invoice.dueAmount ?? invoice.due_amount ?? total - paid);
+      return {
+        id: appointment.id,
+        appointmentId: appointment.id,
+        bookingGroupId: appointment.bookingGroupId || "",
+        clientId: appointment.clientId || "",
+        clientName: client?.name || firstActivity.clientName || "Unknown client",
+        clientPhone: client?.phone || client?.mobile || firstActivity.clientPhone || "",
+        branchId: appointment.branchId || "",
+        branchName: branch?.name || appointment.branchId || "",
+        staffId: appointment.staffId || "",
+        staffName: staff?.name || latestActivity.staffName || firstActivity.staffName || "Unassigned",
+        bookingMode: appointmentSource(appointment, firstActivity),
+        bookedAt: firstActivity.action === "BOOKED" ? firstActivity.createdAt : appointment.createdAt || firstActivity.createdAt || "",
+        appointmentStartAt: appointment.startAt || "",
+        appointmentEndAt: appointment.endAt || "",
+        durationMinutes: Math.max(0, Math.round((appointmentDate(appointment.endAt) - appointmentDate(appointment.startAt)) / 60000)) || Number(appointment.durationMinutes || 0),
+        serviceNames,
+        status: appointment.status || latestActivity.statusAfter || "",
+        cancelReason: timeline.find((row) => ["CANCELLED", "NO_SHOW"].includes(row.action) && row.reason)?.reason || appointment.cancelReason || appointment.cancellationReason || "",
+        notes: appointment.notes || latestActivity.newData?.notes || firstActivity.newData?.notes || "",
+        createdBy: firstActivity.changedBy || appointment.createdBy || "system",
+        lastUpdatedBy: latestActivity.changedBy || appointment.updatedBy || "system",
+        lastUpdatedAt: appointment.updatedAt || latestActivity.createdAt || "",
+        invoiceId: invoice.id || "",
+        invoiceNumber: invoice.invoiceNumber || invoice.invoice_no || "",
+        total,
+        paid,
+        balance,
+        paymentStatus: paymentStatusFor(invoice),
+        invoiceStatus: invoice.status || "",
+        messageStatus: messageStatusFor(appointment.id, messageRows),
+        timeline,
+        timelineCount: timeline.length,
+        problemFlags: registerProblemFlags({ appointment, invoice, timeline })
+      };
+    });
+    const q = text(query.q || query.search).toLowerCase();
+    if (q) {
+      rows = rows.filter((row) => [
+        row.appointmentId,
+        row.clientName,
+        row.clientPhone,
+        row.staffName,
+        row.serviceNames,
+        row.bookingMode,
+        row.status,
+        row.invoiceNumber,
+        row.cancelReason,
+        row.problemFlags.join(" ")
+      ].join(" ").toLowerCase().includes(q));
+    }
+    if (query.paymentStatus) rows = rows.filter((row) => row.paymentStatus === query.paymentStatus);
+    return {
+      generatedAt: now(),
+      summary: {
+        totalAppointments: rows.length,
+        completed: rows.filter((row) => ["completed", "billed", "paid"].includes(String(row.status).toLowerCase())).length,
+        cancelled: rows.filter((row) => ["cancelled", "canceled", "no-show"].includes(String(row.status).toLowerCase())).length,
+        pending: rows.filter((row) => !["completed", "billed", "paid", "cancelled", "canceled", "no-show", "deleted"].includes(String(row.status).toLowerCase())).length,
+        billedAmount: rows.reduce((sum, row) => sum + row.total, 0),
+        unpaidAmount: rows.reduce((sum, row) => sum + row.balance, 0),
+        problemCount: rows.filter((row) => row.problemFlags.length).length
+      },
+      rows: rows.sort((a, b) => appointmentDate(b.appointmentStartAt || b.bookedAt) - appointmentDate(a.appointmentStartAt || a.bookedAt))
     };
   }
 };

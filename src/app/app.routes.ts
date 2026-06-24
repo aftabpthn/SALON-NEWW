@@ -49,6 +49,7 @@ export const routes: Routes = [
   { path: 'salon-3d', loadComponent: () => import('./pages/salon-3d-website.component').then(m => m.Salon3dWebsiteComponent), title: 'AuraShine 3D Salon Website' },
   { path: 'book', loadComponent: () => import('./pages/booking-portal.component').then(m => m.BookingPortalComponent), title: 'Online Booking' },
   { path: 'book/wizard', loadComponent: () => import('./pages/booking-wizard.component').then(m => m.BookingWizardComponent), title: 'Booking Wizard' },
+  { path: 'appointment-reports', loadComponent: () => import('./pages/appointment-activity.component').then(m => m.AppointmentActivityComponent), title: 'Appointment Reports' },
   { path: 'appointment-activity', loadComponent: () => import('./pages/appointment-activity.component').then(m => m.AppointmentActivityComponent), title: 'Appointment Activity' },
   { path: 'appointment-deposits', loadComponent: () => import('./pages/appointment-deposit-report.component').then(m => m.AppointmentDepositReportComponent), title: 'Appointment Deposit Report', canActivate: [permissionGuard], data: { permission: 'read:appointment_deposits' } },
   { path: 'appointments', loadComponent: () => import('./pages/appointments-enterprise.component').then(m => m.AppointmentsEnterpriseComponent), title: 'Appointment Calendar' },

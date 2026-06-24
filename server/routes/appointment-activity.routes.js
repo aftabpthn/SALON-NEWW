@@ -6,6 +6,31 @@ import { appointmentActivityService } from "../services/appointment-activity.ser
 export const appointmentActivityRouter = Router();
 
 appointmentActivityRouter.get(
+  "/appointment-activity/register",
+  requirePermission("read", () => "appointments"),
+  asyncHandler((req, res) => {
+    const register = appointmentActivityService.register(req.query, req.access);
+    if (req.query.format === "csv") {
+      res.type("text/csv").send(toRegisterCsv(register.rows));
+      return;
+    }
+    if (req.query.format === "pdf") {
+      res.type("application/pdf").send(simpleRegisterPdf(register));
+      return;
+    }
+    res.json(register);
+  })
+);
+
+appointmentActivityRouter.get(
+  "/appointment-reports",
+  requirePermission("read", () => "appointments"),
+  asyncHandler((req, res) => {
+    res.json(appointmentActivityService.register(req.query, req.access));
+  })
+);
+
+appointmentActivityRouter.get(
   "/appointment-activity/reports",
   requirePermission("read", () => "appointments"),
   asyncHandler((req, res) => {
@@ -100,6 +125,32 @@ function csvCell(value) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
+function toRegisterCsv(rows = []) {
+  const headers = [
+    "bookedAt",
+    "appointmentStartAt",
+    "clientName",
+    "clientPhone",
+    "staffName",
+    "serviceNames",
+    "status",
+    "cancelReason",
+    "paymentStatus",
+    "invoiceNumber",
+    "total",
+    "paid",
+    "balance",
+    "bookingMode",
+    "createdBy",
+    "lastUpdatedBy",
+    "problemFlags"
+  ];
+  return [
+    headers.join(","),
+    ...rows.map((row) => headers.map((header) => csvCell(Array.isArray(row[header]) ? row[header].join("; ") : row[header])).join(","))
+  ].join("\n");
+}
+
 function simplePdf(report) {
   const lines = [
     "Aura Salon OS - Appointment Activity Report",
@@ -113,6 +164,46 @@ function simplePdf(report) {
     "",
     "Client reliability watch",
     ...report.clientReliability.slice(0, 18).map((row) => `${row.clientName} - score ${row.reliabilityScore}, cancel ${row.cancellations}, no-show ${row.noShows}`)
+  ];
+  const stream = [
+    "BT",
+    "/F1 10 Tf",
+    "50 780 Td",
+    "14 TL",
+    ...lines.slice(0, 70).flatMap((line) => [`(${pdfText(line).slice(0, 110)}) Tj`, "T*"]),
+    "ET"
+  ].join("\n");
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    `5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  objects.forEach((object) => {
+    offsets.push(pdf.length);
+    pdf += object;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  pdf += offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return pdf;
+}
+
+function simpleRegisterPdf(register) {
+  const lines = [
+    "Aura Salon OS - Appointment Register",
+    `Generated: ${register.generatedAt}`,
+    `Appointments: ${register.summary.totalAppointments}`,
+    `Completed: ${register.summary.completed} | Cancelled: ${register.summary.cancelled} | Pending: ${register.summary.pending}`,
+    `Billed: ${register.summary.billedAmount} | Unpaid: ${register.summary.unpaidAmount}`,
+    "",
+    "Recent appointments",
+    ...register.rows.slice(0, 35).map((row) => `${row.appointmentStartAt} - ${row.clientName} - ${row.serviceNames || row.appointmentId} - ${row.status} - ${row.invoiceNumber || "No invoice"}`)
   ];
   const stream = [
     "BT",
