@@ -5004,11 +5004,17 @@ body {
 }
 
 .app-shell > .enterprise-sidebar {
-  color: #edf7f4;
-  border-right-color: rgba(15, 143, 127, 0.26);
-  background:
-    linear-gradient(180deg, #12342f 0%, #173b35 54%, #0f2b27 100%);
-  box-shadow: 14px 0 36px rgba(17, 24, 39, 0.16);
+  color: #002D0B;
+  border-right-color: rgba(0, 45, 11, 0.16);
+  background: #BDE3D6;
+  box-shadow: 14px 0 36px rgba(0, 45, 11, 0.1);
+}
+
+.app-shell > .enterprise-sidebar .brand strong,
+.app-shell > .enterprise-sidebar .nav-section-copy strong,
+.app-shell > .enterprise-sidebar .nav-empty strong,
+.app-shell > .enterprise-sidebar .sidebar-callout strong {
+  color: #002D0B;
 }
 
 .app-shell > .enterprise-sidebar .brand small,
@@ -5016,7 +5022,7 @@ body {
 .app-shell > .enterprise-sidebar .sidebar-callout p,
 .app-shell > .enterprise-sidebar .nav-section-label,
 .app-shell > .enterprise-sidebar .sidebar-search span {
-  color: #b9c7c1;
+  color: rgba(0, 45, 11, 0.7);
 }
 
 .app-shell > .enterprise-sidebar .sidebar-toggle,
@@ -5026,9 +5032,17 @@ body {
 .app-shell > .enterprise-sidebar .nav-subitem,
 .app-shell > .enterprise-sidebar .nav-subgroup-title,
 .app-shell > .enterprise-sidebar .sidebar-callout {
-  border-color: rgba(199, 215, 229, 0.13);
-  color: #edf7f4;
-  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(0, 45, 11, 0.14);
+  color: #002D0B;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.app-shell > .enterprise-sidebar .sidebar-search input {
+  color: #002D0B;
+}
+
+.app-shell > .enterprise-sidebar .sidebar-search input::placeholder {
+  color: rgba(0, 45, 11, 0.58);
 }
 
 .app-shell > .enterprise-sidebar .sidebar-toggle:hover,
@@ -5040,15 +5054,16 @@ body {
 .app-shell > .enterprise-sidebar .nav-subitem.active,
 .app-shell > .enterprise-sidebar .nav-subgroup-title:hover,
 .app-shell > .enterprise-sidebar .nav-subgroup-title.active {
-  border-color: rgba(99, 231, 207, 0.34);
-  background: rgba(15, 143, 127, 0.26);
-  box-shadow: inset 3px 0 0 #63e7cf;
+  color: #002D0B;
+  border-color: rgba(0, 45, 11, 0.28);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 3px 0 0 #002D0B;
 }
 
 .app-shell > .enterprise-sidebar .nav-icon,
 .app-shell > .enterprise-sidebar .nav-count {
-  color: #e8fffa;
-  background: rgba(15, 143, 127, 0.32);
+  color: #BDE3D6;
+  background: #002D0B;
 }
 
 :where(.module-hero, .panel, .form-panel, .metric-card, .metric, .dashboard-hub-card, .action-card, .quick-card, .control-card, .card, .table-wrap) {
