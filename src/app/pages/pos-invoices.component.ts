@@ -2082,7 +2082,19 @@ export class PosInvoicesComponent implements OnInit {
         tips,
         membershipRedeem
       };
-    }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    }).sort((a, b) => this.compareInvoiceRows(a, b));
+  }
+
+  private compareInvoiceRows(a: InvoiceRegisterRow, b: InvoiceRegisterRow): number {
+    const sequenceDelta = this.invoiceSequence(b.invoiceNumber) - this.invoiceSequence(a.invoiceNumber);
+    if (sequenceDelta) return sequenceDelta;
+    return this.dateMs(b.createdAt) - this.dateMs(a.createdAt) || b.invoiceNumber.localeCompare(a.invoiceNumber);
+  }
+
+  private invoiceSequence(invoiceNumber: string): number {
+    const match = String(invoiceNumber || '').match(/(\d+)(?!.*\d)/);
+    const sequence = match ? Number(match[1]) : 0;
+    return Number.isFinite(sequence) ? sequence : 0;
   }
 
   private isReceivedDuePayment(payment: ApiRecord): boolean {
