@@ -524,28 +524,35 @@ export class EnterpriseSchedulerService {
 
   summary({ appointments, visibleAppointments, schedules, blockedTimes, waitlist, staff, services }) {
     const serviceById = new Map(services.map((service) => [service.id, service]));
-    const bookedMinutes = visibleAppointments.reduce((sum, appointment) => {
+    const summaryAppointments = appointments.length ? appointments : visibleAppointments;
+    const activeAppointments = summaryAppointments.filter((appointment) => {
+      const status = String(appointment.status || "booked").toLowerCase();
+      return !INACTIVE_APPOINTMENT_STATUSES.has(status);
+    });
+    const bookedMinutes = activeAppointments.reduce((sum, appointment) => {
       const explicit = minutesBetween(appointment.startAt, appointment.endAt || "");
       if (explicit) return sum + explicit;
       return sum + (appointment.serviceIds || []).reduce((inner, serviceId) => inner + Number(serviceById.get(serviceId)?.durationMinutes || 30), 0);
     }, 0);
     const plannedMinutes = schedules.reduce((sum, schedule) => sum + this.scheduleMinutes(schedule), 0) || staff.length * 14 * 60;
-    const revenue = visibleAppointments.reduce((sum, appointment) => {
+    const revenue = activeAppointments.reduce((sum, appointment) => {
       const explicit = Number(appointment.estimatedAmount || appointment.amount || appointment.total || appointment.value || 0);
       if (explicit) return sum + explicit;
       return sum + (appointment.serviceIds || []).reduce((inner, serviceId) => inner + Number(serviceById.get(serviceId)?.price || 0), 0);
     }, 0);
-    const byStatus = appointments.reduce((map, appointment) => {
+    const byStatus = summaryAppointments.reduce((map, appointment) => {
       const rawStatus = String(appointment.status || "booked").toLowerCase();
       const status = rawStatus === "completed" && appointment.billingLocked ? "billed" : rawStatus;
       map[status] = (map[status] || 0) + 1;
       return map;
     }, {});
+    const countStatuses = (...statuses) => statuses.reduce((sum, status) => sum + (byStatus[status] || 0), 0);
     return {
-      booked: byStatus.booked || 0,
-      arrived: byStatus.arrived || byStatus.waiting || 0,
-      inService: byStatus["in-service"] || 0,
-      completed: byStatus.completed || byStatus.billed || byStatus.paid || 0,
+      booked: activeAppointments.length,
+      scheduled: countStatuses("booked", "confirmed", "payment_pending"),
+      arrived: countStatuses("arrived", "waiting"),
+      inService: countStatuses("in-service", "started"),
+      completed: countStatuses("completed", "billed", "paid"),
       noShow: byStatus["no-show"] || 0,
       cancelled: byStatus.cancelled || byStatus.canceled || 0,
       revenue,
