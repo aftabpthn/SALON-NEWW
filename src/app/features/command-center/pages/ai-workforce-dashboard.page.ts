@@ -1497,41 +1497,45 @@ interface PolicyRow {
   `,
   styles: [`
     .ai-workforce-page {
-      gap: 18px;
+      gap: 12px;
+      color: var(--ink);
+      background: var(--bg);
     }
 
     .ai-workforce-hero h2 {
-      font-size: clamp(2rem, 1.45rem + 1.6vw, 3rem);
+      font-size: 1.35rem;
+      line-height: 1.18;
     }
 
     .ai-tabs {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      padding: 6px;
+      gap: 6px;
+      padding: 6px 8px;
       border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: rgba(255, 255, 255, 0.78);
-      box-shadow: var(--shadow-xs);
+      border-radius: 0;
+      background: var(--surface);
+      box-shadow: none;
     }
 
     .ai-tabs button {
-      min-height: 42px;
+      min-height: 34px;
       display: inline-flex;
       align-items: center;
       gap: 9px;
-      padding: 0 14px;
-      border: 0;
-      border-radius: var(--radius-sm);
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
       color: var(--muted);
-      background: transparent;
+      background: var(--surface);
       font-weight: 700;
     }
 
     .ai-tabs button.active {
-      color: var(--ink);
-      background: var(--color-primary-soft);
-      box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.2);
+      color: #fff;
+      border-color: var(--color-primary-strong);
+      background: var(--color-primary-strong);
+      box-shadow: none;
     }
 
     .ai-tabs strong {
@@ -1539,33 +1543,38 @@ interface PolicyRow {
       height: 24px;
       display: grid;
       place-items: center;
-      border-radius: var(--radius-pill);
-      background: #fff;
-      color: var(--teal-2);
+      border-radius: 999px;
+      background: var(--color-primary-soft);
+      color: var(--color-primary-strong);
       font-size: 0.78rem;
+    }
+
+    .ai-tabs button.active strong {
+      background: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
 
     .ai-tab-panel {
       display: grid;
-      gap: 18px;
+      gap: 12px;
     }
 
     .ai-metrics-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
+      gap: 10px;
     }
 
     .ai-overview-grid {
       display: grid;
       grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.2fr);
-      gap: 18px;
+      gap: 12px;
       align-items: start;
     }
 
     .executive-brief-panel {
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     .executive-brief-grid {
@@ -1578,10 +1587,10 @@ interface PolicyRow {
     .executive-score-card,
     .executive-snapshot-grid span,
     .executive-action-list article {
-      padding: 13px;
+      padding: 12px;
       border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-sunken);
+      border-radius: 8px;
+      background: var(--surface);
     }
 
     .executive-score-card {
@@ -1608,7 +1617,7 @@ interface PolicyRow {
 
     .executive-score-card strong {
       color: var(--ink);
-      font-size: 2rem;
+      font-size: 1.65rem;
       line-height: 1;
     }
 
@@ -1649,7 +1658,7 @@ interface PolicyRow {
 
     .control-tower-panel {
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     .control-strip {
@@ -1659,10 +1668,10 @@ interface PolicyRow {
     }
 
     .control-strip article {
-      padding: 13px;
+      padding: 12px;
       border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: var(--color-surface-sunken);
+      border-radius: 8px;
+      background: var(--surface);
     }
 
     .control-strip span,
@@ -1682,8 +1691,8 @@ interface PolicyRow {
     .control-table-wrap {
       overflow-x: auto;
       border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      background: #fff;
+      border-radius: 8px;
+      background: var(--surface);
     }
 
     .control-table {
@@ -1694,7 +1703,7 @@ interface PolicyRow {
 
     .control-table th,
     .control-table td {
-      padding: 12px;
+      padding: 9px 10px;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: middle;
@@ -1706,6 +1715,9 @@ interface PolicyRow {
       font-weight: 900;
       text-transform: uppercase;
       background: var(--surface-2);
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
 
     .control-table td > strong,
@@ -2953,6 +2965,151 @@ interface PolicyRow {
       background: var(--color-primary-soft);
       color: var(--teal-2);
       font-weight: 800;
+    }
+
+    .ai-workforce-page .module-hero {
+      padding: 16px 18px;
+      border-left: 0;
+      border-right: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .ai-workforce-page .panel,
+    .premium-card,
+    .approval-detail-panel,
+    .incident-detail-panel,
+    .marketplace-detail-panel,
+    .roi-agent-panel,
+    .run-console {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+    }
+
+    .ai-workforce-page .panel,
+    .premium-card {
+      padding: 14px;
+    }
+
+    .ai-workforce-page .metric-card {
+      min-height: 94px;
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+    }
+
+    .ai-workforce-page .metric-card strong {
+      font-size: 1.35rem;
+    }
+
+    .agent-card,
+    .run-mini,
+    .decision-card,
+    .alert-card,
+    .settings-card,
+    .kpi-impact-card,
+    .provider-grid article,
+    .marketplace-grid article,
+    .marketplace-kpi-grid article,
+    .policy-kpi-grid article,
+    .incident-kpi-grid article,
+    .cost-grid div,
+    .console-metrics article,
+    .approval-check-grid article,
+    .template-readiness-grid span,
+    .prompt-meta-grid span,
+    .prompt-readiness-grid span,
+    .prompt-preview-grid div,
+    .detail-grid div,
+    .agent-safety-card,
+    .permission-row {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: none;
+    }
+
+    .agent-card,
+    .run-mini,
+    .decision-card,
+    .alert-card,
+    .settings-card {
+      padding: 12px;
+    }
+
+    .agent-card:hover,
+    .agent-card.selected,
+    .decision-card.selected,
+    .alert-card.selected,
+    .ai-table-wrap tr.selected-row td {
+      border-color: var(--color-primary-strong);
+      background: var(--color-primary-soft);
+      box-shadow: inset 3px 0 0 var(--color-primary-strong);
+    }
+
+    .agent-avatar {
+      background: var(--color-primary-strong);
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .agent-actions {
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .agent-actions .primary-button,
+    .agent-actions .ghost-button,
+    .hero-actions .primary-button,
+    .hero-actions .ghost-button {
+      min-height: 34px;
+      border-radius: 6px;
+      padding: 0 12px;
+      box-shadow: none;
+    }
+
+    .ai-table-wrap,
+    .control-table-wrap,
+    .policy-table-wrap,
+    .roi-table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: auto;
+    }
+
+    .ai-table-wrap th,
+    .policy-table th,
+    .roi-table th {
+      background: var(--surface-2);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .ai-table-wrap th,
+    .ai-table-wrap td,
+    .policy-table th,
+    .policy-table td,
+    .roi-table th,
+    .roi-table td {
+      padding: 9px 10px;
+    }
+
+    .approval-triage-strip button,
+    .alert-triage-strip button {
+      min-height: 38px;
+      border-radius: 6px;
+      background: var(--surface);
+    }
+
+    .approval-triage-strip button.active,
+    .alert-triage-strip button.active {
+      border-color: var(--color-primary-strong);
+      background: var(--color-primary-soft);
+      color: var(--color-primary-strong);
     }
 
     .badge.neutral {
