@@ -4893,6 +4893,164 @@ tbody tr:hover {
   background: rgba(20, 184, 166, 0.13);
 }
 
+/* Zenoti light shell palette */
+:root {
+  --bg: #f6f8fb;
+  --color-bg: #f6f8fb;
+  --surface: #ffffff;
+  --color-surface: #ffffff;
+  --surface-2: #f1f5f8;
+  --color-surface-muted: #f1f5f8;
+  --ink: #111827;
+  --color-text: #111827;
+  --muted: #5f6f84;
+  --color-muted: #5f6f84;
+  --line: #d7e2ea;
+  --color-border: #d7e2ea;
+  --teal: #0f8f7f;
+  --color-primary: #0f8f7f;
+  --color-primary-strong: #0b6f63;
+  --color-primary-soft: #e5f7f3;
+  --color-primary-ring: rgba(15, 143, 127, 0.16);
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(15, 143, 127, 0.035), transparent 300px),
+    #f6f8fb;
+}
+
+.topbar {
+  border-bottom: 1px solid #d7e2ea;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.04), 0 8px 24px rgba(17, 24, 39, 0.06);
+}
+
+.topbar-brand-mark,
+.app-shell > .enterprise-sidebar .brand-mark {
+  background: linear-gradient(135deg, #0f8f7f, #c5a34d);
+  box-shadow: 0 12px 28px rgba(15, 143, 127, 0.22);
+}
+
+.topbar-eyebrow,
+.topbar-page-label,
+.topbar-ctx-chevron,
+.topbar-detail-label {
+  color: #607086;
+}
+
+.topbar-name {
+  color: #111827;
+}
+
+.topbar-main-actions .back-button,
+.topbar-ctx-chip,
+.topbar-main-actions .ghost-button {
+  border-color: #c7d7e5;
+  color: #111827;
+  background: #ffffff;
+}
+
+.topbar-main-actions .back-button:hover,
+.topbar-ctx-chip:hover,
+.topbar-panel-open .topbar-ctx-chip,
+.topbar-main-actions .ghost-button:hover {
+  border-color: rgba(15, 143, 127, 0.34);
+  color: #0b6f63;
+  background: #eaf8f5;
+}
+
+.topbar-ctx-chip-icon {
+  color: #0f8f7f;
+}
+
+.topbar-main-actions .dark-button,
+.topbar-detail-apply,
+.primary-button {
+  background: linear-gradient(135deg, #0f8f7f, #12a08e);
+  color: #ffffff;
+}
+
+.topbar-main-actions .dark-button:hover,
+.topbar-detail-apply:hover,
+.primary-button:hover {
+  background: linear-gradient(135deg, #0b6f63, #0f8f7f);
+}
+
+.topbar-detail-panel {
+  border-top: 1px solid #d7e2ea;
+  background: #f8fbfc;
+}
+
+.topbar-detail-group select {
+  border-color: #c7d7e5;
+  color: #111827;
+  background: #ffffff;
+}
+
+.topbar-detail-group select:hover,
+.topbar-detail-group select:focus {
+  border-color: rgba(15, 143, 127, 0.5);
+  background: #ffffff;
+}
+
+.topbar-detail-group select option {
+  color: #111827;
+  background: #ffffff;
+}
+
+.topbar-detail-divider {
+  background: #d7e2ea;
+}
+
+.app-shell > .enterprise-sidebar {
+  color: #edf7f4;
+  border-right-color: rgba(15, 143, 127, 0.26);
+  background:
+    linear-gradient(180deg, #12342f 0%, #173b35 54%, #0f2b27 100%);
+  box-shadow: 14px 0 36px rgba(17, 24, 39, 0.16);
+}
+
+.app-shell > .enterprise-sidebar .brand small,
+.app-shell > .enterprise-sidebar .nav-section-copy small,
+.app-shell > .enterprise-sidebar .sidebar-callout p,
+.app-shell > .enterprise-sidebar .nav-section-label,
+.app-shell > .enterprise-sidebar .sidebar-search span {
+  color: #b9c7c1;
+}
+
+.app-shell > .enterprise-sidebar .sidebar-toggle,
+.app-shell > .enterprise-sidebar .sidebar-search input,
+.app-shell > .enterprise-sidebar .nav-favorite,
+.app-shell > .enterprise-sidebar .nav-section-trigger,
+.app-shell > .enterprise-sidebar .nav-subitem,
+.app-shell > .enterprise-sidebar .nav-subgroup-title,
+.app-shell > .enterprise-sidebar .sidebar-callout {
+  border-color: rgba(199, 215, 229, 0.13);
+  color: #edf7f4;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.app-shell > .enterprise-sidebar .sidebar-toggle:hover,
+.app-shell > .enterprise-sidebar .nav-favorite:hover,
+.app-shell > .enterprise-sidebar .nav-favorite.active,
+.app-shell > .enterprise-sidebar .nav-section-trigger:hover,
+.app-shell > .enterprise-sidebar .nav-section.active-section > .nav-section-trigger,
+.app-shell > .enterprise-sidebar .nav-subitem:hover,
+.app-shell > .enterprise-sidebar .nav-subitem.active,
+.app-shell > .enterprise-sidebar .nav-subgroup-title:hover,
+.app-shell > .enterprise-sidebar .nav-subgroup-title.active {
+  border-color: rgba(99, 231, 207, 0.34);
+  background: rgba(15, 143, 127, 0.26);
+  box-shadow: inset 3px 0 0 #63e7cf;
+}
+
+.app-shell > .enterprise-sidebar .nav-icon,
+.app-shell > .enterprise-sidebar .nav-count {
+  color: #e8fffa;
+  background: rgba(15, 143, 127, 0.32);
+}
+
 :where(.module-hero, .panel, .form-panel, .metric-card, .metric, .dashboard-hub-card, .action-card, .quick-card, .control-card, .card, .table-wrap) {
   border-color: rgba(15, 118, 110, 0.14);
   box-shadow:
