@@ -47,6 +47,7 @@ type MembershipEnterpriseReport = {
 };
 
 type MembershipDeskTab = 'overview' | 'plans' | 'active' | 'audit' | 'commission' | 'risk' | 'reports' | 'selfService' | 'reminders' | 'autoRenew' | 'giftcards';
+type MembershipReportTab = 'actionQueue' | 'activeMembers' | 'expiringSoon' | 'renewalRevenue' | 'cancelledMemberships' | 'staffWiseSales' | 'planWiseProfitability' | 'creditLiability' | 'autoRenewFailedPayments' | 'upgradeDowngrade' | 'discountLeakage';
 type LifecycleAction = 'renew' | 'upgrade' | 'downgrade' | 'cancel';
 type PlanLifecycleDialog = {
   action: Exclude<LifecycleAction, 'renew'>;
@@ -692,7 +693,21 @@ type PlanLifecycleDialog = {
           <article><span>Action queue</span><strong>{{ reportMetric('actionQueue') }}</strong><small>Renewal, wallet and plan tasks</small></article>
         </section>
 
-        <section class="form-panel report-card action-queue-card">
+        <nav class="report-section-tabs" aria-label="Membership report sections">
+          <button type="button" [class.active]="activeReportTab() === 'actionQueue'" (click)="setReportTab('actionQueue')">Action queue <span>{{ reportMetric('actionQueue') }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'activeMembers'" (click)="setReportTab('activeMembers')">Active members <span>{{ reportSet('activeMembers').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'expiringSoon'" (click)="setReportTab('expiringSoon')">Expiring soon <span>{{ reportSet('expiringSoon').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'renewalRevenue'" (click)="setReportTab('renewalRevenue')">Renewal revenue <span>{{ reportSet('renewalRevenue').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'cancelledMemberships'" (click)="setReportTab('cancelledMemberships')">Cancelled <span>{{ reportSet('cancelledMemberships').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'staffWiseSales'" (click)="setReportTab('staffWiseSales')">Staff sales <span>{{ reportSet('staffWiseSales').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'planWiseProfitability'" (click)="setReportTab('planWiseProfitability')">Plan profit <span>{{ reportSet('planWiseProfitability').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'creditLiability'" (click)="setReportTab('creditLiability')">Credit liability <span>{{ reportSet('creditLiability').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'autoRenewFailedPayments'" (click)="setReportTab('autoRenewFailedPayments')">Auto-renew failed <span>{{ reportSet('autoRenewFailedPayments').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'upgradeDowngrade'" (click)="setReportTab('upgradeDowngrade')">Upgrade / downgrade <span>{{ reportSet('upgradeDowngrade').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'discountLeakage'" (click)="setReportTab('discountLeakage')">Discount leakage <span>{{ reportSet('discountLeakage').length }}</span></button>
+        </nav>
+
+        <section class="form-panel report-card action-queue-card report-detail-card" *ngIf="activeReportTab() === 'actionQueue'">
           <div class="section-title compact-section-title">
             <div>
               <span class="eyebrow">Advanced queue</span>
@@ -714,7 +729,7 @@ type PlanLifecycleDialog = {
         </section>
 
         <div class="report-grid">
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'activeMembers'">
             <h3>Active members</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('activeMembers').length; else noActiveReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Expiry</th><th>Credits</th><th>Price</th></tr></thead>
@@ -725,7 +740,7 @@ type PlanLifecycleDialog = {
             <ng-template #noActiveReport><div class="empty-panel compact-empty"><strong>No active members.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'expiringSoon'">
             <h3>Expiring soon</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('expiringSoon').length; else noExpiryReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Days</th><th>Auto-renew</th></tr></thead>
@@ -736,7 +751,7 @@ type PlanLifecycleDialog = {
             <ng-template #noExpiryReport><div class="empty-panel compact-empty"><strong>No expiring memberships.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'renewalRevenue'">
             <h3>Renewal revenue</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('renewalRevenue').length; else noRenewalReport">
               <table><thead><tr><th>Date</th><th>Revenue</th><th>Count</th><th>Staff</th></tr></thead>
@@ -747,7 +762,7 @@ type PlanLifecycleDialog = {
             <ng-template #noRenewalReport><div class="empty-panel compact-empty"><strong>No renewal revenue.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'cancelledMemberships'">
             <h3>Cancelled memberships</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('cancelledMemberships').length; else noCancelledReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Amount</th><th>When</th></tr></thead>
@@ -758,7 +773,7 @@ type PlanLifecycleDialog = {
             <ng-template #noCancelledReport><div class="empty-panel compact-empty"><strong>No cancellations.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'staffWiseSales'">
             <h3>Staff-wise sales</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('staffWiseSales').length; else noStaffReport">
               <table><thead><tr><th>Staff</th><th>Sale</th><th>Renewal</th><th>Upgrade</th><th>Commission</th></tr></thead>
@@ -769,7 +784,7 @@ type PlanLifecycleDialog = {
             <ng-template #noStaffReport><div class="empty-panel compact-empty"><strong>No staff sales rows.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'planWiseProfitability'">
             <h3>Plan-wise profitability</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('planWiseProfitability').length; else noPlanReport">
               <table><thead><tr><th>Plan</th><th>Revenue</th><th>Leakage</th><th>Liability</th><th>Margin</th></tr></thead>
@@ -780,7 +795,7 @@ type PlanLifecycleDialog = {
             <ng-template #noPlanReport><div class="empty-panel compact-empty"><strong>No plan profitability rows.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'creditLiability'">
             <h3>Credit liability</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('creditLiability').length; else noCreditReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Credits</th><th>Value</th></tr></thead>
@@ -791,7 +806,7 @@ type PlanLifecycleDialog = {
             <ng-template #noCreditReport><div class="empty-panel compact-empty"><strong>No credit liability.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'autoRenewFailedPayments'">
             <h3>Auto-renew failed payments</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('autoRenewFailedPayments').length; else noAutoFailedReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Status</th><th>Retry</th></tr></thead>
@@ -802,7 +817,7 @@ type PlanLifecycleDialog = {
             <ng-template #noAutoFailedReport><div class="empty-panel compact-empty"><strong>No failed auto-renew payments.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'upgradeDowngrade'">
             <h3>Upgrade / downgrade</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('upgradeDowngrade').length; else noLifecycleReport">
               <table><thead><tr><th>Client</th><th>Action</th><th>Amount</th><th>Staff</th></tr></thead>
@@ -813,7 +828,7 @@ type PlanLifecycleDialog = {
             <ng-template #noLifecycleReport><div class="empty-panel compact-empty"><strong>No upgrade or downgrade rows.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card">
+          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'discountLeakage'">
             <h3>Discount leakage</h3>
             <div class="table-wrap compact-table" *ngIf="reportSet('discountLeakage').length; else noDiscountReport">
               <table><thead><tr><th>Invoice</th><th>Plan</th><th>Discount</th><th>Risk</th></tr></thead>
@@ -1826,9 +1841,55 @@ type PlanLifecycleDialog = {
 
     .report-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       margin-top: 14px;
+    }
+
+    .report-section-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 14px;
+      padding: 10px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 16px;
+      background: #fff;
+      overflow-x: auto;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .report-section-tabs button {
+      border: 0;
+      border-radius: 999px;
+      background: #f4f7f7;
+      color: #334155;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      font-weight: 900;
+      padding: 10px 14px;
+      white-space: nowrap;
+    }
+
+    .report-section-tabs button.active {
+      background: #0f766e;
+      color: #fff;
+      box-shadow: 0 14px 26px rgba(15, 118, 110, 0.22);
+    }
+
+    .report-section-tabs span {
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.08);
+      font-size: 0.76rem;
+      min-width: 24px;
+      padding: 3px 7px;
+      text-align: center;
+    }
+
+    .report-section-tabs button.active span {
+      background: rgba(255, 255, 255, 0.22);
     }
 
     .self-service-grid {
@@ -1845,6 +1906,10 @@ type PlanLifecycleDialog = {
 
     .report-card {
       min-width: 0;
+    }
+
+    .report-detail-card {
+      min-height: 360px;
     }
 
     .report-card h3 {
@@ -2157,6 +2222,7 @@ export class MembershipsComponent implements OnInit {
   readonly error = signal('');
   readonly message = signal('');
   readonly activeTab = signal<MembershipDeskTab>('overview');
+  readonly activeReportTab = signal<MembershipReportTab>('actionQueue');
   readonly showPlanDrawer = signal(false);
   readonly planQuery = signal('');
   readonly planShowLimit = signal(10);
@@ -2314,6 +2380,10 @@ export class MembershipsComponent implements OnInit {
 
   setTab(tab: MembershipDeskTab): void {
     this.activeTab.set(tab);
+  }
+
+  setReportTab(tab: MembershipReportTab): void {
+    this.activeReportTab.set(tab);
   }
 
   openPlanDrawer(): void {
