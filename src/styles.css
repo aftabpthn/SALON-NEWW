@@ -5014,7 +5014,7 @@ body {
 }
 
 .app-shell > .enterprise-sidebar {
-  color: #8A9AA6;
+  color: #FFFFFF;
   border-right-color: #13243A;
   background: #0C1A2B;
   box-shadow: 14px 0 36px rgba(12, 26, 43, 0.16);
@@ -5024,7 +5024,7 @@ body {
 .app-shell > .enterprise-sidebar .nav-section-copy strong,
 .app-shell > .enterprise-sidebar .nav-empty strong,
 .app-shell > .enterprise-sidebar .sidebar-callout strong {
-  color: #E6EDF3;
+  color: #FFFFFF;
 }
 
 .app-shell > .enterprise-sidebar .brand small,
@@ -5032,7 +5032,7 @@ body {
 .app-shell > .enterprise-sidebar .sidebar-callout p,
 .app-shell > .enterprise-sidebar .nav-section-label,
 .app-shell > .enterprise-sidebar .sidebar-search span {
-  color: #8A9AA6;
+  color: #FFFFFF;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-toggle,
@@ -5043,17 +5043,17 @@ body {
 .app-shell > .enterprise-sidebar .nav-subgroup-title,
 .app-shell > .enterprise-sidebar .sidebar-callout {
   border-color: #13243A;
-  color: #8A9AA6;
+  color: #FFFFFF;
   background: transparent;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-search input {
-  color: #E6EDF3;
+  color: #FFFFFF;
   background: #13243A;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-search input::placeholder {
-  color: #8A9AA6;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .app-shell > .enterprise-sidebar .sidebar-toggle:hover,
@@ -5065,7 +5065,7 @@ body {
 .app-shell > .enterprise-sidebar .nav-subitem.active,
 .app-shell > .enterprise-sidebar .nav-subgroup-title:hover,
 .app-shell > .enterprise-sidebar .nav-subgroup-title.active {
-  color: #10B981;
+  color: #FFFFFF;
   border-color: #13243A;
   background: #16293E;
   box-shadow: inset 3px 0 0 #10B981;
