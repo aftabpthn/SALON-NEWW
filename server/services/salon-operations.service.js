@@ -137,21 +137,65 @@ function listOperationalStaff(query = {}, access = {}) {
   return [...staff.values()];
 }
 
+function hasLinePricing(item = {}) {
+  return item.lineGross !== undefined || item.lineDiscountAmount !== undefined || item.lineTaxableSubtotal !== undefined;
+}
+
+function itemGross(item = {}) {
+  return money(item.lineGross ?? (Number(item.price || 0) * Number(item.quantity || 1)));
+}
+
+function itemLineDiscount(item = {}) {
+  if (item.lineDiscountAmount !== undefined) return money(item.lineDiscountAmount);
+  const gross = itemGross(item);
+  const value = Math.max(0, Number(item.discountValue || 0));
+  const amount = item.discountType === "percent" ? (gross * Math.min(value, 100)) / 100 : value;
+  return money(Math.min(gross, amount));
+}
+
+function itemTaxableSubtotal(item = {}) {
+  if (item.lineTaxableSubtotal !== undefined) return money(item.lineTaxableSubtotal);
+  return money(Math.max(0, itemGross(item) - itemLineDiscount(item)));
+}
+
 function calculateInvoice(items = [], discount = 0, tipTotal = 0) {
-  const subtotal = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
-  const discountAmount = Math.min(Number(discount || 0), subtotal);
-  const discountRatio = subtotal ? discountAmount / subtotal : 0;
+  const usesLinePricing = items.some(hasLinePricing);
+  if (!usesLinePricing) {
+    const subtotal = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
+    const discountAmount = Math.min(Number(discount || 0), subtotal);
+    const discountRatio = subtotal ? discountAmount / subtotal : 0;
+    const gstAmount = items.reduce((sum, item) => {
+      const line = Number(item.price || 0) * Number(item.quantity || 1);
+      return sum + line * (1 - discountRatio) * (Number(item.gstRate ?? 18) / 100);
+    }, 0);
+    const tipAmount = money(tipTotal);
+    return {
+      subtotal: money(subtotal),
+      discount: money(discountAmount),
+      gstAmount: money(gstAmount),
+      tipTotal: tipAmount,
+      total: money(subtotal - discountAmount + gstAmount + tipAmount)
+    };
+  }
+
+  const subtotal = items.reduce((sum, item) => sum + itemGross(item), 0);
+  const itemDiscountTotal = items.reduce((sum, item) => sum + itemLineDiscount(item), 0);
+  const taxableBeforeBillDiscount = items.reduce((sum, item) => sum + itemTaxableSubtotal(item), 0);
+  const billDiscountAmount = Math.min(Number(discount || 0), taxableBeforeBillDiscount);
+  const afterBillDiscountRatio = taxableBeforeBillDiscount
+    ? Math.max(0, taxableBeforeBillDiscount - billDiscountAmount) / taxableBeforeBillDiscount
+    : 0;
   const gstAmount = items.reduce((sum, item) => {
-    const line = Number(item.price || 0) * Number(item.quantity || 1);
-    return sum + line * (1 - discountRatio) * (Number(item.gstRate ?? 18) / 100);
+    const taxable = itemTaxableSubtotal(item) * afterBillDiscountRatio;
+    return sum + taxable * (Number(item.gstRate ?? 18) / 100);
   }, 0);
   const tipAmount = money(tipTotal);
   return {
     subtotal: money(subtotal),
-    discount: money(discountAmount),
+    discount: money(itemDiscountTotal + billDiscountAmount),
     gstAmount: money(gstAmount),
     tipTotal: tipAmount,
-    total: money(subtotal - discountAmount + gstAmount + tipAmount)
+    total: money(subtotal - itemDiscountTotal - billDiscountAmount + gstAmount + tipAmount)
   };
 }
 
@@ -328,6 +372,14 @@ function normalizeItemAttribution(item = {}, access) {
 function normalizeSaleItems(items = [], access) {
   return items.map((item) => {
     const attribution = normalizeItemAttribution(item, access);
+    const linePricing = {
+      discountType: item.discountType || "",
+      discountValue: Number(item.discountValue || 0),
+      discountSource: item.discountSource || "",
+      ...(item.lineGross !== undefined ? { lineGross: money(item.lineGross) } : {}),
+      ...(item.lineDiscountAmount !== undefined ? { lineDiscountAmount: money(item.lineDiscountAmount) } : {}),
+      ...(item.lineTaxableSubtotal !== undefined ? { lineTaxableSubtotal: money(item.lineTaxableSubtotal) } : {})
+    };
     if (item.type === "service" && item.id) {
       const service = requireRecord(repositories.services, item.id, "Service", access);
       return {
@@ -337,6 +389,7 @@ function normalizeSaleItems(items = [], access) {
         quantity: Number(item.quantity || 1),
         price: Number(item.price ?? service.price),
         gstRate: Number(service.gstRate || 18),
+        ...linePricing,
         ...attribution
       };
     }
@@ -349,6 +402,7 @@ function normalizeSaleItems(items = [], access) {
         quantity: Number(item.quantity || 1),
         price: Number(item.price ?? product.price),
         gstRate: Number(product.gstRate || 18),
+        ...linePricing,
         ...attribution
       };
     }
@@ -359,6 +413,7 @@ function normalizeSaleItems(items = [], access) {
       quantity: Number(item.quantity || 1),
       price: Number(item.price || 0),
       gstRate: Number(item.gstRate ?? 18),
+      ...linePricing,
       ...attribution,
       discountPercent: Number(item.discountPercent || 0),
       validityDays: Number(item.validityDays || 0),
@@ -757,7 +812,8 @@ export class SalonOperationsService {
       couponCode = "",
       payments = [],
       tips = [],
-      membershipRedeem = {}
+      membershipRedeem = {},
+      discountBreakdown = {}
     } = payload;
     const requestedItems = payload.items || [];
     if (!clientId || !branchId || !requestedItems.length) throw badRequest("clientId, branchId and items are required");
@@ -799,7 +855,12 @@ export class SalonOperationsService {
     const couponDiscount = money(coupon?.discountAmount || 0);
     const membershipBenefit = activeMembershipBenefit(clientId, items, access);
     const membershipDiscount = membershipBenefit.amount;
-    const totals = calculateInvoice(items, Number(discount || 0) + membershipDiscount + couponDiscount, tipTotal);
+    const hasSubmittedLinePricing = items.some(hasLinePricing);
+    const manualBillDiscount = money(Number(discountBreakdown?.manualDiscountAmount ?? discount ?? 0));
+    const billDiscount = hasSubmittedLinePricing
+      ? manualBillDiscount + couponDiscount
+      : Number(discount || 0) + membershipDiscount + couponDiscount;
+    const totals = calculateInvoice(items, billDiscount, tipTotal);
     const sale = repositories.sales.create({
       id: makeId("sale"),
       clientId,
