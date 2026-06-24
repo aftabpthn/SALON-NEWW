@@ -48,40 +48,6 @@ type RedemptionLine = {
       <p class="state success" *ngIf="message()">{{ message() }}</p>
 
       <section class="salonist-layout">
-        <aside class="settings-rail" aria-label="Package settings menu">
-          <div class="settings-group">
-            <strong>Your Business</strong>
-            <button type="button">Business Details</button>
-            <button type="button">Services</button>
-            <button class="active" type="button">Packages</button>
-            <button type="button">Membership</button>
-            <button type="button">Calendar Settings</button>
-            <button type="button">Custom Fields</button>
-            <button type="button">Consent Forms</button>
-            <button type="button">Booking Settings</button>
-            <button type="button">Multiple Location</button>
-          </div>
-          <div class="settings-group">
-            <strong>Staff Settings</strong>
-            <button type="button">Manage Staff</button>
-            <button type="button">Scheduled Shifts</button>
-            <button type="button">Commission</button>
-            <button type="button">Roles</button>
-          </div>
-          <div class="settings-group">
-            <strong>Stock</strong>
-            <button type="button">Products</button>
-            <button type="button">Supplier</button>
-            <button type="button">Inventory Settings</button>
-          </div>
-          <div class="settings-group">
-            <strong>Notifications</strong>
-            <button type="button">Sent Messages</button>
-            <button type="button">SMS Template</button>
-            <button type="button">WhatsApp Templates</button>
-          </div>
-        </aside>
-
         <main class="packages-main">
           <button class="floating-add" type="button" (click)="toggleForm()" aria-label="Add package">+</button>
           <header class="packages-title">
@@ -263,52 +229,11 @@ type RedemptionLine = {
     }
 
     .salonist-layout {
-      display: grid;
-      grid-template-columns: 178px minmax(0, 1fr);
-      gap: 22px;
       min-height: calc(100vh - 170px);
       padding: 18px 22px 28px;
       border-radius: 6px;
       background: #fff;
       box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
-    }
-
-    .settings-rail {
-      border-right: 1px solid #edf0f2;
-      padding: 2px 16px 8px 0;
-      color: #1f2937;
-    }
-
-    .settings-group {
-      display: grid;
-      gap: 2px;
-      margin-bottom: 18px;
-    }
-
-    .settings-group strong {
-      display: block;
-      margin: 0 0 7px;
-      color: #6b7280;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    .settings-group button {
-      width: 100%;
-      min-height: 30px;
-      border: 0;
-      border-radius: 4px;
-      background: transparent;
-      color: #111827;
-      font: inherit;
-      font-size: 13px;
-      text-align: left;
-      cursor: default;
-    }
-
-    .settings-group button.active {
-      background: #eff1f3;
-      font-weight: 800;
     }
 
     .packages-main {
@@ -1020,24 +945,6 @@ type RedemptionLine = {
     }
 
     @media (max-width: 1100px) {
-      .salonist-layout {
-        grid-template-columns: 1fr;
-      }
-
-      .settings-rail {
-        border-right: 0;
-        border-bottom: 1px solid #edf0f2;
-        padding: 0 0 14px;
-      }
-
-      .settings-group {
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      }
-
-      .settings-group strong {
-        grid-column: 1 / -1;
-      }
-
       .floating-add {
         top: 0;
       }
