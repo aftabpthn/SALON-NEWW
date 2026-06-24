@@ -244,6 +244,21 @@ type ClientSearchIndex = {
               <strong>{{ currentBranchName() }}</strong>
               <small>POS billing is locked to the top header branch.</small>
             </div>
+            <section
+              class="package-billing-alert"
+              [class.package-billing-alert--expired]="packageNotice.status === 'expired'"
+              *ngIf="selectedClientPackageNotice() as packageNotice"
+            >
+              <div>
+                <span>{{ packageNotice.status === 'active' ? 'Active package' : 'Expired package' }}</span>
+                <strong>{{ packageNotice.title }}</strong>
+                <small>{{ packageNotice.summary }}</small>
+              </div>
+              <div class="package-billing-alert__meta">
+                <span>Credits {{ packageNotice.credits }}</span>
+                <span>Expiry {{ packageNotice.expiry }}</span>
+              </div>
+            </section>
             <label class="field billing-date-field">
               <span>Invoice date</span>
               <input type="date" formControlName="invoiceDate" [attr.max]="invoiceDateMax" />
@@ -1235,6 +1250,64 @@ type ClientSearchIndex = {
     :host .client-badge.warning {
       color: #b45309;
       background: #fef3c7;
+    }
+
+    :host .package-billing-alert {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      min-height: 58px;
+      border: 2px solid #22c55e;
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: #ecfdf5;
+      box-shadow: inset 4px 0 0 #16a34a;
+    }
+
+    :host .package-billing-alert div {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    :host .package-billing-alert span {
+      color: #047857;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    :host .package-billing-alert strong {
+      color: #0f172a;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    :host .package-billing-alert small {
+      color: #166534;
+      line-height: 1.35;
+    }
+
+    :host .package-billing-alert__meta {
+      flex: 0 0 auto;
+      justify-items: end;
+      text-align: right;
+    }
+
+    :host .package-billing-alert--expired {
+      border-color: #f59e0b;
+      background: #fffbeb;
+      box-shadow: inset 4px 0 0 #dc2626;
+    }
+
+    :host .package-billing-alert--expired span {
+      color: #b45309;
+    }
+
+    :host .package-billing-alert--expired small {
+      color: #92400e;
     }
 
     :host .client-result-main mark {
@@ -4060,6 +4133,68 @@ export class PosComponent implements OnInit, OnDestroy {
       && (!membership.validityDate || membership.validityDate >= today)
       && this.membershipBenefitType(membership) === 'package'
     ).length;
+  }
+
+  selectedClientPackageNotice(): { status: 'active' | 'expired'; title: string; summary: string; credits: string; expiry: string } | null {
+    const clientId = String(this.form.value.clientId || '');
+    if (!clientId) return null;
+    const packages = this.clientPackageRecords(clientId);
+    if (!packages.length) return null;
+    const active = packages
+      .filter((membership) => this.packageStatus(membership) === 'active')
+      .sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))[0];
+    const selected = active || packages.sort((a, b) => this.packageSortTime(b) - this.packageSortTime(a))[0];
+    const status = this.packageStatus(selected);
+    const creditsRemaining = this.packageRemainingCredits(selected);
+    const totalCredits = this.packageTotalCredits(selected);
+    const expiry = selected.validityDate ? this.dateLabel(selected.validityDate) : 'No expiry';
+    const title = this.packageDisplayName(selected);
+    return {
+      status,
+      title,
+      summary: status === 'active'
+        ? `${title} active hai. Billing me package redeem kar sakte ho.`
+        : `${title} expire/used ho gaya hai. Renewal ya new package sale check karo.`,
+      credits: totalCredits > 0 ? `${creditsRemaining}/${totalCredits}` : String(creditsRemaining),
+      expiry
+    };
+  }
+
+  private clientPackageRecords(clientId: string): ApiRecord[] {
+    return this.memberships().filter((membership) =>
+      String(membership.clientId || membership.client_id || '') === clientId
+      && this.membershipBenefitType(membership) === 'package'
+    );
+  }
+
+  private packageStatus(membership: ApiRecord): 'active' | 'expired' {
+    const today = new Date().toISOString().slice(0, 10);
+    const status = String(membership.status || '').toLowerCase();
+    if (status === 'expired' || status === 'cancelled' || status === 'inactive') return 'expired';
+    if (membership.validityDate && String(membership.validityDate) < today) return 'expired';
+    return this.packageRemainingCredits(membership) > 0 ? 'active' : 'expired';
+  }
+
+  private packageDisplayName(membership: ApiRecord): string {
+    return String(membership.planName || membership.name || membership.membershipId || 'Package').replace(/^Package:\s*/i, '');
+  }
+
+  private packageRemainingCredits(membership: ApiRecord): number {
+    const direct = Number(membership.creditsRemaining ?? membership.credits_remaining ?? 0);
+    if (direct > 0) return direct;
+    const credits = Array.isArray(membership.serviceCredits) ? membership.serviceCredits : [];
+    return credits.reduce((sum, credit) => sum + Number(credit.remaining ?? credit.creditsRemaining ?? credit.credits ?? credit.quantity ?? 0), 0);
+  }
+
+  private packageTotalCredits(membership: ApiRecord): number {
+    const direct = Number(membership.planCredits ?? membership.plan_credits ?? 0);
+    if (direct > 0) return direct;
+    const credits = Array.isArray(membership.serviceCredits) ? membership.serviceCredits : [];
+    return credits.reduce((sum, credit) => sum + Number(credit.credits ?? credit.quantity ?? credit.remaining ?? credit.creditsRemaining ?? 0), 0);
+  }
+
+  private packageSortTime(membership: ApiRecord): number {
+    return this.dateMs(membership.validityDate || membership.updatedAt || membership.createdAt);
   }
 
   activeMembershipDiscountPercent(): number {
