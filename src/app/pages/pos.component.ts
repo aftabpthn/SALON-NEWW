@@ -2236,12 +2236,15 @@ export class PosComponent implements OnInit, OnDestroy {
   private refreshClientSearchResults(): void {
     const query = this.normalizeSearch(this.debouncedClientQuery());
     const clients = this.clients();
+    const queryDigits = this.phoneDigits(query);
     const results = !query
       ? this.recentClients(clients)
+      : query.length < 2 && queryDigits.length < 2
+        ? this.recentClients(clients)
       : clients
         .filter((client) => this.clientMatchesSearchQuery(client, query))
         .sort((a, b) => this.clientSearchScore(b, query) - this.clientSearchScore(a, query))
-        .slice(0, 25);
+        .slice(0, 12);
     this.clientSearchResults.set(results);
     this.activeClientResultIndex.set(Math.min(this.activeClientResultIndex(), Math.max(0, results.length - 1)));
   }
@@ -2322,9 +2325,9 @@ export class PosComponent implements OnInit, OnDestroy {
     if (name.startsWith(query)) score += 80;
     if (compactQuery && compactName.startsWith(compactQuery)) score += 75;
     if (compactQuery && initials.startsWith(compactQuery)) score += 70;
+    if (compactQuery && this.isWalkInAliasMatch(client, compactQuery)) score += 95;
     if (codes.includes(query)) score += 60;
     if (email.includes(query)) score += 40;
-    if (this.searchLettersExistInName(name, query)) score += 30;
     if (Number(client.unpaidBalance || 0) > 0) score += 4;
     if (Number(client.walletBalance || 0) > 0) score += 3;
     if (index?.membershipBadge) score += 2;
@@ -2334,15 +2337,17 @@ export class PosComponent implements OnInit, OnDestroy {
   private clientMatchesSearchQuery(client: ApiRecord, query: string): boolean {
     const index = this.clientSearchIndex.get(String(client.id || ''));
     const haystack = index?.haystack || this.clientSearchHaystack(client);
+    const queryDigits = this.phoneDigits(query);
+    if (queryDigits && (index?.phone || this.clientPhoneDigits(client)).includes(queryDigits)) return true;
     if (haystack.includes(query)) return true;
 
     const compactQuery = this.compactSearch(query);
     if (!compactQuery) return false;
 
-    const name = index?.name || this.normalizeSearch(client.name || '');
-    return this.compactSearch(haystack).includes(compactQuery)
+    const compactHaystack = this.compactSearch(haystack);
+    return compactHaystack.includes(compactQuery)
       || this.compactSearch(this.clientNameInitials(client)).startsWith(compactQuery)
-      || this.searchLettersExistInName(name, query);
+      || this.isWalkInAliasMatch(client, compactQuery);
   }
 
   private clientNameInitials(client: ApiRecord): string {
@@ -2366,6 +2371,12 @@ export class PosComponent implements OnInit, OnDestroy {
       counts.set(letter, next);
       return true;
     });
+  }
+
+  private isWalkInAliasMatch(client: ApiRecord, compactQuery: string): boolean {
+    if (compactQuery.length < 3) return false;
+    const isWalkInQuery = ['wai', 'wak', 'walk', 'walki', 'walkin'].some((prefix) => compactQuery.startsWith(prefix));
+    return isWalkInQuery && this.compactSearch(client.name || '').startsWith('walkin');
   }
 
   private clientMembershipIds(client: ApiRecord): string[] {
@@ -2525,23 +2536,7 @@ export class PosComponent implements OnInit, OnDestroy {
       ].filter((segment) => segment.text);
     }
 
-    const counts = new Map<string, number>();
-    for (const letter of this.compactSearch(query)) {
-      counts.set(letter, (counts.get(letter) || 0) + 1);
-    }
-    const segments: HighlightSegment[] = [];
-    for (const char of text) {
-      const letter = this.compactSearch(char);
-      const match = Boolean(letter && (counts.get(letter) || 0) > 0);
-      if (match) counts.set(letter, (counts.get(letter) || 0) - 1);
-      const last = segments[segments.length - 1];
-      if (last && last.match === match) {
-        last.text += char;
-      } else {
-        segments.push({ text: char, match });
-      }
-    }
-    return segments.length ? segments : [{ text, match: false }];
+    return [{ text, match: false }];
   }
 
   staffOption(person: ApiRecord): string {
@@ -3281,7 +3276,9 @@ export class PosComponent implements OnInit, OnDestroy {
     const compactQuery = this.compactSearch(query);
     if (compactQuery.length < 3) return false;
     const name = this.compactSearch(client.name || '');
-    return name.startsWith(compactQuery) || this.normalizeSearch(client.name || '').startsWith(this.normalizeSearch(query));
+    return name.startsWith(compactQuery)
+      || this.isWalkInAliasMatch(client, compactQuery)
+      || this.normalizeSearch(client.name || '').startsWith(this.normalizeSearch(query));
   }
 
   closeStaffSearchSoon(): void {
