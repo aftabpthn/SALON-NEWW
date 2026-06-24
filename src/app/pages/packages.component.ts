@@ -44,17 +44,128 @@ type RedemptionLine = {
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
     <section class="page-stack packages-page">
-      <div class="module-hero package-hero">
-        <div>
-          <span class="eyebrow">Module</span>
-          <h2>Service Packages</h2>
-          <p>Create 3 plus 1, prepaid service credits, client package tracking and redeem history.</p>
-        </div>
-        <button class="primary-button" type="button" (click)="toggleForm()">{{ showForm() ? 'Close' : 'Add package' }}</button>
-      </div>
-
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="message()">{{ message() }}</p>
+
+      <section class="salonist-layout">
+        <aside class="settings-rail" aria-label="Package settings menu">
+          <div class="settings-group">
+            <strong>Your Business</strong>
+            <button type="button">Business Details</button>
+            <button type="button">Services</button>
+            <button class="active" type="button">Packages</button>
+            <button type="button">Membership</button>
+            <button type="button">Calendar Settings</button>
+            <button type="button">Custom Fields</button>
+            <button type="button">Consent Forms</button>
+            <button type="button">Booking Settings</button>
+            <button type="button">Multiple Location</button>
+          </div>
+          <div class="settings-group">
+            <strong>Staff Settings</strong>
+            <button type="button">Manage Staff</button>
+            <button type="button">Scheduled Shifts</button>
+            <button type="button">Commission</button>
+            <button type="button">Roles</button>
+          </div>
+          <div class="settings-group">
+            <strong>Stock</strong>
+            <button type="button">Products</button>
+            <button type="button">Supplier</button>
+            <button type="button">Inventory Settings</button>
+          </div>
+          <div class="settings-group">
+            <strong>Notifications</strong>
+            <button type="button">Sent Messages</button>
+            <button type="button">SMS Template</button>
+            <button type="button">WhatsApp Templates</button>
+          </div>
+        </aside>
+
+        <main class="packages-main">
+          <button class="floating-add" type="button" (click)="toggleForm()" aria-label="Add package">+</button>
+          <header class="packages-title">
+            <h1>Packages</h1>
+            <p>
+              Boost revenue with treatment packages, turning clients into loyal regulars. Manage package history for seamless
+              administration, increased profitability <a href="#" (click)="$event.preventDefault()">Learn more</a>
+            </p>
+          </header>
+
+          <div class="list-controls">
+            <label class="show-control">
+              <span>Show</span>
+              <select [ngModel]="showLimit()" (ngModelChange)="showLimit.set(moneyValue($event))">
+                <option [ngValue]="10">10</option>
+                <option [ngValue]="25">25</option>
+                <option [ngValue]="50">50</option>
+              </select>
+            </label>
+            <label class="search-pill">
+              <span class="sr-only">Search</span>
+              <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Search" />
+            </label>
+          </div>
+
+          <div class="salonist-table-wrap">
+            <table class="salonist-table">
+              <thead>
+                <tr>
+                  <th class="check-col"><input type="checkbox" aria-label="Select all packages" /></th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Status</th>
+                  <th class="action-col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of visiblePackages()">
+                  <td class="check-col"><input type="checkbox" [attr.aria-label]="'Select ' + packageName(item)" /></td>
+                  <td>
+                    <div class="package-name-cell">
+                      <span class="package-avatar">{{ packageInitial(item) }}</span>
+                      <div>
+                        <strong>{{ packageName(item) }}</strong>
+                        <small>{{ packageRuleText(item) }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="price-cell">
+                      <del *ngIf="packageCostPrice(item) > packageSellingPrice(item)">
+                        {{ packageCostPrice(item) | currency: 'INR':'symbol':'1.0-0' }}
+                      </del>
+                      <strong>{{ packageSellingPrice(item) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                    </div>
+                  </td>
+                  <td><span class="status-pill">{{ item.status || 'Active' }}</span></td>
+                  <td class="action-cell">
+                    <button class="dots-button" type="button" (click)="toggleActionMenu(item, $event)" aria-label="Package actions">...</button>
+                    <div class="action-menu" *ngIf="openActionId() === recordId(item)">
+                      <button type="button" (click)="editPackage(item); openActionId.set('')">Edit</button>
+                      <button type="button" (click)="archivePackage(item)">Delete</button>
+                      <button type="button" (click)="markPackageInactive(item)">Inactive Status</button>
+                      <button type="button" (click)="viewPackage(item)">View</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!visiblePackages().length">
+                  <td colspan="5" class="empty-row">No package found. Plus button se naya 3+1 / 4+1 package banao.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <footer class="list-footer">
+            <span>Showing 1 to {{ visiblePackages().length }} of {{ filteredPackages().length }} Entries</span>
+            <div class="pager">
+              <button type="button" disabled>Previous</button>
+              <button class="active" type="button">1</button>
+              <button type="button" disabled>Next</button>
+            </div>
+          </footer>
+        </main>
+      </section>
 
       <div class="package-drawer-shell" *ngIf="showForm()">
         <button class="drawer-scrim" type="button" (click)="resetForm()" aria-label="Close package drawer"></button>
@@ -144,137 +255,342 @@ type RedemptionLine = {
           </div>
         </aside>
       </div>
-
-      <section class="package-metrics">
-        <article>
-          <span>Packages</span>
-          <strong>{{ filteredPackages().length }}</strong>
-          <small>{{ activePackageCount() }} active</small>
-        </article>
-        <article>
-          <span>Clients sold</span>
-          <strong>{{ packageSoldCount() }}</strong>
-          <small>Live from POS sales</small>
-        </article>
-        <article>
-          <span>Active clients</span>
-          <strong>{{ activeClientCount() }}</strong>
-          <small>Credits balance available</small>
-        </article>
-        <article>
-          <span>Redeemed</span>
-          <strong>{{ redeemedCreditCount() }}</strong>
-          <small>Service credits used</small>
-        </article>
-      </section>
-
-      <section class="panel">
-        <div class="table-toolbar">
-          <label class="search-field">
-            <span>Search</span>
-            <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Search package, service, client" />
-          </label>
-          <button class="ghost-button" type="button" (click)="load()">Refresh</button>
-        </div>
-
-        <div class="package-workspace">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Package</th>
-                  <th>Service formula</th>
-                  <th>Price</th>
-                  <th>Validity</th>
-                  <th>Sold</th>
-                  <th>Active clients</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let item of filteredPackages()" (click)="selectPackage(item)" [class.active]="recordId(item) === selectedPackageId()">
-                  <td>
-                    <strong>{{ packageName(item) }}</strong>
-                    <small>{{ item.description || packageRuleText(item) }}</small>
-                  </td>
-                  <td>{{ packageRuleText(item) }}</td>
-                  <td>{{ moneyValue(item.price) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ moneyValue(item.validityDays) || 90 }} days</td>
-                  <td>{{ packageMembers(item).length }}</td>
-                  <td>{{ activeMembers(item).length }}</td>
-                  <td><span class="badge">{{ item.status || 'active' }}</span></td>
-                  <td><button class="ghost-button mini" type="button" (click)="editPackage(item); $event.stopPropagation()">Edit</button></td>
-                </tr>
-                <tr *ngIf="!filteredPackages().length">
-                  <td colspan="8">No package found. Add Root Touch Up 3+1 package from the drawer.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <aside class="package-detail" *ngIf="selectedPackage() as pkg">
-            <div class="section-title compact">
-              <div>
-                <span class="eyebrow">Client package ledger</span>
-                <h3>{{ packageName(pkg) }}</h3>
-              </div>
-              <span class="badge">{{ packageMembers(pkg).length }} client(s)</span>
-            </div>
-
-            <div class="detail-summary">
-              <article>
-                <span>Formula</span>
-                <strong>{{ packageRuleText(pkg) }}</strong>
-              </article>
-              <article>
-                <span>Credits</span>
-                <strong>{{ packageTotalCredits(pkg) }}</strong>
-              </article>
-              <article>
-                <span>Redeemed</span>
-                <strong>{{ packageRedeemedCredits(pkg) }}</strong>
-              </article>
-            </div>
-
-            <div class="client-package-card" *ngFor="let membership of packageMembers(pkg)">
-              <div class="client-package-head">
-                <div>
-                  <a [routerLink]="['/clients', clientId(membership)]">{{ clientName(membership) }}</a>
-                  <small>{{ clientPhone(membership) }} · Sold {{ dateLabel(membership.createdAt || membership.startDate) }}</small>
-                </div>
-                <span class="badge" [class.warning]="membershipBalance(membership) <= 0">{{ membershipStatus(membership) }}</span>
-              </div>
-              <div class="mini-grid">
-                <span>Total <strong>{{ membershipTotal(membership) }}</strong></span>
-                <span>Used <strong>{{ membershipUsed(membership) }}</strong></span>
-                <span>Balance <strong>{{ membershipBalance(membership) }}</strong></span>
-                <span>Expiry <strong>{{ dateLabel(membership.validityDate || membership.expiryDate) }}</strong></span>
-              </div>
-
-              <div class="redeem-list" *ngIf="redemptionLines(membership).length; else noRedeem">
-                <div class="redeem-line" *ngFor="let row of redemptionLines(membership)">
-                  <strong>{{ row.step }}. {{ row.service }}</strong>
-                  <span>balance {{ row.balance }}</span>
-                  <small>{{ row.date }} · {{ row.staff }} · {{ row.invoice }}</small>
-                </div>
-              </div>
-              <ng-template #noRedeem>
-                <p class="empty-note">No redemption yet. POS redeem hote hi date aur balance yahan aa jayega.</p>
-              </ng-template>
-            </div>
-
-            <p class="empty-note" *ngIf="!packageMembers(pkg).length">
-              Abhi kisi client ne ye package POS se purchase nahi kiya hai.
-            </p>
-          </aside>
-        </div>
-      </section>
     </section>
   `,
   styles: [`
     .packages-page {
       gap: 18px;
+    }
+
+    .salonist-layout {
+      display: grid;
+      grid-template-columns: 178px minmax(0, 1fr);
+      gap: 22px;
+      min-height: calc(100vh - 170px);
+      padding: 18px 22px 28px;
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+    }
+
+    .settings-rail {
+      border-right: 1px solid #edf0f2;
+      padding: 2px 16px 8px 0;
+      color: #1f2937;
+    }
+
+    .settings-group {
+      display: grid;
+      gap: 2px;
+      margin-bottom: 18px;
+    }
+
+    .settings-group strong {
+      display: block;
+      margin: 0 0 7px;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .settings-group button {
+      width: 100%;
+      min-height: 30px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: #111827;
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      cursor: default;
+    }
+
+    .settings-group button.active {
+      background: #eff1f3;
+      font-weight: 800;
+    }
+
+    .packages-main {
+      position: relative;
+      min-width: 0;
+      padding: 2px 6px 0;
+    }
+
+    .packages-title h1 {
+      margin: 0 0 8px;
+      color: #111827;
+      font-size: 28px;
+      line-height: 1.15;
+    }
+
+    .packages-title p {
+      max-width: 780px;
+      margin: 0;
+      color: #4b5563;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .packages-title a {
+      color: #2563eb;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .floating-add {
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 50%;
+      background: #24262b;
+      color: #fff;
+      font-size: 30px;
+      line-height: 1;
+      box-shadow: 0 14px 24px rgba(15, 23, 42, 0.2);
+      cursor: pointer;
+    }
+
+    .list-controls,
+    .list-footer,
+    .pager,
+    .package-name-cell,
+    .action-cell {
+      display: flex;
+      align-items: center;
+    }
+
+    .list-controls {
+      justify-content: space-between;
+      gap: 16px;
+      margin: 42px 0 18px;
+    }
+
+    .show-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .show-control select {
+      width: 72px;
+      min-height: 36px;
+      border-color: #d1d5db;
+      border-radius: 4px;
+      padding: 6px 28px 6px 10px;
+    }
+
+    .search-pill {
+      width: min(100%, 250px);
+    }
+
+    .search-pill input {
+      min-height: 38px;
+      border-color: #d1d5db;
+      border-radius: 999px;
+      padding: 8px 34px 8px 14px;
+      background: #fff;
+    }
+
+    .salonist-table-wrap {
+      overflow: visible;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .salonist-table {
+      min-width: 720px;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .salonist-table th,
+    .salonist-table td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px 14px;
+      background: #fff;
+      color: #111827;
+      vertical-align: middle;
+    }
+
+    .salonist-table th {
+      color: #111827;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: none;
+    }
+
+    .salonist-table .check-col {
+      width: 42px;
+      text-align: center;
+    }
+
+    .salonist-table .action-col {
+      width: 90px;
+      text-align: center;
+    }
+
+    .salonist-table input[type="checkbox"] {
+      width: 15px;
+      min-height: 15px;
+      padding: 0;
+      border-radius: 2px;
+    }
+
+    .package-name-cell {
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .package-avatar {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      border-radius: 50%;
+      background: #111827;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .package-name-cell strong {
+      display: block;
+      color: #111827;
+      font-size: 15px;
+    }
+
+    .package-name-cell small {
+      max-width: 520px;
+      color: #6b7280;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .price-cell {
+      display: grid;
+      gap: 2px;
+    }
+
+    .price-cell del {
+      color: #9ca3af;
+      font-size: 12px;
+    }
+
+    .price-cell strong {
+      color: #111827;
+      font-size: 14px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      min-width: 96px;
+      justify-content: center;
+      border-radius: 3px;
+      background: #79cfad;
+      color: #fff;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: capitalize;
+    }
+
+    .action-cell {
+      position: relative;
+      justify-content: center;
+    }
+
+    .dots-button {
+      width: 34px;
+      height: 30px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: #fff;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .action-menu {
+      position: absolute;
+      top: 34px;
+      right: 10px;
+      z-index: 5;
+      min-width: 150px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      background: #fff;
+      box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+      padding: 4px 0;
+    }
+
+    .action-menu button {
+      display: block;
+      width: 100%;
+      min-height: 34px;
+      border: 0;
+      background: #fff;
+      color: #111827;
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .action-menu button:hover {
+      background: #f3f4f6;
+    }
+
+    .empty-row {
+      text-align: center;
+      color: #6b7280;
+      height: 90px;
+    }
+
+    .list-footer {
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 18px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .pager {
+      gap: 8px;
+    }
+
+    .pager button {
+      min-width: 42px;
+      min-height: 36px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: #fff;
+      color: #6b7280;
+      font: inherit;
+    }
+
+    .pager button.active {
+      border-color: #111827;
+      color: #111827;
+      font-weight: 800;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
     }
 
     .package-hero {
@@ -310,10 +626,10 @@ type RedemptionLine = {
     .package-drawer {
       position: relative;
       z-index: 1;
-      width: min(100%, 540px);
+      width: min(100%, 460px);
       min-height: 100vh;
       overflow: auto;
-      padding: 22px;
+      padding: 18px;
       background: #fff;
       box-shadow: -24px 0 60px rgba(15, 23, 42, 0.22);
     }
@@ -699,6 +1015,28 @@ type RedemptionLine = {
     }
 
     @media (max-width: 1100px) {
+      .salonist-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .settings-rail {
+        border-right: 0;
+        border-bottom: 1px solid #edf0f2;
+        padding: 0 0 14px;
+      }
+
+      .settings-group {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      }
+
+      .settings-group strong {
+        grid-column: 1 / -1;
+      }
+
+      .floating-add {
+        top: 0;
+      }
+
       .builder-grid,
       .formula-preview,
       .package-metrics,
@@ -724,6 +1062,8 @@ export class PackagesComponent implements OnInit {
   readonly showForm = signal(false);
   readonly selectedPackageId = signal('');
   readonly query = signal('');
+  readonly showLimit = signal(10);
+  readonly openActionId = signal('');
   form: PackageForm = this.defaultForm();
   serviceToAdd = '';
 
@@ -738,6 +1078,7 @@ export class PackagesComponent implements OnInit {
       ...this.packageMembers(item).map((membership) => this.clientName(membership))
     ].join(' ').toLowerCase().includes(term));
   });
+  readonly visiblePackages = computed(() => this.filteredPackages().slice(0, Math.max(1, this.showLimit())));
 
   constructor(private readonly api: ApiService) {}
 
@@ -944,6 +1285,61 @@ export class PackagesComponent implements OnInit {
 
   selectedPackage(): ApiRecord | null {
     return this.packages().find((item) => this.recordId(item) === this.selectedPackageId()) || this.filteredPackages()[0] || null;
+  }
+
+  toggleActionMenu(item: ApiRecord, event: Event): void {
+    event.stopPropagation();
+    const id = this.recordId(item);
+    this.openActionId.set(this.openActionId() === id ? '' : id);
+  }
+
+  viewPackage(item: ApiRecord): void {
+    this.selectPackage(item);
+    this.openActionId.set('');
+    this.message.set(`${this.packageName(item)} selected. Is package ka client ledger POS sale ke baad live update hoga.`);
+  }
+
+  markPackageInactive(item: ApiRecord): void {
+    const id = this.recordId(item);
+    if (!id) return;
+    this.openActionId.set('');
+    this.api.update<ApiRecord>('packages', id, { status: 'inactive' }).subscribe({
+      next: () => {
+        this.message.set(`${this.packageName(item)} inactive ho gaya.`);
+        this.load();
+      },
+      error: (error) => this.error.set(this.api.errorText(error, 'Package inactive nahi ho paya.'))
+    });
+  }
+
+  archivePackage(item: ApiRecord): void {
+    const id = this.recordId(item);
+    if (!id) return;
+    this.openActionId.set('');
+    this.api.delete<ApiRecord>('packages', id).subscribe({
+      next: () => {
+        this.message.set(`${this.packageName(item)} delete ho gaya.`);
+        this.load();
+      },
+      error: (error) => this.error.set(this.api.errorText(error, 'Package delete nahi ho paya.'))
+    });
+  }
+
+  packageInitial(item: ApiRecord): string {
+    return this.packageName(item).trim().charAt(0).toUpperCase() || 'P';
+  }
+
+  packageCostPrice(item: ApiRecord): number {
+    const direct = this.moneyValue(item.costPrice ?? item.cost_price ?? 0);
+    if (direct > 0) return direct;
+    return this.packageServiceCredits(item).reduce((sum, credit) => {
+      const qty = this.moneyValue(credit.credits ?? credit.quantity ?? 1) || 1;
+      return sum + (qty * this.moneyValue(credit.unitPrice ?? 0));
+    }, 0);
+  }
+
+  packageSellingPrice(item: ApiRecord): number {
+    return this.moneyValue(item.price ?? item.sellingPrice ?? item.specialPrice ?? 0);
   }
 
   totalSessions(): number {
