@@ -50,7 +50,7 @@ const RESOURCE_ALIASES = {
 };
 
 const FIELD_ALIASES = {
-  originalRecordId: ["id", "code", "external id", "record id", "old id", "legacy id", "customer id", "client id", "invoice id", "bill id"],
+  originalRecordId: ["id", "code", "external id", "record id", "old id", "legacy id", "customer id", "client id", "invoice id", "bill id", "payment id", "receipt id"],
   createdAt: ["created at", "created date", "date created", "created"],
   branchId: ["branch id", "outlet id", "location id"],
   branchName: ["branch", "branch name", "outlet", "location", "store"],
@@ -84,7 +84,7 @@ const FIELD_ALIASES = {
   vendor: ["vendor", "supplier", "paid to"],
   amount: ["amount", "paid amount", "net amount", "total"],
   taxAmount: ["tax", "gst", "tax amount", "gst amount"],
-  paymentMode: ["payment mode", "mode", "paid by", "payment type"],
+  paymentMode: ["payment mode", "mode", "paid by", "payment type", "tender", "tender type"],
   paidAt: ["paid at", "payment date", "date", "expense date"],
   clientId: ["client id", "customer id"],
   clientName: ["client", "customer", "client name", "customer name"],
@@ -104,9 +104,9 @@ const FIELD_ALIASES = {
   creditsRemaining: ["remaining credits", "balance credits", "balance"],
   validityDate: ["validity", "valid till", "expiry", "expiry date"],
   autoRenew: ["auto renew", "auto-renew", "renewal"],
-  invoiceNumber: ["invoice number", "invoice no", "bill no", "bill number", "receipt no"],
+  invoiceNumber: ["invoice number", "invoice no", "bill no", "bill number", "receipt no", "receipt invoice no", "against invoice", "against bill"],
   saleId: ["sale id", "bill id"],
-  invoiceId: ["invoice id"],
+  invoiceId: ["invoice id", "legacy invoice id", "old invoice id", "source invoice id", "bill id", "legacy bill id"],
   subtotal: ["subtotal", "gross amount"],
   discount: ["discount"],
   gstAmount: ["gst", "gst amount", "tax amount"],
@@ -176,7 +176,7 @@ const RESOURCE_TEMPLATES = {
   payments: {
     table: "payments",
     required: ["invoiceId", "mode", "amount"],
-    fields: ["originalRecordId", "invoiceId", "invoiceNumber", "mode", "amount", "reference", "branchId", "branchName", "createdAt"]
+    fields: ["invoiceId", "invoiceNumber", "originalRecordId", "mode", "paymentMode", "amount", "reference", "branchId", "branchName", "createdAt"]
   }
 };
 
