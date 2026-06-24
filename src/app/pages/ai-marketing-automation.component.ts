@@ -10,20 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, StateComponent],
   template: `
     <section class="marketing-workspace">
-      <div class="command-bar">
-        <div class="brand-block">
-          <span class="brand-mark">A</span>
-          <div>
-            <small>Enterprise command workspace</small>
-            <strong>Aurashine OS</strong>
-          </div>
-        </div>
-        <div class="top-actions">
-          <button type="button" class="zenoti-button" (click)="load()">Refresh</button>
-          <button type="button" class="zenoti-button primary" (click)="festivalCampaign()">Festival campaign</button>
-        </div>
-      </div>
-
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="summary() as summary">

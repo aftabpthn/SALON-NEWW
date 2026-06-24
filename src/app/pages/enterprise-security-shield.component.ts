@@ -16,20 +16,6 @@ type ShieldLayer = {
   imports: [CommonModule, RouterLink],
   template: `
     <section class="shield-workspace">
-      <div class="command-bar">
-        <div class="brand-block">
-          <span class="brand-mark">A</span>
-          <div>
-            <small>ENTERPRISE COMMAND WORKSPACE</small>
-            <strong>Aurashine OS</strong>
-          </div>
-        </div>
-        <div class="command-actions">
-          <a class="zenoti-button" routerLink="/security">Back</a>
-          <a class="zenoti-button primary" routerLink="/security-alerts">Open alerts</a>
-        </div>
-      </div>
-
       <div class="zenoti-header">
         <strong>malad</strong>
         <div class="header-actions">

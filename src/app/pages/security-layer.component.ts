@@ -1,30 +1,15 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
 @Component({
   selector: 'app-security-layer',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, RouterLink, StateComponent],
+  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
   template: `
     <section class="security-workspace">
-      <div class="command-bar">
-        <div class="brand-block">
-          <span class="brand-mark">A</span>
-          <div>
-            <small>ENTERPRISE COMMAND WORKSPACE</small>
-            <strong>Aurashine OS</strong>
-          </div>
-        </div>
-        <div class="command-actions">
-          <button type="button" class="zenoti-button" routerLink="/apps">Back</button>
-          <button type="button" class="zenoti-button primary" (click)="load()">Refresh</button>
-        </div>
-      </div>
-
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="zenoti-header">

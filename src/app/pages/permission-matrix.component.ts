@@ -10,20 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="permissions-workspace">
-      <div class="command-bar">
-        <div class="brand-block">
-          <span class="brand-mark">A</span>
-          <div>
-            <small>Enterprise command workspace</small>
-            <strong>Aurashine OS</strong>
-          </div>
-        </div>
-        <div class="top-actions">
-          <button class="zenoti-button" type="button" (click)="load()">Refresh</button>
-          <button class="zenoti-button primary" type="button" (click)="saveRole()" [disabled]="roleForm.invalid || saving()">Save role</button>
-        </div>
-      </div>
-
       <section class="zenoti-header">
         <div class="center-line">
           <strong>malad</strong>

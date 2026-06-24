@@ -10,20 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, DatePipe, RouterLink, StateComponent],
   template: `
     <section class="alerts-workspace">
-      <div class="command-bar">
-        <div class="brand-block">
-          <span class="brand-mark">A</span>
-          <div>
-            <small>ENTERPRISE COMMAND WORKSPACE</small>
-            <strong>Aurashine OS</strong>
-          </div>
-        </div>
-        <div class="command-actions">
-          <a class="zenoti-button" routerLink="/enterprise-security-shield">Back</a>
-          <button class="zenoti-button primary" type="button" (click)="load()">Refresh</button>
-        </div>
-      </div>
-
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="zenoti-header">

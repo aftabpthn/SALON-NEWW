@@ -10,18 +10,6 @@ import { ComplianceRouteMeta } from '../domain/compliance.models';
   imports: [CommonModule, RouterLink],
   template: `
     <section class="compliance-page">
-      <header class="command-bar">
-        <div class="brand-mark">A</div>
-        <div>
-          <p>Enterprise command workspace</p>
-          <strong>Aurashine OS</strong>
-        </div>
-        <div class="top-actions">
-          <span>Compliance</span>
-          <button type="button" (click)="store.loadDashboard()">Refresh</button>
-        </div>
-      </header>
-
       <section class="quick-actions" aria-label="Compliance actions">
         <div class="branch-label">malad</div>
         <div class="quick-buttons">

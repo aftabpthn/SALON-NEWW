@@ -11,20 +11,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
   template: `
     <section class="saas-workspace">
-      <div class="command-bar">
-        <div class="brand-block">
-          <span class="brand-mark">A</span>
-          <div>
-            <small>Enterprise command workspace</small>
-            <strong>Aurashine OS</strong>
-          </div>
-        </div>
-        <div class="top-actions">
-          <button class="zenoti-button" type="button" (click)="load()">Refresh</button>
-          <button class="zenoti-button primary" type="button" (click)="onboard()" [disabled]="onboardingForm.invalid || saving()">Create tenant</button>
-        </div>
-      </div>
-
       <section class="zenoti-header">
         <div class="center-line">
           <strong>malad</strong>

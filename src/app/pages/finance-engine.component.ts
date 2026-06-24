@@ -10,18 +10,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
   imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
   template: `
     <section class="finance-workspace">
-      <header class="command-bar">
-        <div class="brand-mark">A</div>
-        <div>
-          <p>Enterprise command workspace</p>
-          <strong>Aurashine OS</strong>
-        </div>
-        <div class="top-actions">
-          <span>Finance</span>
-          <button type="button" (click)="load()">Refresh</button>
-        </div>
-      </header>
-
       <section class="quick-actions" aria-label="Finance actions">
         <div class="branch-label">malad</div>
         <div class="quick-buttons">
