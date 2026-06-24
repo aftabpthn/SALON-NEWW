@@ -1261,10 +1261,11 @@ type PlanLifecycleDialog = {
       top: 0;
       z-index: 8;
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       align-items: center;
       padding: 10px;
-      overflow-x: auto;
+      overflow: visible;
       border: 1px solid rgba(15, 23, 42, 0.08);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.92);
@@ -1283,6 +1284,7 @@ type PlanLifecycleDialog = {
       font-weight: 700;
       padding: 9px 13px;
       white-space: nowrap;
+      flex: 0 1 auto;
       transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
     }
 
@@ -1315,7 +1317,7 @@ type PlanLifecycleDialog = {
     }
 
     .membership-tabs .refresh-tab {
-      margin-left: auto;
+      margin-left: 0;
       border-color: rgba(15, 23, 42, 0.12);
       background: #fff;
       color: #0f172a;
@@ -1323,7 +1325,7 @@ type PlanLifecycleDialog = {
 
     .member-count-strip {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
       gap: 10px;
       padding: 10px;
       border: 1px solid rgba(15, 23, 42, 0.08);
@@ -1830,7 +1832,7 @@ type PlanLifecycleDialog = {
 
     .report-filter-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 12px;
       margin-bottom: 14px;
       padding: 14px;
@@ -1848,13 +1850,14 @@ type PlanLifecycleDialog = {
 
     .report-section-tabs {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       margin: 0 0 14px;
       padding: 10px;
       border: 1px solid rgba(15, 23, 42, 0.08);
       border-radius: 16px;
       background: #fff;
-      overflow-x: auto;
+      overflow: visible;
       box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     }
 
@@ -1866,8 +1869,9 @@ type PlanLifecycleDialog = {
       cursor: pointer;
       display: inline-flex;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
-      flex: 0 0 auto;
+      flex: 1 1 190px;
       font-weight: 900;
       padding: 10px 14px;
       white-space: nowrap;
@@ -1909,7 +1913,24 @@ type PlanLifecycleDialog = {
     }
 
     .report-detail-card {
-      min-height: 360px;
+      min-height: 0;
+    }
+
+    .report-detail-card .compact-table {
+      overflow-x: visible;
+    }
+
+    .report-detail-card .compact-table table {
+      min-width: 0;
+      width: 100%;
+      table-layout: auto;
+    }
+
+    .report-detail-card .compact-table th,
+    .report-detail-card .compact-table td {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      vertical-align: top;
     }
 
     .report-card h3 {
