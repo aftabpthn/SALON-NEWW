@@ -76,7 +76,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
           <div class="zenoti-grid-actions">
             <a class="zenoti-mini-button" routerLink="/inventory/reports">Reports</a>
             <a class="zenoti-mini-button" routerLink="/inventory/purchase-orders">Purchase Orders</a>
-            <button class="zenoti-mini-button" type="button" (click)="activeDesk.set('product'); showProductForm.set(true)">Add Product</button>
+            <button class="zenoti-mini-button" type="button" (click)="openNewProductForm()">Add Product</button>
           </div>
         </div>
 
@@ -115,7 +115,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
                 <td>{{ productVendorName(product) }}</td>
                 <td>{{ productInUse(product) }}</td>
                 <td><span class="zenoti-status-pill" [class.inactive]="productStatus(product) !== 'Active'">{{ productStatus(product) }}</span></td>
-                <td><button class="zenoti-row-action" type="button" (click)="selectInventoryProduct(product); activeDesk.set('product'); showProductForm.set(true); $event.stopPropagation()">Edit</button></td>
+                <td><button class="zenoti-row-action" type="button" (click)="openEditProductForm(product); $event.stopPropagation()">Edit</button></td>
               </tr>
               <tr *ngIf="!filteredProducts().length">
                 <td colspan="14" class="empty-cell">No products match these filters.</td>
@@ -154,7 +154,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
         </div>
         <div class="desk-tabs">
           <button type="button" [class.active]="activeDesk() === 'stock'" (click)="activeDesk.set('stock')">Stock movement</button>
-          <button type="button" [class.active]="activeDesk() === 'product'" (click)="activeDesk.set('product'); showProductForm.set(true)">Product setup</button>
+          <button type="button" [class.active]="activeDesk() === 'product'" (click)="openEditProductForm(selectedProduct())">Product setup</button>
           <button type="button" [class.active]="activeDesk() === 'batch'" (click)="activeDesk.set('batch')">Receive batch</button>
           <button type="button" [class.active]="activeDesk() === 'supplier'" (click)="activeDesk.set('supplier')">Supplier</button>
           <button type="button" [class.active]="activeDesk() === 'waste'" (click)="activeDesk.set('waste')">Waste / expiry</button>
@@ -251,8 +251,8 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
             <label class="field"><span>Retail price</span><input type="number" formControlName="price" /></label>
             <label class="field"><span>GST rate</span><input type="number" formControlName="gstRate" /></label>
             <div class="form-actions">
-              <button class="ghost-button" type="button" (click)="activeDesk.set(''); showProductForm.set(false)">Cancel</button>
-              <button class="primary-button" type="submit" [disabled]="productForm.invalid || saving()">Save product</button>
+              <button class="ghost-button" type="button" (click)="closeProductForm()">Cancel</button>
+              <button class="primary-button" type="submit" [disabled]="productForm.invalid || saving()">{{ editingProductId() ? 'Update product' : 'Save product' }}</button>
             </div>
           </form>
 
@@ -1244,6 +1244,7 @@ export class InventoryComponent implements OnInit {
   readonly activeDesk = signal<InventoryDesk>('');
   readonly showProductForm = signal(false);
   readonly selectedProductId = signal('');
+  readonly editingProductId = signal('');
   readonly selectedSupplierId = signal('');
   readonly supplierWhatsappDraft = signal('');
   readonly scannerResult = signal('');
@@ -1400,20 +1401,29 @@ export class InventoryComponent implements OnInit {
   }
 
   saveProduct(): void {
-    if (this.productForm.invalid) return;
+    if (this.productForm.invalid) {
+      this.productForm.markAllAsTouched();
+      return;
+    }
     this.saving.set(true);
+    this.error.set('');
     const payload = {
       ...this.productForm.value,
       packSize: Math.max(0, Number(this.productForm.value.packSize || 0))
     };
-    this.api.create('products', payload).subscribe({
-      next: () => {
+    const editingId = this.editingProductId();
+    const request = editingId
+      ? this.api.update('products', editingId, payload)
+      : this.api.create('products', payload);
+    request.subscribe({
+      next: (product) => {
+        if (product?.id) this.selectedProductId.set(product.id);
         this.saving.set(false);
-        this.showProductForm.set(false);
+        this.closeProductForm();
         this.load();
       },
       error: (error) => {
-        this.error.set(error?.error?.error || 'Unable to save product');
+        this.error.set(this.api.errorText(error, editingId ? 'Unable to update product' : 'Unable to save product'));
         this.saving.set(false);
       }
     });
@@ -1473,6 +1483,13 @@ export class InventoryComponent implements OnInit {
 
   private productUnitValue(): string {
     return String(this.productForm.value.unit || 'pcs').toLowerCase().trim() || 'pcs';
+  }
+
+  private normalizedProductUsageType(product: ApiRecord): string {
+    const value = String(product.usageType || product.productType || product.type || 'retail').toLowerCase();
+    if (value.includes('both')) return 'both';
+    if (value.includes('consumable') || value.includes('professional')) return 'consumable';
+    return 'retail';
   }
 
   private defaultPackUnit(unit: string): string {
@@ -1661,6 +1678,69 @@ export class InventoryComponent implements OnInit {
 
   selectInventoryProduct(product: ApiRecord): void {
     this.selectedProductId.set(product.id);
+  }
+
+  openNewProductForm(): void {
+    this.editingProductId.set('');
+    const branchId = this.api.selectedBranchId() || this.branches()[0]?.id || '';
+    this.productForm.reset({
+      name: '',
+      sku: '',
+      category: '',
+      unit: 'pcs',
+      packSize: '',
+      packUnit: 'pcs',
+      usageType: 'retail',
+      supplier: '',
+      branchId,
+      stock: 0,
+      lowStockThreshold: 5,
+      expiryDate: '',
+      unitCost: 0,
+      price: 0,
+      gstRate: 18
+    });
+    this.error.set('');
+    this.activeDesk.set('product');
+    this.showProductForm.set(true);
+  }
+
+  openEditProductForm(product: ApiRecord | null): void {
+    if (!product) {
+      this.openNewProductForm();
+      return;
+    }
+    this.selectInventoryProduct(product);
+    const unit = String(product.unit || 'pcs').toLowerCase().trim() || 'pcs';
+    const packUnit = String(product.packUnit || this.defaultPackUnit(unit)).toLowerCase().trim() || this.defaultPackUnit(unit);
+    const usageType = this.normalizedProductUsageType(product);
+    this.editingProductId.set(String(product.id || ''));
+    this.productForm.reset({
+      name: product.name || '',
+      sku: product.sku || product.code || product.productCode || '',
+      category: product.category || '',
+      unit,
+      packSize: product.packSize ?? '',
+      packUnit,
+      usageType,
+      supplier: product.supplier || product.vendor || product.vendorName || '',
+      branchId: product.branchId || this.api.selectedBranchId() || this.branches()[0]?.id || '',
+      stock: Number(product.stock || 0),
+      lowStockThreshold: Number(product.lowStockThreshold || 0),
+      expiryDate: product.expiryDate || '',
+      unitCost: Number(product.unitCost || 0),
+      price: Number(product.price || 0),
+      gstRate: Number(product.gstRate || 0)
+    });
+    this.error.set('');
+    this.activeDesk.set('product');
+    this.showProductForm.set(true);
+  }
+
+  closeProductForm(): void {
+    this.activeDesk.set('');
+    this.showProductForm.set(false);
+    this.editingProductId.set('');
   }
 
   resetInventoryFilters(): void {
