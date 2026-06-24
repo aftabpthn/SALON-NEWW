@@ -1270,358 +1270,528 @@ type StaffPhotoUploadResponse = { url?: string };
           <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong><small>review required</small></article>
           <article><span>Payroll</span><strong>{{ attendanceSummary()['payrollPreviewRows'] || 0 }}</strong><small>{{ attendanceSummary()['ownerAlerts'] || 0 }} owner alerts</small></article>
         </div>
+        <nav class="attendance-module-nav">
+          <button type="button" [class.active]="activeAttendanceModule() === 'face-punch'" (click)="activeAttendanceModule.set('face-punch')">Face Punch Attendance</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'attendance-master'" (click)="activeAttendanceModule.set('attendance-master')">Attendance Master</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'salary-generate'" (click)="activeAttendanceModule.set('salary-generate')">Salary Generate</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'camera-punch'" (click)="activeAttendanceModule.set('camera-punch')">Camera Punch</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'biometric-devices'" (click)="activeAttendanceModule.set('biometric-devices')">Biometric Devices</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'staff-mapping'" (click)="activeAttendanceModule.set('staff-mapping')">Staff Mapping</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'privacy-consent'" (click)="activeAttendanceModule.set('privacy-consent')">Privacy &amp; Consent</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'payroll-risk'" (click)="activeAttendanceModule.set('payroll-risk')">Payroll Risk Review</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'reports'" (click)="activeAttendanceModule.set('reports')">Reports</button>
+          <button type="button" [class.active]="activeAttendanceModule() === 'settings'" (click)="activeAttendanceModule.set('settings')">Settings</button>
+        </nav>
         <div class="state error" *ngIf="attendanceError()">{{ attendanceError() }}</div>
         <div class="state success" *ngIf="attendanceMessage()">{{ attendanceMessage() }}</div>
       </section>
 
-      <section class="attendance-workspace" *ngIf="section === 'attendance-dashboard'">
-        <article class="panel physical-panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Physical Attendance Entry</h2>
-              <span>Manual register entry writes into the same live attendance log.</span>
-            </div>
-            <span class="badge">Physical</span>
-          </div>
-          <form class="staff-form camera-form manual-form" [formGroup]="manualAttendanceForm" (ngSubmit)="submitManualAttendance()">
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId" (change)="refreshAttendanceCenter()">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Staff</span>
-              <select formControlName="staffId">
-                <option value="">Select staff</option>
-                <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }} {{ staff.employeeCode ? '(' + staff.employeeCode + ')' : '' }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Entry type</span>
-              <select formControlName="punchType">
-                <option value="full_day">Full day present</option>
-                <option value="clock_in">Clock in only</option>
-                <option value="clock_out">Clock out only</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>In time</span>
-              <input type="time" formControlName="clockInTime" />
-            </label>
-            <label class="field">
-              <span>Out time</span>
-              <input type="time" formControlName="clockOutTime" />
-            </label>
-            <label class="field">
-              <span>OT minutes</span>
-              <input type="number" min="0" step="1" formControlName="overtimeMinutes" />
-            </label>
-            <label class="field full">
-              <span>Notes</span>
-              <input formControlName="notes" placeholder="Physical register, manager entry, missed punch" />
-            </label>
-            <div class="drawer-actions">
-              <button type="submit" class="primary" [disabled]="manualAttendanceForm.invalid || manualAttendanceSaving()">
-                {{ manualAttendanceSaving() ? 'Saving...' : 'Save physical attendance' }}
-              </button>
-              <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Attendance Master</a>
-              <a class="refresh" routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
-            </div>
-          </form>
-        </article>
+      <div class="attendance-kpi-grid" *ngIf="section === 'attendance-dashboard'">
+        <article class="kpi-card present"><span>Today Present</span><strong>{{ attendanceSummary()['attendanceEvents'] || 0 }}</strong><small>checked in today</small></article>
+        <article class="kpi-card absent"><span>Today Absent</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong><small>no punch recorded</small></article>
+        <article class="kpi-card late"><span>Late Arrivals</span><strong>{{ attendanceSummary()['failedEvents'] || 0 }}</strong><small>past grace period</small></article>
+        <article class="kpi-card percent"><span>Attendance %</span><strong>{{ ((attendanceSummary()['attendanceEvents'] || 0) / ((attendanceSummary()['attendanceEvents'] || 0) + (attendanceSummary()['suspiciousEvents'] || 0) || 1) * 100).toFixed(1) }}%</strong><small>today</small></article>
+        <article class="kpi-card punches"><span>Total Punches</span><strong>{{ (attendanceSummary()['attendanceEvents'] || 0) + (attendanceSummary()['queuedEvents'] || 0) }}</strong><small>live + queued</small></article>
+      </div>
 
-        <article class="panel camera-panel">
-          <div class="panel-heading">
-            <h2>Camera Punch</h2>
-            <span>{{ cameraActive() ? 'Camera active' : 'Camera off' }}</span>
-          </div>
-          <div class="camera-stage">
-            <video #attendanceVideo autoplay muted playsinline [class.hidden]="!cameraActive()"></video>
-            <div class="camera-placeholder" *ngIf="!cameraActive()">Camera preview</div>
-          </div>
-          <form class="staff-form camera-form" [formGroup]="cameraForm" (ngSubmit)="submitCameraPunch()">
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId" (change)="refreshAttendanceCenter()">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Staff</span>
-              <select formControlName="staffId">
-                <option value="">Select staff</option>
-                <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }} {{ staff.employeeCode ? '(' + staff.employeeCode + ')' : '' }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Punch</span>
-              <select formControlName="punchType">
-                <option value="clock_in">Clock in</option>
-                <option value="clock_out">Clock out</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Liveness</span>
-              <input type="number" min="0" max="1" step="0.01" formControlName="livenessScore" />
-            </label>
-            <label class="field">
-              <span>Face match</span>
-              <input type="number" min="0" max="1" step="0.01" formControlName="matchScore" />
-            </label>
-            <label class="field full">
-              <span>Notes</span>
-              <input formControlName="notes" placeholder="Gate, reception, mobile punch" />
-            </label>
-            <div class="drawer-actions">
-              <button type="button" class="refresh" [disabled]="cameraStarting()" (click)="startCamera()">{{ cameraStarting() ? 'Opening...' : 'Start camera' }}</button>
-              <button type="button" class="refresh" (click)="stopCamera()">Stop</button>
-              <button type="submit" class="primary" [disabled]="cameraForm.invalid || cameraSaving() || !cameraActive()">
-                {{ cameraSaving() ? 'Saving...' : 'Save camera punch' }}
-              </button>
-            </div>
-          </form>
-        </article>
+      <div class="attendance-module-content" *ngIf="section === 'attendance-dashboard'">
 
-        <article class="panel">
-          <div class="panel-heading">
-            <h2>Biometric Device Hub</h2>
-            <span>{{ store.biometricDevices().length }} devices</span>
-          </div>
-          <form class="device-form" [formGroup]="deviceForm" (ngSubmit)="registerBiometricDevice()">
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Provider</span>
-              <select formControlName="provider">
-                <option value="zkteco">ZKTeco</option>
-                <option value="essl">eSSL</option>
-                <option value="mantra">Mantra</option>
-                <option value="suprema">Suprema</option>
-                <option value="realtime_biometrics">Realtime Biometrics</option>
-                <option value="camera">Camera</option>
-                <option value="manual">Manual</option>
-              </select>
-            </label>
-            <label class="field"><span>Device code</span><input formControlName="deviceCode" /></label>
-            <label class="field"><span>Name</span><input formControlName="deviceName" /></label>
-            <label class="field"><span>Location</span><input formControlName="locationLabel" /></label>
-            <label class="field">
-              <span>Mode</span>
-              <select formControlName="connectionMode">
-                <option value="offline_sync">Offline sync</option>
-                <option value="api">API</option>
-                <option value="webhook">Webhook</option>
-                <option value="browser_camera">Browser camera</option>
-              </select>
-            </label>
-            <button type="submit" class="primary" [disabled]="deviceForm.invalid || deviceSaving()">{{ deviceSaving() ? 'Saving...' : 'Add device' }}</button>
-          </form>
-          <div class="table compact device-table">
-            <div class="row header"><span>Device</span><span>Provider</span><span>Mode</span><span>Status</span></div>
-            <div class="row" *ngFor="let device of store.biometricDevices()">
-              <span><strong>{{ device['deviceName'] || device['deviceCode'] }}</strong><small>{{ device['locationLabel'] || device['deviceCode'] }}</small></span>
-              <span>{{ device['provider'] }}</span>
-              <span>{{ device['connectionMode'] }}</span>
-              <span class="badge">{{ device['lastHealthStatus'] || device['status'] }}</span>
-            </div>
-            <div *ngIf="!store.biometricDevices().length && !store.loading()" class="empty action-empty"><strong>No biometric devices registered.</strong><span>Add a device or use camera punch for mobile-first attendance.</span></div>
-          </div>
-        </article>
-      </section>
+        <div *ngIf="activeAttendanceModule() === 'face-punch'">
+          <nav class="face-punch-tabs">
+            <button type="button" [class.active]="activeFacePunchTab() === 'live-feed'" (click)="activeFacePunchTab.set('live-feed')">Live Feed</button>
+            <button type="button" [class.active]="activeFacePunchTab() === 'punches'" (click)="activeFacePunchTab.set('punches')">Punches</button>
+            <button type="button" [class.active]="activeFacePunchTab() === 'attendance-sheet'" (click)="activeFacePunchTab.set('attendance-sheet')">Attendance Sheet</button>
+            <button type="button" [class.active]="activeFacePunchTab() === 'summary'" (click)="activeFacePunchTab.set('summary')">Summary</button>
+            <button type="button" [class.active]="activeFacePunchTab() === 'exceptions'" (click)="activeFacePunchTab.set('exceptions')">Exceptions</button>
+          </nav>
 
-      <section class="attendance-workspace attendance-wide" *ngIf="section === 'attendance-dashboard'">
-        <article class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Real Biometric Gateway</h2>
-              <span>ZKTeco, eSSL, Mantra, Suprema, RFID, QR, NFC and beacon punch sync</span>
-            </div>
-            <span class="badge">{{ gatewayRows().length }} agents</span>
-          </div>
-          <form class="device-form gateway-form" [formGroup]="gatewayForm" (ngSubmit)="registerGateway()">
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
-              </select>
-            </label>
-            <label class="field"><span>Gateway code</span><input formControlName="gatewayCode" placeholder="FRONT-DESK-PC-01" /></label>
-            <label class="field"><span>Name</span><input formControlName="displayName" placeholder="Front desk gateway" /></label>
-            <label class="field"><span>Machine</span><input formControlName="machineName" /></label>
-            <label class="field"><span>Version</span><input formControlName="versionLabel" placeholder="1.0.0" /></label>
-            <label class="field"><span>Providers</span><input formControlName="providers" /></label>
-            <button type="submit" class="primary" [disabled]="gatewayForm.invalid || gatewaySaving()">{{ gatewaySaving() ? 'Saving...' : 'Register gateway' }}</button>
-          </form>
-          <div class="table compact device-table">
-            <div class="row header"><span>Gateway</span><span>Machine</span><span>Status</span><span>Last seen</span></div>
-            <div class="row" *ngFor="let gateway of gatewayRows()">
-              <span><strong>{{ gateway['displayName'] || gateway['gatewayCode'] }}</strong><small>{{ gateway['gatewayCode'] }}</small></span>
-              <span>{{ gateway['machineName'] || 'Windows gateway' }}</span>
-              <span class="badge">{{ gateway['healthStatus'] }}</span>
-              <span>{{ timeOnly(gateway['lastSeenAt']) || 'not seen' }}</span>
-            </div>
-            <div *ngIf="!gatewayRows().length && !store.loading()" class="empty action-empty"><strong>No gateway registered for selected branch.</strong><span>Register a gateway to sync real biometric attendance.</span></div>
-          </div>
-        </article>
+          <section class="attendance-workspace" *ngIf="activeFacePunchTab() === 'live-feed'">
+            <article class="panel camera-panel">
+              <div class="panel-heading">
+                <h2>Camera Punch</h2>
+                <span>{{ cameraActive() ? 'Camera active' : 'Camera off' }}</span>
+              </div>
+              <div class="camera-stage">
+                <video #attendanceVideo autoplay muted playsinline [class.hidden]="!cameraActive()"></video>
+                <div class="camera-placeholder" *ngIf="!cameraActive()">Camera preview</div>
+              </div>
+              <form class="staff-form camera-form" [formGroup]="cameraForm" (ngSubmit)="submitCameraPunch()">
+                <label class="field">
+                  <span>Branch</span>
+                  <select formControlName="branchId" (change)="refreshAttendanceCenter()">
+                    <option value="">Select branch</option>
+                    <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Staff</span>
+                  <select formControlName="staffId">
+                    <option value="">Select staff</option>
+                    <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }} {{ staff.employeeCode ? '(' + staff.employeeCode + ')' : '' }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Punch</span>
+                  <select formControlName="punchType">
+                    <option value="clock_in">Clock in</option>
+                    <option value="clock_out">Clock out</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Liveness</span>
+                  <input type="number" min="0" max="1" step="0.01" formControlName="livenessScore" />
+                </label>
+                <label class="field">
+                  <span>Face match</span>
+                  <input type="number" min="0" max="1" step="0.01" formControlName="matchScore" />
+                </label>
+                <label class="field full">
+                  <span>Notes</span>
+                  <input formControlName="notes" placeholder="Gate, reception, mobile punch" />
+                </label>
+                <div class="drawer-actions">
+                  <button type="button" class="refresh" [disabled]="cameraStarting()" (click)="startCamera()">{{ cameraStarting() ? 'Opening...' : 'Start camera' }}</button>
+                  <button type="button" class="refresh" (click)="stopCamera()">Stop</button>
+                  <button type="submit" class="primary" [disabled]="cameraForm.invalid || cameraSaving() || !cameraActive()">
+                    {{ cameraSaving() ? 'Saving...' : 'Save camera punch' }}
+                  </button>
+                </div>
+              </form>
+            </article>
+          </section>
 
-        <article class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Staff Mapping UI</h2>
-              <span>Map biometric external user IDs to real staff records</span>
-            </div>
-            <span class="badge">{{ store.biometricMappings().length }} mappings</span>
-          </div>
-          <form class="device-form mapping-form" [formGroup]="mappingForm" (ngSubmit)="createBiometricMapping()">
-            <label class="field">
-              <span>Device</span>
-              <select formControlName="deviceId">
-                <option value="">Select device</option>
-                <option *ngFor="let device of store.biometricDevices()" [value]="device['id']">{{ device['deviceName'] || device['deviceCode'] }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Staff</span>
-              <select formControlName="staffId">
-                <option value="">Select staff</option>
-                <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }}</option>
-              </select>
-            </label>
-            <label class="field"><span>External user ID</span><input formControlName="externalUserId" placeholder="Device user id" /></label>
-            <label class="field"><span>Notes</span><input formControlName="notes" /></label>
-            <button type="submit" class="primary" [disabled]="mappingForm.invalid || mappingSaving()">{{ mappingSaving() ? 'Saving...' : 'Map staff' }}</button>
-          </form>
-          <div class="table compact mapping-table">
-            <div class="row header"><span>Staff</span><span>Device</span><span>External ID</span><span>Status</span><span>Action</span></div>
-            <div class="row" *ngFor="let mapping of store.biometricMappings()">
-              <span>{{ mapping['staffName'] || mapping['staffId'] }}</span>
-              <span>{{ mapping['deviceLabel'] || mapping['deviceId'] }}</span>
-              <span>{{ mapping['externalUserId'] }}</span>
-              <span class="badge">{{ mapping['status'] }}</span>
-              <span>
-                <button type="button" class="refresh mini" *ngIf="mapping['status'] !== 'approved'" (click)="approveBiometricMapping(mapping)">Approve</button>
-              </span>
-            </div>
-            <div *ngIf="!store.biometricMappings().length && !store.loading()" class="empty action-empty"><strong>No staff biometric mappings yet.</strong><span>Map staff with device user IDs to connect attendance and salary.</span></div>
-          </div>
-        </article>
-      </section>
+          <section class="attendance-workspace" *ngIf="activeFacePunchTab() === 'punches'">
+            <article class="panel physical-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Physical Attendance Entry</h2>
+                  <span>Manual register entry writes into the same live attendance log.</span>
+                </div>
+                <span class="badge">Physical</span>
+              </div>
+              <form class="staff-form camera-form manual-form" [formGroup]="manualAttendanceForm" (ngSubmit)="submitManualAttendance()">
+                <label class="field">
+                  <span>Branch</span>
+                  <select formControlName="branchId" (change)="refreshAttendanceCenter()">
+                    <option value="">Select branch</option>
+                    <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Staff</span>
+                  <select formControlName="staffId">
+                    <option value="">Select staff</option>
+                    <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }} {{ staff.employeeCode ? '(' + staff.employeeCode + ')' : '' }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Entry type</span>
+                  <select formControlName="punchType">
+                    <option value="full_day">Full day present</option>
+                    <option value="clock_in">Clock in only</option>
+                    <option value="clock_out">Clock out only</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>In time</span>
+                  <input type="time" formControlName="clockInTime" />
+                </label>
+                <label class="field">
+                  <span>Out time</span>
+                  <input type="time" formControlName="clockOutTime" />
+                </label>
+                <label class="field">
+                  <span>OT minutes</span>
+                  <input type="number" min="0" step="1" formControlName="overtimeMinutes" />
+                </label>
+                <label class="field full">
+                  <span>Notes</span>
+                  <input formControlName="notes" placeholder="Physical register, manager entry, missed punch" />
+                </label>
+                <div class="drawer-actions">
+                  <button type="submit" class="primary" [disabled]="manualAttendanceForm.invalid || manualAttendanceSaving()">
+                    {{ manualAttendanceSaving() ? 'Saving...' : 'Save physical attendance' }}
+                  </button>
+                  <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Attendance Master</a>
+                  <a class="refresh" routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
+                </div>
+              </form>
+            </article>
+          </section>
 
-      <section class="attendance-workspace attendance-wide" *ngIf="section === 'attendance-dashboard'">
-        <article class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Privacy And Consent Center</h2>
-              <span>Biometric consent, retention and delete request controls</span>
-            </div>
-            <span class="badge">{{ store.biometricConsents().length }} records</span>
-          </div>
-          <form class="device-form consent-form" [formGroup]="consentForm" (ngSubmit)="saveBiometricConsent()">
-            <label class="field">
-              <span>Staff</span>
-              <select formControlName="staffId">
-                <option value="">Select staff</option>
-                <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Status</span>
-              <select formControlName="consentStatus">
-                <option value="granted">Granted</option>
-                <option value="pending">Pending</option>
-                <option value="revoked">Revoked</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Channel</span>
-              <select formControlName="consentChannel">
-                <option value="paper">Paper</option>
-                <option value="digital">Digital</option>
-                <option value="manager_verified">Manager verified</option>
-              </select>
-            </label>
-            <label class="field"><span>Retention days</span><input type="number" min="30" formControlName="retentionDays" /></label>
-            <label class="field full"><span>Consent text</span><input formControlName="consentText" /></label>
-            <button type="submit" class="primary" [disabled]="consentForm.invalid || consentSaving()">{{ consentSaving() ? 'Saving...' : 'Save consent' }}</button>
-          </form>
-          <div class="table compact mapping-table">
-            <div class="row header"><span>Staff</span><span>Status</span><span>Retention</span><span>Delete</span><span>Action</span></div>
-            <div class="row" *ngFor="let consent of store.biometricConsents()">
-              <span>{{ consent['staffName'] || consent['staffId'] }}</span>
-              <span class="badge">{{ consent['consentStatus'] }}</span>
-              <span>{{ consent['retentionDays'] }} days</span>
-              <span>{{ consent['deleteRequested'] ? 'requested' : 'no' }}</span>
-              <span><button type="button" class="refresh mini" (click)="requestConsentDeletion(consent)">Delete request</button></span>
-            </div>
-            <div *ngIf="!store.biometricConsents().length && !store.loading()" class="empty action-empty"><strong>No biometric consent captured yet.</strong><span>Capture consent before biometric attendance goes live.</span></div>
-          </div>
-        </article>
+          <section class="attendance-workspace attendance-wide" *ngIf="activeFacePunchTab() === 'attendance-sheet'">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Attendance Sheet</h2>
+                  <span>Live attendance log for selected date</span>
+                </div>
+                <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Full Attendance Master</a>
+              </div>
+              <div class="table compact evidence-table">
+                <div class="row header"><span>Staff</span><span>Source</span><span>Clock</span><span>Status</span></div>
+                <div class="row" *ngFor="let row of attendanceRows()">
+                  <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['businessDate'] || row['business_date'] }}</small></span>
+                  <span>{{ row['source'] || 'manual' }}</span>
+                  <span>{{ timeOnly(row['clockInAt'] || row['clock_in_at']) }} - {{ timeOnly(row['clockOutAt'] || row['clock_out_at']) || 'open' }}</span>
+                  <span class="badge">{{ row['status'] }}</span>
+                </div>
+                <div *ngIf="!attendanceRows().length && !store.loading()" class="empty action-empty">
+                  <strong>No attendance events for selected date.</strong>
+                  <span>Use physical entry, camera punch or biometric queue to create live attendance.</span>
+                  <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Attendance master</a>
+                </div>
+              </div>
+            </article>
+          </section>
 
-        <article class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Payroll Risk Review</h2>
-              <span>Risk scan, owner alerts and attendance deduction preview from real punches</span>
-            </div>
-            <button type="button" class="refresh" [disabled]="fraudScanning()" (click)="runFraudScan()">{{ fraudScanning() ? 'Checking...' : 'Run risk check' }}</button>
-          </div>
-          <form class="device-form payroll-form" [formGroup]="payrollPreviewForm" (ngSubmit)="generatePayrollPreview()">
-            <label class="field"><span>From</span><input type="date" formControlName="periodStart" /></label>
-            <label class="field"><span>To</span><input type="date" formControlName="periodEnd" /></label>
-            <label class="field"><span>Shift start</span><input type="time" formControlName="defaultShiftStart" /></label>
-            <label class="field"><span>Late grace</span><input type="number" min="0" formControlName="lateGraceMinutes" /></label>
-            <label class="field"><span>Hold absent days</span><input type="number" min="0" formControlName="incentiveHoldAbsentDays" /></label>
-            <label class="field"><span>Default gross</span><input type="number" min="0" formControlName="defaultGrossAmount" /></label>
-            <button type="submit" class="primary" [disabled]="payrollPreviewForm.invalid || payrollPreviewSaving()">{{ payrollPreviewSaving() ? 'Generating...' : 'Payroll preview' }}</button>
-          </form>
-          <div class="table compact risk-table">
-            <div class="row header"><span>Risk / Payroll</span><span>Score</span><span>Amount</span><span>Status</span></div>
-            <div class="row" *ngFor="let risk of store.attendanceRisks()">
-              <span><strong>{{ risk['riskType'] }}</strong><small>{{ risk['reason'] }}</small></span>
-              <span>{{ risk['riskScore'] }}</span>
-              <span>{{ risk['severity'] }}</span>
-              <span class="badge">{{ risk['status'] }}</span>
-            </div>
-            <div class="row" *ngFor="let row of store.attendancePayrollPreview()">
-              <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['presentDays'] || 0 }} present · {{ row['lateCount'] || 0 }} late</small></span>
-              <span>{{ row['absentDays'] || 0 }} absent</span>
-              <span>₹{{ row['netPreview'] || 0 }}</span>
-              <span class="badge">{{ row['incentiveHold'] ? 'hold' : 'draft' }}</span>
-            </div>
-            <div *ngIf="!store.attendanceRisks().length && !store.attendancePayrollPreview().length && !store.loading()" class="empty action-empty"><strong>No payroll risk output yet.</strong><span>Run risk check or payroll preview to view results.</span></div>
-          </div>
-        </article>
-      </section>
+          <section class="attendance-workspace attendance-wide" *ngIf="activeFacePunchTab() === 'summary'">
+            <article class="panel">
+              <div class="panel-heading">
+                <h2>Attendance Summary</h2>
+                <span>{{ attendanceDate() }}</span>
+              </div>
+              <div class="attendance-stats compact-summary">
+                <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong><small>active / total</small></article>
+                <article><span>Gateway</span><strong>{{ attendanceSummary()['onlineGateways'] || 0 }}/{{ attendanceSummary()['gateways'] || 0 }}</strong><small>Windows sync agents</small></article>
+                <article><span>Attendance</span><strong>{{ attendanceSummary()['attendanceEvents'] || 0 }}</strong><small>{{ attendanceDate() }}</small></article>
+                <article><span>Camera</span><strong>{{ attendanceSummary()['cameraCaptures'] || 0 }}</strong><small>verified captures</small></article>
+                <article><span>Consent</span><strong>{{ attendanceSummary()['consentGranted'] || 0 }}</strong><small>{{ attendanceSummary()['consentPending'] || 0 }} pending</small></article>
+                <article><span>Queue</span><strong>{{ attendanceSummary()['queuedEvents'] || 0 }}</strong><small>{{ attendanceSummary()['failedEvents'] || 0 }} failed</small></article>
+                <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong><small>review required</small></article>
+                <article><span>Payroll</span><strong>{{ attendanceSummary()['payrollPreviewRows'] || 0 }}</strong><small>{{ attendanceSummary()['ownerAlerts'] || 0 }} owner alerts</small></article>
+              </div>
+            </article>
+          </section>
 
-      <section class="panel" *ngIf="section === 'attendance-dashboard'">
-        <div class="panel-heading">
-          <h2>Live Attendance Evidence</h2>
-          <span>{{ attendanceRows().length }} attendance rows</span>
+          <section class="attendance-workspace attendance-wide" *ngIf="activeFacePunchTab() === 'exceptions'">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Payroll Risk Review</h2>
+                  <span>Risk scan, owner alerts and attendance deduction preview from real punches</span>
+                </div>
+                <button type="button" class="refresh" [disabled]="fraudScanning()" (click)="runFraudScan()">{{ fraudScanning() ? 'Checking...' : 'Run risk check' }}</button>
+              </div>
+              <form class="device-form payroll-form" [formGroup]="payrollPreviewForm" (ngSubmit)="generatePayrollPreview()">
+                <label class="field"><span>From</span><input type="date" formControlName="periodStart" /></label>
+                <label class="field"><span>To</span><input type="date" formControlName="periodEnd" /></label>
+                <label class="field"><span>Shift start</span><input type="time" formControlName="defaultShiftStart" /></label>
+                <label class="field"><span>Late grace</span><input type="number" min="0" formControlName="lateGraceMinutes" /></label>
+                <label class="field"><span>Hold absent days</span><input type="number" min="0" formControlName="incentiveHoldAbsentDays" /></label>
+                <label class="field"><span>Default gross</span><input type="number" min="0" formControlName="defaultGrossAmount" /></label>
+                <button type="submit" class="primary" [disabled]="payrollPreviewForm.invalid || payrollPreviewSaving()">{{ payrollPreviewSaving() ? 'Generating...' : 'Payroll preview' }}</button>
+              </form>
+              <div class="table compact risk-table">
+                <div class="row header"><span>Risk / Payroll</span><span>Score</span><span>Amount</span><span>Status</span></div>
+                <div class="row" *ngFor="let risk of store.attendanceRisks()">
+                  <span><strong>{{ risk['riskType'] }}</strong><small>{{ risk['reason'] }}</small></span>
+                  <span>{{ risk['riskScore'] }}</span>
+                  <span>{{ risk['severity'] }}</span>
+                  <span class="badge">{{ risk['status'] }}</span>
+                </div>
+                <div class="row" *ngFor="let row of store.attendancePayrollPreview()">
+                  <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['presentDays'] || 0 }} present · {{ row['lateCount'] || 0 }} late</small></span>
+                  <span>{{ row['absentDays'] || 0 }} absent</span>
+                  <span>₹{{ row['netPreview'] || 0 }}</span>
+                  <span class="badge">{{ row['incentiveHold'] ? 'hold' : 'draft' }}</span>
+                </div>
+                <div *ngIf="!store.attendanceRisks().length && !store.attendancePayrollPreview().length && !store.loading()" class="empty action-empty"><strong>No payroll risk output yet.</strong><span>Run risk check or payroll preview to view results.</span></div>
+              </div>
+            </article>
+          </section>
         </div>
-        <div class="table compact evidence-table">
-          <div class="row header"><span>Staff</span><span>Source</span><span>Clock</span><span>Status</span></div>
-          <div class="row" *ngFor="let row of attendanceRows()">
-            <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['businessDate'] || row['business_date'] }}</small></span>
-            <span>{{ row['source'] || 'manual' }}</span>
-            <span>{{ timeOnly(row['clockInAt'] || row['clock_in_at']) }} - {{ timeOnly(row['clockOutAt'] || row['clock_out_at']) || 'open' }}</span>
-            <span class="badge">{{ row['status'] }}</span>
-          </div>
-          <div *ngIf="!attendanceRows().length && !store.loading()" class="empty action-empty">
-            <strong>No attendance events for selected date.</strong>
-            <span>Use physical entry, camera punch or biometric queue to create live attendance.</span>
-            <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Attendance master</a>
+
+        <div *ngIf="activeAttendanceModule() === 'attendance-master'">
+          <div class="empty action-empty module-empty">
+            <strong>Attendance Master</strong>
+            <span>View and manage full attendance records.</span>
+            <a class="primary" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Open Attendance Master</a>
           </div>
         </div>
-      </section>
+
+        <div *ngIf="activeAttendanceModule() === 'salary-generate'">
+          <div class="empty action-empty module-empty">
+            <strong>Salary Generate</strong>
+            <span>Run payroll and generate salary for the selected period.</span>
+            <a class="primary" routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Open Salary Generate</a>
+          </div>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'camera-punch'">
+          <div class="empty action-empty module-empty">
+            <strong>Camera Punch</strong>
+            <span>Face punch with camera is available in the Live Feed tab.</span>
+            <button type="button" class="primary" (click)="activeAttendanceModule.set('face-punch'); activeFacePunchTab.set('live-feed')">Open Face Punch Attendance</button>
+          </div>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'biometric-devices'">
+          <section class="attendance-workspace">
+            <article class="panel">
+              <div class="panel-heading">
+                <h2>Biometric Device Hub</h2>
+                <span>{{ store.biometricDevices().length }} devices</span>
+              </div>
+              <form class="device-form" [formGroup]="deviceForm" (ngSubmit)="registerBiometricDevice()">
+                <label class="field">
+                  <span>Branch</span>
+                  <select formControlName="branchId">
+                    <option value="">Select branch</option>
+                    <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Provider</span>
+                  <select formControlName="provider">
+                    <option value="zkteco">ZKTeco</option>
+                    <option value="essl">eSSL</option>
+                    <option value="mantra">Mantra</option>
+                    <option value="suprema">Suprema</option>
+                    <option value="realtime_biometrics">Realtime Biometrics</option>
+                    <option value="camera">Camera</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                </label>
+                <label class="field"><span>Device code</span><input formControlName="deviceCode" /></label>
+                <label class="field"><span>Name</span><input formControlName="deviceName" /></label>
+                <label class="field"><span>Location</span><input formControlName="locationLabel" /></label>
+                <label class="field">
+                  <span>Mode</span>
+                  <select formControlName="connectionMode">
+                    <option value="offline_sync">Offline sync</option>
+                    <option value="api">API</option>
+                    <option value="webhook">Webhook</option>
+                    <option value="browser_camera">Browser camera</option>
+                  </select>
+                </label>
+                <button type="submit" class="primary" [disabled]="deviceForm.invalid || deviceSaving()">{{ deviceSaving() ? 'Saving...' : 'Add device' }}</button>
+              </form>
+              <div class="table compact device-table">
+                <div class="row header"><span>Device</span><span>Provider</span><span>Mode</span><span>Status</span></div>
+                <div class="row" *ngFor="let device of store.biometricDevices()">
+                  <span><strong>{{ device['deviceName'] || device['deviceCode'] }}</strong><small>{{ device['locationLabel'] || device['deviceCode'] }}</small></span>
+                  <span>{{ device['provider'] }}</span>
+                  <span>{{ device['connectionMode'] }}</span>
+                  <span class="badge">{{ device['lastHealthStatus'] || device['status'] }}</span>
+                </div>
+                <div *ngIf="!store.biometricDevices().length && !store.loading()" class="empty action-empty"><strong>No biometric devices registered.</strong><span>Add a device or use camera punch for mobile-first attendance.</span></div>
+              </div>
+            </article>
+          </section>
+          <section class="attendance-workspace attendance-wide">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Real Biometric Gateway</h2>
+                  <span>ZKTeco, eSSL, Mantra, Suprema, RFID, QR, NFC and beacon punch sync</span>
+                </div>
+                <span class="badge">{{ gatewayRows().length }} agents</span>
+              </div>
+              <form class="device-form gateway-form" [formGroup]="gatewayForm" (ngSubmit)="registerGateway()">
+                <label class="field">
+                  <span>Branch</span>
+                  <select formControlName="branchId">
+                    <option value="">Select branch</option>
+                    <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
+                  </select>
+                </label>
+                <label class="field"><span>Gateway code</span><input formControlName="gatewayCode" placeholder="FRONT-DESK-PC-01" /></label>
+                <label class="field"><span>Name</span><input formControlName="displayName" placeholder="Front desk gateway" /></label>
+                <label class="field"><span>Machine</span><input formControlName="machineName" /></label>
+                <label class="field"><span>Version</span><input formControlName="versionLabel" placeholder="1.0.0" /></label>
+                <label class="field"><span>Providers</span><input formControlName="providers" /></label>
+                <button type="submit" class="primary" [disabled]="gatewayForm.invalid || gatewaySaving()">{{ gatewaySaving() ? 'Saving...' : 'Register gateway' }}</button>
+              </form>
+              <div class="table compact device-table">
+                <div class="row header"><span>Gateway</span><span>Machine</span><span>Status</span><span>Last seen</span></div>
+                <div class="row" *ngFor="let gateway of gatewayRows()">
+                  <span><strong>{{ gateway['displayName'] || gateway['gatewayCode'] }}</strong><small>{{ gateway['gatewayCode'] }}</small></span>
+                  <span>{{ gateway['machineName'] || 'Windows gateway' }}</span>
+                  <span class="badge">{{ gateway['healthStatus'] }}</span>
+                  <span>{{ timeOnly(gateway['lastSeenAt']) || 'not seen' }}</span>
+                </div>
+                <div *ngIf="!gatewayRows().length && !store.loading()" class="empty action-empty"><strong>No gateway registered for selected branch.</strong><span>Register a gateway to sync real biometric attendance.</span></div>
+              </div>
+            </article>
+          </section>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'staff-mapping'">
+          <section class="attendance-workspace attendance-wide">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Staff Mapping UI</h2>
+                  <span>Map biometric external user IDs to real staff records</span>
+                </div>
+                <span class="badge">{{ store.biometricMappings().length }} mappings</span>
+              </div>
+              <form class="device-form mapping-form" [formGroup]="mappingForm" (ngSubmit)="createBiometricMapping()">
+                <label class="field">
+                  <span>Device</span>
+                  <select formControlName="deviceId">
+                    <option value="">Select device</option>
+                    <option *ngFor="let device of store.biometricDevices()" [value]="device['id']">{{ device['deviceName'] || device['deviceCode'] }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Staff</span>
+                  <select formControlName="staffId">
+                    <option value="">Select staff</option>
+                    <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }}</option>
+                  </select>
+                </label>
+                <label class="field"><span>External user ID</span><input formControlName="externalUserId" placeholder="Device user id" /></label>
+                <label class="field"><span>Notes</span><input formControlName="notes" /></label>
+                <button type="submit" class="primary" [disabled]="mappingForm.invalid || mappingSaving()">{{ mappingSaving() ? 'Saving...' : 'Map staff' }}</button>
+              </form>
+              <div class="table compact mapping-table">
+                <div class="row header"><span>Staff</span><span>Device</span><span>External ID</span><span>Status</span><span>Action</span></div>
+                <div class="row" *ngFor="let mapping of store.biometricMappings()">
+                  <span>{{ mapping['staffName'] || mapping['staffId'] }}</span>
+                  <span>{{ mapping['deviceLabel'] || mapping['deviceId'] }}</span>
+                  <span>{{ mapping['externalUserId'] }}</span>
+                  <span class="badge">{{ mapping['status'] }}</span>
+                  <span>
+                    <button type="button" class="refresh mini" *ngIf="mapping['status'] !== 'approved'" (click)="approveBiometricMapping(mapping)">Approve</button>
+                  </span>
+                </div>
+                <div *ngIf="!store.biometricMappings().length && !store.loading()" class="empty action-empty"><strong>No staff biometric mappings yet.</strong><span>Map staff with device user IDs to connect attendance and salary.</span></div>
+              </div>
+            </article>
+          </section>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'privacy-consent'">
+          <section class="attendance-workspace attendance-wide">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Privacy And Consent Center</h2>
+                  <span>Biometric consent, retention and delete request controls</span>
+                </div>
+                <span class="badge">{{ store.biometricConsents().length }} records</span>
+              </div>
+              <form class="device-form consent-form" [formGroup]="consentForm" (ngSubmit)="saveBiometricConsent()">
+                <label class="field">
+                  <span>Staff</span>
+                  <select formControlName="staffId">
+                    <option value="">Select staff</option>
+                    <option *ngFor="let staff of activeStaffForAttendance()" [value]="staff.id">{{ staff.fullName }}</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Status</span>
+                  <select formControlName="consentStatus">
+                    <option value="granted">Granted</option>
+                    <option value="pending">Pending</option>
+                    <option value="revoked">Revoked</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Channel</span>
+                  <select formControlName="consentChannel">
+                    <option value="paper">Paper</option>
+                    <option value="digital">Digital</option>
+                    <option value="manager_verified">Manager verified</option>
+                  </select>
+                </label>
+                <label class="field"><span>Retention days</span><input type="number" min="30" formControlName="retentionDays" /></label>
+                <label class="field full"><span>Consent text</span><input formControlName="consentText" /></label>
+                <button type="submit" class="primary" [disabled]="consentForm.invalid || consentSaving()">{{ consentSaving() ? 'Saving...' : 'Save consent' }}</button>
+              </form>
+              <div class="table compact mapping-table">
+                <div class="row header"><span>Staff</span><span>Status</span><span>Retention</span><span>Delete</span><span>Action</span></div>
+                <div class="row" *ngFor="let consent of store.biometricConsents()">
+                  <span>{{ consent['staffName'] || consent['staffId'] }}</span>
+                  <span class="badge">{{ consent['consentStatus'] }}</span>
+                  <span>{{ consent['retentionDays'] }} days</span>
+                  <span>{{ consent['deleteRequested'] ? 'requested' : 'no' }}</span>
+                  <span><button type="button" class="refresh mini" (click)="requestConsentDeletion(consent)">Delete request</button></span>
+                </div>
+                <div *ngIf="!store.biometricConsents().length && !store.loading()" class="empty action-empty"><strong>No biometric consent captured yet.</strong><span>Capture consent before biometric attendance goes live.</span></div>
+              </div>
+            </article>
+          </section>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'payroll-risk'">
+          <section class="attendance-workspace attendance-wide">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Payroll Risk Review</h2>
+                  <span>Risk scan, owner alerts and attendance deduction preview from real punches</span>
+                </div>
+                <button type="button" class="refresh" [disabled]="fraudScanning()" (click)="runFraudScan()">{{ fraudScanning() ? 'Checking...' : 'Run risk check' }}</button>
+              </div>
+              <form class="device-form payroll-form" [formGroup]="payrollPreviewForm" (ngSubmit)="generatePayrollPreview()">
+                <label class="field"><span>From</span><input type="date" formControlName="periodStart" /></label>
+                <label class="field"><span>To</span><input type="date" formControlName="periodEnd" /></label>
+                <label class="field"><span>Shift start</span><input type="time" formControlName="defaultShiftStart" /></label>
+                <label class="field"><span>Late grace</span><input type="number" min="0" formControlName="lateGraceMinutes" /></label>
+                <label class="field"><span>Hold absent days</span><input type="number" min="0" formControlName="incentiveHoldAbsentDays" /></label>
+                <label class="field"><span>Default gross</span><input type="number" min="0" formControlName="defaultGrossAmount" /></label>
+                <button type="submit" class="primary" [disabled]="payrollPreviewForm.invalid || payrollPreviewSaving()">{{ payrollPreviewSaving() ? 'Generating...' : 'Payroll preview' }}</button>
+              </form>
+              <div class="table compact risk-table">
+                <div class="row header"><span>Risk / Payroll</span><span>Score</span><span>Amount</span><span>Status</span></div>
+                <div class="row" *ngFor="let risk of store.attendanceRisks()">
+                  <span><strong>{{ risk['riskType'] }}</strong><small>{{ risk['reason'] }}</small></span>
+                  <span>{{ risk['riskScore'] }}</span>
+                  <span>{{ risk['severity'] }}</span>
+                  <span class="badge">{{ risk['status'] }}</span>
+                </div>
+                <div class="row" *ngFor="let row of store.attendancePayrollPreview()">
+                  <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['presentDays'] || 0 }} present · {{ row['lateCount'] || 0 }} late</small></span>
+                  <span>{{ row['absentDays'] || 0 }} absent</span>
+                  <span>₹{{ row['netPreview'] || 0 }}</span>
+                  <span class="badge">{{ row['incentiveHold'] ? 'hold' : 'draft' }}</span>
+                </div>
+                <div *ngIf="!store.attendanceRisks().length && !store.attendancePayrollPreview().length && !store.loading()" class="empty action-empty"><strong>No payroll risk output yet.</strong><span>Run risk check or payroll preview to view results.</span></div>
+              </div>
+            </article>
+          </section>
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Live Attendance Evidence</h2>
+              <span>{{ attendanceRows().length }} attendance rows</span>
+            </div>
+            <div class="table compact evidence-table">
+              <div class="row header"><span>Staff</span><span>Source</span><span>Clock</span><span>Status</span></div>
+              <div class="row" *ngFor="let row of attendanceRows()">
+                <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['businessDate'] || row['business_date'] }}</small></span>
+                <span>{{ row['source'] || 'manual' }}</span>
+                <span>{{ timeOnly(row['clockInAt'] || row['clock_in_at']) }} - {{ timeOnly(row['clockOutAt'] || row['clock_out_at']) || 'open' }}</span>
+                <span class="badge">{{ row['status'] }}</span>
+              </div>
+              <div *ngIf="!attendanceRows().length && !store.loading()" class="empty action-empty">
+                <strong>No attendance events for selected date.</strong>
+                <span>Use physical entry, camera punch or biometric queue to create live attendance.</span>
+                <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Attendance master</a>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'reports'">
+          <div class="empty action-empty module-empty">
+            <strong>Attendance Reports</strong>
+            <span>Generate and view attendance reports.</span>
+            <a class="primary" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Open Attendance Reports</a>
+          </div>
+        </div>
+
+        <div *ngIf="activeAttendanceModule() === 'settings'">
+          <div class="empty action-empty module-empty">
+            <strong>Attendance Settings</strong>
+            <span>Configure attendance rules, grace periods, and workflows.</span>
+            <a class="refresh" routerLink="/staff-os/attendance-master" [queryParams]="staffContextParams()">Configure Settings</a>
+          </div>
+        </div>
+
+      </div>
 
       <section class="panel" *ngIf="section === 'roster-calendar'">
         <div class="panel-heading">
@@ -1994,6 +2164,29 @@ type StaffPhotoUploadResponse = { url?: string };
     .attendance-stats span { color: #60766d; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .attendance-stats strong { font-size: 24px; color: #10201a; }
     .attendance-stats small { color: #60766d; }
+    .attendance-module-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding: 0; }
+    .attendance-module-nav button { padding: 8px 14px; border: 1px solid #d9e5de; border-radius: 6px; background: #f7faf8; color: #3a5247; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .attendance-module-nav button:hover { border-color: #b0c8bb; background: #edf2ef; }
+    .attendance-module-nav button.active { background: #10201a; color: #fff; border-color: #10201a; }
+    .attendance-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 14px 0; }
+    .attendance-kpi-grid .kpi-card { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 4px; padding: 14px; }
+    .attendance-kpi-grid .kpi-card span { color: #60766d; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; }
+    .attendance-kpi-grid .kpi-card strong { font-size: 22px; color: #10201a; }
+    .attendance-kpi-grid .kpi-card small { color: #60766d; font-size: 11px; }
+    .attendance-kpi-grid .kpi-card.present { border-left: 3px solid #249e5e; }
+    .attendance-kpi-grid .kpi-card.absent { border-left: 3px solid #d9534f; }
+    .attendance-kpi-grid .kpi-card.late { border-left: 3px solid #f0ad4e; }
+    .attendance-kpi-grid .kpi-card.percent { border-left: 3px solid #5bc0de; }
+    .attendance-kpi-grid .kpi-card.punches { border-left: 3px solid #9270c7; }
+    .attendance-module-content { min-width: 0; }
+    .face-punch-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
+    .face-punch-tabs button { padding: 6px 16px; border: 0; border-radius: 20px; background: #edf2ef; color: #3a5247; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .face-punch-tabs button:hover { background: #d9e5de; }
+    .face-punch-tabs button.active { background: #10201a; color: #fff; }
+    .compact-summary { margin-top: 0; }
+    .module-empty { text-align: center; padding: 60px 20px; grid-column: 1 / -1; }
+    .module-empty strong { font-size: 18px; display: block; margin-bottom: 8px; }
+    .module-empty span { display: block; color: #60766d; margin-bottom: 16px; }
     .attendance-workspace { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 14px; min-width: 0; }
     .attendance-wide { grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); }
     .attendance-command,
@@ -2240,6 +2433,8 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   readonly attendanceDate = signal(new Date().toISOString().slice(0, 10));
   readonly attendanceError = signal('');
   readonly attendanceMessage = signal('');
+  readonly activeAttendanceModule = signal('face-punch');
+  readonly activeFacePunchTab = signal('live-feed');
   readonly cameraActive = signal(false);
   readonly cameraStarting = signal(false);
   readonly cameraSaving = signal(false);
