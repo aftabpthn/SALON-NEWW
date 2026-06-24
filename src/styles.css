@@ -4893,128 +4893,138 @@ tbody tr:hover {
   background: rgba(20, 184, 166, 0.13);
 }
 
-/* Zenoti light shell palette */
+/* Midnight + Emerald shell palette */
 :root {
-  --bg: #f6f8fb;
-  --color-bg: #f6f8fb;
-  --surface: #ffffff;
-  --color-surface: #ffffff;
-  --surface-2: #f1f5f8;
-  --color-surface-muted: #f1f5f8;
-  --ink: #111827;
-  --color-text: #111827;
-  --muted: #5f6f84;
-  --color-muted: #5f6f84;
-  --line: #d7e2ea;
-  --color-border: #d7e2ea;
-  --teal: #0f8f7f;
-  --color-primary: #0f8f7f;
-  --color-primary-strong: #0b6f63;
-  --color-primary-soft: #e5f7f3;
-  --color-primary-ring: rgba(15, 143, 127, 0.16);
+  --bg: #F6F9F7;
+  --color-bg: #F6F9F7;
+  --surface: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --surface-2: #F2F7F4;
+  --color-surface-muted: #F2F7F4;
+  --ink: #18283A;
+  --color-text: #18283A;
+  --muted: #5B6B66;
+  --color-muted: #5B6B66;
+  --line: #DEE8E2;
+  --color-border: #DEE8E2;
+  --teal: #10B981;
+  --color-primary: #10B981;
+  --color-primary-strong: #059669;
+  --color-primary-soft: #ECFDF5;
+  --color-primary-ring: rgba(16, 185, 129, 0.35);
+  --accent: #10B981;
+  --accent-hover: #059669;
+  --accent-active: #047857;
+  --success-bg: #ECFDF5;
+  --success-text: #065F46;
+  --success-border: #A7F3D0;
 }
 
 body {
   background:
-    linear-gradient(180deg, rgba(15, 143, 127, 0.035), transparent 300px),
-    #f6f8fb;
+    linear-gradient(180deg, rgba(16, 185, 129, 0.035), transparent 300px),
+    #F6F9F7;
+  color: #18283A;
 }
 
 .topbar {
-  border-bottom: 1px solid #d7e2ea;
-  background: #ffffff;
-  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.04), 0 8px 24px rgba(17, 24, 39, 0.06);
+  border-bottom: 1px solid #DEE8E2;
+  background: #FFFFFF;
+  box-shadow: 0 1px 0 rgba(12, 26, 43, 0.04), 0 4px 12px rgba(12, 26, 43, 0.08);
 }
 
 .topbar-brand-mark,
 .app-shell > .enterprise-sidebar .brand-mark {
-  background: linear-gradient(135deg, #0f8f7f, #c5a34d);
-  box-shadow: 0 12px 28px rgba(15, 143, 127, 0.22);
+  background: #10B981;
+  box-shadow: 0 12px 28px rgba(16, 185, 129, 0.22);
 }
 
 .topbar-eyebrow,
 .topbar-page-label,
 .topbar-ctx-chevron,
 .topbar-detail-label {
-  color: #607086;
+  color: #8A958F;
 }
 
 .topbar-name {
-  color: #111827;
+  color: #18283A;
 }
 
 .topbar-main-actions .back-button,
 .topbar-ctx-chip,
 .topbar-main-actions .ghost-button {
-  border-color: #c7d7e5;
-  color: #111827;
-  background: #ffffff;
+  border-color: #DEE8E2;
+  color: #18283A;
+  background: #FFFFFF;
 }
 
 .topbar-main-actions .back-button:hover,
 .topbar-ctx-chip:hover,
 .topbar-panel-open .topbar-ctx-chip,
 .topbar-main-actions .ghost-button:hover {
-  border-color: rgba(15, 143, 127, 0.34);
-  color: #0b6f63;
-  background: #eaf8f5;
+  border-color: #C8D6CE;
+  color: #059669;
+  background: #F2F7F4;
 }
 
 .topbar-ctx-chip-icon {
-  color: #0f8f7f;
+  color: #10B981;
 }
 
 .topbar-main-actions .dark-button,
 .topbar-detail-apply,
-.primary-button {
-  background: linear-gradient(135deg, #0f8f7f, #12a08e);
-  color: #ffffff;
+.primary-button,
+.btn-primary {
+  border-color: #047857;
+  background: #059669;
+  color: #FFFFFF;
 }
 
 .topbar-main-actions .dark-button:hover,
 .topbar-detail-apply:hover,
-.primary-button:hover {
-  background: linear-gradient(135deg, #0b6f63, #0f8f7f);
+.primary-button:hover,
+.btn-primary:hover {
+  background: #047857;
 }
 
 .topbar-detail-panel {
-  border-top: 1px solid #d7e2ea;
-  background: #f8fbfc;
+  border-top: 1px solid #DEE8E2;
+  background: #F2F7F4;
 }
 
 .topbar-detail-group select {
-  border-color: #c7d7e5;
-  color: #111827;
-  background: #ffffff;
+  border-color: #DEE8E2;
+  color: #18283A;
+  background: #FFFFFF;
 }
 
 .topbar-detail-group select:hover,
 .topbar-detail-group select:focus {
-  border-color: rgba(15, 143, 127, 0.5);
-  background: #ffffff;
+  border-color: #C8D6CE;
+  background: #FFFFFF;
 }
 
 .topbar-detail-group select option {
-  color: #111827;
-  background: #ffffff;
+  color: #18283A;
+  background: #FFFFFF;
 }
 
 .topbar-detail-divider {
-  background: #d7e2ea;
+  background: #DEE8E2;
 }
 
 .app-shell > .enterprise-sidebar {
-  color: #002D0B;
-  border-right-color: rgba(0, 45, 11, 0.16);
-  background: #FFFFFF;
-  box-shadow: 14px 0 36px rgba(0, 45, 11, 0.1);
+  color: #8A9AA6;
+  border-right-color: #13243A;
+  background: #0C1A2B;
+  box-shadow: 14px 0 36px rgba(12, 26, 43, 0.16);
 }
 
 .app-shell > .enterprise-sidebar .brand strong,
 .app-shell > .enterprise-sidebar .nav-section-copy strong,
 .app-shell > .enterprise-sidebar .nav-empty strong,
 .app-shell > .enterprise-sidebar .sidebar-callout strong {
-  color: #002D0B;
+  color: #E6EDF3;
 }
 
 .app-shell > .enterprise-sidebar .brand small,
@@ -5022,7 +5032,7 @@ body {
 .app-shell > .enterprise-sidebar .sidebar-callout p,
 .app-shell > .enterprise-sidebar .nav-section-label,
 .app-shell > .enterprise-sidebar .sidebar-search span {
-  color: rgba(0, 45, 11, 0.7);
+  color: #8A9AA6;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-toggle,
@@ -5032,17 +5042,18 @@ body {
 .app-shell > .enterprise-sidebar .nav-subitem,
 .app-shell > .enterprise-sidebar .nav-subgroup-title,
 .app-shell > .enterprise-sidebar .sidebar-callout {
-  border-color: rgba(0, 45, 11, 0.14);
-  color: #002D0B;
-  background: rgba(255, 255, 255, 0.42);
+  border-color: #13243A;
+  color: #8A9AA6;
+  background: transparent;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-search input {
-  color: #002D0B;
+  color: #E6EDF3;
+  background: #13243A;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-search input::placeholder {
-  color: rgba(0, 45, 11, 0.58);
+  color: #8A9AA6;
 }
 
 .app-shell > .enterprise-sidebar .sidebar-toggle:hover,
@@ -5054,23 +5065,46 @@ body {
 .app-shell > .enterprise-sidebar .nav-subitem.active,
 .app-shell > .enterprise-sidebar .nav-subgroup-title:hover,
 .app-shell > .enterprise-sidebar .nav-subgroup-title.active {
-  color: #002D0B;
-  border-color: rgba(0, 45, 11, 0.28);
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: inset 3px 0 0 #002D0B;
+  color: #10B981;
+  border-color: #13243A;
+  background: #16293E;
+  box-shadow: inset 3px 0 0 #10B981;
 }
 
 .app-shell > .enterprise-sidebar .nav-icon,
 .app-shell > .enterprise-sidebar .nav-count {
-  color: #FFFFFF;
-  background: #002D0B;
+  color: #0C1A2B;
+  background: #10B981;
 }
 
 :where(.module-hero, .panel, .form-panel, .metric-card, .metric, .dashboard-hub-card, .action-card, .quick-card, .control-card, .card, .table-wrap) {
-  border-color: rgba(15, 118, 110, 0.14);
+  border-color: #DEE8E2;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.92) inset,
-    0 12px 30px rgba(15, 23, 42, 0.07);
+    0 4px 12px rgba(12, 26, 43, 0.08);
+}
+
+:where(.metric-card, .kpi-card) {
+  background: #FFFFFF;
+  border-color: #DEE8E2;
+}
+
+:where(.metric-card, .kpi-card):hover {
+  background: #F2F7F4;
+}
+
+:where(.metric-card small, .metric-card span, .kpi-card .label) {
+  color: #5B6B66;
+}
+
+:where(.metric-card strong, .kpi-card .value) {
+  color: #18283A;
+}
+
+:where(.badge-success, .status-confirmed, .pill.success, .state.success) {
+  color: #065F46;
+  border-color: #A7F3D0;
+  background: #ECFDF5;
 }
 
 @media (prefers-reduced-motion: reduce) {
