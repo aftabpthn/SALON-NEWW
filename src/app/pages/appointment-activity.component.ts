@@ -82,6 +82,43 @@ interface AppointmentRegisterRow {
   problemFlags: string[];
 }
 
+interface SmartAlert {
+  level: 'high' | 'medium' | 'low';
+  title: string;
+  detail: string;
+  action: string;
+  appointmentId: string;
+  clientName: string;
+}
+
+interface StaffPerformanceRow {
+  staffId: string;
+  staffName: string;
+  appointments: number;
+  completed: number;
+  cancelled: number;
+  noShows: number;
+  notBilled: number;
+  revenue: number;
+  due: number;
+  averageDuration: number;
+  completionRate: number;
+}
+
+interface ClientScoreRow {
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  appointments: number;
+  completed: number;
+  cancelled: number;
+  noShows: number;
+  due: number;
+  score: number;
+  label: string;
+  suggestion: string;
+}
+
 @Component({
   selector: 'app-appointment-activity',
   standalone: true,
@@ -110,6 +147,110 @@ interface AppointmentRegisterRow {
           <small>{{ card.hint }}</small>
         </article>
       </div>
+
+      <section class="owner-command-grid" *ngIf="!loading()">
+        <article class="panel owner-summary-panel">
+          <div class="section-title activity-title">
+            <div>
+              <span class="eyebrow">Owner dashboard</span>
+              <h3>Live appointment control</h3>
+            </div>
+            <span>{{ filteredRegisterRows().length }} appointment(s)</span>
+          </div>
+          <div class="owner-summary-grid">
+            <article *ngFor="let card of ownerCards" [ngClass]="card.tone">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <small>{{ card.hint }}</small>
+            </article>
+          </div>
+        </article>
+
+        <article class="panel whatsapp-report-panel">
+          <div class="section-title activity-title">
+            <div>
+              <span class="eyebrow">WhatsApp daily report</span>
+              <h3>Owner summary ready</h3>
+            </div>
+            <button class="ghost-button mini" type="button" (click)="copyWhatsappSummary()">Copy</button>
+          </div>
+          <textarea readonly [value]="whatsappSummary"></textarea>
+          <small *ngIf="copyMessage()">{{ copyMessage() }}</small>
+        </article>
+      </section>
+
+      <section class="panel smart-alert-panel" *ngIf="!loading() && smartAlerts.length">
+        <div class="section-title activity-title">
+          <div>
+            <span class="eyebrow">Smart problem finder</span>
+            <h3>Live alerts to fix today</h3>
+          </div>
+          <span>{{ smartAlerts.length }} alert(s)</span>
+        </div>
+        <div class="alert-grid">
+          <article *ngFor="let alert of smartAlerts" [ngClass]="alert.level">
+            <span>{{ alert.title }}</span>
+            <strong>{{ alert.clientName }}</strong>
+            <p>{{ alert.detail }}</p>
+            <small>{{ alert.action }}</small>
+            <button class="ghost-button mini" type="button" (click)="openRegisterByAppointment(alert.appointmentId)">Open timeline</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="insight-grid" *ngIf="!loading()">
+        <article class="panel insight-panel">
+          <div class="section-title activity-title">
+            <div>
+              <span class="eyebrow">Staff performance</span>
+              <h3>Staff-wise live appointment view</h3>
+            </div>
+          </div>
+          <div class="compact-table-wrap">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Staff</th>
+                  <th>Appt</th>
+                  <th>Done</th>
+                  <th>Cancel</th>
+                  <th>Not billed</th>
+                  <th>Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of staffPerformance">
+                  <td><strong>{{ row.staffName }}</strong><small>{{ row.completionRate }}% completion · {{ row.averageDuration }} min avg</small></td>
+                  <td>{{ row.appointments }}</td>
+                  <td>{{ row.completed }}</td>
+                  <td>{{ row.cancelled }}</td>
+                  <td>{{ row.notBilled }}</td>
+                  <td>{{ row.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel insight-panel">
+          <div class="section-title activity-title">
+            <div>
+              <span class="eyebrow">Client reliability score</span>
+              <h3>Risky clients and follow-up</h3>
+            </div>
+          </div>
+          <div class="client-score-list">
+            <article *ngFor="let client of clientScores">
+              <div>
+                <strong>{{ client.clientName }}</strong>
+                <small>{{ client.clientPhone || client.clientId }} · {{ client.appointments }} appointment(s)</small>
+              </div>
+              <span class="risk-pill" [ngClass]="client.score < 55 ? 'high' : client.score < 75 ? 'medium' : 'low'">{{ client.score }}% {{ client.label }}</span>
+              <small>{{ client.suggestion }}</small>
+            </article>
+          </div>
+        </article>
+      </section>
 
       <section class="panel filter-panel" *ngIf="!loading()">
         <div class="section-title activity-title">
@@ -415,6 +556,12 @@ interface AppointmentRegisterRow {
           <article><span>Invoice</span><strong>{{ register.invoiceNumber || 'No invoice' }}</strong><small>{{ label(register.paymentStatus) }} · Due {{ register.balance | currency: 'INR':'symbol':'1.0-0' }}</small></article>
           <article><span>Last update</span><strong>{{ register.lastUpdatedBy }}</strong><small>{{ formatDateTime(register.lastUpdatedAt) }}</small></article>
         </div>
+        <div class="drawer-actions">
+          <a class="ghost-button mini" routerLink="/appointments">Open calendar</a>
+          <a class="ghost-button mini" [routerLink]="['/clients', register.clientId]" *ngIf="register.clientId">Open client</a>
+          <a class="ghost-button mini" routerLink="/pos/invoices" [queryParams]="{ search: register.invoiceNumber }" *ngIf="register.invoiceNumber">Open invoice</a>
+          <a class="ghost-button mini" routerLink="/pos" [queryParams]="{ appointmentId: register.appointmentId }" *ngIf="!register.invoiceNumber">Open POS</a>
+        </div>
 
         <section>
           <div class="section-title activity-title">
@@ -574,11 +721,14 @@ interface AppointmentRegisterRow {
 
     .metric-grid {
       display: grid;
-      grid-template-columns: repeat(6, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
     }
 
     .metric-card,
+    .owner-summary-grid article,
+    .alert-grid article,
+    .client-score-list article,
     .report-grid article,
     .client-stats-grid article,
     .detail-grid article,
@@ -621,9 +771,102 @@ interface AppointmentRegisterRow {
     .filter-panel,
     .table-panel,
     .report-panel,
+    .owner-summary-panel,
+    .whatsapp-report-panel,
+    .smart-alert-panel,
+    .insight-panel,
     .client-reliability-panel,
     .detail-drawer {
       padding: 14px;
+    }
+
+    .owner-command-grid,
+    .insight-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
+      gap: 12px;
+    }
+
+    .owner-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .owner-summary-grid article {
+      min-height: 82px;
+      border-top: 3px solid var(--teal);
+    }
+
+    .owner-summary-grid article.red,
+    .alert-grid article.high {
+      border-top-color: var(--danger);
+    }
+
+    .owner-summary-grid article.amber,
+    .alert-grid article.medium {
+      border-top-color: #b7791f;
+    }
+
+    .whatsapp-report-panel {
+      align-content: start;
+      display: grid;
+      gap: 10px;
+    }
+
+    .whatsapp-report-panel textarea {
+      min-height: 168px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    .alert-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+
+    .alert-grid article {
+      display: grid;
+      gap: 6px;
+      border-top: 3px solid var(--teal);
+    }
+
+    .alert-grid p {
+      margin: 0;
+      color: var(--ink);
+    }
+
+    .compact-table-wrap {
+      overflow-x: auto;
+    }
+
+    .compact-table {
+      min-width: 720px;
+    }
+
+    .client-score-list {
+      display: grid;
+      gap: 10px;
+      max-height: 420px;
+      overflow: auto;
+    }
+
+    .client-score-list article {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px 10px;
+      align-items: center;
+    }
+
+    .client-score-list article > small {
+      grid-column: 1 / -1;
+    }
+
+    .drawer-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     .activity-title {
@@ -836,7 +1079,9 @@ interface AppointmentRegisterRow {
       }
 
       .metric-grid,
-      .filter-grid {
+      .filter-grid,
+      .owner-command-grid,
+      .insight-grid {
         grid-template-columns: 1fr;
       }
 
@@ -861,6 +1106,7 @@ export class AppointmentActivityComponent implements OnInit {
   clients = signal<ApiRecord[]>([]);
   staff = signal<ApiRecord[]>([]);
   branches = signal<ApiRecord[]>([]);
+  copyMessage = signal('');
 
   search = '';
   clientId = '';
@@ -874,6 +1120,11 @@ export class AppointmentActivityComponent implements OnInit {
   toDate = '';
 
   kpiCards: Array<{ label: string; value: string | number; hint: string; tone: string }> = [];
+  ownerCards: Array<{ label: string; value: string | number; hint: string; tone: string }> = [];
+  smartAlerts: SmartAlert[] = [];
+  staffPerformance: StaffPerformanceRow[] = [];
+  clientScores: ClientScoreRow[] = [];
+  whatsappSummary = '';
   dailySummary: ApiRecord[] = [];
   staffRisk: ApiRecord[] = [];
   clientReliability: ApiRecord[] = [];
@@ -1127,6 +1378,190 @@ export class AppointmentActivityComponent implements OnInit {
       { label: 'Unpaid', value: this.formatMoney(registerRows.reduce((sum, row) => sum + row.balance, 0)), hint: 'Pending invoice balance', tone: 'red' },
       { label: 'Problems', value: registerRows.filter((row) => row.problemFlags.length).length || report?.summary?.highRiskActivities || rows.filter((row) => ['high', 'critical'].includes(row.riskLevel)).length, hint: 'Review recommended', tone: 'red' }
     ];
+    this.rebuildAdvancedInsights(registerRows);
+  }
+
+  private rebuildAdvancedInsights(registerRows: AppointmentRegisterRow[]): void {
+    const completedRows = registerRows.filter((row) => this.isCompletedStatus(row.status));
+    const cancelledRows = registerRows.filter((row) => this.isCancelledStatus(row.status));
+    const notBilledRows = registerRows.filter((row) => this.isCompletedStatus(row.status) && !row.invoiceNumber);
+    const paymentPendingRows = registerRows.filter((row) => row.balance > 0 || ['partial', 'unpaid'].includes(row.paymentStatus));
+    const expectedRevenue = registerRows.reduce((sum, row) => sum + row.total, 0);
+    const billedRevenue = registerRows.filter((row) => row.invoiceNumber).reduce((sum, row) => sum + row.total, 0);
+    const staffCount = new Set(registerRows.map((row) => row.staffId || row.staffName).filter(Boolean)).size;
+    this.ownerCards = [
+      { label: 'Today booked', value: registerRows.length, hint: 'Filtered live appointments', tone: 'blue' },
+      { label: 'Completed', value: completedRows.length, hint: 'Ready or already billed', tone: 'green' },
+      { label: 'Cancel / no-show', value: cancelledRows.length, hint: 'Needs reason and recovery', tone: cancelledRows.length ? 'red' : 'green' },
+      { label: 'Not billed', value: notBilledRows.length, hint: 'Completed but POS missing', tone: notBilledRows.length ? 'red' : 'green' },
+      { label: 'Payment pending', value: this.formatMoney(paymentPendingRows.reduce((sum, row) => sum + row.balance, 0)), hint: `${paymentPendingRows.length} invoice(s)`, tone: paymentPendingRows.length ? 'amber' : 'green' },
+      { label: 'Staff coverage', value: staffCount, hint: 'Staff with appointments', tone: 'blue' },
+      { label: 'Expected revenue', value: this.formatMoney(expectedRevenue), hint: 'From live invoice/register rows', tone: 'blue' },
+      { label: 'Billed revenue', value: this.formatMoney(billedRevenue), hint: 'Invoice linked value', tone: 'green' }
+    ];
+
+    this.staffPerformance = this.buildStaffPerformance(registerRows);
+    this.clientScores = this.buildClientScores(registerRows);
+    this.smartAlerts = this.buildSmartAlerts(registerRows);
+    this.whatsappSummary = this.buildWhatsappSummary(registerRows, notBilledRows, paymentPendingRows);
+  }
+
+  private buildStaffPerformance(rows: AppointmentRegisterRow[]): StaffPerformanceRow[] {
+    const byStaff = new Map<string, StaffPerformanceRow>();
+    for (const row of rows) {
+      const key = row.staffId || row.staffName || 'unassigned';
+      const current = byStaff.get(key) || {
+        staffId: row.staffId || key,
+        staffName: row.staffName || 'Unassigned',
+        appointments: 0,
+        completed: 0,
+        cancelled: 0,
+        noShows: 0,
+        notBilled: 0,
+        revenue: 0,
+        due: 0,
+        averageDuration: 0,
+        completionRate: 0
+      };
+      current.appointments += 1;
+      if (this.isCompletedStatus(row.status)) current.completed += 1;
+      if (this.isCancelledStatus(row.status)) current.cancelled += 1;
+      if (String(row.status || '').toLowerCase() === 'no-show') current.noShows += 1;
+      if (this.isCompletedStatus(row.status) && !row.invoiceNumber) current.notBilled += 1;
+      current.revenue += row.total;
+      current.due += row.balance;
+      current.averageDuration += row.durationMinutes || 0;
+      byStaff.set(key, current);
+    }
+    return [...byStaff.values()].map((row) => ({
+      ...row,
+      averageDuration: row.appointments ? Math.round(row.averageDuration / row.appointments) : 0,
+      completionRate: row.appointments ? Math.round((row.completed / row.appointments) * 100) : 0
+    })).sort((a, b) => b.appointments - a.appointments || b.revenue - a.revenue);
+  }
+
+  private buildClientScores(rows: AppointmentRegisterRow[]): ClientScoreRow[] {
+    const byClient = new Map<string, ClientScoreRow>();
+    for (const row of rows) {
+      const key = row.clientId || row.clientPhone || row.clientName || 'unknown';
+      const current = byClient.get(key) || {
+        clientId: row.clientId || key,
+        clientName: row.clientName || 'Unknown client',
+        clientPhone: row.clientPhone || '',
+        appointments: 0,
+        completed: 0,
+        cancelled: 0,
+        noShows: 0,
+        due: 0,
+        score: 100,
+        label: 'Good',
+        suggestion: 'Normal confirmation is enough.'
+      };
+      current.appointments += 1;
+      if (this.isCompletedStatus(row.status)) current.completed += 1;
+      if (this.isCancelledStatus(row.status)) current.cancelled += 1;
+      if (String(row.status || '').toLowerCase() === 'no-show') current.noShows += 1;
+      current.due += row.balance;
+      byClient.set(key, current);
+    }
+    return [...byClient.values()].map((client) => {
+      const score = Math.max(0, Math.min(100, 100 - client.cancelled * 18 - client.noShows * 28 - (client.due > 0 ? 12 : 0)));
+      const label = score < 55 ? 'Risky' : score < 75 ? 'Watch' : 'Good';
+      const suggestion = score < 55
+        ? 'Deposit/confirmation required before next slot.'
+        : score < 75
+          ? 'Call or WhatsApp confirmation recommended.'
+          : 'Normal confirmation is enough.';
+      return { ...client, score, label, suggestion };
+    }).sort((a, b) => a.score - b.score || b.due - a.due).slice(0, 12);
+  }
+
+  private buildSmartAlerts(rows: AppointmentRegisterRow[]): SmartAlert[] {
+    const alerts: SmartAlert[] = [];
+    const clientNoShows = new Map<string, number>();
+    for (const row of rows) {
+      if (String(row.status || '').toLowerCase() === 'no-show') {
+        const key = row.clientId || row.clientName;
+        clientNoShows.set(key, (clientNoShows.get(key) || 0) + 1);
+      }
+    }
+    for (const row of rows) {
+      if (this.isCompletedStatus(row.status) && !row.invoiceNumber) {
+        alerts.push(this.alertFor(row, 'high', 'Completed but not billed', 'POS invoice is missing for this completed appointment.', 'Open POS and generate invoice.'));
+      }
+      if (row.balance > 0 || ['partial', 'unpaid'].includes(row.paymentStatus)) {
+        alerts.push(this.alertFor(row, 'medium', 'Payment pending', `${this.formatMoney(row.balance)} balance is pending.`, 'Collect balance or send payment reminder.'));
+      }
+      if (this.isCancelledStatus(row.status) && !row.cancelReason) {
+        alerts.push(this.alertFor(row, 'high', 'Cancel reason blank', 'Cancelled/no-show appointment has no reason captured.', 'Update reason for audit protection.'));
+      }
+      if (row.timelineCount <= 0) {
+        alerts.push(this.alertFor(row, 'medium', 'Timeline missing', 'No lifecycle activity captured for this appointment.', 'Review booking source and activity logging.'));
+      }
+      if (row.durationMinutes <= 0 || row.durationMinutes > 360) {
+        alerts.push(this.alertFor(row, 'medium', 'Duration mismatch', `${row.durationMinutes || 0} minute duration looks unusual.`, 'Check AM/PM, service duration and staff slot.'));
+      }
+      if ((clientNoShows.get(row.clientId || row.clientName) || 0) >= 2) {
+        alerts.push(this.alertFor(row, 'high', 'Repeat no-show client', 'Same client has repeated no-show activity in this view.', 'Require confirmation or advance before next booking.'));
+      }
+      if (row.messageStatus.count <= 0 && !this.isCompletedStatus(row.status) && !this.isCancelledStatus(row.status)) {
+        alerts.push(this.alertFor(row, 'low', 'Message not sent', 'No SMS/WhatsApp log found for this open appointment.', 'Send reminder or confirmation message.'));
+      }
+    }
+    return alerts.slice(0, 18);
+  }
+
+  private alertFor(row: AppointmentRegisterRow, level: SmartAlert['level'], title: string, detail: string, action: string): SmartAlert {
+    return {
+      level,
+      title,
+      detail,
+      action,
+      appointmentId: row.appointmentId,
+      clientName: row.clientName || 'Unknown client'
+    };
+  }
+
+  private buildWhatsappSummary(rows: AppointmentRegisterRow[], notBilledRows: AppointmentRegisterRow[], paymentPendingRows: AppointmentRegisterRow[]): string {
+    const completed = rows.filter((row) => this.isCompletedStatus(row.status)).length;
+    const cancelled = rows.filter((row) => this.isCancelledStatus(row.status)).length;
+    const due = paymentPendingRows.reduce((sum, row) => sum + row.balance, 0);
+    const revenue = rows.filter((row) => row.invoiceNumber).reduce((sum, row) => sum + row.total, 0);
+    const topStaff = this.staffPerformance.slice(0, 3).map((row) => `${row.staffName}: ${row.appointments}`).join(', ') || 'No staff data';
+    return [
+      `Appointment Register ${this.todayKey()}`,
+      `Booked: ${rows.length} | Completed: ${completed} | Cancel/no-show: ${cancelled}`,
+      `Not billed: ${notBilledRows.length} | Payment pending: ${this.formatMoney(due)}`,
+      `Billed revenue: ${this.formatMoney(revenue)}`,
+      `Staff count: ${this.staffPerformance.length} | ${topStaff}`,
+      `Problem alerts: ${this.smartAlerts.length}`
+    ].join('\n');
+  }
+
+  openRegisterByAppointment(appointmentId: string): void {
+    const row = this.filteredRegisterRows().find((item) => item.appointmentId === appointmentId);
+    if (row) this.openRegisterDetail(row);
+  }
+
+  copyWhatsappSummary(): void {
+    this.copyMessage.set('');
+    const write = navigator.clipboard?.writeText(this.whatsappSummary);
+    if (!write) {
+      this.copyMessage.set('Copy blocked by browser. Select text and copy manually.');
+      return;
+    }
+    write.then(
+      () => this.copyMessage.set('WhatsApp summary copied.'),
+      () => this.copyMessage.set('Copy blocked by browser. Select text and copy manually.')
+    );
+  }
+
+  private isCompletedStatus(status: string): boolean {
+    return ['completed', 'billed', 'paid'].includes(String(status || '').toLowerCase());
+  }
+
+  private isCancelledStatus(status: string): boolean {
+    return ['cancelled', 'canceled', 'no-show', 'deleted'].includes(String(status || '').toLowerCase());
   }
 
   private normalizeRow(row: ApiRecord): AppointmentActivityRow {
