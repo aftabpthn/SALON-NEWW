@@ -358,7 +358,7 @@ export class MembershipEnterpriseService {
     const credits = Number(payload.planCredits ?? (isPrepaidCredit ? planRules.creditAmount : 0) ?? 0);
     const bonusAmount = Number(payload.bonusAmount ?? (isPrepaidCredit ? planRules.bonusAmount : 0) ?? 0);
     const serviceCredits = payload.serviceCredits || (isPrepaidCredit
-      ? [{ type: "prepaid_credit", credits, remaining: credits, planId: plan?.id || "", bonusAmount, benefitPercent: Number(planRules.benefitPercent || 0) }]
+      ? [{ type: "prepaid_credit", credits, remaining: credits, planId: plan?.id || "", bonusAmount, benefitPercent: Number(planRules.benefitPercent || 0), benefitRules: planRules }]
       : [{ type: "bill_discount", percent: discountPercent, planId: plan?.id || "" }]);
     const membership = repositories.memberships.create({
       id: makeId("mem"),
@@ -3178,6 +3178,10 @@ export class MembershipEnterpriseService {
     const ownedByViewer = membership.clientId === viewerClientId;
     const sharingRows = familyRows.filter((row) => row.primary_client_id === membership.clientId || row.member_client_id === membership.clientId);
     const entitlementType = entitlementTypeFromMembership(membership);
+    const prepaidCredit = Array.isArray(membership.serviceCredits)
+      ? membership.serviceCredits.find((credit) => credit?.type === "prepaid_credit")
+      : null;
+    const creditRules = prepaidCredit?.benefitRules && typeof prepaidCredit.benefitRules === "object" ? prepaidCredit.benefitRules : {};
     return {
       membershipId: membership.id,
       clientId: membership.clientId,
@@ -3195,7 +3199,7 @@ export class MembershipEnterpriseService {
         serviceDiscountPercent: Number(this.discountPercent(membership) || plan.discountPercent || 0),
         productDiscountPercent: Number(this.productDiscountPercent(membership) || plan.productDiscountPercent || 0),
         includedServices: plan.includedServices || [],
-        benefitRules: plan.benefitRules || {}
+        benefitRules: { ...(plan.benefitRules || {}), ...creditRules }
       },
       serviceCredits: {
         total: totalCredits,

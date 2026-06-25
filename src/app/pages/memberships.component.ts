@@ -364,6 +364,38 @@ type PlanLifecycleDialog = {
               <label class="field"><span>We add</span><input type="number" formControlName="bonusAmount" /></label>
               <label class="field"><span>You get credit</span><input type="number" formControlName="creditAmount" /></label>
               <label class="field"><span>Benefit %</span><input type="number" formControlName="benefitPercent" /></label>
+              <label class="field">
+                <span>Per visit limit</span>
+                <select formControlName="perVisitLimitType">
+                  <option value="none">No limit</option>
+                  <option value="fixed">Fixed amount</option>
+                  <option value="bill_percent">% of eligible bill</option>
+                </select>
+              </label>
+              <label class="field" *ngIf="planForm.value.perVisitLimitType !== 'none'">
+                <span>Limit value</span>
+                <input type="number" formControlName="perVisitLimitValue" />
+              </label>
+              <label class="field">
+                <span>Service restriction</span>
+                <select formControlName="serviceRestrictionType">
+                  <option value="all">All services</option>
+                  <option value="category">Category wise</option>
+                  <option value="selected_services">Selected services</option>
+                </select>
+              </label>
+              <label class="field" *ngIf="planForm.value.serviceRestrictionType !== 'all'">
+                <span>Allowed categories / service names</span>
+                <input formControlName="serviceRestrictionValue" placeholder="Hair, Facial or service IDs" />
+              </label>
+              <label class="field checkbox-field">
+                <span>Product redeem</span>
+                <input type="checkbox" formControlName="allowProductRedeem" />
+              </label>
+              <div class="field full wallet-preview">
+                <strong>{{ prepaidPlanCreditPreview() }}</strong>
+                <span>{{ prepaidPlanRulePreview() }}</span>
+              </div>
               <div class="field full inline-actions">
                 <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(20000, 4800, 150)">20k -> 24.8k</button>
                 <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(30000, 8700, 210)">30k -> 38.7k</button>
@@ -1778,6 +1810,24 @@ type PlanLifecycleDialog = {
       grid-column: 1 / -1;
     }
 
+    .checkbox-field input {
+      width: 22px;
+      min-height: 22px;
+    }
+
+    .wallet-preview {
+      border: 1px solid #bbf7d0;
+      background: #f0fdf4;
+      color: #14532d;
+      gap: 4px;
+    }
+
+    .wallet-preview span {
+      color: #166534;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
     .compact-workbench {
       align-items: start;
       grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.25fr);
@@ -2311,6 +2361,11 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     creditAmount: [0],
     bonusAmount: [0],
     benefitPercent: [0],
+    perVisitLimitType: ['none'],
+    perVisitLimitValue: [0],
+    serviceRestrictionType: ['all'],
+    serviceRestrictionValue: [''],
+    allowProductRedeem: [false],
     gstRate: [18],
     validityDays: [365, Validators.required],
     includedServicesText: ['[]'],
@@ -2483,6 +2538,10 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const creditAmount = Math.max(0, Number(this.planForm.value.creditAmount || 0) || price + bonusAmount);
     const benefitPercent = Number(this.planForm.value.benefitPercent || 0) || (price > 0 ? Math.round((Math.max(0, creditAmount - price) / price) * 100) : 0);
     if (planType === 'prepaid_credit') {
+      const perVisitLimitType = String(this.planForm.value.perVisitLimitType || 'none');
+      const perVisitLimitValue = Math.max(0, Number(this.planForm.value.perVisitLimitValue || 0));
+      const serviceRestrictionType = String(this.planForm.value.serviceRestrictionType || 'all');
+      const serviceRestrictionValue = String(this.planForm.value.serviceRestrictionValue || '').trim();
       benefitRules = {
         ...benefitRules,
         planType,
@@ -2490,7 +2549,16 @@ export class MembershipsComponent implements OnInit, OnDestroy {
         creditAmount,
         bonusAmount: Math.max(0, creditAmount - price || bonusAmount),
         benefitPercent,
-        redemptionMode: 'prepaid_credit'
+        redemptionMode: 'prepaid_credit',
+        allowProductRedeem: !!this.planForm.value.allowProductRedeem,
+        perVisitLimit: {
+          type: perVisitLimitType,
+          value: perVisitLimitType === 'none' ? 0 : perVisitLimitValue
+        },
+        serviceRestriction: {
+          type: serviceRestrictionType,
+          value: serviceRestrictionType === 'all' ? '' : serviceRestrictionValue
+        }
       };
     } else {
       benefitRules = { ...benefitRules, planType };
@@ -2532,6 +2600,8 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     this.showPlanDrawer.set(true);
     this.editingPlanId.set(plan.id);
     const planType = this.membershipPlanType(plan);
+    const perVisitLimit = (plan.benefitRules?.['perVisitLimit'] || {}) as ApiRecord;
+    const serviceRestriction = (plan.benefitRules?.['serviceRestriction'] || {}) as ApiRecord;
     this.planForm.patchValue({
       id: plan.id,
       version: plan.version || 1,
@@ -2545,6 +2615,11 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       creditAmount: plan.creditAmount || 0,
       bonusAmount: plan.bonusAmount || 0,
       benefitPercent: plan.benefitPercent || 0,
+      perVisitLimitType: String(perVisitLimit['type'] || plan.perVisitLimitType || 'none'),
+      perVisitLimitValue: Number(perVisitLimit['value'] || plan.perVisitLimitValue || 0),
+      serviceRestrictionType: String(serviceRestriction['type'] || plan.serviceRestrictionType || 'all'),
+      serviceRestrictionValue: String(serviceRestriction['value'] || plan.serviceRestrictionValue || ''),
+      allowProductRedeem: Boolean(plan.benefitRules?.['allowProductRedeem'] || plan.allowProductRedeem),
       gstRate: plan.gstRate || 18,
       validityDays: plan.validityDays,
       includedServicesText: JSON.stringify(plan.includedServices || [], null, 2),
@@ -2568,6 +2643,11 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       creditAmount: 0,
       bonusAmount: 0,
       benefitPercent: 0,
+      perVisitLimitType: 'none',
+      perVisitLimitValue: 0,
+      serviceRestrictionType: 'all',
+      serviceRestrictionValue: '',
+      allowProductRedeem: false,
       gstRate: 18,
       validityDays: 365,
       includedServicesText: '[]',
@@ -2586,7 +2666,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       ? this.membershipPlanCreditAmount(plan)
       : Number(value.planCredits || 0);
     const serviceCredits = this.membershipPlanType(plan) === 'prepaid_credit'
-      ? [{ type: 'prepaid_credit', credits: planCredits, remaining: planCredits, planId: plan?.id || '', bonusAmount: this.membershipPlanBonusAmount(plan), benefitPercent: plan?.benefitPercent || 0 }]
+      ? [{ type: 'prepaid_credit', credits: planCredits, remaining: planCredits, planId: plan?.id || '', bonusAmount: this.membershipPlanBonusAmount(plan), benefitPercent: plan?.benefitPercent || 0, benefitRules: plan?.benefitRules || {} }]
       : undefined;
     this.api.post('membership-enterprise/sell', {
       ...value,
@@ -3803,6 +3883,27 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     });
   }
 
+  prepaidPlanCreditPreview(): string {
+    const price = Number(this.planForm.value.price || 0);
+    const creditAmount = Number(this.planForm.value.creditAmount || 0) || price + Number(this.planForm.value.bonusAmount || 0);
+    return `Client pays ${this.moneyLabel(price)} and gets ${this.moneyLabel(creditAmount)} service credit.`;
+  }
+
+  prepaidPlanRulePreview(): string {
+    const limitType = String(this.planForm.value.perVisitLimitType || 'none');
+    const limitValue = Number(this.planForm.value.perVisitLimitValue || 0);
+    const restrictionType = String(this.planForm.value.serviceRestrictionType || 'all');
+    const limit = limitType === 'fixed'
+      ? `Per visit max ${this.moneyLabel(limitValue)}`
+      : limitType === 'bill_percent'
+        ? `Per visit max ${limitValue}% of eligible bill`
+        : 'No per visit cap';
+    const restriction = restrictionType === 'all'
+      ? 'all services'
+      : `${restrictionType.replace('_', ' ')}: ${this.planForm.value.serviceRestrictionValue || '-'}`;
+    return `${limit} · applies on ${restriction}${this.planForm.value.allowProductRedeem ? ' · products allowed' : ''}.`;
+  }
+
   planSummary(plan: PosMembershipPlan): string {
     if (this.membershipPlanType(plan) === 'prepaid_credit') {
       return `Pay ${this.moneyLabel(plan.price)} · Get ${this.moneyLabel(this.membershipPlanCreditAmount(plan))} credit · ${plan.benefitPercent || 0}% bonus`;
@@ -3835,6 +3936,8 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const price = Number(plan.price || 0);
     const creditAmount = Math.max(0, Number(plan.creditAmount || benefitRules['creditAmount'] || 0));
     const bonusAmount = Math.max(0, Number(plan.bonusAmount || benefitRules['bonusAmount'] || Math.max(0, creditAmount - price)));
+    const perVisitLimit = (benefitRules['perVisitLimit'] || {}) as ApiRecord;
+    const serviceRestriction = (benefitRules['serviceRestriction'] || {}) as ApiRecord;
     return {
       ...plan,
       price,
@@ -3844,6 +3947,11 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       creditAmount,
       bonusAmount,
       benefitPercent: Number(plan.benefitPercent || benefitRules['benefitPercent'] || (price > 0 ? Math.round((bonusAmount / price) * 100) : 0)),
+      perVisitLimitType: String(plan.perVisitLimitType || perVisitLimit['type'] || 'none'),
+      perVisitLimitValue: Number(plan.perVisitLimitValue || perVisitLimit['value'] || 0),
+      serviceRestrictionType: String(plan.serviceRestrictionType || serviceRestriction['type'] || 'all'),
+      serviceRestrictionValue: String(plan.serviceRestrictionValue || serviceRestriction['value'] || ''),
+      allowProductRedeem: Boolean(plan.allowProductRedeem || benefitRules['allowProductRedeem']),
       gstRate: Number(plan.gstRate || 18),
       validityDays: Number(plan.validityDays || 365),
       status: plan.status || (plan.active === false ? 'inactive' : 'active'),

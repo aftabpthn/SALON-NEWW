@@ -436,6 +436,7 @@ function createSoldEntitlements({ clientId, branchId, saleId, items = [], access
   for (const item of items) {
     if (item.type === "membership") {
       const membershipCredits = Math.max(0, Number(item.creditsRemaining || item.planCredits || 0));
+      const benefitRules = item.benefitRules && typeof item.benefitRules === "object" ? item.benefitRules : {};
       created.push(repositories.memberships.create({
         id: makeId("mem"),
         clientId,
@@ -443,7 +444,11 @@ function createSoldEntitlements({ clientId, branchId, saleId, items = [], access
         price: money(item.price),
         planCredits: membershipCredits,
         creditsRemaining: membershipCredits,
-        serviceCredits: item.serviceCredits?.length ? item.serviceCredits : [{ type: "bill_discount", percent: Number(item.discountPercent || 0), planId: item.id || "" }],
+        serviceCredits: item.serviceCredits?.length
+          ? item.serviceCredits
+          : item.planType === "prepaid_credit"
+            ? [{ type: "prepaid_credit", credits: membershipCredits, remaining: membershipCredits, planId: item.id || "", bonusAmount: money(item.bonusAmount || 0), benefitRules }]
+            : [{ type: "bill_discount", percent: Number(item.discountPercent || 0), planId: item.id || "" }],
         validityDate: addDays(item.validityDays || 365, soldAt),
         autoRenew: 0,
         loyaltyMultiplier: 1,
@@ -863,7 +868,7 @@ export class SalonOperationsService {
     const membershipDiscount = membershipBenefit.amount;
     const hasSubmittedLinePricing = items.some(hasLinePricing);
     const manualBillDiscount = money(Number(discountBreakdown?.manualDiscountAmount ?? discount ?? 0));
-    const membershipRedeemAdjustment = money(Number(membershipRedeem?.invoiceAdjustmentAmount || 0));
+    const membershipRedeemAdjustment = this.validatedMembershipRedeemAdjustment({ membershipRedeem, items }, access);
     const billDiscount = hasSubmittedLinePricing
       ? manualBillDiscount + couponDiscount + membershipRedeemAdjustment
       : Number(discount || 0) + membershipDiscount + couponDiscount + membershipRedeemAdjustment;
@@ -1159,7 +1164,46 @@ export class SalonOperationsService {
     }, scope(access, sale?.branchId || ""));
   }
 
-  redeemMembership({ membershipId, creditsUsed = 0, saleId = "", serviceId = "", serviceLineMappings = [], benefitType = "", benefitName = "", remainingAfterRedeem = 0 }, access) {
+  validatedMembershipRedeemAdjustment({ membershipRedeem = {}, items = [] }, access) {
+    const amount = money(Number(membershipRedeem?.invoiceAdjustmentAmount || 0));
+    if (!membershipRedeem?.membershipId || amount <= 0) return amount;
+    const membership = requireRecord(repositories.memberships, membershipRedeem.membershipId, "Membership", access);
+    const creditsRemaining = money(membership.creditsRemaining || 0);
+    if (creditsRemaining < amount) throw conflict("Membership does not have enough credits");
+    const serviceCredits = Array.isArray(membership.serviceCredits) ? membership.serviceCredits : [];
+    const prepaidCredit = serviceCredits.find((credit) => credit?.type === "prepaid_credit");
+    if (!prepaidCredit) return amount;
+    const rules = prepaidCredit.benefitRules && typeof prepaidCredit.benefitRules === "object" ? prepaidCredit.benefitRules : {};
+    const restriction = rules.serviceRestriction && typeof rules.serviceRestriction === "object" ? rules.serviceRestriction : {};
+    const restrictionType = String(restriction.type || "all");
+    const tokens = String(restriction.value || "")
+      .toLowerCase()
+      .split(",")
+      .map((token) => token.trim())
+      .filter(Boolean);
+    const eligibleSubtotal = items
+      .filter((item) => {
+        if (item.type === "product") return Boolean(rules.allowProductRedeem);
+        if (item.type !== "service" && item.type !== "package_redeem") return false;
+        if (restrictionType === "all" || !tokens.length) return true;
+        const haystack = `${item.id || ""} ${item.name || ""}`.toLowerCase();
+        return tokens.some((token) => haystack.includes(token));
+      })
+      .reduce((sum, item) => sum + itemTaxableSubtotal(item), 0);
+    const limit = rules.perVisitLimit && typeof rules.perVisitLimit === "object" ? rules.perVisitLimit : {};
+    const limitType = String(limit.type || "none");
+    const limitValue = Math.max(0, Number(limit.value || 0));
+    const perVisitCap = limitType === "fixed"
+      ? limitValue
+      : limitType === "bill_percent" && limitValue > 0
+        ? money(eligibleSubtotal * (limitValue / 100))
+        : eligibleSubtotal;
+    const cap = money(Math.min(creditsRemaining, eligibleSubtotal, perVisitCap));
+    if (amount > cap) throw conflict("Membership credit exceeds eligible amount");
+    return amount;
+  }
+
+  redeemMembership({ membershipId, creditsUsed = 0, saleId = "", serviceId = "", serviceLineMappings = [], benefitType = "", benefitName = "", remainingAfterRedeem = 0, invoiceAdjustmentAmount = 0 }, access) {
     if (!membershipId || !creditsUsed) return null;
     const membership = requireRecord(repositories.memberships, membershipId, "Membership", access);
     if (Number(membership.creditsRemaining) < Number(creditsUsed)) {
@@ -1171,6 +1215,7 @@ export class SalonOperationsService {
         {
           date: now().slice(0, 10),
           credits: Number(creditsUsed),
+          invoiceAdjustmentAmount: money(invoiceAdjustmentAmount || creditsUsed),
           saleId,
           serviceId,
           benefitType,

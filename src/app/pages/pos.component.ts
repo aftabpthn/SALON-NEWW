@@ -690,12 +690,13 @@ type PackageClientNotice = {
                 <option *ngFor="let benefit of redeemableBenefits()" [value]="benefit.membershipId || benefit.id">{{ redeemableBenefitOption(benefit) }}</option>
               </select>
             </label>
-            <button class="ghost-button summary-apply-button" type="button" (click)="useAllRedeemableCredits()" [disabled]="!selectedRedeemableBenefit() || !selectedRedeemableBenefitRemainingCredits()">
+            <button class="ghost-button summary-apply-button" type="button" (click)="useAllRedeemableCredits()" [disabled]="!selectedRedeemableBenefit() || !membershipCreditRedeemCap()">
               Use all
             </button>
           </div>
           <p class="inline-hint" *ngIf="selectedRedeemableBenefit() as benefit">
-            Redeeming {{ redeemableBenefitTypeLabel(benefit) }} {{ benefit.planName || benefit.name || benefit.membershipId }}. {{ selectedRedeemableBenefitRemainingCredits() }} credits available before invoice save.
+            Redeeming {{ redeemableBenefitTypeLabel(benefit) }} {{ benefit.planName || benefit.name || benefit.membershipId }}.
+            {{ selectedRedeemableBenefitRemainingCredits() }} credits available · {{ membershipCreditRedeemCap(benefit) }} eligible for this bill.
           </p>
           <section class="benefit-mapping-box" *ngIf="selectedRedeemableBenefit() as benefit">
             <div class="benefit-mapping-box__header">
@@ -1961,19 +1962,19 @@ export class PosComponent implements OnInit, OnDestroy {
 
   get prepaidMembershipRedeemDiscount(): number {
     const benefit = this.selectedRedeemableBenefit();
-    if (!benefit || this.redeemableBenefitTypeLabel(benefit) !== 'membership' || Number(this.creditsUsed || 0) <= 0) return 0;
+    if (!benefit || !this.isPrepaidCreditBenefit(benefit) || Number(this.creditsUsed || 0) <= 0) return 0;
     const mappedLines = this.selectedBenefitServiceMappings();
     const taxableMappedTotal = mappedLines.length
       ? mappedLines.reduce((sum, mapping) => {
           const item = this.items()[mapping.lineIndex];
-          return item ? sum + this.lineTaxableSubtotal(item) : sum;
+          return item && this.membershipCreditAllowedForItem(item, benefit) ? sum + this.lineTaxableSubtotal(item) : sum;
         }, 0)
-      : this.redeemableServiceLines().reduce((sum, line) => {
+      : this.redeemableServiceLines(benefit).reduce((sum, line) => {
           const item = this.items()[line.lineIndex];
           return item ? sum + this.lineTaxableSubtotal(item) : sum;
         }, 0);
     const baseAfterManual = Math.max(0, this.subtotal - this.itemDiscountTotal - this.manualDiscountAmount - this.couponDiscount);
-    return this.money(Math.min(Math.max(0, Number(this.creditsUsed || 0)), taxableMappedTotal, baseAfterManual));
+    return this.money(Math.min(Math.max(0, Number(this.creditsUsed || 0)), taxableMappedTotal, baseAfterManual, this.membershipCreditRedeemCap(benefit)));
   }
 
   get totalDiscount(): number {
@@ -2774,12 +2775,63 @@ export class PosComponent implements OnInit, OnDestroy {
     return this.redeemableBenefitsCache;
   }
 
-  redeemableServiceLines(): RedeemableServiceLine[] {
+  private prepaidCreditLine(benefit?: ApiRecord): ApiRecord | undefined {
+    const rows = Array.isArray(benefit?.['serviceCredits']) ? benefit?.['serviceCredits'] as ApiRecord[] : [];
+    return rows.find((credit) => String(credit['type'] || '') === 'prepaid_credit');
+  }
+
+  private benefitRulesFor(benefit?: ApiRecord): ApiRecord {
+    const directRules = this.readJsonObject(benefit?.['benefitRules']) || {};
+    const planBenefits = this.readJsonObject(benefit?.['planBenefits']) || {};
+    const planRules = this.readJsonObject(planBenefits['benefitRules']) || {};
+    const creditRules = this.readJsonObject(this.prepaidCreditLine(benefit)?.['benefitRules']) || {};
+    return { ...planRules, ...creditRules, ...directRules };
+  }
+
+  private isPrepaidCreditBenefit(benefit?: ApiRecord): boolean {
+    const rules = this.benefitRulesFor(benefit);
+    return this.redeemableBenefitTypeLabel(benefit) === 'membership'
+      && (String(rules['planType'] || '') === 'prepaid_credit' || rules['prepaidCredit'] === true || !!this.prepaidCreditLine(benefit));
+  }
+
+  private membershipCreditAllowedForItem(item: SaleItem, benefit?: ApiRecord): boolean {
+    const rules = this.benefitRulesFor(benefit);
+    if (item.type === 'product') return Boolean(rules['allowProductRedeem']);
+    if (item.type !== 'service' && item.type !== 'package_redeem') return false;
+    const restriction = this.readJsonObject(rules['serviceRestriction']) || {};
+    const type = String(restriction['type'] || 'all');
+    const value = String(restriction['value'] || '').trim().toLowerCase();
+    if (type === 'all' || !value) return true;
+    const tokens = value.split(',').map((token) => token.trim()).filter(Boolean);
+    const service = this.services().find((row) => String(row.id) === item.id);
+    const haystack = `${item.id} ${item.name} ${service?.['category'] || ''} ${service?.['code'] || ''}`.toLowerCase();
+    return tokens.some((token) => haystack.includes(token));
+  }
+
+  membershipCreditRedeemCap(benefit: ApiRecord | undefined = this.selectedRedeemableBenefit()): number {
+    if (!benefit) return 0;
+    const remaining = this.selectedRedeemableBenefitRemainingCredits();
+    if (!this.isPrepaidCreditBenefit(benefit)) return remaining;
+    const eligible = this.redeemableServiceLines(benefit).reduce((sum, line) => sum + this.money(line.finalAmount), 0);
+    const rules = this.benefitRulesFor(benefit);
+    const limit = this.readJsonObject(rules['perVisitLimit']) || {};
+    const limitType = String(limit['type'] || 'none');
+    const limitValue = Math.max(0, Number(limit['value'] || 0));
+    const perVisitCap = limitType === 'fixed'
+      ? limitValue
+      : limitType === 'bill_percent' && limitValue > 0
+        ? this.money(eligible * (limitValue / 100))
+        : eligible;
+    return this.money(Math.min(remaining, eligible, perVisitCap));
+  }
+
+  redeemableServiceLines(benefit: ApiRecord | undefined = this.selectedRedeemableBenefit()): RedeemableServiceLine[] {
     const serviceItems = this.items()
       .map((item, lineIndex) => ({ item, lineIndex }))
-      .filter(({ item }) => item.type === 'service' || item.type === 'package_redeem');
+      .filter(({ item }) => item.type === 'service' || item.type === 'package_redeem' || (this.isPrepaidCreditBenefit(benefit) && item.type === 'product'))
+      .filter(({ item }) => !this.isPrepaidCreditBenefit(benefit) || this.membershipCreditAllowedForItem(item, benefit));
     const cacheKey = serviceItems
-      .map(({ item, lineIndex }) => `${lineIndex}:${item.type}:${item.id}:${item.name}:${item.staffName}:${item.quantity}:${item.price}:${item.discountValue}:${this.lineTotal(item)}`)
+      .map(({ item, lineIndex }) => `${benefit?.['membershipId'] || benefit?.['id'] || ''}:${lineIndex}:${item.type}:${item.id}:${item.name}:${item.staffName}:${item.quantity}:${item.price}:${item.discountValue}:${this.lineTotal(item)}`)
       .join('|');
     if (cacheKey === this.redeemableServiceLinesCacheKey) return this.redeemableServiceLinesCache;
     this.redeemableServiceLinesCacheKey = cacheKey;
@@ -2840,18 +2892,19 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     const remaining = this.selectedRedeemableBenefitRemainingCredits();
     if (this.creditsUsed <= 0) {
-      this.creditsUsed = remaining > 0 ? 1 : 0;
-      this.autoAllocateBenefitCredits();
+      this.creditsUsed = 0;
       return;
     }
-    this.creditsUsed = Math.min(this.creditsUsed, remaining);
+    this.creditsUsed = Math.min(this.creditsUsed, this.membershipCreditRedeemCap(this.selectedRedeemableBenefit()), remaining);
     this.normalizeBenefitServiceMappings();
   }
 
   setRedeemableCredits(value: number | string): void {
     const requested = Math.max(0, Math.floor(Number(value || 0)));
     const remaining = this.selectedRedeemableBenefitRemainingCredits();
-    this.creditsUsed = remaining > 0 ? Math.min(requested, remaining) : 0;
+    const benefit = this.selectedRedeemableBenefit();
+    const cap = this.isPrepaidCreditBenefit(benefit) ? this.membershipCreditRedeemCap(benefit) : remaining;
+    this.creditsUsed = remaining > 0 ? Math.min(requested, cap) : 0;
     this.normalizeBenefitServiceMappings();
   }
 
@@ -2860,7 +2913,8 @@ export class PosComponent implements OnInit, OnDestroy {
   }
 
   useAllRedeemableCredits(): void {
-    this.creditsUsed = this.selectedRedeemableBenefitRemainingCredits();
+    const benefit = this.selectedRedeemableBenefit();
+    this.creditsUsed = this.isPrepaidCreditBenefit(benefit) ? this.membershipCreditRedeemCap(benefit) : this.selectedRedeemableBenefitRemainingCredits();
     this.autoAllocateBenefitCredits();
   }
 
@@ -2880,10 +2934,11 @@ export class PosComponent implements OnInit, OnDestroy {
 
   maxServiceLineMappedCredits(lineIndex: number): number {
     const current = this.serviceLineMappedCredits(lineIndex);
+    const line = this.redeemableServiceLines().find((item) => item.lineIndex === lineIndex);
     const others = this.selectedBenefitServiceMappings()
       .filter((mapping) => mapping.lineIndex !== lineIndex)
       .reduce((sum, mapping) => sum + Number(mapping.credits || 0), 0);
-    return Math.max(current, this.creditsUsed - others);
+    return Math.max(current, Math.min(this.creditsUsed - others, this.isPrepaidCreditBenefit(this.selectedRedeemableBenefit()) ? Math.floor(line?.finalAmount || 0) : this.creditsUsed));
   }
 
   setServiceLineMappedCredits(lineIndex: number, value: number | string): void {
@@ -2892,7 +2947,9 @@ export class PosComponent implements OnInit, OnDestroy {
     if (!serviceLine) return;
     const next = this.selectedBenefitServiceMappings().filter((mapping) => mapping.lineIndex !== lineIndex);
     const remaining = Math.max(0, this.creditsUsed - next.reduce((sum, mapping) => sum + Number(mapping.credits || 0), 0));
-    const credits = Math.min(requested, remaining);
+    const benefit = this.selectedRedeemableBenefit();
+    const lineCap = this.isPrepaidCreditBenefit(benefit) ? Math.floor(serviceLine.finalAmount || 0) : remaining;
+    const credits = Math.min(requested, remaining, lineCap);
     if (credits > 0) {
       next.push({
         lineIndex,
@@ -2922,20 +2979,23 @@ export class PosComponent implements OnInit, OnDestroy {
       this.benefitServiceMappings = [];
       return;
     }
-    const next = serviceLines.map((line) => ({
-      lineIndex: line.lineIndex,
-      serviceId: line.serviceId,
-      serviceName: line.serviceName,
-      credits: 0
-    }));
     let remaining = Number(this.creditsUsed || 0);
-    let cursor = 0;
-    while (remaining > 0) {
-      next[cursor % next.length].credits += 1;
-      remaining -= 1;
-      cursor += 1;
+    const benefit = this.selectedRedeemableBenefit();
+    const next: BenefitServiceMapping[] = [];
+    for (const line of serviceLines) {
+      if (remaining <= 0) break;
+      const lineCap = this.isPrepaidCreditBenefit(benefit) ? Math.floor(line.finalAmount || 0) : remaining;
+      const credits = Math.min(Math.floor(remaining), lineCap);
+      if (credits <= 0) continue;
+      next.push({
+        lineIndex: line.lineIndex,
+        serviceId: line.serviceId,
+        serviceName: line.serviceName,
+        credits
+      });
+      remaining -= credits;
     }
-    this.benefitServiceMappings = next.filter((mapping) => mapping.credits > 0);
+    this.benefitServiceMappings = next;
   }
 
   generatedBenefitRedeemLabel(benefitRedeem: ApiRecord): string {
@@ -2984,10 +3044,12 @@ export class PosComponent implements OnInit, OnDestroy {
     }
     let remaining = Number(this.creditsUsed || 0);
     const next: BenefitServiceMapping[] = [];
+    const benefit = this.selectedRedeemableBenefit();
     for (const mapping of this.selectedBenefitServiceMappings().sort((left, right) => left.lineIndex - right.lineIndex)) {
       const line = validLines.get(mapping.lineIndex);
       if (!line || remaining <= 0) continue;
-      const credits = Math.min(Math.max(0, Math.floor(Number(mapping.credits || 0))), remaining);
+      const lineCap = this.isPrepaidCreditBenefit(benefit) ? Math.floor(line.finalAmount || 0) : remaining;
+      const credits = Math.min(Math.max(0, Math.floor(Number(mapping.credits || 0))), remaining, lineCap);
       if (credits <= 0) continue;
       next.push({
         lineIndex: mapping.lineIndex,
@@ -3654,8 +3716,9 @@ export class PosComponent implements OnInit, OnDestroy {
     const planType = this.membershipPlanType(plan);
     const creditAmount = this.membershipPlanCreditAmount(plan);
     const bonusAmount = this.membershipPlanBonusAmount(plan);
+    const benefitRules = plan.benefitRules || {};
     const serviceCredits = planType === 'prepaid_credit'
-      ? [{ type: 'prepaid_credit', credits: creditAmount, remaining: creditAmount, planId: plan.id, bonusAmount, benefitPercent: plan.benefitPercent || 0 }]
+      ? [{ type: 'prepaid_credit', credits: creditAmount, remaining: creditAmount, planId: plan.id, bonusAmount, benefitPercent: plan.benefitPercent || 0, benefitRules }]
       : [
           { type: 'bill_discount', percent: Number(plan.discountPercent || 0), planId: plan.id },
           { type: 'product_discount', percent: Number(plan.productDiscountPercent || 0), planId: plan.id }
@@ -3676,7 +3739,7 @@ export class PosComponent implements OnInit, OnDestroy {
         planCredits: planType === 'prepaid_credit' ? creditAmount : 0,
         creditsRemaining: planType === 'prepaid_credit' ? creditAmount : 0,
         bonusAmount,
-        benefitRules: plan.benefitRules || {},
+        benefitRules,
         serviceCredits
       }
     ]);
@@ -4811,6 +4874,8 @@ export class PosComponent implements OnInit, OnDestroy {
     const price = Number(plan.price || 0);
     const creditAmount = Math.max(0, Number(plan.creditAmount || benefitRules['creditAmount'] || 0));
     const bonusAmount = Math.max(0, Number(plan.bonusAmount || benefitRules['bonusAmount'] || Math.max(0, creditAmount - price)));
+    const perVisitLimit = (benefitRules['perVisitLimit'] || {}) as ApiRecord;
+    const serviceRestriction = (benefitRules['serviceRestriction'] || {}) as ApiRecord;
     return {
       ...plan,
       price,
@@ -4820,6 +4885,11 @@ export class PosComponent implements OnInit, OnDestroy {
       creditAmount,
       bonusAmount,
       benefitPercent: Number(plan.benefitPercent || benefitRules['benefitPercent'] || (price > 0 ? Math.round((bonusAmount / price) * 100) : 0)),
+      perVisitLimitType: String(plan.perVisitLimitType || perVisitLimit['type'] || 'none'),
+      perVisitLimitValue: Number(plan.perVisitLimitValue || perVisitLimit['value'] || 0),
+      serviceRestrictionType: String(plan.serviceRestrictionType || serviceRestriction['type'] || 'all'),
+      serviceRestrictionValue: String(plan.serviceRestrictionValue || serviceRestriction['value'] || ''),
+      allowProductRedeem: Boolean(plan.allowProductRedeem || benefitRules['allowProductRedeem']),
       gstRate: Number(plan.gstRate || 18),
       validityDays: Number(plan.validityDays || 365),
       active: plan.active !== false && plan.status !== 'inactive',

@@ -35,6 +35,11 @@ export type PosMembershipPlan = {
   creditAmount?: number;
   bonusAmount?: number;
   benefitPercent?: number;
+  perVisitLimitType?: 'none' | 'fixed' | 'bill_percent' | string;
+  perVisitLimitValue?: number;
+  serviceRestrictionType?: 'all' | 'category' | 'selected_services' | string;
+  serviceRestrictionValue?: string;
+  allowProductRedeem?: boolean;
   gstRate?: number;
   validityDays: number;
   includedServices?: unknown[];
