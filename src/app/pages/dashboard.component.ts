@@ -185,30 +185,46 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     </section>
   `,
   styles: [`
+    .page-stack { display: flex; flex-direction: column; gap: 20px; padding: 6px 2px 24px; background: var(--color-surface-muted); min-height: 100vh; }
+
     .metrics-grid {
+      display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 12px;
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.03);
     }
 
     .dashboard-command-panel {
-      padding: 8px 14px 12px;
+      padding: 8px 20px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.03);
     }
 
-    .header-link-row {
-      display: inline-flex;
-      gap: 8px;
+    .section-title {
+      padding: 12px 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       flex-wrap: wrap;
     }
+    .section-title h2 { font-size: 1.1rem; font-weight: 750; margin: 0; letter-spacing: -0.02em; }
+    .section-title .eyebrow { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: block; margin-bottom: 2px; }
 
-    .compact-title {
-      margin-bottom: 8px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--line);
-    }
+    .compact-title { margin-bottom: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+
+    .header-link-row { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 
     .dashboard-hub-grid {
       display: grid;
       grid-template-columns: repeat(7, minmax(138px, 1fr));
-      gap: 10px;
+      gap: 12px;
     }
 
     .dashboard-hub-card {
@@ -217,40 +233,39 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       display: grid;
       align-content: start;
       gap: 6px;
-      padding: 12px;
+      padding: 14px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
       overflow: hidden;
-      transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+      transition: all 180ms cubic-bezier(0.16,1,0.3,1);
     }
 
     .dashboard-hub-card:hover,
     .dashboard-hub-card:focus-visible {
-      border-color: var(--brand-600, #4f46e5);
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4), 0 10px 24px rgba(79, 70, 229, 0.16);
-      transform: translateY(-2px);
-      background: #fff;
+      border-color: rgba(79,70,229,0.15);
+      box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+      transform: translateY(-3px);
+      background: var(--surface);
       outline: 0;
     }
 
-    .dashboard-hub-card strong,
-    .dashboard-hub-card small {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
+    .dashboard-hub-card .eyebrow { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .dashboard-hub-card strong { font-size: 0.92rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dashboard-hub-card small { font-size: 0.74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.35; }
     .dashboard-hub-card b {
       align-self: end;
-      color: var(--teal-2);
+      color: var(--color-primary);
       font-size: 0.78rem;
+      font-weight: 600;
     }
 
     .dashboard-summary-grid {
+      display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       grid-auto-rows: 1fr;
-      gap: 10px;
+      gap: 12px;
       align-items: stretch;
     }
 
@@ -258,58 +273,103 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       display: flex;
       flex-direction: column;
       gap: 10px;
+      padding: 0 16px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.03);
     }
 
-    .dashboard-summary-grid > .panel > .section-title {
-      flex: 0 0 auto;
+    .dashboard-summary-grid > .panel > .section-title { padding-left: 0; padding-right: 0; }
+
+    .dashboard-summary-grid .quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      flex: 1;
     }
 
-    .dashboard-summary-grid .quick-grid,
     .dashboard-summary-grid .summary-tile,
     .dashboard-summary-grid .timeline {
-      flex: 1 1 auto;
+      flex: 1;
     }
 
-    .dashboard-summary-grid .summary-tile {
+    .quick-grid .action-card {
+      min-height: 82px;
+      display: grid;
       align-content: center;
+      gap: 4px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      transition: all 160ms cubic-bezier(0.16,1,0.3,1);
     }
+    .quick-grid .action-card:hover { border-color: rgba(79,70,229,0.12); box-shadow: 0 4px 12px rgba(15,23,42,0.04); transform: translateY(-1px); }
+    .quick-grid .action-card strong { font-size: 0.85rem; font-weight: 650; }
+    .quick-grid .action-card span { font-size: 0.74rem; color: var(--muted); }
 
     .summary-tile {
       min-height: 88px;
       display: grid;
-      gap: 6px;
       align-content: center;
-      padding: 12px;
+      gap: 4px;
+      padding: 14px 16px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
+      border-radius: 10px;
+      background: var(--surface);
+      transition: all 160ms cubic-bezier(0.16,1,0.3,1);
     }
+    .summary-tile:hover { border-color: rgba(79,70,229,0.08); box-shadow: 0 4px 12px rgba(15,23,42,0.03); }
+    .summary-tile strong { font-size: 0.95rem; font-weight: 650; }
+    .summary-tile span { font-size: 0.76rem; color: var(--muted); }
+    .summary-tile small { font-size: 0.72rem; color: var(--muted); display: block; margin-top: 2px; }
 
-    .summary-tile span,
-    .summary-tile small {
+    .timeline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    .timeline span {
+      flex: 1;
+      text-align: center;
+      font-size: 0.74rem;
+      font-weight: 600;
       color: var(--muted);
+      padding: 6px 4px;
+      border-radius: 6px;
+      background: var(--color-surface-muted);
+      transition: all 120ms ease;
     }
+    .timeline span:hover { background: var(--color-primary-soft); color: var(--color-primary); }
 
-    .action-card {
-      min-height: 82px;
+    .ghost-button {
+      display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 8px;
+      border: 1px solid var(--line); font-size: 0.78rem; font-weight: 600; color: var(--color-primary);
+      transition: all 120ms ease;
     }
+    .ghost-button:hover { background: var(--color-primary-soft); border-color: var(--color-primary); }
 
     @media (max-width: 1280px) {
-      .metrics-grid,
-      .dashboard-hub-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .dashboard-summary-grid {
-        grid-template-columns: 1fr;
-      }
+      .metrics-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .dashboard-hub-grid { grid-template-columns: repeat(4, minmax(138px, 1fr)); }
+      .dashboard-summary-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 768px) {
-      .metrics-grid,
-      .dashboard-hub-grid {
-        grid-template-columns: 1fr;
-      }
+      .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dashboard-hub-grid { grid-template-columns: repeat(2, minmax(138px, 1fr)); }
+      .quick-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .metrics-grid { grid-template-columns: 1fr; }
+      .dashboard-hub-grid { grid-template-columns: 1fr; }
     }
   `]
 })

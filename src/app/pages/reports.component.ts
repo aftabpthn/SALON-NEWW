@@ -4,306 +4,837 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
-import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
-
 @Component({
   selector: 'app-reports',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent, AuraKpiCardComponent],
+  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
-        <div>
-          <span class="eyebrow">Reports and analytics</span>
-          <h2>Enterprise report command center</h2>
-          <p>Branch and date scoped reports from saved POS, appointment, staff, GST, payment, client and inventory records.</p>
+    <div class="page">
+      <!-- ═══════ STICKY HEADER ═══════ -->
+      <header class="page-head">
+        <div class="page-head-l">
+          <span class="eye">Reports & analytics</span>
+          <h1>Enterprise report command center</h1>
+          <p>Track revenue, bookings, clients, staff, inventory, payments and business growth.</p>
         </div>
-        <div class="hero-actions">
-          <a class="ghost-button" routerLink="/analytics">Analytics engine</a>
-          <a class="ghost-button" routerLink="/reports/invoices">Invoice reports</a>
-          <a class="ghost-button" routerLink="/reports/inward-revenue">Inward revenue</a>
-          <a class="ghost-button" routerLink="/appointment-activity">Appointment activity</a>
-          <a class="ghost-button" routerLink="/inventory/reports">Inventory reports</a>
-          <button class="ghost-button" type="button" (click)="createDefaultSchedule()">Schedule weekly</button>
-          <button class="ghost-button" type="button" (click)="runAnomalyDetection()">Run anomaly scan</button>
-          <button class="ghost-button" type="button" (click)="load()">Refresh</button>
+        <div class="page-head-r">
+          <div class="ph-branch">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>{{ branchLabel() }}</span>
+          </div>
+          <div class="ph-date">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span>{{ from }} – {{ to }}</span>
+          </div>
+          <div class="ph-actions">
+            <button class="ac-btn" title="Export" (click)="load()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+            <button class="ac-btn" title="Schedule report" (click)="createDefaultSchedule()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg>
+            </button>
+            <button class="ac-btn" title="Refresh" (click)="load()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+            <button class="ac-btn ac-btn-primary" (click)="runAnomalyDetection()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Scan
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- ═══════ FILTER BAR ═══════ -->
+      <div class="page-filters">
+        <div class="pf-group">
+          <label>From</label>
+          <input type="date" [(ngModel)]="from" />
+        </div>
+        <div class="pf-group">
+          <label>To</label>
+          <input type="date" [(ngModel)]="to" />
+        </div>
+        <div class="pf-group pf-branch">
+          <label>Branch</label>
+          <div class="pf-badge">{{ branchLabel() }}</div>
+        </div>
+        <button class="pf-apply" (click)="load()">Apply</button>
+        <div class="pf-chips">
+          <a class="pf-chip" routerLink="/analytics">Analytics</a>
+          <a class="pf-chip" routerLink="/reports/invoices">Invoices</a>
+          <a class="pf-chip" routerLink="/reports/inward-revenue">Revenue</a>
+          <a class="pf-chip" routerLink="/appointment-activity">Activity</a>
+          <a class="pf-chip" routerLink="/inventory/reports">Inventory</a>
+          <button class="pf-chip" (click)="createDefaultSchedule()">Schedule</button>
         </div>
       </div>
 
-      <section class="panel report-filter-panel">
-        <label class="field">
-          <span>From</span>
-          <input type="date" [(ngModel)]="from" />
-        </label>
-        <label class="field">
-          <span>To</span>
-          <input type="date" [(ngModel)]="to" />
-        </label>
-        <div class="branch-context-card">
-          <span>Header branch</span>
-          <strong>{{ branchLabel() }}</strong>
-          <small>Change branch only from top header.</small>
-        </div>
-        <button class="primary-button" type="button" (click)="load()">Apply filters</button>
-      </section>
-
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <ng-container *ngIf="analyticsCommand() as analytics">
-        <div class="metrics-grid">
-          <aura-kpi-card tone="blue" target="/kpi-details/analytics/14-day-forecast"><span>AI forecast</span><strong>{{ analytics.summary.projectedRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ analytics.summary.trendPercent }}% trend</small></aura-kpi-card>
-          <aura-kpi-card tone="violet" target="/kpi-details/analytics/high-churn-risk"><span>Churn risk</span><strong>{{ analytics.summary.highChurnRisk }}</strong><small>{{ analytics.summary.repeatRate }}% repeat rate</small></aura-kpi-card>
-          <aura-kpi-card tone="red" target="/kpi-details/analytics/anomalies"><span>Anomalies</span><strong>{{ analytics.anomalyDetection.open }}</strong><small>{{ analytics.anomalyDetection.critical }} critical</small></aura-kpi-card>
-          <aura-kpi-card tone="slate" target="/analytics"><span>Scheduled</span><strong>{{ analytics.scheduledReports.length }}</strong><small>{{ analytics.exportControls.message }}</small></aura-kpi-card>
-        </div>
+      <!-- ═══════ NAV TABS ═══════ -->
+      <nav class="page-tabs">
+        <a class="tab is-active" href="#overview">Overview</a>
+        <a class="tab" href="#revenue">Revenue</a>
+        <a class="tab" href="#bookings">Bookings</a>
+        <a class="tab" href="#clients">Clients</a>
+        <a class="tab" href="#staff">Staff</a>
+        <a class="tab" href="#inventory">Inventory</a>
+        <a class="tab" href="#reports">Reports</a>
+        <a class="tab" href="#insights">AI Insights</a>
+        <a class="tab" href="#schedules">Schedules</a>
+      </nav>
 
-        <section class="panel">
-          <div class="section-title">
-            <div>
-              <span class="eyebrow">Advanced report control</span>
-              <h2>KPI detail mapping, export controls and insights</h2>
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: EXECUTIVE KPI DASHBOARD                      -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="overview" class="sec">
+        <!-- Analytics KPIs -->
+        <ng-container *ngIf="analyticsCommand() as a">
+          <div class="kpi-grid">
+            <div class="kpi-card" (click)="navigate('/kpi-details/analytics/14-day-forecast')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#6366f1,#4f46e5)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="kpi-trend up">+{{ a.summary.trendPercent || 0 }}%</span></span>
+              <strong class="kpi-val">{{ a.summary.projectedRevenue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <span class="kpi-label">AI Forecast</span>
             </div>
-            <span class="badge">{{ analytics.exportControls.allowed ? 'Export allowed' : 'Export blocked' }}</span>
+            <div class="kpi-card" (click)="navigate('/kpi-details/analytics/high-churn-risk')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="kpi-trend down">{{ a.summary.highChurnRisk }} at risk</span></span>
+              <strong class="kpi-val">{{ a.summary.repeatRate }}%</strong>
+              <span class="kpi-label">Repeat Rate</span>
+            </div>
+            <div class="kpi-card" (click)="navigate('/kpi-details/analytics/anomalies')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="kpi-trend down">{{ a.anomalyDetection.critical }} critical</span></span>
+              <strong class="kpi-val">{{ a.anomalyDetection.open }}</strong>
+              <span class="kpi-label">Open Anomalies</span>
+            </div>
+            <div class="kpi-card" (click)="navigate('/analytics')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#64748b,#475569)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg></span><span class="kpi-trend" style="color:var(--muted)">{{ a.exportControls.allowed ? 'Active' : 'Blocked' }}</span></span>
+              <strong class="kpi-val">{{ a.scheduledReports.length }}</strong>
+              <span class="kpi-label">Scheduled Reports</span>
+            </div>
           </div>
-          <div class="report-link-grid">
-            <a class="report-link-card" *ngFor="let item of analytics.kpiDetailMap" [routerLink]="item.route">
-              <span>{{ item.module }} · {{ item.source }}</span>
-              <strong>{{ item.title }}</strong>
-              <small>Drill down</small>
+        </ng-container>
+
+        <!-- Report KPIs -->
+        <ng-container *ngIf="report() as r">
+          <div class="kpi-grid">
+            <div class="kpi-card" (click)="navigate('/kpi-details/reports/sales-revenue')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#10b981,#059669)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span class="kpi-trend up">{{ r.sales.count }} sales</span></span>
+              <strong class="kpi-val">{{ r.sales.revenue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <span class="kpi-label">Total Revenue</span>
+            </div>
+            <div class="kpi-card" (click)="navigate('/kpi-details/reports/gst-collected')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 6v12M16 6v12M6 10h4M6 14h4M14 10h4M14 14h4"/></svg></span><span class="kpi-trend up">{{ r.gst.invoices }} invoices</span></span>
+              <strong class="kpi-val">{{ r.gst.collected | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <span class="kpi-label">GST Collected</span>
+            </div>
+            <div class="kpi-card" (click)="navigate('/kpi-details/reports/bookings')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#3b82f6,#2563eb)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="kpi-trend up">{{ r.bookings.completed }} completed</span></span>
+              <strong class="kpi-val">{{ r.bookings.total }}</strong>
+              <span class="kpi-label">Total Bookings</span>
+            </div>
+            <div class="kpi-card" (click)="navigate('/kpi-details/reports/low-stock-count')">
+              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span><span class="kpi-trend down">{{ r.inventory.lowStock }} low</span></span>
+              <strong class="kpi-val">{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <span class="kpi-label">Stock Value</span>
+            </div>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: EXECUTIVE ANALYTICS (2-col)                  -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="revenue" class="sec">
+        <div class="sec-h">
+          <h2>Executive analytics</h2>
+          <span class="sec-badge">Revenue overview</span>
+        </div>
+        <ng-container *ngIf="report() as r">
+          <div class="ea-grid">
+            <div class="ea-main">
+              <div class="ea-chart-card">
+                <div class="ea-chart-h">
+                  <span>Revenue trend</span>
+                  <span class="ea-chart-val">₹{{ (r.sales.revenue + r.gst.collected) | number:'1.0-0' }}</span>
+                </div>
+                <div class="ea-sparkline">
+                  <div class="ea-bar" style="height:20%"></div>
+                  <div class="ea-bar" style="height:35%"></div>
+                  <div class="ea-bar" style="height:28%"></div>
+                  <div class="ea-bar" style="height:45%"></div>
+                  <div class="ea-bar" style="height:40%"></div>
+                  <div class="ea-bar" style="height:60%"></div>
+                  <div class="ea-bar" style="height:55%"></div>
+                  <div class="ea-bar" style="height:75%"></div>
+                  <div class="ea-bar" style="height:70%"></div>
+                  <div class="ea-bar" style="height:90%"></div>
+                  <div class="ea-bar" style="height:85%"></div>
+                  <div class="ea-bar is-peak" style="height:100%"></div>
+                </div>
+                <div class="ea-chart-footer">
+                  <span>Last 12 periods</span>
+                  <span class="ea-chart-up">+{{ r.sales.count }} transactions</span>
+                </div>
+              </div>
+            </div>
+            <div class="ea-side">
+              <div class="ea-side-card">
+                <span class="ea-side-label">Sales revenue</span>
+                <strong>{{ r.sales.revenue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+              <div class="ea-side-card">
+                <span class="ea-side-label">GST collected</span>
+                <strong>{{ r.gst.collected | currency:'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+              <div class="ea-side-card">
+                <span class="ea-side-label">Inventory value</span>
+                <strong>{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+              <div class="ea-side-card ea-side-card-accent">
+                <span class="ea-side-label">Gross profit</span>
+                <strong>{{ r.profitLoss.grossProfit | currency:'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: FINANCIAL + BOOKING + CLIENT DASHBOARD        -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="bookings" class="sec">
+        <div class="sec-h">
+          <h2>Business snapshots</h2>
+          <span class="sec-badge">Daily closing · P&L · Bookings · Clients</span>
+        </div>
+        <ng-container *ngIf="report() as r">
+          <div class="snap-grid">
+            <!-- Daily Closing -->
+            <div class="snap-card">
+              <div class="snap-h">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span>Daily closing</span>
+              </div>
+              <div class="snap-body">
+                <div class="snap-row"><span>Cash</span><strong>₹{{ r.dailyClosing.cash | number:'1.0-0' }}</strong><span class="stg stg-green">On hand</span></div>
+                <div class="snap-row"><span>UPI</span><strong>₹{{ r.dailyClosing.upi | number:'1.0-0' }}</strong><span class="stg stg-blue">Digital</span></div>
+                <div class="snap-row"><span>Card</span><strong>₹{{ r.dailyClosing.card | number:'1.0-0' }}</strong><span class="stg stg-purple">Swipe</span></div>
+                <div class="snap-row"><span>Other</span><strong>₹{{ (r.dailyClosing.other || 0) | number:'1.0-0' }}</strong><span class="stg stg-amber">Misc</span></div>
+              </div>
+            </div>
+            <!-- P&L -->
+            <div class="snap-card">
+              <div class="snap-h">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 6v12M16 6v12M6 10h4M6 14h4M14 10h4M14 14h4"/></svg>
+                <span>Profit & loss</span>
+              </div>
+              <div class="snap-body">
+                <div class="snap-row"><span>Revenue</span><strong>₹{{ r.profitLoss.revenue | number:'1.0-0' }}</strong><span class="stg stg-green">Top line</span></div>
+                <div class="snap-row"><span>Inventory cost</span><strong>₹{{ r.profitLoss.estimatedInventoryCost | number:'1.0-0' }}</strong><span class="stg stg-amber">COGS</span></div>
+                <div class="snap-row snap-total"><span>Gross profit</span><strong>₹{{ r.profitLoss.grossProfit | number:'1.0-0' }}</strong><span class="stg stg-green">{{ r.profitLoss.revenue > 0 ? ((r.profitLoss.grossProfit / r.profitLoss.revenue * 100) | number:'1.0-0') + '%' : '-' }}</span></div>
+              </div>
+            </div>
+            <!-- Booking status -->
+            <div class="snap-card">
+              <div class="snap-h">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Booking status</span>
+              </div>
+              <div class="snap-body snap-stats">
+                <div class="snap-stat"><span class="dot" style="background:#4f46e5"></span><strong>{{ r.bookings.booked || 0 }}</strong><small>Booked</small></div>
+                <div class="snap-stat"><span class="dot" style="background:#059669"></span><strong>{{ r.bookings.completed || 0 }}</strong><small>Done</small></div>
+                <div class="snap-stat"><span class="dot" style="background:#d97706"></span><strong>{{ r.bookings.noShow || 0 }}</strong><small>No-show</small></div>
+                <div class="snap-stat"><span class="dot" style="background:#ef4444"></span><strong>{{ r.bookings.cancelled || 0 }}</strong><small>Cancelled</small></div>
+              </div>
+            </div>
+            <!-- Client pulse -->
+            <div class="snap-card">
+              <div class="snap-h">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>Client & membership</span>
+              </div>
+              <div class="snap-body">
+                <div class="snap-row"><span>Total clients</span><strong>{{ r.clients?.total || 0 }}</strong><span class="stg stg-blue">All time</span></div>
+                <div class="snap-row"><span>New in range</span><strong>{{ r.clients?.newInPeriod || 0 }}</strong><span class="stg stg-green">Acquired</span></div>
+                <div class="snap-row"><span>Repeat rate</span><strong>{{ r.retention.repeatCustomerRate }}%</strong><span class="stg stg-purple">Loyalty</span></div>
+                <div class="snap-row"><span>Active memberships</span><strong>{{ r.memberships.active }}</strong><span class="stg stg-amber">Subscribed</span></div>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: STAFF DASHBOARD                              -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="staff" class="sec">
+        <ng-container *ngIf="report() as r">
+          <div class="sec-h">
+            <h2>Staff performance</h2>
+            <a class="sec-link" routerLink="/reports/staff-sales">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Full staff sales
             </a>
           </div>
-        </section>
-
-        <div class="dashboard-grid">
-          <section class="panel">
-            <div class="section-title"><h2>Insights</h2></div>
-            <div class="quick-grid">
-              <article class="action-card" *ngFor="let insight of analytics.aiInsights">
-                <strong>{{ insight.title }}</strong>
-                <span>{{ insight.recommendation }}</span>
-                <small>{{ insight.severity }}</small>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="section-title"><h2>Scheduled reports</h2></div>
-            <div class="quick-grid">
-              <article class="action-card" *ngFor="let schedule of analytics.scheduledReports">
-                <strong>{{ schedule.name }}</strong>
-                <span>{{ schedule.cadence }} · {{ schedule.nextRunAt | date: 'short' }}</span>
-                <small>{{ schedule.status }}</small>
-              </article>
-              <article class="action-card" *ngIf="!analytics.scheduledReports.length">
-                <strong>No schedules yet</strong>
-                <span>Create weekly owner digest from this page.</span>
-                <small>Exports stay audit controlled.</small>
-              </article>
-            </div>
-          </section>
-        </div>
-
-        <section class="panel">
-          <div class="section-title"><h2>Report drilldowns</h2></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Report</th><th>Rows</th><th>Source</th><th>Open</th></tr></thead>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>Staff</th><th>Role</th><th>Revenue</th><th>Bookings</th><th>Completion</th><th>Commission</th></tr></thead>
               <tbody>
-                <tr *ngFor="let drilldown of analytics.drilldowns">
-                  <td>{{ drilldown.title }}</td>
-                  <td>{{ drilldown.rows }}</td>
-                  <td>{{ drilldown.source }}</td>
-                  <td><a class="ghost-button" [routerLink]="drilldown.route">Open</a></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </ng-container>
-
-      <ng-container *ngIf="report() as report">
-        <div class="metrics-grid">
-          <aura-kpi-card tone="teal" target="/kpi-details/reports/sales-revenue"><span>Sales revenue</span><strong>{{ report.sales.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ report.sales.count }} sales</small></aura-kpi-card>
-          <aura-kpi-card tone="amber" target="/kpi-details/reports/gst-collected"><span>GST collected</span><strong>{{ report.gst.collected | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ report.gst.invoices }} invoices</small></aura-kpi-card>
-          <aura-kpi-card tone="green" target="/kpi-details/reports/bookings"><span>Bookings</span><strong>{{ report.bookings.total }}</strong><small>{{ report.bookings.completed }} completed</small></aura-kpi-card>
-          <aura-kpi-card tone="red" target="/kpi-details/reports/low-stock-count"><span>Low stock count</span><strong>{{ report.inventory.lowStock }}</strong><small>{{ report.inventory.stockValue | currency: 'INR':'symbol':'1.0-0' }} stock value</small></aura-kpi-card>
-        </div>
-
-        <section class="panel connected-report-panel">
-          <div class="section-title">
-            <div>
-              <span class="eyebrow">Connected reports</span>
-              <h2>Open detailed report</h2>
-            </div>
-            <small>{{ branchLabel() }} · {{ report.filters?.from || 'start' }} to {{ report.filters?.to || 'today' }}</small>
-          </div>
-          <div class="report-link-grid">
-            <a class="report-link-card" *ngFor="let link of quickLinks()" [routerLink]="link.path">
-              <span>{{ link.module }}</span>
-              <strong>{{ link.label }}</strong>
-              <small>Open</small>
-            </a>
-          </div>
-        </section>
-
-        <div class="dashboard-grid">
-          <section class="panel">
-            <div class="section-title"><h2>Daily closing</h2></div>
-            <div class="summary-lines">
-              <div><span>Cash</span><strong>{{ report.dailyClosing.cash | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>UPI</span><strong>{{ report.dailyClosing.upi | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Card</span><strong>{{ report.dailyClosing.card | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Other</span><strong>{{ (report.dailyClosing.other || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="section-title"><h2>Profit / loss summary</h2></div>
-            <div class="summary-lines">
-              <div><span>Revenue</span><strong>{{ report.profitLoss.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Inventory cost</span><strong>{{ report.profitLoss.estimatedInventoryCost | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div class="total"><span>Gross profit</span><strong>{{ report.profitLoss.grossProfit | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            </div>
-          </section>
-        </div>
-
-        <div class="dashboard-grid">
-          <section class="panel">
-            <div class="section-title"><h2>Booking status</h2></div>
-            <div class="status-grid">
-              <article><span>Booked</span><strong>{{ report.bookings.booked || 0 }}</strong></article>
-              <article><span>Completed</span><strong>{{ report.bookings.completed || 0 }}</strong></article>
-              <article><span>No-show</span><strong>{{ report.bookings.noShow || 0 }}</strong></article>
-              <article><span>Cancelled</span><strong>{{ report.bookings.cancelled || 0 }}</strong></article>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="section-title"><h2>Client and membership pulse</h2></div>
-            <div class="summary-lines">
-              <div><span>Total clients</span><strong>{{ report.clients?.total || 0 }}</strong></div>
-              <div><span>New in range</span><strong>{{ report.clients?.newInPeriod || 0 }}</strong></div>
-              <div><span>Repeat rate</span><strong>{{ report.retention.repeatCustomerRate }}%</strong></div>
-              <div><span>Active memberships</span><strong>{{ report.memberships.active }}</strong></div>
-            </div>
-          </section>
-        </div>
-
-        <section class="panel">
-          <div class="section-title">
-            <div>
-              <span class="eyebrow">Staff performance</span>
-              <h2>Top staff from Staff OS + POS attribution</h2>
-            </div>
-            <a class="ghost-button" routerLink="/reports/staff-sales">Open full staff sales</a>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Staff</th>
-                  <th>Role</th>
-                  <th>Revenue</th>
-                  <th>Bookings</th>
-                  <th>Completion</th>
-                  <th>Commission</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let person of topStaff()">
-                  <td>{{ person.name }}</td>
-                  <td>{{ person.role }}</td>
-                  <td>{{ person.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ person.bookings }}</td>
-                  <td>{{ person.rating }}%</td>
-                  <td>{{ (person.commission || 0) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <tr *ngFor="let p of topStaff(); let i = index">
+                  <td><div class="staff-cell"><span class="staff-rank">{{ i + 1 }}</span><strong>{{ p.name }}</strong></div></td>
+                  <td><span class="role-badge">{{ p.role }}</span></td>
+                  <td><strong>₹{{ p.revenue | number:'1.0-0' }}</strong></td>
+                  <td>{{ p.bookings }}</td>
+                  <td><span class="compl-badge" [class.high]="p.rating >= 80" [class.mid]="p.rating >= 60 && p.rating < 80" [class.low]="p.rating < 60">{{ p.rating }}%</span></td>
+                  <td>₹{{ (p.commission || 0) | number:'1.0-0' }}</td>
                 </tr>
                 <tr *ngIf="!topStaff().length">
-                  <td colspan="6">No staff performance data found for selected filters.</td>
+                  <td colspan="6" class="empty-row">No staff performance data found for selected filters.</td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </section>
-      </ng-container>
-    </section>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: INVENTORY + AI INSIGHTS                       -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="inventory" class="sec">
+        <ng-container *ngIf="report() as r">
+          <div class="sec-h">
+            <h2>Inventory overview</h2>
+            <a class="sec-link" routerLink="/inventory/reports">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              Inventory reports
+            </a>
+          </div>
+          <div class="inv-grid">
+              <div class="inv-card">
+                <span class="inv-label">Stock value</span>
+                <strong>{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+              <div class="inv-card inv-card-warn">
+                <span class="inv-label">Low stock alerts</span>
+                <strong>{{ r.inventory.lowStock }}</strong>
+              </div>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: REPORT LIBRARY (tiles) + CONNECTED REPORTS    -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="reports" class="sec">
+        <div class="sec-h">
+          <h2>Report library</h2>
+          <span class="sec-badge">{{ quickLinks().length }} reports</span>
+        </div>
+        <ng-container *ngIf="report() as r">
+          <div class="lib-grid">
+            <div class="lib-card" *ngFor="let link of quickLinks()" (click)="navigate(link.path)">
+              <span class="lib-card-icon" [style.background]="libColor(link.module)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+              </span>
+              <span class="lib-card-body">
+                <span class="lib-module">{{ link.module }}</span>
+                <strong>{{ link.label }}</strong>
+              </span>
+              <span class="lib-arrow">→</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- Connected reports -->
+        <ng-container *ngIf="analyticsCommand() as a">
+          <div class="sec-h" style="margin-top:24px">
+            <h3>KPI detail mapping</h3>
+            <span class="sec-badge">{{ a.kpiDetailMap?.length || 0 }} drill-downs</span>
+          </div>
+          <div class="lib-grid">
+            <div class="lib-card" *ngFor="let item of a.kpiDetailMap" (click)="navigate(item.route)">
+              <span class="lib-card-icon" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              </span>
+              <span class="lib-card-body">
+                <span class="lib-module">{{ item.module }} · {{ item.source }}</span>
+                <strong>{{ item.title }}</strong>
+              </span>
+              <span class="lib-arrow">→</span>
+            </div>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: AI INSIGHTS + SCHEDULED REPORTS (2-col)       -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="insights" class="sec">
+        <ng-container *ngIf="analyticsCommand() as a">
+          <div class="sec-h"><h2>AI Insights & schedules</h2></div>
+          <div class="is-grid">
+            <!-- Insights -->
+            <div class="is-card">
+              <div class="is-card-h">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                <span>AI recommendations</span>
+              </div>
+              <div class="is-ins" *ngIf="a.aiInsights?.length">
+                <div class="is-ins-item" *ngFor="let ins of a.aiInsights">
+                  <span class="is-dot" [class]="sevClass(ins.severity)"></span>
+                  <div>
+                    <strong>{{ ins.title }}</strong>
+                    <span>{{ ins.recommendation }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="is-empty" *ngIf="!a.aiInsights?.length">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                <span>No AI insights available</span>
+              </div>
+            </div>
+
+            <!-- Scheduled reports -->
+            <div class="is-card">
+              <div class="is-card-h">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg>
+                <span>Scheduled reports</span>
+                <button class="is-add" (click)="createDefaultSchedule()">+ New</button>
+              </div>
+              <div class="tbl-wrap" *ngIf="a.scheduledReports?.length">
+                <table class="tbl tbl-compact">
+                  <thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let s of a.scheduledReports">
+                      <td><strong>{{ s.name }}</strong></td>
+                      <td>{{ s.cadence }}</td>
+                      <td>{{ s.nextRunAt | date:'short' }}</td>
+                      <td><span class="sch-badge" [class]="s.status?.toLowerCase()">{{ s.status }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="is-empty" *ngIf="!a.scheduledReports?.length">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg>
+                <span>No schedules — create a weekly digest</span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!--  SECTION: DRILLDOWNS TABLE                            -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <section id="drilldowns" class="sec">
+        <ng-container *ngIf="analyticsCommand() as a">
+          <div class="sec-h"><h2>Report drilldowns</h2><span class="sec-badge">{{ a.drilldowns?.length || 0 }} reports</span></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>Report</th><th>Rows</th><th>Source</th><th></th></tr></thead>
+              <tbody>
+                <tr *ngFor="let d of a.drilldowns">
+                  <td><strong>{{ d.title }}</strong></td>
+                  <td><span class="count-badge">{{ d.rows }}</span></td>
+                  <td><span class="src-label">{{ d.source }}</span></td>
+                  <td class="td-r"><a class="ac-link" [routerLink]="d.route">Open →</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ng-container>
+      </section>
+
+      <!-- ═══════ FOOTER ACTIONS ═══════ -->
+      <div class="page-footer">
+        <div class="pf-left">
+          <span>Reports command center · {{ branchLabel() }}</span>
+        </div>
+        <div class="pf-right">
+          <button class="ac-btn" (click)="load()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+          </button>
+          <button class="ac-btn" (click)="createDefaultSchedule()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg>
+            Schedule
+          </button>
+          <button class="ac-btn" (click)="runAnomalyDetection()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Scan
+          </button>
+          <a class="ac-link" href="#overview">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            Back to top
+          </a>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
-    .hero-actions,
-    .report-filter-panel {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
+    .page { display: flex; flex-direction: column; gap: 22px; padding: 6px 2px 24px; background: var(--color-surface-muted); min-height: 100vh; }
+    a { text-decoration: none; color: inherit; }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ─── HEADER (glass) ─── */
+    .page-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      padding: 22px 26px; border-radius: 16px; border: 1px solid rgba(79,70,229,0.08);
+      background: rgba(255,255,255,0.85); backdrop-filter: blur(14px) saturate(1.08);
+      box-shadow: 0 1px 4px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04);
+      position: sticky; top: 0; z-index: 20;
     }
-    .hero-actions {
-      justify-content: flex-end;
+    .eye { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .page-head h1 { font-size: 1.45rem; font-weight: 800; margin: 4px 0 8px; letter-spacing: -0.03em; }
+    .page-head p { margin: 0; color: var(--muted); font-size: 0.84rem; max-width: 540px; line-height: 1.45; }
+    .page-head-l { position: relative; }
+    .page-head-l::before {
+      content: ''; position: absolute; top: -2px; left: 0; width: 42px; height: 4px;
+      border-radius: 4px; background: linear-gradient(90deg, var(--color-primary), #818cf8, rgba(99,102,241,0.15));
     }
-    .report-filter-panel {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-      align-items: end;
+    .page-head-r { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+    .ph-branch, .ph-date {
+      display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 8px;
+      border: 1px solid var(--line); font-size: 0.79rem; font-weight: 600; white-space: nowrap;
+      background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+      transition: border-color 140ms ease, box-shadow 140ms ease;
     }
-    .connected-report-panel {
-      display: grid;
-      gap: 16px;
+    .ph-branch:hover, .ph-date:hover { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.08); }
+    .ph-branch svg, .ph-date svg { color: var(--color-primary); flex-shrink: 0; }
+    .ph-actions { display: flex; gap: 5px; }
+
+    .ac-btn {
+      display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 9px;
+      border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+      font-size: 0.79rem; font-weight: 600; white-space: nowrap;
+      transition: all 140ms cubic-bezier(0.16,1,0.3,1);
     }
-    .report-link-grid {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+    .ac-btn:hover { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); transform: translateY(-1px); }
+    .ac-btn:active { transform: translateY(0); }
+    .ac-btn-primary {
+      border-color: transparent; background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+      color: #fff; box-shadow: 0 2px 8px rgba(79,70,229,0.2);
     }
-    .report-link-card {
+    .ac-btn-primary:hover { box-shadow: 0 4px 16px rgba(79,70,229,0.35); transform: translateY(-1px); border-color: transparent; color: #fff; }
+    .ac-link { color: var(--color-primary); font-weight: 600; font-size: 0.82rem; transition: opacity 130ms ease; }
+    .ac-link:hover { opacity: 0.75; }
+
+    /* ─── FILTERS (glass) ─── */
+    .page-filters {
+      display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+      padding: 13px 20px; border-radius: 14px; border: 1px solid rgba(79,70,229,0.06);
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
+      box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+      position: sticky; top: 82px; z-index: 19;
+    }
+    .pf-group { display: flex; flex-direction: column; gap: 4px; }
+    .pf-group label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .pf-group input {
+      padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 0.84rem;
+      font-family: inherit; background: var(--surface); outline: none; min-width: 130px;
+      transition: border-color 140ms ease, box-shadow 140ms ease;
+    }
+    .pf-group input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+    .pf-badge {
+      padding: 7px 13px; border-radius: 8px; border: 1px solid var(--line);
+      background: var(--color-surface-muted); font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+    }
+    .pf-apply {
+      padding: 7px 18px; border-radius: 9px; border: none;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+      color: #fff; font-size: 0.82rem; font-weight: 600; box-shadow: 0 2px 8px rgba(79,70,229,0.2);
+      transition: all 140ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .pf-apply:hover { box-shadow: 0 4px 16px rgba(79,70,229,0.35); transform: translateY(-1px); }
+    .pf-apply:active { transform: translateY(0); }
+    .pf-chips { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+    .pf-chip {
+      padding: 5px 11px; border-radius: 7px; font-size: 0.73rem; font-weight: 500;
+      background: transparent; border: none; color: var(--muted); white-space: nowrap;
+      transition: all 120ms ease;
+    }
+    .pf-chip:hover { background: var(--color-surface-muted); color: var(--ink); }
+
+    /* ─── NAV TABS ─── */
+    .page-tabs {
+      display: flex; gap: 3px; padding: 5px; border-radius: 14px;
+      background: rgba(244,245,250,0.85); backdrop-filter: blur(8px);
+      border: 1px solid rgba(79,70,229,0.04);
+      overflow-x: auto; position: sticky; top: 134px; z-index: 18;
+    }
+    .tab {
+      padding: 8px 20px; border-radius: 10px; font-size: 0.82rem; font-weight: 600; color: var(--muted);
+      white-space: nowrap; transition: all 160ms cubic-bezier(0.16,1,0.3,1);
+      position: relative;
+    }
+    .tab:hover { color: var(--ink); background: rgba(255,255,255,0.7); }
+    .tab.is-active { color: var(--color-primary); background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(255,255,255,0.8); }
+    .tab.is-active::after {
+      content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+      width: 20px; height: 3px; border-radius: 3px; background: var(--color-primary);
+    }
+
+    /* ─── SECTION ─── */
+    .sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 170px; padding: 24px 20px; border-radius: 16px; background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
+    .sec + .sec { margin-top: 18px; }
+    .sec-h {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 4px;
+    }
+    .sec-h { position: relative; }
+    .sec-h h2, .sec-h h3 { font-size: 1.1rem; font-weight: 750; margin: 0; letter-spacing: -0.02em; }
+    .sec-h h2::before, .sec-h h3::before {
+      content: ''; display: inline-block; width: 3px; height: 14px; border-radius: 3px;
+      background: var(--color-primary); margin-right: 10px; vertical-align: middle;
+    }
+    .sec-badge {
+      padding: 4px 11px; border-radius: 7px; font-size: 0.7rem; font-weight: 600;
+      background: var(--color-surface-muted); color: var(--muted);
+    }
+    .sec-link {
+      display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: 8px;
+      font-size: 0.78rem; font-weight: 600; color: var(--color-primary); margin-left: auto;
+      transition: background 120ms ease, transform 120ms ease;
+    }
+    .sec-link:hover { background: var(--color-primary-soft); transform: translateY(-1px); }
+
+    /* ─── KPI GRID ─── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .kpi-card {
+      display: flex; flex-direction: column; padding: 22px 24px 20px; border-radius: 16px; border: 1px solid var(--line);
+      background: var(--surface); color: inherit; cursor: pointer;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
+      transition: all 200ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(15,23,42,0.06); border-color: rgba(0,0,0,0.06); }
+    .kpi-card:active { transform: translateY(-1px); }
+    .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+    .kpi-icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .kpi-trend { font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 6px; }
+    .kpi-trend.up { background: rgba(5,150,105,0.1); color: #059669; }
+    .kpi-trend.down { background: rgba(220,38,38,0.08); color: #dc2626; }
+    .kpi-val { display: block; font-size: 1.55rem; font-weight: 750; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 6px; }
+    .kpi-label { display: block; font-size: 0.78rem; color: var(--muted); font-weight: 500; margin-top: auto; }
+    /* ─── EXECUTIVE ANALYTICS (2-col) ─── */
+    .ea-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: start; }
+    .ea-chart-card {
+      padding: 22px 24px; border-radius: 16px; border: 1px solid var(--line);
+      background: linear-gradient(135deg, var(--surface), var(--color-surface-muted));
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
+    }
+    .ea-chart-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 2px solid var(--color-surface-muted); }
+    .ea-chart-h span { font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .ea-chart-val { font-size: 1.35rem !important; font-weight: 750 !important; color: var(--ink) !important; letter-spacing: -0.02em; }
+    .ea-sparkline { display: flex; align-items: flex-end; gap: 4px; height: 110px; margin-bottom: 14px; padding: 0 2px; }
+    .ea-bar {
+      flex: 1; border-radius: 4px 4px 0 0;
+      background: linear-gradient(180deg, rgba(99,102,241,0.5), rgba(99,102,241,0.08));
+      transition: all 300ms cubic-bezier(0.16,1,0.3,1); min-height: 4px;
+      cursor: pointer;
+    }
+    .ea-bar:hover { background: linear-gradient(180deg, rgba(99,102,241,0.7), rgba(99,102,241,0.15)); transform: scaleY(1.02); transform-origin: bottom; }
+    .ea-bar.is-peak { background: linear-gradient(180deg, rgba(79,70,229,0.7), rgba(79,70,229,0.15)); }
+    .ea-chart-footer { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--muted); }
+    .ea-chart-up { color: #059669; font-weight: 600; }
+
+    .ea-side { display: flex; flex-direction: column; gap: 12px; }
+    .ea-side-card {
+      position: relative; padding: 16px 18px 16px 20px; border-radius: 12px; border: 1px solid var(--line);
+      background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03);
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .ea-side-card::before {
+      content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+      border-radius: 3px; background: var(--color-primary);
+    }
+    .ea-side-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15,23,42,0.06); border-color: rgba(79,70,229,0.12); }
+    .ea-side-card-accent {
+      border-color: rgba(5,150,105,0.18);
+    }
+    .ea-side-card-accent::before { background: #059669; }
+    .ea-side-label { font-size: 0.75rem; color: var(--muted); font-weight: 600; display: block; text-transform: uppercase; letter-spacing: 0.04em; }
+    .ea-side-card strong { font-size: 1.15rem; font-weight: 700; display: block; margin: 5px 0 4px; letter-spacing: -0.02em; }
+    .ea-side-card-accent strong { color: #059669; }
+
+    /* ─── SNAPSHOT GRID (4-col) ─── */
+    .snap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .snap-card {
+      padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line);
       background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      color: inherit;
-      display: grid;
-      gap: 8px;
-      min-height: 112px;
-      height: 100%;
-      padding: 16px;
-      text-decoration: none;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
+      transition: all 180ms cubic-bezier(0.16,1,0.3,1);
     }
-    .report-link-card span,
-    .report-link-card small {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
+    .snap-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(15,23,42,0.06); border-color: rgba(0,0,0,0.05); }
+    .snap-h { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid var(--color-surface-muted); }
+    .snap-h svg { color: var(--color-primary); width: 16px; }
+    .snap-h span { font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+    .snap-body { display: flex; flex-direction: column; gap: 2px; }
+    .snap-row {
+      display: flex; align-items: center; gap: 8px; padding: 7px 0;
+      border-bottom: 1px solid var(--line); font-size: 0.82rem;
     }
-    .report-link-card strong {
-      font-size: 20px;
+    .snap-row:last-child { border-bottom: 0; }
+    .snap-row span:first-child { width: 80px; color: var(--muted); flex-shrink: 0; font-weight: 500; }
+    .snap-row strong { flex: 1; text-align: right; font-weight: 650; font-size: 0.88rem; }
+    .snap-total { border-top: 2px solid var(--line); margin-top: 6px; padding-top: 10px; }
+    .snap-total strong { color: #059669; }
+    .snap-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 2px; }
+    .snap-stat { text-align: center; padding: 10px 4px; border-radius: 8px; background: var(--color-surface-muted); transition: transform 140ms ease; }
+    .snap-stat:hover { transform: scale(1.03); }
+    .snap-stat strong { display: block; font-size: 1.15rem; font-weight: 700; }
+    .snap-stat small { font-size: 0.68rem; color: var(--muted); display: block; margin-top: 3px; font-weight: 600; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-bottom: 5px; }
+
+    .stg { padding: 2px 8px; border-radius: 5px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; border: 1px solid transparent; }
+    .stg-green { background: rgba(5,150,105,0.06); color: #059669; border-color: rgba(5,150,105,0.15); }
+    .stg-blue { background: rgba(37,99,235,0.06); color: #2563eb; border-color: rgba(37,99,235,0.15); }
+    .stg-purple { background: rgba(124,58,237,0.06); color: #7c3aed; border-color: rgba(124,58,237,0.15); }
+    .stg-amber { background: rgba(217,119,6,0.06); color: #d97706; border-color: rgba(217,119,6,0.15); }
+
+    /* ─── TABLE ─── */
+    .tbl-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02); }
+    .tbl { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 550px; }
+    .tbl th {
+      padding: 11px 15px; background: var(--color-surface-muted); font-size: 0.7rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+      text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap;
     }
-    .status-grid {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+    .tbl th:first-child { border-radius: 12px 0 0 0; }
+    .tbl th:last-child { border-radius: 0 12px 0 0; }
+    .tbl td { padding: 12px 15px; border-bottom: 1px solid var(--line); font-size: 0.85rem; transition: background 120ms ease; }
+    .tbl tbody tr:last-child td { border-bottom: 0; }
+    .tbl tbody tr:nth-child(even) td { background: rgba(0,0,0,0.015); }
+    .tbl tbody tr:hover td { background: rgba(99,102,241,0.04); }
+    .tbl tbody tr:active td { background: rgba(99,102,241,0.08); }
+    .tbl-compact td { padding: 9px 12px; font-size: 0.82rem; }
+    .td-r { text-align: right; }
+    .empty-row { text-align: center; color: var(--muted); padding: 28px !important; font-size: 0.85rem; }
+    .count-badge { font-weight: 700; padding: 2px 9px; border-radius: 6px; background: var(--color-surface-muted); font-size: 0.82rem; }
+    .src-label { font-size: 0.8rem; color: var(--muted); }
+
+    /* ─── STAFF TABLE ─── */
+    .staff-cell { display: flex; align-items: center; gap: 10px; }
+    .staff-rank {
+      width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
+      font-size: 0.7rem; font-weight: 800; background: var(--color-surface-muted); color: var(--muted);
     }
-    .status-grid article {
+    tbody tr:nth-child(1) .staff-rank { background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(245,158,11,0.08)); color: #d97706; }
+    tbody tr:nth-child(2) .staff-rank { background: linear-gradient(135deg, rgba(148,163,184,0.25), rgba(148,163,184,0.08)); color: #64748b; }
+    tbody tr:nth-child(3) .staff-rank { background: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(180,83,9,0.05)); color: #92400e; }
+    .role-badge { padding: 3px 9px; border-radius: 6px; font-size: 0.73rem; font-weight: 600; background: var(--color-surface-muted); color: var(--muted); white-space: nowrap; }
+    .compl-badge { font-weight: 700; padding: 3px 9px; border-radius: 6px; }
+    .compl-badge.high { color: #059669; background: rgba(5,150,105,0.1); }
+    .compl-badge.mid { color: #d97706; background: rgba(217,119,6,0.1); }
+    .compl-badge.low { color: #dc2626; background: rgba(220,38,38,0.08); }
+
+    .sch-badge { padding: 3px 9px; border-radius: 6px; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sch-badge.active { background: rgba(5,150,105,0.1); color: #059669; }
+    .sch-badge.paused { background: rgba(217,119,6,0.1); color: #d97706; }
+    .sch-badge.error { background: rgba(220,38,38,0.08); color: #dc2626; }
+
+    /* ─── INVENTORY ─── */
+    .inv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .inv-card {
+      padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line);
+      background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03);
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .inv-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15,23,42,0.06); }
+    .inv-card-warn { border-color: rgba(217,119,6,0.18); }
+    .inv-label { font-size: 0.74rem; color: var(--muted); font-weight: 600; display: block; text-transform: uppercase; letter-spacing: 0.04em; }
+    .inv-card strong { font-size: 1.25rem; font-weight: 700; display: block; margin: 5px 0 4px; letter-spacing: -0.02em; }
+
+    /* ─── REPORT LIBRARY ─── */
+    .lib-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .lib-card {
+      display: flex; align-items: center; gap: 12px; padding: 15px; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
+      transition: all 180ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .lib-card:hover { transform: translateY(-3px); border-color: rgba(79,70,229,0.15); box-shadow: 0 6px 20px rgba(15,23,42,0.06); }
+    .lib-card:active { transform: translateY(-1px); }
+    .lib-card-icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .lib-card-body { flex: 1; min-width: 0; }
+    .lib-module { font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); display: block; }
+    .lib-card-body strong { font-size: 0.86rem; font-weight: 650; display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lib-arrow { color: var(--muted); font-size: 1.1rem; opacity: 0; transition: opacity 160ms ease, transform 160ms ease; }
+    .lib-card:hover .lib-arrow { opacity: 1; color: var(--color-primary); transform: translateX(3px); }
+
+    /* ─── AI INSIGHTS + SCHEDULES ─── */
+    .is-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .is-card {
+      padding: 20px 22px; border-radius: 14px; border: 1px solid var(--line);
       background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
     }
-    .status-grid span {
-      color: var(--muted);
-      display: block;
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
+    .is-card-h { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 2px solid var(--color-surface-muted); }
+    .is-card-h svg { color: var(--color-primary); width: 18px; }
+    .is-card-h span { font-size: 0.92rem; font-weight: 650; flex: 1; }
+    .is-add {
+      padding: 4px 12px; border-radius: 7px; border: 1px solid var(--line);
+      background: transparent; font-size: 0.76rem; font-weight: 600; color: var(--color-primary);
+      transition: all 120ms ease;
     }
-    .status-grid strong {
-      display: block;
-      font-size: 24px;
-      margin-top: 6px;
+    .is-add:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
+    .is-ins { display: flex; flex-direction: column; gap: 8px; }
+    .is-ins-item {
+      display: flex; align-items: flex-start; gap: 11px; padding: 12px 14px 12px 16px;
+      border-radius: 9px; border: 1px solid var(--line);
+      border-left: 3px solid var(--line);
+      transition: background 140ms ease, border-color 140ms ease;
     }
-    @media (max-width: 760px) {
-      .report-filter-panel,
-      .report-link-grid,
-      .status-grid {
-        grid-template-columns: 1fr;
-      }
+    .is-ins-item:hover { background: var(--color-surface-muted); border-color: rgba(79,70,229,0.1); border-left-color: var(--color-primary); }
+    .is-ins-item:has(.is-dot.high) { border-left-color: #dc2626; }
+    .is-ins-item:has(.is-dot.medium) { border-left-color: #d97706; }
+    .is-ins-item:has(.is-dot.low) { border-left-color: #059669; }
+    .is-ins-item:has(.is-dot.info) { border-left-color: var(--color-primary); }
+    .is-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
+    .is-dot.high { background: #dc2626; }
+    .is-dot.medium { background: #d97706; }
+    .is-dot.low { background: #059669; }
+    .is-dot.info { background: var(--color-primary); }
+    .is-ins-item strong { font-size: 0.84rem; font-weight: 600; display: block; }
+    .is-ins-item span { font-size: 0.76rem; color: var(--muted); display: block; margin-top: 2px; line-height: 1.35; }
+    .is-empty { display: flex; align-items: center; gap: 9px; padding: 20px 0; color: var(--muted); font-size: 0.82rem; }
+    .is-empty svg { opacity: 0.25; flex-shrink: 0; }
+
+    /* ─── FOOTER ─── */
+    .page-footer {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 16px 22px; border-radius: 14px; border: 1px solid var(--line);
+      background: var(--surface); margin-top: 4px; flex-wrap: wrap;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 1px 4px rgba(15,23,42,0.02);
+    }
+    .pf-left { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+    .pf-right { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+    /* ─── SCROLLBAR ─── */
+    .page-tabs::-webkit-scrollbar { height: 4px; }
+    .page-tabs::-webkit-scrollbar-track { background: transparent; }
+    .page-tabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 1200px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .snap-grid { grid-template-columns: repeat(2, 1fr); }
+      .lib-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .ea-grid { grid-template-columns: 1fr; }
+      .is-grid { grid-template-columns: 1fr; }
+      .inv-grid { grid-template-columns: 1fr; }
+      .page-head { flex-direction: column; }
+      .page-head-r { width: 100%; }
+      .pf-chips { margin-left: 0; }
+    }
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .snap-grid { grid-template-columns: 1fr; }
+      .lib-grid { grid-template-columns: 1fr; }
+      .page-tabs { overflow-x: auto; gap: 2px; }
+      .tab { padding: 7px 14px; font-size: 0.78rem; }
+      .page-filters { flex-direction: column; align-items: stretch; }
+      .pf-group input { min-width: auto; width: 100%; }
     }
   `]
 })
@@ -400,10 +931,40 @@ export class ReportsComponent implements OnInit {
     });
   }
 
+  navigate(path: string): void {
+    if (path?.startsWith('/')) {
+      const el = document.createElement('a');
+      el.href = path;
+      el.click();
+    }
+  }
+
+  sevClass(severity: string): string {
+    const s = (severity || '').toLowerCase();
+    if (s.includes('high') || s === 'critical') return 'high';
+    if (s.includes('medium') || s === 'warn') return 'medium';
+    if (s.includes('low') || s === 'info') return 'low';
+    return 'info';
+  }
+
   branchLabel(): string {
     const branchId = this.api.selectedBranchId();
     if (!branchId) return 'Header branch not selected';
     return this.branches().find((branch) => branch.id === branchId)?.name || branchId;
+  }
+
+  libColor(module: string): string {
+    const colors: Record<string, string> = {
+      'FlexiSalon import': 'linear-gradient(135deg,#3b82f6,#2563eb)',
+      'Invoice intelligence': 'linear-gradient(135deg,#10b981,#059669)',
+      'POS attribution': 'linear-gradient(135deg,#8b5cf6,#7c3aed)',
+      'Payroll': 'linear-gradient(135deg,#f59e0b,#d97706)',
+      'Finance': 'linear-gradient(135deg,#64748b,#475569)',
+      'Inventory': 'linear-gradient(135deg,#ef4444,#dc2626)',
+      'Bookings': 'linear-gradient(135deg,#06b6d4,#0891b2)',
+      'Clients': 'linear-gradient(135deg,#ec4899,#db2777)'
+    };
+    return colors[module] || 'linear-gradient(135deg,#6366f1,#4f46e5)';
   }
 
   private loadBranches(): void {
