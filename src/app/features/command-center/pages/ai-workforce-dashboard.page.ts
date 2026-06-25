@@ -207,7 +207,7 @@ interface AiKpiImpact extends ApiRecord {
           </article>
         </div>
 
-        <div class="ai-overview-grid">
+        <div class="ai-overview-grid" [class.has-detail]="selectedAgent() !== null">
           <article class="panel ai-list-panel">
             <div class="section-title">
               <div>
@@ -679,6 +679,7 @@ interface AiKpiImpact extends ApiRecord {
     .page-stack.ai-workforce-page {
       display: grid;
     }
+    .muted { color: #6b7c74; font-size: 12px; font-weight: 700; }
 
     .module-hero {
       background: #fff; border-radius: 14px; padding: 24px 28px;
@@ -699,15 +700,17 @@ interface AiKpiImpact extends ApiRecord {
     .state.loading { border-left: 3px solid #0f766e; }
 
     .ai-tabs {
-      display: flex; flex-wrap: wrap; gap: 4px; padding: 6px;
+      display: flex; align-items: center; gap: 4px; padding: 6px;
       background: #fff; border-radius: 12px;
       box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04);
+      overflow-x: auto;
     }
     .ai-tabs button {
-      min-height: 40px; display: inline-flex; align-items: center; gap: 8px;
+      height: 40px; display: inline-flex; align-items: center; gap: 8px;
       padding: 0 14px; border: 0; border-radius: 8px;
       color: #6b7c74; background: transparent; font-weight: 700; font-size: 13px;
-      cursor: pointer; transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+      white-space: nowrap; cursor: pointer; flex-shrink: 0;
+      transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
     }
     .ai-tabs button.active { color: #12231d; background: #f0f5f3; box-shadow: inset 0 0 0 1px rgba(15,118,110,0.15); }
     .ai-tabs button:hover:not(.active) { background: #f5f6fb; }
@@ -759,7 +762,10 @@ interface AiKpiImpact extends ApiRecord {
     .metric-card.neutral { border-top-color: #0f766e; }
 
     .ai-overview-grid {
-      display: grid; grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.2fr); gap: 20px; align-items: start;
+      display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start;
+    }
+    .ai-overview-grid.has-detail {
+      grid-template-columns: 1fr 1fr;
     }
 
     .agent-card {
@@ -803,7 +809,7 @@ interface AiKpiImpact extends ApiRecord {
     .agent-actions button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 
     .run-mini, .decision-card, .alert-card, .settings-card {
-      padding: 14px 16px; border: 1px solid #edf2ef; border-radius: 10px; background: #fff;
+      width: 100%; box-sizing: border-box; padding: 14px 16px; border: 1px solid #edf2ef; border-radius: 10px; background: #fff;
       transition: box-shadow 140ms ease, transform 140ms ease;
     }
     .run-mini:hover, .decision-card:hover, .alert-card:hover, .settings-card:hover {
@@ -827,7 +833,7 @@ interface AiKpiImpact extends ApiRecord {
     .action-chips span { padding: 5px 10px; border-radius: 999px; background: #f0f5f3; color: #6b7c74; font-size: 11px; font-weight: 700; }
 
     .ai-table-wrap { overflow-x: auto; }
-    .ai-table-wrap table { min-width: 1060px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    .ai-table-wrap table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
     .ai-table-wrap th { text-align: left; padding: 12px 14px; color: #6b7c74; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 2px solid #edf2ef; }
     .ai-table-wrap td { padding: 12px 14px; border-bottom: 1px solid #edf2ef; color: #12231d; }
     .ai-table-wrap tbody tr { transition: background 100ms ease; }
@@ -891,7 +897,7 @@ interface AiKpiImpact extends ApiRecord {
 
     @media (max-width: 1180px) {
       .ai-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .ai-overview-grid { grid-template-columns: 1fr; }
+      .ai-overview-grid, .ai-overview-grid.has-detail { grid-template-columns: 1fr; }
       .settings-form-grid, .premium-grid, .provider-grid, .marketplace-grid { grid-template-columns: 1fr; }
     }
 

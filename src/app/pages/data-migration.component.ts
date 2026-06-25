@@ -141,737 +141,659 @@ type MigrationRecoveryReport = {
         </article>
       </section>
 
-      <section class="workspace-grid">
-        <article class="panel import-panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Live Import Runbook</span>
-              <h2>Controlled migration launch</h2>
-            </div>
-            <span class="status-pill">{{ loading() ? 'Running' : 'Ready' }}</span>
-          </div>
+      <nav class="migration-nav">
+        <button *ngFor="let item of navItems" type="button" [class.active]="activeSection() === item.id" (click)="scrollTo(item.id)">
+          <span>{{ item.icon }}</span>
+          <span>{{ item.label }}</span>
+        </button>
+      </nav>
+      <section class="accordion-stack">
 
-          <div class="form-grid">
-            <label>
-              <span>Source software</span>
-              <select [(ngModel)]="sourceSoftware" (ngModelChange)="refreshSourceContext()">
-                <option *ngFor="let source of sourceOptions" [value]="source.value">{{ source.label }}</option>
-              </select>
-            </label>
-            <label>
-              <span>Resource</span>
-              <select [(ngModel)]="resource" (ngModelChange)="onResourceChange()">
-                <option value="">Auto-detect by sheet name</option>
-                <option *ngFor="let item of resourceOptions" [value]="item.value">{{ item.label }}</option>
-              </select>
-            </label>
-            <label class="file-drop">
-              <span>Upload Excel / CSV</span>
-              <input type="file" accept=".xlsx,.xls,.csv" (change)="onFile($event)" />
-              <small>Preserves old IDs, created dates, invoice numbers and branch history.</small>
-            </label>
-          </div>
-
-          <div class="action-row">
-            <button class="secondary-button" [disabled]="!fileBase64() || loading()" (click)="analyze()">Analyze</button>
-            <button class="secondary-button" [disabled]="!fileBase64() || loading()" (click)="dryRun()">Dry run</button>
-            <button class="primary-button" [disabled]="!fileBase64() || loading() || hasCriticalErrors()" (click)="runImport()">Final import</button>
-            <button class="ghost-button" type="button" [disabled]="!templateColumns().length" (click)="downloadTemplate()">Template</button>
-          </div>
-
-          <p class="error-text" *ngIf="fileBase64() && !summary() && !error()">
-            Run Analyze before final import, then submit and approve it.
-          </p>
-          <p class="error-text" *ngIf="error()">{{ error() }}</p>
-          <p class="success-text" *ngIf="message()">{{ message() }}</p>
-
-          <div class="pipeline">
-            <article *ngFor="let step of pipelineSteps()" [class.done]="step.status === 'done'" [class.active]="step.status === 'active'" [class.blocked]="step.status === 'blocked'">
-              <span>{{ step.key }}</span>
-              <strong>{{ step.label }}</strong>
-              <small>{{ step.detail }}</small>
-            </article>
-          </div>
-        </article>
-
-        <aside class="panel risk-panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Risk Radar</span>
-              <h2>Import blockers</h2>
-            </div>
-          </div>
-          <article *ngFor="let risk of riskCards()" [class.danger]="risk.tone === 'danger'" [class.warning]="risk.tone === 'warning'" [class.good]="risk.tone === 'good'">
-            <span>{{ risk.label }}</span>
-            <strong>{{ risk.value }}</strong>
-            <small>{{ risk.detail }}</small>
-          </article>
-        </aside>
-      </section>
-
-
-      <section class="grid two">
-        <article class="panel worker-panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Large Migration Worker</span>
-              <h2>Chunked import queue</h2>
-            </div>
-            <span class="status-pill" [class.danger]="largeJob()?.status === 'failed'">{{ largeJob()?.status || 'Not prepared' }}</span>
-          </div>
-          <div class="control-strip compact">
-            <article><span>Job ID</span><strong>{{ largeJob()?.id || '-' }}</strong><small>{{ largeJob()?.resumeToken || 'Create a staged job from analyzed data' }}</small></article>
-            <article><span>Rows</span><strong>{{ largeJob()?.totalRows || summary()?.totalRows || 0 }}</strong><small>{{ largeJob()?.processedRows || 0 }} processed</small></article>
-            <article><span>Imported</span><strong>{{ largeJob()?.importedRows || 0 }}</strong><small>{{ largeJob()?.skippedRows || 0 }} skipped</small></article>
-            <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeReadyChunks() }}/{{ largeJobChunks().length }} chunks ready · {{ csvStagedRows() }} staged rows</small></article>
-          </div>
-          <div class="worker-settings">
-            <label>
-              <span>Chunk size</span>
-              <input type="number" min="100" max="50000" step="100" [ngModel]="largeChunkSize()" (ngModelChange)="largeChunkSize.set(numberInput($event, 5000))" />
-            </label>
-            <label>
-              <span>Chunks per tick</span>
-              <input type="number" min="1" max="100" [ngModel]="largeMaxChunks()" (ngModelChange)="largeMaxChunks.set(numberInput($event, 5))" />
-            </label>
-            <label class="toggle-field">
-              <span>Allow partial import</span>
-              <input type="checkbox" [ngModel]="allowPartialLargeImport()" (ngModelChange)="allowPartialLargeImport.set($event)" />
-            </label>
-          </div>
-          <div class="action-row">
-            <button class="secondary-button" type="button" [disabled]="!canPrepareLargeMigration() || loading()" (click)="prepareLargeMigrationJob()">Prepare chunk 1</button>
-            <button class="secondary-button" type="button" [disabled]="!isCsvFileSelected() || loading()" (click)="stageCsvMigrationChunks()">Stage CSV chunks</button>
-            <button class="primary-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="queueLargeMigrationJob()">Queue worker</button>
-            <button class="secondary-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="runWorkerTick()">Run worker tick</button>
-            <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="refreshLargeJobStatus()">Refresh</button>
-            <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="pauseLargeMigrationJob()">Pause</button>
-            <button class="secondary-button" type="button" [disabled]="!largeJob() || loading()" (click)="retryFailedLargeMigrationChunks()">Retry failed</button>
-            <button class="danger-button" type="button" [disabled]="!largeJob() || loading()" (click)="cancelLargeMigrationJob()">Cancel</button>
-            <button class="ghost-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="resumeLargeMigrationJob()">Resume now</button>
-          </div>
-          <p class="muted" *ngIf="!importApprovalReady()">Owner approval required before queued import writes into live modules.</p>
-          <p class="migration-warning" *ngIf="largePendingChunks()">{{ largePendingChunks() }} chunk(s) still need analysis. Queue/resume is blocked unless partial import is enabled.</p>
-          <div class="chunk-list" *ngIf="largeJobChunks().length">
-            <article *ngFor="let chunk of largeJobChunks()" [class.done]="chunk.status === 'imported'" [class.danger]="chunk.status === 'failed' || chunk.status === 'imported_with_errors'">
-              <strong>Chunk {{ chunk.chunkNumber }}</strong>
-              <span>{{ chunk.status }}</span>
-              <small>{{ chunk.importedRows || 0 }}/{{ chunk.totalRows || 0 }} imported · {{ chunk.errorRows || 0 }} errors</small>
-            </article>
-          </div>
-        </article>
-
-        <article class="panel proof-panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Migration Proof</span>
-              <h2>Reconciliation sign-off</h2>
-            </div>
-            <span class="status-pill" [class.danger]="latestLargeReconciliation()?.status === 'warning'">{{ latestLargeReconciliation()?.status || 'Not checked' }}</span>
-          </div>
-          <div class="proof-grid">
-            <article>
-              <span>Snapshot</span>
-              <strong>{{ latestLargeReconciliation()?.id || '-' }}</strong>
-              <small>{{ latestLargeReconciliation()?.snapshotType || 'Run proof check after import' }}</small>
-            </article>
-            <article>
-              <span>Differences</span>
-              <strong>{{ largeReconciliationDifferences().length }}</strong>
-              <small>{{ latestLargeReconciliation()?.createdAt || 'No audit snapshot yet' }}</small>
-            </article>
-          </div>
-          <div class="action-row">
-            <button class="primary-button" type="button" [disabled]="!largeJob() || loading()" (click)="runLargeJobReconciliation()">Run proof check</button>
-            <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="refreshLargeJobStatus()">Refresh proof</button>
-            <button class="secondary-button" type="button" [disabled]="!latestLargeReconciliation() || loading()" (click)="downloadLargeReconciliationReport()">Export proof</button>
-          </div>
-          <div class="checklist compact-checklist">
-            <label *ngFor="let item of largeMigrationChecklist()">
-              <input type="checkbox" [checked]="item.done" disabled />
-              <span>{{ item.label }}</span>
-            </label>
-            <label>
-              <input type="checkbox" [checked]="!!latestLargeReconciliation()" disabled />
-              <span>Reconciliation snapshot saved</span>
-            </label>
-          </div>
-          <div class="result-box" *ngIf="lastWorkerResult()">
-            <span>Last worker result</span>
-            <strong>{{ lastWorkerResult()?.checkedJobs || lastWorkerResult()?.processedChunks || 0 }} unit(s) processed</strong>
-            <small>{{ lastWorkerResultText() }}</small>
-          </div>
-          <div class="difference-list" *ngIf="largeReconciliationDifferences().length; else noLargeReconDiffs">
-            <article *ngFor="let diff of largeReconciliationDifferences()" [class.danger]="diff.severity === 'critical'">
-              <strong>{{ diff.code || 'difference' }}</strong>
-              <span>{{ diff.message || 'Review this migration proof difference.' }}</span>
-              <small>{{ diff.resource || 'all resources' }} · expected {{ diff.expected ?? '-' }} · actual {{ diff.actual ?? '-' }}</small>
-            </article>
-          </div>
-          <ng-template #noLargeReconDiffs>
-            <p class="muted">No proof differences recorded for the latest snapshot.</p>
-          </ng-template>
-        </article>
-      </section>
-
-      <section class="grid three">
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">AI Mapping Studio</span>
-              <h2>Field confidence & saved profiles</h2>
-            </div>
-            <span class="status-pill">{{ mappingCoverage() }}% mapped</span>
-          </div>
-          <div class="mapping-toolbar">
-            <select [(ngModel)]="selectedMappingId" (ngModelChange)="applySavedMapping($event)">
-              <option value="">New AI mapping draft</option>
-              <option *ngFor="let mapping of relevantMappings()" [value]="mapping.id">{{ mapping.name || mapping.resource }}</option>
-            </select>
-            <button class="secondary-button" type="button" [disabled]="!mappingDraft().length || loading()" (click)="saveMappingProfile()">Save profile</button>
-          </div>
-          <div class="mapping-list">
-            <article *ngFor="let row of mappingDraftPreview()" [class.required]="row.required">
-              <div>
-                <strong>{{ row.targetField }}</strong>
-                <small>{{ row.aliases.slice(0, 3).join(', ') || 'No alias' }}</small>
+        <article class="accordion-item" [class.open]="activeSection() === 'launch'" id="section-launch">
+          <button class="accordion-head" type="button" (click)="toggleSection('launch')">
+            <span class="acc-icon">🚀</span>
+            <span class="acc-title">Migration Launch</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'launch'">
+            <div class="acc-grid">
+              <div class="panel acc-panel">
+                <div class="panel-head">
+                  <div>
+                    <span class="eyebrow">Live Import Runbook</span>
+                    <h2>Controlled migration launch</h2>
+                  </div>
+                  <span class="status-pill">{{ loading() ? 'Running' : 'Ready' }}</span>
+                </div>
+                <div class="form-grid">
+                  <label><span>Source software</span><select [(ngModel)]="sourceSoftware" (ngModelChange)="refreshSourceContext()"><option *ngFor="let source of sourceOptions" [value]="source.value">{{ source.label }}</option></select></label>
+                  <label><span>Resource</span><select [(ngModel)]="resource" (ngModelChange)="onResourceChange()"><option value="">Auto-detect by sheet name</option><option *ngFor="let item of resourceOptions" [value]="item.value">{{ item.label }}</option></select></label>
+                  <label class="file-drop"><span>Upload Excel / CSV</span><input type="file" accept=".xlsx,.xls,.csv" (change)="onFile($event)" /><small>Preserves old IDs, created dates, invoice numbers and branch history.</small></label>
+                </div>
+                <div class="action-row">
+                  <button class="secondary-button" [disabled]="!fileBase64() || loading()" (click)="analyze()">Analyze</button>
+                  <button class="secondary-button" [disabled]="!fileBase64() || loading()" (click)="dryRun()">Dry run</button>
+                  <button class="primary-button" [disabled]="!fileBase64() || loading() || hasCriticalErrors()" (click)="runImport()">Final import</button>
+                  <button class="ghost-button" type="button" [disabled]="!templateColumns().length" (click)="downloadTemplate()">Template</button>
+                </div>
+                <p class="error-text" *ngIf="fileBase64() && !summary() && !error()">Run Analyze before final import, then submit and approve it.</p>
+                <p class="error-text" *ngIf="error()">{{ error() }}</p>
+                <p class="success-text" *ngIf="message()">{{ message() }}</p>
+                <div class="pipeline">
+                  <article *ngFor="let step of pipelineSteps()" [class.done]="step.status === 'done'" [class.active]="step.status === 'active'" [class.blocked]="step.status === 'blocked'">
+                    <span>{{ step.key }}</span>
+                    <strong>{{ step.label }}</strong>
+                    <small>{{ step.detail }}</small>
+                  </article>
+                </div>
               </div>
-              <input [ngModel]="row.sourceColumn" (ngModelChange)="setMappingSource(row.targetField, $event)" placeholder="Source column" />
-              <span>{{ row.confidence }}%</span>
-            </article>
-            <p class="muted" *ngIf="!templateColumns().length">Select a resource to inspect required fields.</p>
+              <aside class="panel risk-panel">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Risk Radar</span><h2>Import blockers</h2></div>
+                </div>
+                <article *ngFor="let risk of riskCards()" [class.danger]="risk.tone === 'danger'" [class.warning]="risk.tone === 'warning'" [class.good]="risk.tone === 'good'">
+                  <span>{{ risk.label }}</span>
+                  <strong>{{ risk.value }}</strong>
+                  <small>{{ risk.detail }}</small>
+                </article>
+              </aside>
+            </div>
           </div>
         </article>
 
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Entity Coverage</span>
-              <h2>Detected modules</h2>
-            </div>
-          </div>
-          <div class="entity-stack">
-            <article *ngFor="let row of entityRows()">
-              <strong>{{ label(row.entity) }}</strong>
-              <span>{{ row.valid }}/{{ row.total }} valid</span>
-              <meter min="0" [max]="row.total || 1" [value]="row.valid"></meter>
-              <small>{{ row.errors }} errors - {{ row.duplicates }} duplicates</small>
-            </article>
-            <p class="muted" *ngIf="!entityRows().length">Analyze a file to see entity coverage.</p>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Reconciliation</span>
-              <h2>Old vs Aura checks</h2>
-            </div>
-          </div>
-          <div class="recon-list">
-            <article *ngFor="let row of reconciliationRows()">
-              <span>{{ row.label }}</span>
-              <strong>{{ row.value }}</strong>
-              <small>{{ row.detail }}</small>
-            </article>
-          </div>
-        </article>
-      </section>
-
-      <section class="grid two">
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Reconciliation Lab</span>
-              <h2>Expected totals vs analyzed data</h2>
-            </div>
-            <span class="status-pill" [class.danger]="reconciliationResult()?.mismatchCount">{{ reconciliationResult()?.matched ? 'Matched' : reconciliationResult() ? 'Mismatch' : 'Not run' }}</span>
-          </div>
-          <div class="expected-grid">
-            <label *ngFor="let metric of expectedMetrics">
-              <span>{{ metric.label }}</span>
-              <input type="number" min="0" [ngModel]="expectedTotals()[metric.key] || ''" (ngModelChange)="setExpectedTotal(metric.key, $event)" />
-            </label>
-          </div>
-          <div class="action-row">
-            <button class="secondary-button" type="button" [disabled]="!fileBase64() || loading()" (click)="runReconciliation()">Run reconciliation</button>
-            <button class="ghost-button" type="button" [disabled]="!reconciliationResult()" (click)="clearReconciliation()">Clear</button>
-          </div>
-          <div class="reconcile-table" *ngIf="reconciliationLines().length">
-            <article *ngFor="let line of reconciliationLines()" [class.mismatch]="line.status === 'mismatch'" [class.match]="line.status === 'match'">
-              <span>{{ line.metric }}</span>
-              <strong>{{ line.actual }}</strong>
-              <small>Expected {{ line.expected ?? 'not set' }} · Diff {{ line.difference ?? '-' }}</small>
-            </article>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Approval Control Tower</span>
-              <h2>Owner sign-off workflow</h2>
-            </div>
-            <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadApprovals()">Refresh</button>
-          </div>
-          <label>
-            <span>Approval note</span>
-            <textarea [(ngModel)]="approvalNote" rows="3" placeholder="Summary, risk notes, branch sign-off, reconciliation evidence"></textarea>
-          </label>
-          <div class="action-row">
-            <button class="primary-button" type="button" [disabled]="!summary() || hasCriticalErrors() || loading()" (click)="submitApproval()">Submit for approval</button>
-            <button class="ghost-button" type="button" [disabled]="!latestPendingApproval() || loading()" (click)="decideApproval(latestPendingApproval()?.id || '', 'approved')">Approve latest</button>
-            <button class="danger-button" type="button" [disabled]="!latestPendingApproval() || loading()" (click)="decideApproval(latestPendingApproval()?.id || '', 'rejected')">Reject latest</button>
-          </div>
-          <p class="error-text" *ngIf="fileBase64() && !summary()">
-            Analyze must run before approval.
-          </p>
-          <p class="success-text" *ngIf="summary() && !latestPendingApproval() && !importApprovalReady()">
-            Analyze is complete. Click "Submit for approval".
-          </p>
-          <p class="error-text" *ngIf="approvalDebug()">{{ approvalDebug() }}</p>
-          <div class="approval-list">
-            <article *ngFor="let approval of recentApprovals()" [class.pending]="approval.status === 'pending'" [class.approved]="approval.status === 'approved'" [class.rejected]="approval.status === 'rejected'">
-              <div>
-                <strong>{{ approval.status | titlecase }} · {{ approval.resource || 'migration' }}</strong>
-                <small>{{ approval.submittedAt | date:'short' }} {{ approval.reviewedAt ? '· reviewed ' + (approval.reviewedAt | date:'short') : '' }}</small>
+        <article class="accordion-item" [class.open]="activeSection() === 'mapping'" id="section-mapping">
+          <button class="accordion-head" type="button" (click)="toggleSection('mapping')">
+            <span class="acc-icon">🧠</span>
+            <span class="acc-title">AI Mapping Studio</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'mapping'">
+            <div class="acc-grid three">
+              <div class="panel">
+                <div class="panel-head">
+                  <div><span class="eyebrow">AI Mapping Studio</span><h2>Field confidence & saved profiles</h2></div>
+                  <span class="status-pill">{{ mappingCoverage() }}% mapped</span>
+                </div>
+                <div class="mapping-toolbar">
+                  <select [(ngModel)]="selectedMappingId" (ngModelChange)="applySavedMapping($event)">
+                    <option value="">New AI mapping draft</option>
+                    <option *ngFor="let mapping of relevantMappings()" [value]="mapping.id">{{ mapping.name || mapping.resource }}</option>
+                  </select>
+                  <button class="secondary-button" type="button" [disabled]="!mappingDraft().length || loading()" (click)="saveMappingProfile()">Save profile</button>
+                </div>
+                <div class="mapping-list">
+                  <article *ngFor="let row of mappingDraftPreview()" [class.required]="row.required">
+                    <div><strong>{{ row.targetField }}</strong><small>{{ row.aliases.slice(0, 3).join(', ') || 'No alias' }}</small></div>
+                    <input [ngModel]="row.sourceColumn" (ngModelChange)="setMappingSource(row.targetField, $event)" placeholder="Source column" />
+                    <span>{{ row.confidence }}%</span>
+                  </article>
+                  <p class="muted" *ngIf="!templateColumns().length">Select a resource to inspect required fields.</p>
+                </div>
               </div>
-              <span>{{ approval.note || 'No note' }}</span>
-            </article>
-            <p class="muted" *ngIf="!approvals().length">No approval requests yet.</p>
-          </div>
-        </article>
-      </section>
-
-      <section class="grid two">
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Duplicate Merge Studio</span>
-              <h2>Client, invoice & source collisions</h2>
-            </div>
-            <span class="status-pill">{{ duplicateDecisionCount() }}/{{ duplicateRows().length }} decided</span>
-          </div>
-          <div class="duplicate-list">
-            <article *ngFor="let row of duplicatePreviewRows()">
-              <div>
-                <strong>{{ label(row.entity || 'record') }} row {{ row.sourceRowNumber || '-' }}</strong>
-                <small>{{ row.message || row.sourceExternalId || row.targetId || 'Possible duplicate' }}</small>
+              <div class="panel">
+                <div class="panel-head"><div><span class="eyebrow">Entity Coverage</span><h2>Detected modules</h2></div></div>
+                <div class="entity-stack">
+                  <article *ngFor="let row of entityRows()">
+                    <strong>{{ label(row.entity) }}</strong>
+                    <span>{{ row.valid }}/{{ row.total }} valid</span>
+                    <meter min="0" [max]="row.total || 1" [value]="row.valid"></meter>
+                    <small>{{ row.errors }} errors - {{ row.duplicates }} duplicates</small>
+                  </article>
+                  <p class="muted" *ngIf="!entityRows().length">Analyze a file to see entity coverage.</p>
+                </div>
               </div>
-              <div class="decision-actions">
-                <button type="button" [class.active]="duplicateDecision(row) === 'merge'" (click)="setDuplicateDecision(row, 'merge')">Merge</button>
-                <button type="button" [class.active]="duplicateDecision(row) === 'keep'" (click)="setDuplicateDecision(row, 'keep')">Keep</button>
-                <button type="button" [class.active]="duplicateDecision(row) === 'link'" (click)="setDuplicateDecision(row, 'link')">Link</button>
+              <div class="panel">
+                <div class="panel-head"><div><span class="eyebrow">Reconciliation</span><h2>Old vs Aura checks</h2></div></div>
+                <div class="recon-list">
+                  <article *ngFor="let row of reconciliationRows()">
+                    <span>{{ row.label }}</span>
+                    <strong>{{ row.value }}</strong>
+                    <small>{{ row.detail }}</small>
+                  </article>
+                </div>
               </div>
-            </article>
-            <p class="muted" *ngIf="!duplicateRows().length">No duplicate rows in the current preview.</p>
+            </div>
           </div>
         </article>
 
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Validation Ops Queue</span>
-              <h2>Fix priorities</h2>
-            </div>
-          </div>
-          <div class="ops-queue">
-            <button type="button" *ngFor="let item of validationQueues()" [class.danger]="item.status === 'error'" [class.warning]="item.status === 'warning'" [class.active]="rowFilter() === item.status" (click)="rowFilter.set(item.status)">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.count }}</strong>
-              <small>{{ item.detail }}</small>
-            </button>
-          </div>
-        </article>
-      </section>
-
-      <section class="grid two">
-        <article class="panel" *ngIf="previewRows().length">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Validation Cockpit</span>
-              <h2>First 500 row decisions</h2>
-            </div>
-            <div class="segmented">
-              <button [class.active]="rowFilter() === 'all'" (click)="rowFilter.set('all')">All</button>
-              <button [class.active]="rowFilter() === 'error'" (click)="rowFilter.set('error')">Errors</button>
-              <button [class.active]="rowFilter() === 'warning'" (click)="rowFilter.set('warning')">Warnings</button>
-              <button [class.active]="rowFilter() === 'duplicate'" (click)="rowFilter.set('duplicate')">Duplicates</button>
-            </div>
-          </div>
-          <div class="table-wrap dense">
-            <table>
-              <thead>
-                <tr>
-                  <th>Sheet</th>
-                  <th>Row</th>
-                  <th>Entity</th>
-                  <th>Status</th>
-                  <th>Decision</th>
-                  <th>Target/source</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of filteredPreviewRows()">
-                  <td>{{ row.sourceSheet }}</td>
-                  <td>{{ row.sourceRowNumber }}</td>
-                  <td>{{ row.entity }}</td>
-                  <td><span class="badge" [class.danger]="row.status === 'error'" [class.warning]="row.status === 'warning'">{{ row.status }}</span></td>
-                  <td>{{ row.message }}</td>
-                  <td>{{ row.sourceExternalId || row.targetId }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Go-Live Checklist</span>
-              <h2>Sign-off controls</h2>
-            </div>
-          </div>
-          <div class="checklist">
-            <label *ngFor="let item of completionChecklist()">
-              <input type="checkbox" [checked]="item.done" disabled />
-              <span>{{ item.label }}</span>
-            </label>
-          </div>
-          <div class="rollback-zone">
-            <strong>Emergency rollback</strong>
-            <span>Last import, job-wise rollback and batch-level audit are available from the same migration ledger.</span>
-            <label>
-              <span>Rollback reason</span>
-              <textarea [ngModel]="rollbackReason()" (ngModelChange)="rollbackReason.set($event)" rows="2" placeholder="Why rollback is required?"></textarea>
-            </label>
-            <button class="danger-button" [disabled]="loading() || !jobs().length" (click)="rollbackLast()">Rollback last import</button>
-          </div>
-        </article>
-      </section>
-
-
-      <section class="grid two">
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Enterprise Controls</span>
-              <h2>Quality, sandbox & approval gate</h2>
-            </div>
-            <span class="status-pill" [class.danger]="dataQualityScore() < 60">{{ dataQualityScore() }}% quality</span>
-          </div>
-          <div class="control-strip compact">
-            <article><span>Mode</span><strong>{{ sandboxMode() ? 'Sandbox' : 'Live' }}</strong><small>Sandbox recommended first</small></article>
-            <article><span>Approval gate</span><strong>{{ importApprovalReady() ? 'Approved' : 'Blocked' }}</strong><small>Final import requires owner sign-off</small></article>
-            <article><span>Progress</span><strong>{{ migrationProgress() }}%</strong><small>{{ progressLabel() }}</small></article>
-            <article><span>PII preview</span><strong>{{ maskPreviewPii() ? 'Masked' : 'Visible' }}</strong><small>Phone/email protection</small></article>
-          </div>
-          <div class="action-row">
-            <button class="secondary-button" type="button" (click)="sandboxMode.set(!sandboxMode())">{{ sandboxMode() ? 'Switch to live mode' : 'Switch to sandbox mode' }}</button>
-            <button class="secondary-button" type="button" (click)="maskPreviewPii.set(!maskPreviewPii())">{{ maskPreviewPii() ? 'Show PII preview' : 'Mask PII preview' }}</button>
-            <button class="ghost-button" type="button" [disabled]="!previewRows().length" (click)="exportFailedRows()">Export failed rows</button>
-            <button class="ghost-button" type="button" [disabled]="!previewRows().length" (click)="exportPreviewSummary()">Export preview summary</button>
-          </div>
-          <div class="checklist">
-            <label *ngFor="let item of enterpriseChecklist()">
-              <input type="checkbox" [checked]="item.done" disabled />
-              <span>{{ item.label }}</span>
-            </label>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Migration Assistant</span>
-              <h2>Ask why rows failed</h2>
-            </div>
-          </div>
-          <label>
-            <span>Ask migration assistant</span>
-            <textarea [ngModel]="assistantQuestion()" (ngModelChange)="assistantQuestion.set($event)" rows="3" placeholder="Example: kyu 50 rows fail hui?"></textarea>
-          </label>
-          <div class="action-row">
-            <button class="primary-button" type="button" [disabled]="!previewRows().length" (click)="askMigrationAssistant()">Ask assistant</button>
-            <button class="ghost-button" type="button" [disabled]="!assistantAnswer()" (click)="assistantAnswer.set('')">Clear</button>
-          </div>
-          <div class="result-box" *ngIf="assistantAnswer()">
-            <strong>Assistant answer</strong>
-            <span>{{ assistantAnswer() }}</span>
-          </div>
-          <div class="ops-queue">
-            <button type="button" *ngFor="let item of anomalyCards()" [class.danger]="item.tone === 'danger'" [class.warning]="item.tone === 'warning'">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.count }}</strong>
-              <small>{{ item.detail }}</small>
-            </button>
-          </div>
-        </article>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <span class="eyebrow">Migration Ledger</span>
-            <h2>Jobs, audits and rollback history</h2>
-          </div>
-          <button class="secondary-button" (click)="loadJobs()" [disabled]="loading()">Refresh</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Created</th>
-                <th>Source</th>
-                <th>File</th>
-                <th>Status</th>
-                <th>Total</th>
-                <th>Imported</th>
-                <th>Errors</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let job of jobs()" [class.selected]="selectedJob()?.id === job.id">
-                <td>{{ job.createdAt | date: 'short' }}</td>
-                <td>{{ job.sourceSoftware }}</td>
-                <td>{{ job.fileName }}</td>
-                <td><span class="badge">{{ job.status }}</span></td>
-                <td>{{ job.totalRows }}</td>
-                <td>{{ job.importedRows }}</td>
-                <td>{{ job.errorRows }}</td>
-                <td>
-                  <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadJobDetail(job.id)">Open</button>
-                  <button class="ghost-button" type="button" [disabled]="loading()" (click)="loadJobRecovery(job.id)">Recovery</button>
-                  <button class="danger-button" [disabled]="job.status === 'rolled_back' || loading()" (click)="rollback(job.id)">Rollback</button>
-                </td>
-              </tr>
-              <tr *ngIf="!jobs().length"><td colspan="8">No migration jobs yet.</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="job-detail" *ngIf="selectedJob() as job">
-          <div class="panel-head">
-            <div>
-              <span class="eyebrow">Job Drilldown</span>
-              <h2>{{ job.fileName || job.id }}</h2>
-            </div>
-            <div class="action-row tight">
-              <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadJobRecovery(job.id)">Recovery</button>
-              <button class="ghost-button" type="button" [disabled]="!selectedJobRecovery()" (click)="exportRecoveryReport()">Export recovery</button>
-              <button class="ghost-button" type="button" (click)="closeJobDetail()">Close</button>
-            </div>
-          </div>
-          <div class="control-strip compact">
-            <article><span>Total</span><strong>{{ job.totalRows }}</strong><small>Rows</small></article>
-            <article><span>Imported</span><strong>{{ job.importedRows }}</strong><small>Live records</small></article>
-            <article><span>Errors</span><strong>{{ job.errorRows }}</strong><small>Blocked rows</small></article>
-            <article><span>Status</span><strong>{{ job.status }}</strong><small>{{ job.sourceSoftware }}</small></article>
-          </div>
-          <div class="table-wrap dense" *ngIf="job.rows?.length">
-            <table>
-              <thead><tr><th>Sheet</th><th>Row</th><th>Entity</th><th>Status</th><th>Message</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let row of selectedJobRows()">
-                  <td>{{ row.sourceSheet }}</td>
-                  <td>{{ row.sourceRowNumber }}</td>
-                  <td>{{ row.entity }}</td>
-                  <td><span class="badge" [class.danger]="row.status === 'error'" [class.warning]="row.status === 'warning'">{{ row.status }}</span></td>
-                  <td>{{ row.message }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-          <div class="recovery-panel" *ngIf="selectedJobRecovery() as recovery">
-            <div class="panel-head">
-              <div>
-                <span class="eyebrow">Recovery Control</span>
-                <h2>{{ recovery.status | titlecase }}</h2>
+        <article class="accordion-item" [class.open]="activeSection() === 'worker'" id="section-worker">
+          <button class="accordion-head" type="button" (click)="toggleSection('worker')">
+            <span class="acc-icon">⚙️</span>
+            <span class="acc-title">Import Worker</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'worker'">
+            <div class="acc-grid two">
+              <div class="panel worker-panel">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Large Migration Worker</span><h2>Chunked import queue</h2></div>
+                  <span class="status-pill" [class.danger]="largeJob()?.status === 'failed'">{{ largeJob()?.status || 'Not prepared' }}</span>
+                </div>
+                <div class="control-strip compact">
+                  <article><span>Job ID</span><strong>{{ largeJob()?.id || '-' }}</strong><small>{{ largeJob()?.resumeToken || 'Create a staged job from analyzed data' }}</small></article>
+                  <article><span>Rows</span><strong>{{ largeJob()?.totalRows || summary()?.totalRows || 0 }}</strong><small>{{ largeJob()?.processedRows || 0 }} processed</small></article>
+                  <article><span>Imported</span><strong>{{ largeJob()?.importedRows || 0 }}</strong><small>{{ largeJob()?.skippedRows || 0 }} skipped</small></article>
+                  <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeReadyChunks() }}/{{ largeJobChunks().length }} chunks ready · {{ csvStagedRows() }} staged rows</small></article>
+                </div>
+                <div class="worker-settings">
+                  <label><span>Chunk size</span><input type="number" min="100" max="50000" step="100" [ngModel]="largeChunkSize()" (ngModelChange)="largeChunkSize.set(numberInput($event, 5000))" /></label>
+                  <label><span>Chunks per tick</span><input type="number" min="1" max="100" [ngModel]="largeMaxChunks()" (ngModelChange)="largeMaxChunks.set(numberInput($event, 5))" /></label>
+                  <label class="toggle-field"><span>Allow partial import</span><input type="checkbox" [ngModel]="allowPartialLargeImport()" (ngModelChange)="allowPartialLargeImport.set($event)" /></label>
+                </div>
+                <div class="action-row">
+                  <button class="secondary-button" type="button" [disabled]="!canPrepareLargeMigration() || loading()" (click)="prepareLargeMigrationJob()">Prepare chunk 1</button>
+                  <button class="secondary-button" type="button" [disabled]="!isCsvFileSelected() || loading()" (click)="stageCsvMigrationChunks()">Stage CSV chunks</button>
+                  <button class="primary-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="queueLargeMigrationJob()">Queue worker</button>
+                  <button class="secondary-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="runWorkerTick()">Run worker tick</button>
+                  <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="refreshLargeJobStatus()">Refresh</button>
+                  <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="pauseLargeMigrationJob()">Pause</button>
+                  <button class="secondary-button" type="button" [disabled]="!largeJob() || loading()" (click)="retryFailedLargeMigrationChunks()">Retry failed</button>
+                  <button class="danger-button" type="button" [disabled]="!largeJob() || loading()" (click)="cancelLargeMigrationJob()">Cancel</button>
+                  <button class="ghost-button" type="button" [disabled]="!largeJob() || hasCriticalErrors() || !importApprovalReady() || loading()" (click)="resumeLargeMigrationJob()">Resume now</button>
+                </div>
+                <p class="muted" *ngIf="!importApprovalReady()">Owner approval required before queued import writes into live modules.</p>
+                <p class="migration-warning" *ngIf="largePendingChunks()">{{ largePendingChunks() }} chunk(s) still need analysis. Queue/resume is blocked unless partial import is enabled.</p>
+                <div class="chunk-list" *ngIf="largeJobChunks().length">
+                  <article *ngFor="let chunk of largeJobChunks()" [class.done]="chunk.status === 'imported'" [class.danger]="chunk.status === 'failed' || chunk.status === 'imported_with_errors'">
+                    <strong>Chunk {{ chunk.chunkNumber }}</strong>
+                    <span>{{ chunk.status }}</span>
+                    <small>{{ chunk.importedRows || 0 }}/{{ chunk.totalRows || 0 }} imported · {{ chunk.errorRows || 0 }} errors</small>
+                  </article>
+                </div>
               </div>
-              <span class="status-pill" [class.danger]="recovery.blockers.length">{{ recovery.blockers.length || 0 }} blocker(s)</span>
-            </div>
-            <div class="recovery-grid">
-              <article><span>Failed rows</span><strong>{{ recovery.summary.failedRows }}</strong><small>{{ recovery.summary.retryCandidates }} retry candidates</small></article>
-              <article><span>Warnings</span><strong>{{ recovery.summary.warningRows }}</strong><small>Manual review queue</small></article>
-              <article><span>Missing targets</span><strong>{{ recovery.summary.missingLiveTargets }}</strong><small>Live table proof</small></article>
-              <article><span>Rollback batches</span><strong>{{ recovery.rollbackPlan?.batches?.length || 0 }}</strong><small>{{ recovery.rollbackPlan?.recommended ? 'Rollback recommended' : 'Rollback optional' }}</small></article>
-            </div>
-            <div class="action-row">
-              <button class="secondary-button" type="button" [disabled]="!recoveryFailedRows().length" (click)="exportRecoveryFailedRows()">Export failed rows</button>
-              <button class="danger-button" type="button" [disabled]="!recovery.rollbackPlan?.recommended || loading()" (click)="rollbackRecoveryJob()">Rollback affected job</button>
-            </div>
-            <div class="recovery-list" *ngIf="recoveryNextActions().length">
-              <article *ngFor="let action of recoveryNextActions(); let i = index">
-                <strong>{{ i + 1 }}</strong>
-                <span>{{ action }}</span>
-              </article>
-            </div>
-            <div class="table-wrap dense" *ngIf="recoveryFailedRows().length">
-              <table>
-                <thead><tr><th>Row</th><th>Resource</th><th>Legacy ID</th><th>Reason</th><th>Action</th></tr></thead>
-                <tbody>
-                  <tr *ngFor="let row of recoveryFailedRows()">
-                    <td>{{ row.rowKey }}</td>
-                    <td>{{ row.resource }}</td>
-                    <td>{{ row.sourceExternalId || '-' }}</td>
-                    <td>{{ row.message }}</td>
-                    <td>{{ row.retryReason }}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="panel proof-panel">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Migration Proof</span><h2>Reconciliation sign-off</h2></div>
+                  <span class="status-pill" [class.danger]="latestLargeReconciliation()?.status === 'warning'">{{ latestLargeReconciliation()?.status || 'Not checked' }}</span>
+                </div>
+                <div class="proof-grid">
+                  <article><span>Snapshot</span><strong>{{ latestLargeReconciliation()?.id || '-' }}</strong><small>{{ latestLargeReconciliation()?.snapshotType || 'Run proof check after import' }}</small></article>
+                  <article><span>Differences</span><strong>{{ largeReconciliationDifferences().length }}</strong><small>{{ latestLargeReconciliation()?.createdAt || 'No audit snapshot yet' }}</small></article>
+                </div>
+                <div class="action-row">
+                  <button class="primary-button" type="button" [disabled]="!largeJob() || loading()" (click)="runLargeJobReconciliation()">Run proof check</button>
+                  <button class="ghost-button" type="button" [disabled]="!largeJob() || loading()" (click)="refreshLargeJobStatus()">Refresh proof</button>
+                  <button class="secondary-button" type="button" [disabled]="!latestLargeReconciliation() || loading()" (click)="downloadLargeReconciliationReport()">Export proof</button>
+                </div>
+                <div class="checklist compact-checklist">
+                  <label *ngFor="let item of largeMigrationChecklist()"><input type="checkbox" [checked]="item.done" disabled /><span>{{ item.label }}</span></label>
+                  <label><input type="checkbox" [checked]="!!latestLargeReconciliation()" disabled /><span>Reconciliation snapshot saved</span></label>
+                </div>
+                <div class="result-box" *ngIf="lastWorkerResult()">
+                  <span>Last worker result</span>
+                  <strong>{{ lastWorkerResult()?.checkedJobs || lastWorkerResult()?.processedChunks || 0 }} unit(s) processed</strong>
+                  <small>{{ lastWorkerResultText() }}</small>
+                </div>
+                <div class="difference-list" *ngIf="largeReconciliationDifferences().length; else noLargeReconDiffs">
+                  <article *ngFor="let diff of largeReconciliationDifferences()" [class.danger]="diff.severity === 'critical'">
+                    <strong>{{ diff.code || 'difference' }}</strong>
+                    <span>{{ diff.message || 'Review this migration proof difference.' }}</span>
+                    <small>{{ diff.resource || 'all resources' }} · expected {{ diff.expected ?? '-' }} · actual {{ diff.actual ?? '-' }}</small>
+                  </article>
+                </div>
+                <ng-template #noLargeReconDiffs><p class="muted">No proof differences recorded for the latest snapshot.</p></ng-template>
+              </div>
             </div>
           </div>
+        </article>
+
+        <article class="accordion-item" [class.open]="activeSection() === 'validation'" id="section-validation">
+          <button class="accordion-head" type="button" (click)="toggleSection('validation')">
+            <span class="acc-icon">🛡️</span>
+            <span class="acc-title">Validation & Reconciliation</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'validation'">
+            <div class="acc-grid two">
+              <div class="panel">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Reconciliation Lab</span><h2>Expected totals vs analyzed data</h2></div>
+                  <span class="status-pill" [class.danger]="reconciliationResult()?.mismatchCount">{{ reconciliationResult()?.matched ? 'Matched' : reconciliationResult() ? 'Mismatch' : 'Not run' }}</span>
+                </div>
+                <div class="expected-grid">
+                  <label *ngFor="let metric of expectedMetrics"><span>{{ metric.label }}</span><input type="number" min="0" [ngModel]="expectedTotals()[metric.key] || ''" (ngModelChange)="setExpectedTotal(metric.key, $event)" /></label>
+                </div>
+                <div class="action-row">
+                  <button class="secondary-button" type="button" [disabled]="!fileBase64() || loading()" (click)="runReconciliation()">Run reconciliation</button>
+                  <button class="ghost-button" type="button" [disabled]="!reconciliationResult()" (click)="clearReconciliation()">Clear</button>
+                </div>
+                <div class="reconcile-table" *ngIf="reconciliationLines().length">
+                  <article *ngFor="let line of reconciliationLines()" [class.mismatch]="line.status === 'mismatch'" [class.match]="line.status === 'match'">
+                    <span>{{ line.metric }}</span>
+                    <strong>{{ line.actual }}</strong>
+                    <small>Expected {{ line.expected ?? 'not set' }} · Diff {{ line.difference ?? '-' }}</small>
+                  </article>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head"><div><span class="eyebrow">Validation Ops Queue</span><h2>Fix priorities</h2></div></div>
+                <div class="ops-queue">
+                  <button type="button" *ngFor="let item of validationQueues()" [class.danger]="item.status === 'error'" [class.warning]="item.status === 'warning'" [class.active]="rowFilter() === item.status" (click)="rowFilter.set(item.status)">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }}</strong>
+                    <small>{{ item.detail }}</small>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="panel" *ngIf="previewRows().length" style="margin-top:12px">
+              <div class="panel-head">
+                <div><span class="eyebrow">Validation Cockpit</span><h2>First 500 row decisions</h2></div>
+                <div class="segmented">
+                  <button [class.active]="rowFilter() === 'all'" (click)="rowFilter.set('all')">All</button>
+                  <button [class.active]="rowFilter() === 'error'" (click)="rowFilter.set('error')">Errors</button>
+                  <button [class.active]="rowFilter() === 'warning'" (click)="rowFilter.set('warning')">Warnings</button>
+                  <button [class.active]="rowFilter() === 'duplicate'" (click)="rowFilter.set('duplicate')">Duplicates</button>
+                </div>
+              </div>
+              <div class="table-wrap dense">
+                <table>
+                  <thead><tr><th>Sheet</th><th>Row</th><th>Entity</th><th>Status</th><th>Decision</th><th>Target/source</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let row of filteredPreviewRows()">
+                      <td>{{ row.sourceSheet }}</td>
+                      <td>{{ row.sourceRowNumber }}</td>
+                      <td>{{ row.entity }}</td>
+                      <td><span class="badge" [class.danger]="row.status === 'error'" [class.warning]="row.status === 'warning'">{{ row.status }}</span></td>
+                      <td>{{ row.message }}</td>
+                      <td>{{ row.sourceExternalId || row.targetId }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="panel" style="margin-top:12px">
+              <div class="panel-head">
+                <div><span class="eyebrow">Duplicate Merge Studio</span><h2>Client, invoice & source collisions</h2></div>
+                <span class="status-pill">{{ duplicateDecisionCount() }}/{{ duplicateRows().length }} decided</span>
+              </div>
+              <div class="duplicate-list">
+                <article *ngFor="let row of duplicatePreviewRows()">
+                  <div><strong>{{ label(row.entity || 'record') }} row {{ row.sourceRowNumber || '-' }}</strong><small>{{ row.message || row.sourceExternalId || row.targetId || 'Possible duplicate' }}</small></div>
+                  <div class="decision-actions">
+                    <button type="button" [class.active]="duplicateDecision(row) === 'merge'" (click)="setDuplicateDecision(row, 'merge')">Merge</button>
+                    <button type="button" [class.active]="duplicateDecision(row) === 'keep'" (click)="setDuplicateDecision(row, 'keep')">Keep</button>
+                    <button type="button" [class.active]="duplicateDecision(row) === 'link'" (click)="setDuplicateDecision(row, 'link')">Link</button>
+                  </div>
+                </article>
+                <p class="muted" *ngIf="!duplicateRows().length">No duplicate rows in the current preview.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="accordion-item" [class.open]="activeSection() === 'approval'" id="section-approval">
+          <button class="accordion-head" type="button" (click)="toggleSection('approval')">
+            <span class="acc-icon">✅</span>
+            <span class="acc-title">Approval Workflow</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'approval'">
+            <div class="panel">
+              <div class="panel-head">
+                <div><span class="eyebrow">Approval Control Tower</span><h2>Owner sign-off workflow</h2></div>
+                <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadApprovals()">Refresh</button>
+              </div>
+              <label><span>Approval note</span><textarea [(ngModel)]="approvalNote" rows="3" placeholder="Summary, risk notes, branch sign-off, reconciliation evidence"></textarea></label>
+              <div class="action-row">
+                <button class="primary-button" type="button" [disabled]="!summary() || hasCriticalErrors() || loading()" (click)="submitApproval()">Submit for approval</button>
+                <button class="ghost-button" type="button" [disabled]="!latestPendingApproval() || loading()" (click)="decideApproval(latestPendingApproval()?.id || '', 'approved')">Approve latest</button>
+                <button class="danger-button" type="button" [disabled]="!latestPendingApproval() || loading()" (click)="decideApproval(latestPendingApproval()?.id || '', 'rejected')">Reject latest</button>
+              </div>
+              <p class="error-text" *ngIf="fileBase64() && !summary()">Analyze must run before approval.</p>
+              <p class="success-text" *ngIf="summary() && !latestPendingApproval() && !importApprovalReady()">Analyze is complete. Click "Submit for approval".</p>
+              <p class="error-text" *ngIf="approvalDebug()">{{ approvalDebug() }}</p>
+              <div class="approval-list">
+                <article *ngFor="let approval of recentApprovals()" [class.pending]="approval.status === 'pending'" [class.approved]="approval.status === 'approved'" [class.rejected]="approval.status === 'rejected'">
+                  <div><strong>{{ approval.status | titlecase }} · {{ approval.resource || 'migration' }}</strong><small>{{ approval.submittedAt | date:'short' }} {{ approval.reviewedAt ? '· reviewed ' + (approval.reviewedAt | date:'short') : '' }}</small></div>
+                  <span>{{ approval.note || 'No note' }}</span>
+                </article>
+                <p class="muted" *ngIf="!approvals().length">No approval requests yet.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="accordion-item" [class.open]="activeSection() === 'golive'" id="section-golive">
+          <button class="accordion-head" type="button" (click)="toggleSection('golive')">
+            <span class="acc-icon">🎯</span>
+            <span class="acc-title">Go-Live Checklist</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'golive'">
+            <div class="acc-grid two">
+              <div class="panel">
+                <div class="panel-head"><div><span class="eyebrow">Go-Live Checklist</span><h2>Sign-off controls</h2></div></div>
+                <div class="checklist">
+                  <label *ngFor="let item of completionChecklist()"><input type="checkbox" [checked]="item.done" disabled /><span>{{ item.label }}</span></label>
+                </div>
+                <div class="rollback-zone">
+                  <strong>Emergency rollback</strong>
+                  <span>Last import, job-wise rollback and batch-level audit are available from the same migration ledger.</span>
+                  <label><span>Rollback reason</span><textarea [ngModel]="rollbackReason()" (ngModelChange)="rollbackReason.set($event)" rows="2" placeholder="Why rollback is required?"></textarea></label>
+                  <button class="danger-button" [disabled]="loading() || !jobs().length" (click)="rollbackLast()">Rollback last import</button>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Enterprise Controls</span><h2>Quality, sandbox & approval gate</h2></div>
+                  <span class="status-pill" [class.danger]="dataQualityScore() < 60">{{ dataQualityScore() }}% quality</span>
+                </div>
+                <div class="control-strip compact">
+                  <article><span>Mode</span><strong>{{ sandboxMode() ? 'Sandbox' : 'Live' }}</strong><small>Sandbox recommended first</small></article>
+                  <article><span>Approval gate</span><strong>{{ importApprovalReady() ? 'Approved' : 'Blocked' }}</strong><small>Final import requires owner sign-off</small></article>
+                  <article><span>Progress</span><strong>{{ migrationProgress() }}%</strong><small>{{ progressLabel() }}</small></article>
+                  <article><span>PII preview</span><strong>{{ maskPreviewPii() ? 'Masked' : 'Visible' }}</strong><small>Phone/email protection</small></article>
+                </div>
+                <div class="action-row">
+                  <button class="secondary-button" type="button" (click)="sandboxMode.set(!sandboxMode())">{{ sandboxMode() ? 'Switch to live mode' : 'Switch to sandbox mode' }}</button>
+                  <button class="secondary-button" type="button" (click)="maskPreviewPii.set(!maskPreviewPii())">{{ maskPreviewPii() ? 'Show PII preview' : 'Mask PII preview' }}</button>
+                  <button class="ghost-button" type="button" [disabled]="!previewRows().length" (click)="exportFailedRows()">Export failed rows</button>
+                  <button class="ghost-button" type="button" [disabled]="!previewRows().length" (click)="exportPreviewSummary()">Export preview summary</button>
+                </div>
+                <div class="checklist">
+                  <label *ngFor="let item of enterpriseChecklist()"><input type="checkbox" [checked]="item.done" disabled /><span>{{ item.label }}</span></label>
+                </div>
+              </div>
+            </div>
+            <div class="panel" style="margin-top:12px">
+              <div class="panel-head"><div><span class="eyebrow">Migration Assistant</span><h2>Ask why rows failed</h2></div></div>
+              <label><span>Ask migration assistant</span><textarea [ngModel]="assistantQuestion()" (ngModelChange)="assistantQuestion.set($event)" rows="3" placeholder="Example: kyu 50 rows fail hui?"></textarea></label>
+              <div class="action-row">
+                <button class="primary-button" type="button" [disabled]="!previewRows().length" (click)="askMigrationAssistant()">Ask assistant</button>
+                <button class="ghost-button" type="button" [disabled]="!assistantAnswer()" (click)="assistantAnswer.set('')">Clear</button>
+              </div>
+              <div class="result-box" *ngIf="assistantAnswer()"><strong>Assistant answer</strong><span>{{ assistantAnswer() }}</span></div>
+              <div class="ops-queue" style="margin-top:8px">
+                <button type="button" *ngFor="let item of anomalyCards()" [class.danger]="item.tone === 'danger'" [class.warning]="item.tone === 'warning'">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.count }}</strong>
+                  <small>{{ item.detail }}</small>
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="accordion-item" [class.open]="activeSection() === 'history'" id="section-history">
+          <button class="accordion-head" type="button" (click)="toggleSection('history')">
+            <span class="acc-icon">📋</span>
+            <span class="acc-title">Migration History</span>
+            <span class="acc-arrow">▾</span>
+          </button>
+          <div class="accordion-body" [class.expanded]="activeSection() === 'history'">
+            <div class="panel">
+              <div class="panel-head">
+                <div><span class="eyebrow">Migration Ledger</span><h2>Jobs, audits and rollback history</h2></div>
+                <button class="secondary-button" (click)="loadJobs()" [disabled]="loading()">Refresh</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Created</th><th>Source</th><th>File</th><th>Status</th><th>Total</th><th>Imported</th><th>Errors</th><th>Action</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let job of jobs()" [class.selected]="selectedJob()?.id === job.id">
+                      <td>{{ job.createdAt | date: 'short' }}</td>
+                      <td>{{ job.sourceSoftware }}</td>
+                      <td>{{ job.fileName }}</td>
+                      <td><span class="badge">{{ job.status }}</span></td>
+                      <td>{{ job.totalRows }}</td>
+                      <td>{{ job.importedRows }}</td>
+                      <td>{{ job.errorRows }}</td>
+                      <td>
+                        <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadJobDetail(job.id)">Open</button>
+                        <button class="ghost-button" type="button" [disabled]="loading()" (click)="loadJobRecovery(job.id)">Recovery</button>
+                        <button class="danger-button" [disabled]="job.status === 'rolled_back' || loading()" (click)="rollback(job.id)">Rollback</button>
+                      </td>
+                    </tr>
+                    <tr *ngIf="!jobs().length"><td colspan="8">No migration jobs yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="job-detail" *ngIf="selectedJob() as job">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Job Drilldown</span><h2>{{ job.fileName || job.id }}</h2></div>
+                  <div class="action-row tight">
+                    <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadJobRecovery(job.id)">Recovery</button>
+                    <button class="ghost-button" type="button" [disabled]="!selectedJobRecovery()" (click)="exportRecoveryReport()">Export recovery</button>
+                    <button class="ghost-button" type="button" (click)="closeJobDetail()">Close</button>
+                  </div>
+                </div>
+                <div class="control-strip compact">
+                  <article><span>Total</span><strong>{{ job.totalRows }}</strong><small>Rows</small></article>
+                  <article><span>Imported</span><strong>{{ job.importedRows }}</strong><small>Live records</small></article>
+                  <article><span>Errors</span><strong>{{ job.errorRows }}</strong><small>Blocked rows</small></article>
+                  <article><span>Status</span><strong>{{ job.status }}</strong><small>{{ job.sourceSoftware }}</small></article>
+                </div>
+                <div class="table-wrap dense" *ngIf="job.rows?.length">
+                  <table>
+                    <thead><tr><th>Sheet</th><th>Row</th><th>Entity</th><th>Status</th><th>Message</th></tr></thead>
+                    <tbody>
+                      <tr *ngFor="let row of selectedJobRows()">
+                        <td>{{ row.sourceSheet }}</td>
+                        <td>{{ row.sourceRowNumber }}</td>
+                        <td>{{ row.entity }}</td>
+                        <td><span class="badge" [class.danger]="row.status === 'error'" [class.warning]="row.status === 'warning'">{{ row.status }}</span></td>
+                        <td>{{ row.message }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="recovery-panel" *ngIf="selectedJobRecovery() as recovery">
+                <div class="panel-head">
+                  <div><span class="eyebrow">Recovery Control</span><h2>{{ recovery.status | titlecase }}</h2></div>
+                  <span class="status-pill" [class.danger]="recovery.blockers.length">{{ recovery.blockers.length || 0 }} blocker(s)</span>
+                </div>
+                <div class="recovery-grid">
+                  <article><span>Failed rows</span><strong>{{ recovery.summary.failedRows }}</strong><small>{{ recovery.summary.retryCandidates }} retry candidates</small></article>
+                  <article><span>Warnings</span><strong>{{ recovery.summary.warningRows }}</strong><small>Manual review queue</small></article>
+                  <article><span>Missing targets</span><strong>{{ recovery.summary.missingLiveTargets }}</strong><small>Live table proof</small></article>
+                  <article><span>Rollback batches</span><strong>{{ recovery.rollbackPlan?.batches?.length || 0 }}</strong><small>{{ recovery.rollbackPlan?.recommended ? 'Rollback recommended' : 'Rollback optional' }}</small></article>
+                </div>
+                <div class="action-row">
+                  <button class="secondary-button" type="button" [disabled]="!recoveryFailedRows().length" (click)="exportRecoveryFailedRows()">Export failed rows</button>
+                  <button class="danger-button" type="button" [disabled]="!recovery.rollbackPlan?.recommended || loading()" (click)="rollbackRecoveryJob()">Rollback affected job</button>
+                </div>
+                <div class="recovery-list" *ngIf="recoveryNextActions().length">
+                  <article *ngFor="let action of recoveryNextActions(); let i = index">
+                    <strong>{{ i + 1 }}</strong>
+                    <span>{{ action }}</span>
+                  </article>
+                </div>
+                <div class="table-wrap dense" *ngIf="recoveryFailedRows().length">
+                  <table>
+                    <thead><tr><th>Row</th><th>Resource</th><th>Legacy ID</th><th>Reason</th><th>Action</th></tr></thead>
+                    <tbody>
+                      <tr *ngFor="let row of recoveryFailedRows()">
+                        <td>{{ row.rowKey }}</td>
+                        <td>{{ row.resource }}</td>
+                        <td>{{ row.sourceExternalId || '-' }}</td>
+                        <td>{{ row.message }}</td>
+                        <td>{{ row.retryReason }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
       </section>
     </section>
   `,
   styles: [`
     :host { display: block; }
-    .migration-shell { display: grid; gap: 18px; color: #172033; }
-    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; align-items: stretch; padding: 22px; border: 1px solid #d7e6e2; border-radius: 8px; background: linear-gradient(120deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 18px 40px rgba(15,23,42,.08); }
-    .command-header h1 { margin: 6px 0; font-size: 34px; line-height: 1.05; letter-spacing: 0; }
-    .command-header p { margin: 0; max-width: 900px; color: #64748b; font-size: 15px; line-height: 1.55; }
-    .eyebrow { color: #2563eb; font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
-    .score-card, .control-strip article, .panel, .pipeline article, .risk-panel article, .mapping-list article, .entity-stack article, .recon-list article { border: 1px solid #d7e6e2; border-radius: 8px; background: #ffffff; }
-    .score-card { display: grid; align-content: center; gap: 6px; padding: 18px; }
-    .score-card strong { font-size: 42px; line-height: 1; }
-    .score-card span, .control-strip span, .panel-head span, .risk-panel span, .recon-list span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    .score-card small, .control-strip small, .risk-panel small, .recon-list small { color: #64748b; }
+    .migration-shell { display: grid; gap: 14px; padding: 16px; color: #172033; }
+    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
+    .command-header h1 { margin: 4px 0; font-size: 26px; line-height: 1.1; letter-spacing: -0.01em; }
+    .command-header p { margin: 0; max-width: 800px; color: #64748b; font-size: 13px; line-height: 1.45; }
+    .eyebrow { color: #2563eb; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .score-card, .control-strip article, .panel, .pipeline article, .risk-panel article, .mapping-list article, .entity-stack article, .recon-list article { border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; }
+    .score-card { display: grid; align-content: center; gap: 4px; padding: 14px; }
+    .score-card strong { font-size: 32px; line-height: 1; }
+    .score-card span, .control-strip span, .panel-head span, .risk-panel span, .recon-list span { color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+    .score-card small, .control-strip small, .risk-panel small, .recon-list small { color: #64748b; font-size: 12px; }
     .score-card.warning { border-color: #f59e0b; background: #fffbeb; }
     .score-card.danger { border-color: #ef4444; background: #fef2f2; }
-    .control-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-    .control-strip article { padding: 14px; display: grid; gap: 4px; min-width: 0; }
-    .control-strip strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(260px, .65fr); gap: 14px; align-items: stretch; }
-    .grid { display: grid; gap: 14px; }
-    .grid.two { grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); }
-    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .panel { padding: 18px; min-width: 0; }
-    .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 14px; }
-    .panel-head h2 { margin: 3px 0 0; font-size: 20px; letter-spacing: 0; }
-    .status-pill, .badge { border-radius: 999px; background: #e8f7f4; color: #0f766e; padding: 6px 10px; font-size: 12px; font-weight: 900; white-space: nowrap; }
+    .control-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .control-strip article { padding: 12px; display: grid; gap: 3px; min-width: 0; }
+    .control-strip strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .accordion-stack { display: grid; gap: 6px; }
+    .accordion-item { border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; overflow: hidden; }
+    .accordion-head { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 16px; border: 0; border-radius: 0; cursor: pointer; background: #f8fafc; font-weight: 700; font-size: 14px; color: #172033; transition: background .15s; }
+    .accordion-head:hover { background: #f1f5f9; }
+    .accordion-icon { font-size: 16px; line-height: 1; }
+    .acc-title { flex: 1; text-align: left; }
+    .acc-arrow { font-size: 14px; transition: transform .2s; color: #64748b; }
+    .accordion-item.open .acc-arrow { transform: rotate(180deg); }
+    .accordion-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s ease; }
+    .accordion-body.expanded { grid-template-rows: 1fr; }
+    .accordion-body > * { overflow: hidden; }
+    .acc-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(240px, .65fr); gap: 14px; padding: 14px; }
+    .acc-grid.two { grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); }
+    .acc-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .acc-panel { padding: 14px; }
+    .migration-nav { display: flex; gap: 6px; padding: 8px 0; overflow-x: auto; scrollbar-width: none; position: sticky; top: 0; z-index: 10; background: #ffffff; }
+    .migration-nav::-webkit-scrollbar { display: none; }
+    .migration-nav button { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: all .15s; }
+    .migration-nav button.active { background: #0f8f7f; color: #ffffff; border-color: #0f8f7f; }
+    .migration-nav button:hover:not(.active) { background: #f1f5f9; }
+    .panel { padding: 14px; min-width: 0; }
+    .panel-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #edf2f7; }
+    .panel-head h2 { margin: 2px 0 0; font-size: 16px; letter-spacing: 0; }
+    .status-pill, .badge { border-radius: 999px; background: #e8f7f4; color: #0f766e; padding: 4px 8px; font-size: 11px; font-weight: 800; white-space: nowrap; }
     .status-pill.danger { background: #fef2f2; color: #b91c1c; }
     .badge.warning { background: #fffbeb; color: #b45309; }
     .badge.danger { background: #fef2f2; color: #b91c1c; }
-    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     label { display: grid; gap: 6px; color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    input, select, textarea { width: 100%; min-height: 42px; border: 1px solid #cfe0dc; border-radius: 8px; background: #f8fffd; padding: 10px 11px; color: #172033; font-weight: 800; box-sizing: border-box; }
-    input:focus, select:focus, textarea:focus { border-color: #0f8f7f; outline: 3px solid rgba(15,143,127,.14); background: #ffffff; }
+    input, select, textarea { width: 100%; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }
+    input:focus, select:focus, textarea:focus { border-color: #0f8f7f; outline: 2px solid rgba(15,143,127,.12); background: #ffffff; }
     textarea { resize: vertical; font-family: inherit; text-transform: none; }
-    .file-drop { grid-column: 1 / -1; border: 1px dashed #93c5fd; border-radius: 8px; padding: 12px; background: #f8fbff; }
-    .file-drop small, .muted { color: #64748b; text-transform: none; font-weight: 700; }
-    .migration-warning { margin: 10px 0 0; border: 1px solid #f59e0b; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 10px 12px; font-weight: 900; }
+    .file-drop { grid-column: 1 / -1; border: 1px dashed #93c5fd; border-radius: 8px; padding: 10px; background: #f8fbff; }
+    .file-drop small, .muted { color: #64748b; text-transform: none; font-weight: 600; font-size: 12px; }
+    .migration-warning { margin: 8px 0 0; border: 1px solid #f59e0b; border-radius: 8px; background: #fffbeb; color: #92400e; padding: 8px 10px; font-weight: 800; font-size: 13px; }
     .toggle-field { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
     .toggle-field input { width: 20px; min-height: 20px; padding: 0; }
-    .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
-    button { min-height: 40px; border: 1px solid #cfe0dc; border-radius: 8px; padding: 0 14px; font-weight: 900; cursor: pointer; background: #ffffff; color: #172033; }
-    button:disabled { opacity: .55; cursor: not-allowed; }
+    .action-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    button { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #172033; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
     .primary-button { background: #0f8f7f; color: #ffffff; border-color: #0f8f7f; }
     .secondary-button { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
     .ghost-button { background: #ffffff; }
     .danger-button { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-    .success-text, .error-text { margin: 8px 0 0; font-weight: 900; }
+    .success-text, .error-text { margin: 6px 0 0; font-weight: 800; font-size: 13px; }
     .success-text { color: #047857; }
     .error-text { color: #b91c1c; }
-    .pipeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-    .pipeline article { padding: 10px; display: grid; gap: 3px; border-left: 4px solid #cbd5e1; }
+    .pipeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+    .pipeline article { padding: 8px; display: grid; gap: 2px; border-left: 3px solid #cbd5e1; font-size: 12px; }
     .pipeline article.done { border-left-color: #10b981; background: #f0fdf4; }
     .pipeline article.active { border-left-color: #2563eb; background: #eff6ff; }
     .pipeline article.blocked { border-left-color: #ef4444; background: #fef2f2; }
-    .pipeline strong { font-size: 13px; }
-    .pipeline small { color: #64748b; }
-    .risk-panel { display: grid; gap: 10px; }
-    .risk-panel .panel-head { margin-bottom: 0; }
-    .risk-panel article { padding: 12px; display: grid; gap: 4px; border-left: 4px solid #94a3b8; }
+    .pipeline strong { font-size: 12px; }
+    .pipeline small { color: #64748b; font-size: 11px; }
+    .risk-panel { display: grid; gap: 8px; }
+    .risk-panel .panel-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+    .risk-panel article { padding: 10px; display: grid; gap: 3px; border-left: 3px solid #94a3b8; }
     .risk-panel article.good { border-left-color: #10b981; }
     .risk-panel article.warning { border-left-color: #f59e0b; background: #fffbeb; }
     .risk-panel article.danger { border-left-color: #ef4444; background: #fef2f2; }
-    .risk-panel strong { font-size: 24px; }
-    .mapping-list, .entity-stack, .recon-list, .checklist { display: grid; gap: 8px; }
-    .mapping-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 10px; }
-    .mapping-list article { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) auto; align-items: center; gap: 12px; padding: 10px; }
+    .risk-panel strong { font-size: 18px; }
+    .risk-panel span { font-size: 11px; }
+    .mapping-list, .entity-stack, .recon-list, .checklist { display: grid; gap: 6px; }
+    .mapping-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-bottom: 8px; }
+    .mapping-list article { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) auto; align-items: center; gap: 10px; padding: 8px; }
     .mapping-list article.required { border-color: #bfdbfe; background: #eff6ff; }
-    .mapping-list strong, .entity-stack strong { display: block; }
-    .mapping-list small, .entity-stack small { color: #64748b; }
-    .mapping-list article > span { color: #2563eb; font-size: 12px; font-weight: 900; }
-    .mapping-list input { min-height: 36px; }
-    .duplicate-list, .ops-queue { display: grid; gap: 8px; }
-    .duplicate-list article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+    .mapping-list strong, .entity-stack strong { display: block; font-size: 13px; }
+    .mapping-list small, .entity-stack small { color: #64748b; font-size: 12px; }
+    .mapping-list article > span { color: #2563eb; font-size: 11px; font-weight: 700; }
+    .mapping-list input { min-height: 32px; }
+    .duplicate-list, .ops-queue { display: grid; gap: 6px; }
+    .duplicate-list article { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
     .duplicate-list small { color: #64748b; }
-    .decision-actions { display: inline-flex; border: 1px solid #cfe0dc; border-radius: 8px; overflow: hidden; }
-    .decision-actions button { border: 0; border-radius: 0; min-height: 34px; }
+    .decision-actions { display: inline-flex; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .decision-actions button { border: 0; border-radius: 0; min-height: 30px; }
     .decision-actions button.active { background: #0f8f7f; color: #ffffff; }
     .ops-queue { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .ops-queue button { min-height: 92px; display: grid; gap: 4px; align-content: center; text-align: left; border-left: 4px solid #94a3b8; }
+    .ops-queue button { min-height: 72px; display: grid; gap: 3px; align-content: center; text-align: left; border-left: 3px solid #94a3b8; }
     .ops-queue button.warning { border-left-color: #f59e0b; background: #fffbeb; }
     .ops-queue button.danger { border-left-color: #ef4444; background: #fef2f2; }
-    .ops-queue button.active { outline: 3px solid rgba(15,143,127,.16); }
-    .ops-queue strong { font-size: 26px; }
-    .ops-queue span, .ops-queue small { color: #64748b; }
-    .entity-stack article { padding: 10px; display: grid; gap: 6px; }
-    meter { width: 100%; height: 8px; }
+    .ops-queue button.active { outline: 2px solid rgba(15,143,127,.15); }
+    .ops-queue strong { font-size: 20px; }
+    .ops-queue span, .ops-queue small { color: #64748b; font-size: 12px; }
+    .entity-stack article { padding: 8px; display: grid; gap: 4px; }
+    meter { width: 100%; height: 6px; }
     .recon-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .recon-list article { padding: 12px; display: grid; gap: 4px; }
-    .recon-list strong { font-size: 22px; }
-    .expected-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-    .reconcile-table, .approval-list { display: grid; gap: 8px; }
-    .reconcile-table article, .approval-list article, .job-detail { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; background: #ffffff; }
-    .reconcile-table article { display: grid; gap: 4px; border-left: 4px solid #94a3b8; }
+    .recon-list article { padding: 10px; display: grid; gap: 3px; }
+    .recon-list strong { font-size: 18px; }
+    .expected-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .reconcile-table, .approval-list { display: grid; gap: 6px; }
+    .reconcile-table article, .approval-list article, .job-detail { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; background: #ffffff; }
+    .reconcile-table article { display: grid; gap: 3px; border-left: 3px solid #94a3b8; }
     .reconcile-table article.match { border-left-color: #10b981; background: #f0fdf4; }
     .reconcile-table article.mismatch { border-left-color: #ef4444; background: #fef2f2; }
-    .reconcile-table span, .approval-list small, .approval-list span { color: #64748b; }
-    .approval-list article { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .6fr); gap: 10px; border-left: 4px solid #94a3b8; }
+    .reconcile-table span, .approval-list small, .approval-list span { color: #64748b; font-size: 12px; }
+    .reconcile-table strong { font-size: 14px; }
+    .approval-list article { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, .6fr); gap: 8px; border-left: 3px solid #94a3b8; }
     .approval-list article.pending { border-left-color: #f59e0b; background: #fffbeb; }
     .approval-list article.approved { border-left-color: #10b981; background: #f0fdf4; }
     .approval-list article.rejected { border-left-color: #ef4444; background: #fef2f2; }
-    .job-detail { margin-top: 14px; display: grid; gap: 12px; }
-    .recovery-panel { margin-top: 14px; border: 1px solid #d7e6e2; border-radius: 8px; padding: 12px; background: #f8fffd; display: grid; gap: 12px; }
-    .recovery-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-    .recovery-grid article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; background: #ffffff; display: grid; gap: 4px; }
-    .recovery-grid span, .recovery-grid small, .recovery-list span { color: #64748b; }
-    .recovery-grid strong { font-size: 22px; }
-    .recovery-list { display: grid; gap: 8px; }
-    .recovery-list article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; background: #ffffff; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: center; }
-    .recovery-list strong { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; background: #eff6ff; color: #1d4ed8; }
+    .job-detail { margin-top: 10px; display: grid; gap: 10px; }
+    .recovery-panel { margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; background: #f8fffd; display: grid; gap: 10px; }
+    .recovery-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .recovery-grid article { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; background: #ffffff; display: grid; gap: 3px; }
+    .recovery-grid span, .recovery-grid small, .recovery-list span { color: #64748b; font-size: 12px; }
+    .recovery-grid strong { font-size: 18px; }
+    .recovery-list { display: grid; gap: 6px; }
+    .recovery-list article { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; background: #ffffff; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; }
+    .recovery-list strong { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; background: #eff6ff; color: #1d4ed8; font-size: 12px; }
     .control-strip.compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .worker-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
-    .proof-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
-    .proof-grid article, .difference-list article { border: 1px solid #d7e6e2; border-radius: 8px; padding: 10px; display: grid; gap: 4px; background: #ffffff; }
-    .proof-grid span, .difference-list span, .difference-list small { color: #64748b; }
-    .proof-grid strong { font-size: 18px; word-break: break-word; }
-    .compact-checklist { margin-top: 10px; }
-    .difference-list { display: grid; gap: 8px; margin-top: 10px; }
-    .difference-list article { border-left: 4px solid #f59e0b; background: #fffbeb; }
+    .worker-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .worker-settings label { gap: 4px; }
+    .proof-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+    .proof-grid article, .difference-list article { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; display: grid; gap: 3px; background: #ffffff; }
+    .proof-grid span, .difference-list span, .difference-list small { color: #64748b; font-size: 12px; }
+    .proof-grid strong { font-size: 15px; word-break: break-word; }
+    .compact-checklist { margin-top: 8px; }
+    .difference-list { display: grid; gap: 6px; margin-top: 8px; }
+    .difference-list article { border-left: 3px solid #f59e0b; background: #fffbeb; }
     .difference-list article.danger { border-left-color: #ef4444; background: #fef2f2; }
-    .chunk-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-top: 12px; }
-    .chunk-list article { border: 1px solid #d7e6e2; border-left: 4px solid #94a3b8; border-radius: 8px; padding: 10px; display: grid; gap: 4px; background: #ffffff; }
+    .chunk-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin-top: 8px; }
+    .chunk-list article { border: 1px solid #e2e8f0; border-left: 3px solid #94a3b8; border-radius: 8px; padding: 8px; display: grid; gap: 3px; background: #ffffff; font-size: 12px; }
     .chunk-list article.done { border-left-color: #10b981; background: #f0fdf4; }
     .chunk-list article.danger { border-left-color: #ef4444; background: #fef2f2; }
-    .chunk-list span, .chunk-list small { color: #64748b; }
+    .chunk-list span, .chunk-list small { color: #64748b; font-size: 11px; }
     tr.selected td { background: #eff6ff; }
-    .segmented { display: inline-flex; border: 1px solid #cfe0dc; border-radius: 8px; overflow: hidden; }
-    .segmented button { border: 0; border-radius: 0; min-height: 34px; background: #ffffff; }
+    .segmented { display: inline-flex; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .segmented button { border: 0; border-radius: 0; min-height: 30px; background: #ffffff; }
     .segmented button.active { background: #0f8f7f; color: #ffffff; }
-    .table-wrap { overflow: auto; border: 1px solid #d7e6e2; border-radius: 8px; }
-    table { width: 100%; border-collapse: collapse; min-width: 760px; }
-    th, td { padding: 11px 12px; border-bottom: 1px solid #edf2f7; text-align: left; vertical-align: top; }
-    th { background: #f8fafc; color: #64748b; font-size: 12px; text-transform: uppercase; }
+    .table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #edf2f7; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700; }
     td { font-size: 13px; }
-    .dense { max-height: 420px; }
-    .checklist label { display: flex; align-items: center; gap: 10px; text-transform: none; color: #172033; font-size: 14px; }
+    .dense { max-height: 380px; }
+    .checklist label { display: flex; align-items: center; gap: 8px; text-transform: none; color: #172033; font-size: 13px; }
     .checklist input { width: auto; min-height: auto; }
-    .rollback-zone { margin-top: 16px; border: 1px solid #fecaca; border-radius: 8px; padding: 14px; display: grid; gap: 8px; background: #fff7f7; }
-    .rollback-zone span, .result-box span { color: #64748b; }
-    .result-box { border: 1px solid #d7e6e2; border-radius: 8px; padding: 12px; display: grid; gap: 6px; background: #f8fffd; }
+    .rollback-zone { margin-top: 12px; border: 1px solid #fecaca; border-radius: 10px; padding: 10px; display: grid; gap: 6px; background: #fff7f7; }
+    .rollback-zone span, .result-box span { color: #64748b; font-size: 12px; }
+    .result-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; display: grid; gap: 4px; background: #f8fffd; font-size: 13px; }
     @media (max-width: 1100px) {
-      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip { grid-template-columns: 1fr 1fr; }
+      .command-header { grid-template-columns: 1fr; }
+      .acc-grid, .acc-grid.two { grid-template-columns: 1fr; }
+      .acc-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
-      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid, .recovery-grid { grid-template-columns: 1fr; }
-      .command-header h1 { font-size: 28px; }
+      .migration-shell { padding: 10px; }
+      .command-header { padding: 14px; }
+      .command-header h1 { font-size: 22px; }
+      .acc-grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid, .recovery-grid { grid-template-columns: 1fr; }
       .panel-head { align-items: flex-start; flex-direction: column; }
       .mapping-toolbar, .mapping-list article, .duplicate-list article, .ops-queue, .worker-settings { grid-template-columns: 1fr; }
+      .score-card strong { font-size: 26px; }
+      .migration-nav button { font-size: 11px; padding: 0 10px; min-height: 32px; }
     }
   `]
 })
@@ -950,6 +872,23 @@ export class DataMigrationComponent implements OnInit {
   lastWorkerResult = signal<any | null>(null);
   csvStagedRows = signal(0);
   csvStagedChunks = signal(0);
+  readonly activeSection = signal<string | null>(null);
+  readonly navItems = [
+    { id: 'launch', label: 'Migration', icon: '🚀' },
+    { id: 'mapping', label: 'AI Mapping', icon: '🧠' },
+    { id: 'worker', label: 'Import Worker', icon: '⚙️' },
+    { id: 'validation', label: 'Validation', icon: '🛡️' },
+    { id: 'approval', label: 'Approval', icon: '✅' },
+    { id: 'golive', label: 'Go-Live', icon: '🎯' },
+    { id: 'history', label: 'History', icon: '📋' }
+  ];
+  toggleSection(id: string): void {
+    this.activeSection.set(this.activeSection() === id ? null : id);
+  }
+  scrollTo(id: string): void {
+    this.activeSection.set(id);
+    setTimeout(() => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
   private selectedSourceFile: File | null = null;
   private readonly emptyTemplateColumns: MigrationTemplate['columns'] = [];
   private relevantMappingsCacheKey = '';

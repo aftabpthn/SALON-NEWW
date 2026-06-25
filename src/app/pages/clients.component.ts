@@ -256,8 +256,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
       width: 100%;
       max-width: none;
       min-width: 0;
-      padding-inline-end: var(--client-edge-safe);
+      padding-inline: var(--client-edge-safe);
+      padding-block: 16px;
       box-sizing: border-box;
+      display: grid; gap: 14px;
     }
 
     .client-command-hero {
@@ -267,11 +269,18 @@ import { StateComponent } from '../shared/ui/state/state.component';
       overflow: hidden;
       align-items: center;
       gap: 16px;
-      min-height: 84px;
-      padding: 18px 22px;
+      min-height: 72px;
+      padding: 16px 20px;
       border: 1px solid color-mix(in srgb, var(--teal) 20%, var(--line));
       background: color-mix(in srgb, var(--surface) 96%, white);
-      box-shadow: 0 14px 34px color-mix(in srgb, var(--ink) 6%, transparent);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04);
+      border-radius: 12px;
+    }
+    .client-command-hero::after {
+      content: ''; position: absolute; inset: 0;
+      border-radius: 12px;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--teal) 4%, transparent), transparent 60%);
+      pointer-events: none;
     }
 
     .hero-copy {
@@ -282,7 +291,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
     .hero-copy h2 {
       margin: 0;
-      font-size: 34px;
+      font-size: 28px;
       letter-spacing: 0;
       line-height: 1.05;
     }
@@ -308,12 +317,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
     .client-reports-panel {
       display: grid;
-      gap: 18px;
+      gap: 14px;
       min-width: 0;
-      padding: 18px;
+      padding: 16px;
       background:
         linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, white), color-mix(in srgb, var(--surface-2) 92%, white)),
         var(--surface);
+      border-radius: 12px;
     }
 
     .client-report-heading {
@@ -354,12 +364,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .client-report-metrics .metric-card {
-      min-height: 104px;
-      border-top-width: 4px;
+      min-height: 96px;
+      border-top-width: 3px;
+      border-radius: 10px;
       background:
         linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, white), var(--surface)),
         var(--surface);
-      box-shadow: 0 12px 28px color-mix(in srgb, var(--ink) 5%, transparent);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04);
     }
 
     .client-report-metrics .kpi-link-card {
@@ -383,6 +394,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, white), color-mix(in srgb, var(--surface-2) 92%, white)),
         var(--surface);
       overflow: hidden;
+      border-radius: 12px;
     }
 
     .client-database-panel .table-toolbar {
@@ -394,9 +406,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       align-items: end;
       gap: 12px;
       overflow: visible;
-      padding: 12px;
-      border: 1px solid color-mix(in srgb, var(--line) 75%, white);
-      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
       background: color-mix(in srgb, var(--surface) 92%, white);
       backdrop-filter: blur(18px);
     }
@@ -421,13 +432,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .client-database-panel .table-wrap {
-      max-height: min(780px, 72vh);
+      max-height: min(720px, 70vh);
       overflow: auto;
       overscroll-behavior: contain;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
       background: var(--surface);
-      box-shadow: 0 14px 34px color-mix(in srgb, var(--ink) 4%, transparent);
     }
 
     .client-database-panel .clients-crm-table {

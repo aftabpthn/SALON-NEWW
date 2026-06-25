@@ -208,7 +208,20 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
       <pre class="result-json" *ngIf="result()">{{ result() | json }}</pre>
     </section>
-  `
+  `,
+  styles: [`
+    .dashboard-grid > :only-child { grid-column: 1 / -1; }
+    .page-stack { display: grid; gap: 16px; padding-block: 16px; }
+    .module-hero { border-radius: 12px; padding: 16px 20px; min-height: auto; }
+    .module-hero h2 { font-size: 22px; line-height: 1.15; }
+    .module-hero p { font-size: 13px; margin-top: 4px; }
+    .dashboard-grid { gap: 14px; }
+    .dashboard-grid .panel, .dashboard-grid .form-panel { border-radius: 12px; padding: 16px; }
+    .dashboard-grid .section-title { padding-bottom: 6px; margin-bottom: 8px; }
+    .dashboard-grid .section-title h2 { font-size: 15px; }
+    .table-wrap { border-radius: 8px; }
+    .form-panel h3 { font-size: 15px; margin: 0 0 12px; }
+  `]
 })
 export class Customer360Component implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);
