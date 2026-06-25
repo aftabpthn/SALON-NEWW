@@ -106,7 +106,7 @@ const SUITE_GROUPS: SuiteGroup[] = [
     apps: [
       { path: '/staff-os/employee-masters', label: 'Staff OS', description: 'Employee master, attendance, payroll and lifecycle actions.', icon: 'SO', tone: 'blue', status: 'Ready', tags: ['staff', 'payroll'] },
       { path: '/staff-os/staff-list', label: 'Staff Directory', description: 'Active team, staff categories, documents and operational staff controls.', icon: 'ST', tone: 'teal', status: 'Live', tags: ['staff', 'employee'] },
-      { path: '/staff-os/salary-workspace', label: 'Salary Setup', description: 'Salary setup connected to attendance, rules and payout states.', icon: 'SW', tone: 'violet', status: 'Ready', tags: ['hr', 'enterprise'] },
+      { path: '/staff-os/employee-masters', label: 'Salary Setup', description: 'Salary setup is now merged into Employee Masters payroll flow.', icon: 'SW', tone: 'violet', status: 'Ready', tags: ['hr', 'enterprise'] },
       { path: '/staff/my-work', label: 'My Work', description: 'Staff self-service view for appointments, work summary and own performance.', icon: 'MW', tone: 'green', status: 'Live', tags: ['staff', 'self'] },
       { path: '/staff-os/attendance-dashboard', label: 'Attendance Dashboard', description: 'Present, absent, late, shift and biometric attendance visibility.', icon: 'AD', tone: 'amber', status: 'Ready', tags: ['attendance'] },
       { path: '/staff-os/payroll-dashboard', label: 'Payroll Dashboard', description: 'Salary, deductions, statutory values and payroll export controls.', icon: 'PD', tone: 'blue', status: 'Ready', tags: ['payroll'] },

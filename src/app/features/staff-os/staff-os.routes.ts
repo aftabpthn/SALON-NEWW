@@ -8,8 +8,8 @@ export const STAFF_OS_ROUTES: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'staff-list' },
       { path: 'workspace', loadComponent: () => import('./pages/staff-workspace.page').then((m) => m.StaffWorkspacePage), title: 'Staff Workspace' },
-      { path: 'salary-workspace', loadComponent: () => import('./pages/staff-salary-workspace.page').then((m) => m.StaffSalaryWorkspacePage), title: 'Staff OS - Salary Workspace' },
-      { path: 'staff-salary-workspace', pathMatch: 'full', redirectTo: 'salary-workspace' },
+      { path: 'salary-workspace', pathMatch: 'full', redirectTo: 'employee-masters' },
+      { path: 'staff-salary-workspace', pathMatch: 'full', redirectTo: 'employee-masters' },
       { path: 'employee-masters', loadComponent: () => import('./pages/employee-masters.page').then((m) => m.EmployeeMastersPage), title: 'Staff OS - Employee Masters' },
       { path: 'staff-list', loadComponent: () => import('./pages/staff-list.page').then((m) => m.StaffListPage), title: 'Staff OS - Staff List' },
       { path: 'staff-categories', loadComponent: () => import('./pages/staff-categories.page').then((m) => m.StaffCategoriesPage), title: 'Staff OS - Staff Categories' },

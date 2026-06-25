@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { StaffOsApi } from '../data/staff-os.api';
 
@@ -13,7 +13,6 @@ type MasterTile = {
 };
 
 const masterTiles: MasterTile[] = [
-  { label: 'Salary Workspace', section: 'Payroll', path: '/staff-os/salary-workspace', status: 'live', accent: 'payroll' },
   { label: 'Employee Category', section: 'Core', path: '/staff-os/staff-categories', status: 'live', accent: 'people' },
   { label: 'Employee Master', section: 'Core', path: '/staff-os/staff-list', status: 'live', accent: 'people' },
   { label: 'Attendance Master', section: 'Attendance', path: '/staff-os/attendance-master', status: 'live', accent: 'time' },
@@ -47,6 +46,13 @@ const masterTiles: MasterTile[] = [
   { label: 'Performance Dashboard', section: 'Performance', path: '/staff-os/performance-dashboard', status: 'live', accent: 'services' },
   { label: 'Staff Sales Report', section: 'Reports', path: '/reports/staff-sales', status: 'live', accent: 'services' },
   { label: 'Invoice Reports', section: 'Reports', path: '/reports/invoices', status: 'live', accent: 'services' }
+];
+
+const payrollFlow = [
+  { label: 'Staff Setup', path: '/staff-os/staff-list', note: 'Staff profile, category and salary basics.' },
+  { label: 'Attendance Rules', path: '/staff-os/attendance-dashboard', note: 'Attendance, leave, shift and roster data.' },
+  { label: 'Payroll Setup', path: '/staff-os/payroll-rules', note: 'Rules, fines, deductions and salary structure.' },
+  { label: 'Salary Generate', path: '/staff-os/salary-generate', note: 'Preview, validate and generate net salary.' }
 ];
 
 @Component({
@@ -136,6 +142,22 @@ const masterTiles: MasterTile[] = [
         </a>
       </section>
 
+      <section class="payroll-flow" *ngIf="activeSection() === 'All' || activeSection() === 'Payroll'">
+        <div class="flow-head">
+          <div>
+            <p class="eyebrow">Payroll setup merged</p>
+            <h2>Salary workspace flow</h2>
+          </div>
+          <a routerLink="/staff-os/salary-generate">Open Salary Generate</a>
+        </div>
+        <div class="flow-grid">
+          <a *ngFor="let item of payrollFlow" [routerLink]="item.path">
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.note }}</small>
+          </a>
+        </div>
+      </section>
+
       <div class="group-tabs" aria-label="Employee master sections">
         <button
           type="button"
@@ -191,6 +213,14 @@ const masterTiles: MasterTile[] = [
     .money .tile-icon, .primary-tile.money span { background: #fff4e4; color: #8a5a00; }
     .services .tile-icon { background: #f4efff; color: #5f4aa3; }
     .payroll .tile-icon, .primary-tile.payroll span { background: #f3f5f7; color: #445261; }
+    .payroll-flow { background: #f8fbf9; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; padding: 16px; }
+    .flow-head { align-items: center; display: flex; justify-content: space-between; gap: 12px; }
+    .flow-head h2 { font-size: 20px; letter-spacing: 0; margin: 0; }
+    .flow-head a { background: #10201a; border-radius: 6px; color: #fff; font-weight: 850; padding: 9px 12px; text-decoration: none; white-space: nowrap; }
+    .flow-grid { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .flow-grid a { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; color: #10201a; display: grid; gap: 6px; min-height: 86px; padding: 13px; text-decoration: none; }
+    .flow-grid strong { font-size: 15px; letter-spacing: 0; }
+    .flow-grid small { color: #60766d; line-height: 1.35; }
     .group-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px; border: 1px solid #d9e5de; border-radius: 8px; background: #f8fbf9; }
     .group-tabs button { background: #fff; border: 1px solid #cbd8d2; border-radius: 6px; color: #34483f; cursor: pointer; font-weight: 850; min-height: 36px; padding: 8px 11px; white-space: nowrap; }
     .group-tabs button.active { background: #10201a; border-color: #10201a; color: #fff; }
@@ -201,16 +231,18 @@ const masterTiles: MasterTile[] = [
     .tile small.live { color: #286345; }
     .tile small.ready { color: #1f6172; }
     .tile small.next { color: #8a5a00; }
-    @media (max-width: 1100px) { .metrics, .primary-band, .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 1100px) { .metrics, .primary-band, .tile-grid, .flow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 680px) {
       .masters-page { padding: 16px; }
       .topbar { display: grid; }
-      .metrics, .primary-band, .tile-grid { grid-template-columns: 1fr; }
+      .flow-head { align-items: flex-start; display: grid; }
+      .metrics, .primary-band, .tile-grid, .flow-grid { grid-template-columns: 1fr; }
     }
   `]
 })
 export class EmployeeMastersPage implements OnInit {
   readonly tiles = masterTiles;
+  readonly payrollFlow = payrollFlow;
   readonly activeSection = signal('All');
   readonly loading = signal(false);
   readonly error = signal('');
@@ -231,9 +263,15 @@ export class EmployeeMastersPage implements OnInit {
     return section === 'All' ? this.tiles : this.tiles.filter((tile) => tile.section === section);
   });
 
-  constructor(private readonly api: StaffOsApi) {}
+  constructor(private readonly api: StaffOsApi, private readonly route: ActivatedRoute) {}
 
   ngOnInit(): void {
+    this.route.queryParamMap.subscribe((params) => {
+      const section = params.get('section');
+      if (section && this.sections().includes(section)) {
+        this.activeSection.set(section);
+      }
+    });
     this.load();
   }
 
