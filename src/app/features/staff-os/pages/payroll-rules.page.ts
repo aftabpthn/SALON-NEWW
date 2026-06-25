@@ -16,6 +16,7 @@ import { DEFAULT_STAFF_PAYROLL_RULES, normalizeStaffPayrollRules, readStaffPayro
           <p>Set attendance, week off, shift, commission and advance deduction rules for Salary Generate.</p>
         </div>
         <div class="top-actions">
+          <a routerLink="/staff-os/salary-workspace">Salary Setup</a>
           <a routerLink="/staff-os/salary-generate">Salary Generate</a>
           <button type="button" (click)="resetDefaults()">Reset</button>
           <button type="button" (click)="save()">Save Rules</button>

@@ -2900,6 +2900,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.applyWorkspaceRouteContext();
     this.applyAttendanceRouteContext();
     this.store.load();
     if (this.section === 'workspace' || this.section === 'attendance-dashboard') {
@@ -2964,6 +2965,18 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
 
   selectedStaffWorkspaceCategory(): StaffWorkspaceCategory {
     return this.staffWorkspaceCategories.find((item) => item.key === this.staffWorkspaceCategory()) || this.staffWorkspaceCategories[0];
+  }
+
+  private applyWorkspaceRouteContext(): void {
+    if (this.section !== 'workspace') return;
+    const requested = (
+      this.route.snapshot.queryParamMap.get('workspace')
+      || this.route.snapshot.queryParamMap.get('category')
+      || (this.route.snapshot.routeConfig?.path?.includes('salary') ? 'salary' : '')
+    ) as StaffWorkspaceKey;
+    if (this.staffWorkspaceCategories.some((item) => item.key === requested)) {
+      this.staffWorkspaceCategory.set(requested);
+    }
   }
 
   staffWorkspaceValue(key: StaffWorkspaceKey): string | number {

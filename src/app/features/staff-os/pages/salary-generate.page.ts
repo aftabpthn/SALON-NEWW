@@ -89,7 +89,7 @@ type SalaryRow = {
         </div>
         <div class="hero-actions">
           <button type="button" routerLink="/staff-os/payroll-rules">Payroll Rules</button>
-          <button type="button" routerLink="/staff-os/employee-masters" [queryParams]="{ section: 'Payroll' }">Salary Setup</button>
+          <button type="button" routerLink="/staff-os/salary-workspace">Salary Setup</button>
           <button class="primary" type="button" [disabled]="loading()" (click)="previewPayroll()">Preview Salary</button>
           <button type="button" [disabled]="!rows().length || loading()" (click)="generatePermanentPayroll()">Generate Salary</button>
         </div>
