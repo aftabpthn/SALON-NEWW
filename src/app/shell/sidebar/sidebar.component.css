@@ -17,6 +17,20 @@
   overflow: hidden;
 }
 
+.three-container {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.three-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .enterprise-sidebar.is-rail {
   grid-template-columns: 76px;
 }
@@ -98,14 +112,15 @@
 }
 
 .sidebar-panel {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   display: grid;
   grid-template-rows: auto auto auto auto 1fr auto;
   gap: 12px;
   padding: 10px 12px 12px;
   background:
-    linear-gradient(180deg, rgba(36, 164, 126, 0.08), transparent 170px),
-    #101313;
+    linear-gradient(180deg, rgba(16, 19, 19, 0.88) 0%, rgba(16, 19, 19, 0.82) 50%, rgba(16, 19, 19, 0.92) 100%);
 }
 
 .workspace-header,
