@@ -4,8 +4,6 @@ import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/fo
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
-type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
-
 @Component({
   selector: 'app-finance-engine',
   standalone: true,
@@ -37,19 +35,10 @@ type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
             <p class="eyebrow">Finance operations</p>
             <h2>Single compact work desk</h2>
           </div>
-          <span>Choose one task instead of scrolling through every form.</span>
         </header>
 
-        <div class="desk-tabs">
-          <button type="button" [class.active]="activeDesk() === 'cash'" (click)="selectDesk('cash')">Cash drawer</button>
-          <button type="button" [class.active]="activeDesk() === 'expense'" (click)="selectDesk('expense')">Expense</button>
-          <button type="button" [class.active]="activeDesk() === 'daily'" (click)="selectDesk('daily')">Daily close</button>
-          <button type="button" [class.active]="activeDesk() === 'invoice'" (click)="selectDesk('invoice')">Invoice payment</button>
-          <button type="button" [class.active]="activeDesk() === 'payout'" (click)="selectDesk('payout')">Staff payout</button>
-        </div>
-
         <div class="workdesk-grid">
-          <form [formGroup]="drawerForm" *ngIf="activeDesk() === 'cash'">
+          <form [formGroup]="drawerForm">
             <h3>Cash drawer</h3>
             <label class="field"><span>Branch</span><select formControlName="branchId"><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>
             <label class="field"><span>Opening float</span><input type="number" formControlName="openingFloat" /></label>
@@ -60,7 +49,7 @@ type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
             </div>
           </form>
 
-          <form [formGroup]="expenseForm" (ngSubmit)="addExpense()" *ngIf="activeDesk() === 'expense'">
+          <form [formGroup]="expenseForm" (ngSubmit)="addExpense()">
             <h3>Expense tracking</h3>
             <label class="field"><span>Category</span><input formControlName="category" /></label>
             <label class="field"><span>Amount</span><input type="number" formControlName="amount" /></label>
@@ -69,14 +58,14 @@ type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
             <div class="form-actions"><button class="primary-button" type="submit" [disabled]="expenseForm.invalid">Add expense</button></div>
           </form>
 
-          <form [formGroup]="closingForm" (ngSubmit)="dailyClosing()" *ngIf="activeDesk() === 'daily'">
+          <form [formGroup]="closingForm" (ngSubmit)="dailyClosing()">
             <h3>Daily closing</h3>
             <label class="field"><span>Business date</span><input type="date" formControlName="businessDate" /></label>
             <label class="field"><span>Notes</span><input formControlName="notes" /></label>
             <div class="form-actions"><button class="primary-button" type="submit">Close day</button></div>
           </form>
 
-          <form [formGroup]="invoiceForm" *ngIf="activeDesk() === 'invoice'">
+          <form [formGroup]="invoiceForm">
             <h3>Partial payment and refund</h3>
             <label class="field full"><span>Invoice</span><select formControlName="invoiceId"><option *ngFor="let invoice of invoices()" [value]="invoice.id">{{ invoice.invoiceNumber }} · {{ invoice.status }} · {{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</option></select></label>
             <label class="field"><span>Amount</span><input type="number" formControlName="amount" /></label>
@@ -88,7 +77,7 @@ type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
             </div>
           </form>
 
-          <form [formGroup]="payoutForm" (ngSubmit)="staffPayout()" *ngIf="activeDesk() === 'payout'">
+          <form [formGroup]="payoutForm" (ngSubmit)="staffPayout()">
             <h3>Staff payout</h3>
             <label class="field full"><span>Staff</span><select formControlName="staffId"><option *ngFor="let person of staff()" [value]="person.id">{{ person.name }}</option></select></label>
             <label class="field"><span>Period start</span><input type="date" formControlName="periodStart" /></label>
@@ -170,7 +159,7 @@ type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
     .page-title { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 14px; background: #fff; border-bottom: 1px solid #d9e1ea; }
     .page-title h1, .desk-heading h2, .register-heading h2 { margin: 0; letter-spacing: 0; }
     .page-title p { margin: 6px 0 0; color: #38506d; font-size: 13px; }
-    .page-title strong, .desk-heading span, .register-heading > span { color: #5d6f87; font-size: 12px; font-weight: 800; }
+    .page-title strong, .register-heading > span { color: #5d6f87; font-size: 12px; font-weight: 800; }
     app-state { display: block; margin: 12px 14px 0; }
     .metrics-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; padding: 0 14px 12px; background: #fff; border-bottom: 1px solid #d9e1ea; }
     .metrics-grid article { display: grid; gap: 3px; min-height: 74px; padding: 12px 14px; border: 1px solid #d9e1ea; border-left: 0; border-top: 3px solid #0a78b6; }
@@ -180,10 +169,7 @@ type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
     .workdesk, .register-panel { background: #fff; border-bottom: 1px solid #d9e1ea; padding: 12px 14px; display: grid; gap: 10px; }
     .desk-heading, .register-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .eyebrow { margin: 0 0 3px; color: #5d6f87; font-size: 11px; font-weight: 900; text-transform: uppercase; }
-    .desk-tabs { display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #d9e1ea; padding-bottom: 8px; }
-    .desk-tabs button { border: 1px solid #c6d7ea; background: #fff; color: #0963a6; border-radius: 3px; padding: 7px 12px; font-weight: 900; }
-    .desk-tabs button.active { background: #0f8a7d; color: #fff; border-color: #0f8a7d; }
-    .workdesk-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .workdesk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     form { border: 1px solid #d9e1ea; padding: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; }
     form h3 { grid-column: 1 / -1; margin: 0 0 4px; font-size: 15px; }
     .field { display: grid; gap: 5px; color: #5d6f87; font-size: 11px; font-weight: 900; }
@@ -230,7 +216,6 @@ export class FinanceEngineComponent implements OnInit {
   readonly result = signal<ApiRecord | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
-  readonly activeDesk = signal<FinanceDesk>('cash');
 
   readonly drawerForm = this.fb.group({ branchId: ['', Validators.required], openingFloat: [5000], countedCash: [5000] });
   readonly expenseForm = this.fb.group({ category: ['Supplies', Validators.required], amount: [500, Validators.required], vendor: ['Local supplier'], paymentMode: ['cash'] });
@@ -273,13 +258,6 @@ export class FinanceEngineComponent implements OnInit {
         this.loading.set(false);
       }
     });
-  }
-
-  selectDesk(desk: FinanceDesk): void {
-    this.activeDesk.set(desk);
-    this.result.set(null);
-    this.loadLists();
-    this.load();
   }
 
   openDrawer(): void {
