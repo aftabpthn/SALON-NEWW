@@ -23,12 +23,17 @@ export class FinanceEngineService {
     const branchId = query.branchId || access.branchId || "";
     if (branchId) tenantService.assertBranchAccess(access, branchId);
     const businessDate = query.businessDate || today();
+    const listLimit = Math.min(Math.max(Number(query.limit || 250), 25), 500);
     const payments = this.paymentsForDay(branchId, businessDate, access);
-    const expenses = repositories.financeExpenses.list({ branchId, limit: 10000 }, scope(access, branchId)).filter((item) => (item.paidAt || item.createdAt || "").startsWith(businessDate));
-    const refunds = repositories.financeRefunds.list({ branchId, limit: 10000 }, scope(access, branchId)).filter((item) => (item.createdAt || "").startsWith(businessDate));
-    const payouts = repositories.financeStaffPayouts.list({ branchId, limit: 10000 }, scope(access, branchId));
-    const invoices = repositories.invoices.list({ limit: 10000 }, scope(access));
-    const sales = repositories.sales.list({ branchId, limit: 10000 }, scope(access, branchId));
+    const expenses = repositories.financeExpenses
+      .list({ branchId, limit: listLimit }, scope(access, branchId))
+      .filter((item) => (item.paidAt || item.createdAt || "").startsWith(businessDate));
+    const refunds = repositories.financeRefunds
+      .list({ branchId, limit: listLimit }, scope(access, branchId))
+      .filter((item) => (item.createdAt || "").startsWith(businessDate));
+    const payouts = repositories.financeStaffPayouts.list({ branchId, limit: listLimit }, scope(access, branchId));
+    const invoices = repositories.invoices.list({ limit: listLimit }, scope(access));
+    const sales = repositories.sales.list({ branchId, limit: listLimit }, scope(access, branchId));
     const outstanding = invoices.filter((invoice) => invoice.status !== "paid");
     const drawer = this.currentDrawer(branchId, access);
     const paymentTotals = this.paymentTotals(payments);
@@ -56,7 +61,7 @@ export class FinanceEngineService {
       refunds,
       payouts,
       closings: repositories.financeDailyClosings.list({ branchId, limit: 30 }, scope(access, branchId)),
-      outstanding,
+      outstanding: outstanding.slice(0, 100),
       salesCount: sales.length
     };
   }

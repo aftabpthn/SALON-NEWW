@@ -4,6 +4,8 @@ import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/fo
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
+type FinanceDesk = 'cash' | 'expense' | 'daily' | 'invoice' | 'payout';
+
 @Component({
   selector: 'app-finance-engine',
   standalone: true,
@@ -39,15 +41,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </header>
 
         <div class="desk-tabs">
-          <button type="button">Cash drawer</button>
-          <button type="button">Expense</button>
-          <button type="button">Daily close</button>
-          <button type="button">Invoice payment</button>
-          <button type="button">Staff payout</button>
+          <button type="button" [class.active]="activeDesk() === 'cash'" (click)="selectDesk('cash')">Cash drawer</button>
+          <button type="button" [class.active]="activeDesk() === 'expense'" (click)="selectDesk('expense')">Expense</button>
+          <button type="button" [class.active]="activeDesk() === 'daily'" (click)="selectDesk('daily')">Daily close</button>
+          <button type="button" [class.active]="activeDesk() === 'invoice'" (click)="selectDesk('invoice')">Invoice payment</button>
+          <button type="button" [class.active]="activeDesk() === 'payout'" (click)="selectDesk('payout')">Staff payout</button>
         </div>
 
         <div class="workdesk-grid">
-          <form [formGroup]="drawerForm">
+          <form [formGroup]="drawerForm" *ngIf="activeDesk() === 'cash'">
             <h3>Cash drawer</h3>
             <label class="field"><span>Branch</span><select formControlName="branchId"><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>
             <label class="field"><span>Opening float</span><input type="number" formControlName="openingFloat" /></label>
@@ -58,7 +60,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </form>
 
-          <form [formGroup]="expenseForm" (ngSubmit)="addExpense()">
+          <form [formGroup]="expenseForm" (ngSubmit)="addExpense()" *ngIf="activeDesk() === 'expense'">
             <h3>Expense tracking</h3>
             <label class="field"><span>Category</span><input formControlName="category" /></label>
             <label class="field"><span>Amount</span><input type="number" formControlName="amount" /></label>
@@ -67,14 +69,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="form-actions"><button class="primary-button" type="submit" [disabled]="expenseForm.invalid">Add expense</button></div>
           </form>
 
-          <form [formGroup]="closingForm" (ngSubmit)="dailyClosing()">
+          <form [formGroup]="closingForm" (ngSubmit)="dailyClosing()" *ngIf="activeDesk() === 'daily'">
             <h3>Daily closing</h3>
             <label class="field"><span>Business date</span><input type="date" formControlName="businessDate" /></label>
             <label class="field"><span>Notes</span><input formControlName="notes" /></label>
             <div class="form-actions"><button class="primary-button" type="submit">Close day</button></div>
           </form>
 
-          <form [formGroup]="invoiceForm">
+          <form [formGroup]="invoiceForm" *ngIf="activeDesk() === 'invoice'">
             <h3>Partial payment and refund</h3>
             <label class="field full"><span>Invoice</span><select formControlName="invoiceId"><option *ngFor="let invoice of invoices()" [value]="invoice.id">{{ invoice.invoiceNumber }} · {{ invoice.status }} · {{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</option></select></label>
             <label class="field"><span>Amount</span><input type="number" formControlName="amount" /></label>
@@ -86,7 +88,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </form>
 
-          <form [formGroup]="payoutForm" (ngSubmit)="staffPayout()">
+          <form [formGroup]="payoutForm" (ngSubmit)="staffPayout()" *ngIf="activeDesk() === 'payout'">
             <h3>Staff payout</h3>
             <label class="field full"><span>Staff</span><select formControlName="staffId"><option *ngFor="let person of staff()" [value]="person.id">{{ person.name }}</option></select></label>
             <label class="field"><span>Period start</span><input type="date" formControlName="periodStart" /></label>
@@ -180,8 +182,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .eyebrow { margin: 0 0 3px; color: #5d6f87; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .desk-tabs { display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #d9e1ea; padding-bottom: 8px; }
     .desk-tabs button { border: 1px solid #c6d7ea; background: #fff; color: #0963a6; border-radius: 3px; padding: 7px 12px; font-weight: 900; }
-    .desk-tabs button:first-child { background: #0f8a7d; color: #fff; border-color: #0f8a7d; }
-    .workdesk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .desk-tabs button.active { background: #0f8a7d; color: #fff; border-color: #0f8a7d; }
+    .workdesk-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
     form { border: 1px solid #d9e1ea; padding: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; }
     form h3 { grid-column: 1 / -1; margin: 0 0 4px; font-size: 15px; }
     .field { display: grid; gap: 5px; color: #5d6f87; font-size: 11px; font-weight: 900; }
@@ -228,6 +230,7 @@ export class FinanceEngineComponent implements OnInit {
   readonly result = signal<ApiRecord | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly activeDesk = signal<FinanceDesk>('cash');
 
   readonly drawerForm = this.fb.group({ branchId: ['', Validators.required], openingFloat: [5000], countedCash: [5000] });
   readonly expenseForm = this.fb.group({ category: ['Supplies', Validators.required], amount: [500, Validators.required], vendor: ['Local supplier'], paymentMode: ['cash'] });
@@ -246,60 +249,90 @@ export class FinanceEngineComponent implements OnInit {
     this.api.list<ApiRecord[]>('branches').subscribe((rows) => {
       this.branches.set(rows);
       if (rows[0]) this.drawerForm.patchValue({ branchId: rows[0].id });
-    });
+    }, (error) => this.error.set(this.api.errorText(error, 'Unable to load finance lists')));
     this.api.list<ApiRecord[]>('invoices').subscribe((rows) => {
       this.invoices.set(rows);
       if (rows[0]) this.invoiceForm.patchValue({ invoiceId: rows[0].id, amount: Math.max(1, Number(rows[0].balance || rows[0].paid || 100)) });
-    });
+    }, (error) => this.error.set(this.api.errorText(error, 'Unable to load finance lists')));
     this.api.list<ApiRecord[]>('staff').subscribe((rows) => {
       this.staff.set(rows);
       if (rows[0]) this.payoutForm.patchValue({ staffId: rows[0].id });
-    });
+    }, (error) => this.error.set(this.api.errorText(error, 'Unable to load finance lists')));
   }
 
   load(): void {
     this.loading.set(true);
+    this.error.set('');
     this.api.list<ApiRecord>('finance/summary').subscribe({
       next: (summary) => {
         this.summary.set(summary);
         this.loading.set(false);
       },
       error: (error) => {
-        this.error.set(error?.error?.error || 'Unable to load finance engine');
+        this.error.set(this.api.errorText(error, 'Unable to load finance engine'));
         this.loading.set(false);
       }
     });
   }
 
+  selectDesk(desk: FinanceDesk): void {
+    this.activeDesk.set(desk);
+    this.result.set(null);
+    this.loadLists();
+    this.load();
+  }
+
   openDrawer(): void {
-    this.api.post<ApiRecord>('finance/cash-drawers/open', this.drawerForm.value).subscribe((response) => this.afterAction(response));
+    this.api.post<ApiRecord>('finance/cash-drawers/open', this.drawerForm.value).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to open cash drawer'))
+    });
   }
 
   closeDrawer(): void {
-    this.api.patch<ApiRecord>('finance/cash-drawers/close', this.drawerForm.value).subscribe((response) => this.afterAction(response));
+    this.api.patch<ApiRecord>('finance/cash-drawers/close', this.drawerForm.value).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to close cash drawer'))
+    });
   }
 
   addExpense(): void {
-    this.api.post<ApiRecord>('finance/expenses', { ...this.expenseForm.value, branchId: this.drawerForm.value.branchId }).subscribe((response) => this.afterAction(response));
+    this.api.post<ApiRecord>('finance/expenses', { ...this.expenseForm.value, branchId: this.drawerForm.value.branchId }).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to add expense'))
+    });
   }
 
   dailyClosing(): void {
-    this.api.post<ApiRecord>('finance/daily-closing', { ...this.closingForm.value, branchId: this.drawerForm.value.branchId }).subscribe((response) => this.afterAction(response));
+    this.api.post<ApiRecord>('finance/daily-closing', { ...this.closingForm.value, branchId: this.drawerForm.value.branchId }).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to close day'))
+    });
   }
 
   partialPayment(): void {
-    this.api.post<ApiRecord>(`finance/invoices/${this.invoiceForm.value.invoiceId}/partial-payment`, this.invoiceForm.value).subscribe((response) => this.afterAction(response));
+    this.api.post<ApiRecord>(`finance/invoices/${this.invoiceForm.value.invoiceId}/partial-payment`, this.invoiceForm.value).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to add invoice payment'))
+    });
   }
 
   refund(): void {
-    this.api.post<ApiRecord>('finance/refunds', { ...this.invoiceForm.value, invoiceId: this.invoiceForm.value.invoiceId }).subscribe((response) => this.afterAction(response));
+    this.api.post<ApiRecord>('finance/refunds', { ...this.invoiceForm.value, invoiceId: this.invoiceForm.value.invoiceId }).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to refund invoice'))
+    });
   }
 
   staffPayout(): void {
-    this.api.post<ApiRecord>('finance/staff-payouts', this.payoutForm.value).subscribe((response) => this.afterAction(response));
+    this.api.post<ApiRecord>('finance/staff-payouts', this.payoutForm.value).subscribe({
+      next: (response) => this.afterAction(response),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to calculate staff payout'))
+    });
   }
 
   afterAction(response: ApiRecord): void {
+    this.error.set('');
     this.result.set(response);
     this.loadLists();
     this.load();
