@@ -5,6 +5,7 @@ import test from "node:test";
 const serverApp = readFileSync("server/app.js", "utf8");
 const route = readFileSync("server/routes/profit-intelligence.routes.js", "utf8");
 const service = readFileSync("server/services/profit-intelligence.service.js", "utf8");
+const bookingService = readFileSync("server/services/profit-aware-booking.service.js", "utf8");
 const appRoutes = readFileSync("src/app/app.routes.ts", "utf8");
 const appComponent = readFileSync("src/app/app.component.ts", "utf8");
 const page = readFileSync("src/app/pages/profit-intelligence.component.ts", "utf8");
@@ -18,6 +19,7 @@ test("Profit Intelligence API is mounted for v1 and legacy finance clients", () 
 test("Profit Intelligence summary is finance-protected and paise-based", () => {
   assert.match(route, /\/profit-intelligence\/summary[\s\S]*requirePermission\("read",\s*\(\) => "finance"\)/, "summary should require read finance");
   assert.match(route, /\/profit-intelligence\/breakdown[\s\S]*requirePermission\("read",\s*\(\) => "finance"\)/, "breakdown should require read finance");
+  assert.match(route, /\/profit-intelligence\/booking-recommendations[\s\S]*requirePermission\("read",\s*\(\) => "finance"\)/, "booking recommendations should require read finance");
   for (const field of [
     "revenuePaise",
     "productCostPaise",
@@ -144,11 +146,34 @@ test("Profit Intelligence exposes Profit Digital Twin simulation", () => {
   }
 });
 
+test("Profit Intelligence exposes margin-aware booking recommendations", () => {
+  assert.ok(route.includes("profitAwareBookingService"), "route should use the profit-aware booking wrapper");
+  assert.ok(bookingService.includes("profitIntelligenceService.breakdown"), "booking wrapper should reuse Profit Intelligence breakdowns");
+  assert.ok(bookingService.includes("appointments"), "booking wrapper should read appointment history");
+  for (const field of [
+    "booking-recommendations",
+    "expectedRevenuePaise",
+    "expectedCostPaise",
+    "expectedProfitPaise",
+    "marginBps",
+    "peakScore",
+    "suggestedPriceUpliftBps",
+    "recommendation",
+    "restrictionReason"
+  ]) {
+    assert.ok(route.includes(field) || bookingService.includes(field) || page.includes(field), `${field} should be part of margin-aware booking`);
+  }
+  for (const label of ["Margin-Aware Booking", "Profit ranked slots", "Best Slot", "Peak", "Prime slot candidate"]) {
+    assert.ok(page.includes(label), `${label} should be visible for booking intelligence`);
+  }
+});
+
 test("Profit Intelligence page is routed and visible in Finance navigation", () => {
   assert.match(appRoutes, /profit-intelligence[\s\S]*ProfitIntelligenceComponent/, "Angular route should load ProfitIntelligenceComponent");
   assert.ok(appComponent.includes("path: '/profit-intelligence'"), "Finance navigation should include the page");
   assert.ok(page.includes("profit-intelligence/summary"), "page should call the summary endpoint");
   assert.ok(page.includes("profit-intelligence/breakdown"), "page should call the breakdown endpoint");
+  assert.ok(page.includes("profit-intelligence/booking-recommendations"), "page should call booking recommendations endpoint");
   assert.ok(page.includes("grossMarginBps"), "page should expose gross margin");
   assert.ok(page.includes("netMarginBps"), "page should expose net margin");
   for (const label of ["Service wise margin", "Staff wise profitability", "Branch wise profit", "Category wise margin"]) {

@@ -179,6 +179,36 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </article>
       </section>
 
+      <section class="booking-grid" *ngIf="bookingRecommendations() as booking">
+        <article class="table-panel booking-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Margin-Aware Booking</p>
+              <h2>Profit ranked slots</h2>
+            </div>
+            <span>{{ booking.sourceHealth?.appointments || 0 }} appointment signals</span>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Best Slot</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th><th>Peak</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of booking.recommendations || []">
+                  <td><strong>{{ row.serviceName }}</strong><span>{{ row.restrictionReason || 'Prime slot candidate' }}</span></td>
+                  <td>{{ slotLabel(row.slot) }}</td>
+                  <td>{{ paise(row.expectedRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.expectedCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.expectedProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ percent(row.marginBps) }}</td>
+                  <td>{{ row.peakScore || 0 }}</td>
+                  <td><span>{{ row.recommendation }}</span><strong *ngIf="row.suggestedPriceUpliftBps">+{{ percent(row.suggestedPriceUpliftBps) }} peak uplift</strong></td>
+                </tr>
+                <tr *ngIf="!(booking.recommendations || []).length"><td colspan="8" class="empty-cell">No booking profitability signals yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <section class="enterprise-grid" *ngIf="summary()?.enterpriseAnalytics as analytics">
         <article class="panel analytics-card">
           <header>
@@ -530,6 +560,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .twin-metrics .delta { border-top: 3px solid #0f8a7d; }
     .twin-metrics span { color: #64748b; font-size: 12px; font-weight: 800; }
     .twin-metrics strong { font-size: 18px; white-space: nowrap; }
+    .booking-grid { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 12px 14px; background: #eef4f8; border-bottom: 1px solid #d9e1ea; }
+    .booking-panel { border-top: 3px solid #0a78b6; }
+    .booking-panel table { min-width: 980px; }
     .enterprise-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 10px; padding: 12px 14px; background: #f6f8fb; border-bottom: 1px solid #d9e1ea; }
     .analytics-card { border-top: 3px solid #0f8a7d; }
     .analytics-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -580,6 +613,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 export class ProfitIntelligenceComponent implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);
   readonly breakdown = signal<ApiRecord | null>(null);
+  readonly bookingRecommendations = signal<ApiRecord | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
   readonly today = new Date().toISOString().slice(0, 10);
@@ -605,11 +639,13 @@ export class ProfitIntelligenceComponent implements OnInit {
     this.error.set('');
     forkJoin({
       report: this.api.list<ApiRecord>('profit-intelligence/summary', this.filters.value),
-      detail: this.api.list<ApiRecord>('profit-intelligence/breakdown', this.filters.value)
+      detail: this.api.list<ApiRecord>('profit-intelligence/breakdown', this.filters.value),
+      booking: this.api.list<ApiRecord>('profit-intelligence/booking-recommendations', this.filters.value)
     }).subscribe({
-      next: ({ report, detail }) => {
+      next: ({ report, detail, booking }) => {
         this.summary.set(report);
         this.breakdown.set(detail);
+        this.bookingRecommendations.set(booking);
         this.loading.set(false);
       },
       error: (error) => {
@@ -625,5 +661,10 @@ export class ProfitIntelligenceComponent implements OnInit {
 
   percent(value: unknown): string {
     return `${(Number(value || 0) / 100).toFixed(1)}%`;
+  }
+
+  slotLabel(value: unknown): string {
+    const text = String(value || '');
+    return text ? text.replace('T', ' ').slice(0, 16) : 'No slot';
   }
 }
