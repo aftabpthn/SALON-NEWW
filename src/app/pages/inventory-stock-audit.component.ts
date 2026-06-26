@@ -105,18 +105,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .audit-form.transfer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .audit-form .field.full { grid-column: 1 / -1; }
     .audit-list { display: grid; gap: 6px; }
-    .audit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface); transition: box-shadow 0.15s; }
-    .audit-row:hover { box-shadow: var(--elev-1); }
-    .audit-row.danger { border-color: rgba(185, 28, 28, 0.18); background: #fff8f8; }
-    .audit-row.danger:hover { border-color: rgba(185, 28, 28, 0.35); }
+    .audit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid rgba(79, 70, 229, 0.1); border-radius: 18px; background: rgba(255, 255, 255, 0.92); }
+    .audit-row.danger { border-color: rgba(185, 28, 28, 0.2); background: #fff8f8; }
     .audit-row-info { display: grid; gap: 2px; }
     .audit-row-title { font-size: 0.92rem; font-weight: 650; color: var(--ink); }
     .audit-row-meta { font-size: 0.78rem; color: var(--muted); }
-    .badge { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
     .badge.severity-high { background: rgba(185, 28, 28, 0.1); color: var(--red); }
     .badge.severity-medium { background: rgba(217, 119, 6, 0.1); color: var(--amber); }
     .badge.severity-low { background: rgba(5, 150, 105, 0.1); color: var(--green); }
-    .muted { color: var(--muted); }
     @media (max-width: 1100px) { .audit-panels.two, .audit-panels.three { grid-template-columns: 1fr; } .audit-form { grid-template-columns: 1fr; } }
   `]
 })

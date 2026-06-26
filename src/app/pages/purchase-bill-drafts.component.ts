@@ -372,10 +372,10 @@ type UploadFile = {
 
     .hero-insights span {
       padding: 7px 10px;
-      border: 1px solid rgba(15, 118, 110, 0.22);
+      border: 1px solid rgba(79, 70, 229, 0.16);
       border-radius: 999px;
-      background: rgba(236, 253, 245, 0.82);
-      color: #115e59;
+      background: rgba(238, 242, 255, 0.82);
+      color: #4338ca;
       font-size: 0.78rem;
       font-weight: 900;
     }
@@ -397,7 +397,7 @@ type UploadFile = {
 
     .draft-workbench {
       grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-      align-items: start;
+      align-items: stretch;
     }
 
     .metric-card.violet {
@@ -482,7 +482,7 @@ type UploadFile = {
       display: grid;
       grid-template-columns: minmax(250px, 0.45fr) minmax(0, 2.55fr);
       gap: 12px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .review-command-strip {
@@ -497,18 +497,18 @@ type UploadFile = {
       overflow: hidden;
       min-height: 104px;
       padding: 16px;
-      border: 1px solid rgba(15, 118, 110, 0.12);
+      border: 1px solid rgba(79, 70, 229, 0.12);
       border-radius: 18px;
       background:
-        radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.13), transparent 32%),
-        linear-gradient(135deg, #ffffff, #f8fbf9);
+        radial-gradient(circle at 100% 0%, rgba(79, 70, 229, 0.12), transparent 32%),
+        linear-gradient(135deg, #ffffff, #f5f3ff);
       box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
     }
 
     .command-card.primary {
       background:
-        radial-gradient(circle at 100% 0%, rgba(20, 184, 166, 0.28), transparent 34%),
-        linear-gradient(135deg, #10202b, #172a3a);
+        radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.3), transparent 34%),
+        linear-gradient(135deg, #1e1b4b, #312e81);
       color: #fff;
     }
 
@@ -602,9 +602,9 @@ type UploadFile = {
     .line-readiness article {
       min-height: 88px;
       padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: linear-gradient(135deg, #fff, #f7fbfa);
+      border: 1px solid rgba(79, 70, 229, 0.1);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
     }
 
     .line-readiness strong {
@@ -629,13 +629,13 @@ type UploadFile = {
       gap: 8px 16px;
       margin-bottom: 8px;
       padding: 10px 12px;
-      border: 1px solid rgba(15, 118, 110, 0.16);
-      border-radius: 14px;
-      background: rgba(236, 253, 245, 0.74);
+      border: 1px solid rgba(79, 70, 229, 0.12);
+      border-radius: 18px;
+      background: rgba(238, 242, 255, 0.74);
     }
 
     .table-guidance strong {
-      color: #115e59;
+      color: #4338ca;
     }
 
     .table-guidance span {
@@ -767,13 +767,13 @@ type UploadFile = {
     }
 
     .badge.success {
-      background: #e6f7f3;
-      color: #047857;
+      background: #eef2ff;
+      color: #4338ca;
     }
 
     .badge.warn {
-      background: #fff3d8;
-      color: #7c4d00;
+      background: #fef3c7;
+      color: #92400e;
     }
 
     .suggestion-list {

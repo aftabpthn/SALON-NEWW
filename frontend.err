@@ -1,0 +1,7 @@
+[1m[33m[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mNG8113: BaseChartComponent is not used within the template of ReportInventoryComponent[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/pages/reports-enterprise/report-inventory.component.ts:10:40:
+[37m      10 │   imports: [CommonModule, CurrencyPipe, [32mBaseChartComponent[37m],
+         ╵                                         [32m~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m

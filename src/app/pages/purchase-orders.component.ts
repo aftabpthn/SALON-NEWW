@@ -348,7 +348,7 @@ type ReceiveItem = {
 
     .po-layout {
       grid-template-columns: minmax(0, 1.4fr) minmax(420px, 0.8fr);
-      align-items: start;
+      align-items: stretch;
     }
 
     .po-form {
@@ -374,9 +374,9 @@ type ReceiveItem = {
       flex-wrap: wrap;
       gap: 8px;
       padding: 10px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
-      border-radius: 8px;
-      background: #f8fcfb;
+      border: 1px solid rgba(79, 70, 229, 0.12);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
     }
 
     .supplier-strip span,
@@ -384,10 +384,10 @@ type ReceiveItem = {
     .history-strip span,
     .totals-grid span,
     .detail-grid div {
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 8px;
+      border: 1px solid rgba(79, 70, 229, 0.08);
+      border-radius: 14px;
       padding: 10px;
-      background: #fff;
+      background: rgba(255, 255, 255, 0.96);
       min-width: 0;
     }
 
@@ -477,7 +477,7 @@ type ReceiveItem = {
 
     .warning-box {
       margin: 12px 0;
-      border-color: rgba(180, 35, 24, 0.22);
+      border-color: rgba(180, 35, 24, 0.2);
       background: #fff7ed;
     }
 
@@ -493,10 +493,10 @@ type ReceiveItem = {
     }
 
     .draft-box {
-      border: 1px solid rgba(15, 118, 110, 0.28);
-      border-radius: 8px;
+      border: 1px solid rgba(79, 70, 229, 0.14);
+      border-radius: 18px;
       padding: 14px;
-      background: #f4fbf9;
+      background: rgba(255, 255, 255, 0.92);
       white-space: pre-wrap;
       line-height: 1.5;
     }

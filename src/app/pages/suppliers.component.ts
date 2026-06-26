@@ -413,14 +413,14 @@ interface SupplierCommandRow {
       display: grid;
       grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
       gap: 12px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .supplier-workbench-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .supplier-command-panel,
@@ -449,9 +449,9 @@ interface SupplierCommandRow {
       align-items: center;
       gap: 7px;
       padding: 0 11px;
-      border: 1px solid var(--line);
+      border: 1px solid rgba(79, 70, 229, 0.12);
       border-radius: 999px;
-      background: #fff;
+      background: rgba(255, 255, 255, 0.92);
       color: var(--ink);
       font-weight: 800;
       cursor: pointer;
@@ -499,9 +499,9 @@ interface SupplierCommandRow {
       gap: 12px;
       align-items: center;
       padding: 11px 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
+      border: 1px solid rgba(79, 70, 229, 0.1);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
     }
 
     .alert-list.compact article {

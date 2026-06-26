@@ -103,6 +103,11 @@ export class SidebarService {
       .filter((group) => group.items.length);
   }
 
+  groupForPath(path: string): string[] {
+    const matched = GROUPS.filter((g) => g.paths.some((p) => path.startsWith(p)));
+    return matched.length ? matched.map((g) => g.id) : ['more'];
+  }
+
   private filterItems(items: EnterpriseNavItem[], query: string): EnterpriseNavItem[] {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return items;

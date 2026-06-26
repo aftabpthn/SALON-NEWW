@@ -21,441 +21,330 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
           <p>Product sales and completed services create inventory transactions automatically.</p>
         </div>
         <div class="hero-actions">
-          <a class="ghost-button" routerLink="/inventory/reports">Inventory report</a>
-          <a class="ghost-button" routerLink="/inventory/purchase-bill-drafts">AI bill drafts</a>
-          <a class="ghost-button" routerLink="/inventory/purchase-orders">Purchase orders</a>
-          <a class="ghost-button" routerLink="/inventory/recipes">Service recipes</a>
-          <a class="ghost-button" routerLink="/inventory/stock-audit">Stock audit</a>
-          <a class="ghost-button" routerLink="/inventory/scanner">Scanner</a>
+          <button class="primary-button" type="button" (click)="activeDesk.set('product'); showProductForm.set(true)">+ Add product</button>
           <button class="ghost-button" type="button" (click)="runReorder()">Generate reorder</button>
-          <button class="primary-button" type="button" (click)="activeDesk.set('product'); showProductForm.set(true)">Add product</button>
         </div>
       </div>
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <section class="inventory-command-board" *ngIf="commandMetrics() as metrics">
-        <article class="command-metric teal">
-          <span>Live stock value</span>
-          <strong>{{ metrics.stockValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>{{ metrics.products }} active products</small>
+      <div class="inv-quick-links">
+        <a class="inv-quick-link" routerLink="/inventory/reports">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Reports
+        </a>
+        <a class="inv-quick-link" routerLink="/inventory/reorder">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Reorder
+        </a>
+        <a class="inv-quick-link" routerLink="/inventory/purchase-orders">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Purchase orders
+        </a>
+        <a class="inv-quick-link" routerLink="/inventory/purchase-bill-drafts">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 6v12M16 6v12M6 10h4M6 14h4M14 10h4M14 14h4"/></svg>
+          Bill drafts
+        </a>
+        <a class="inv-quick-link" routerLink="/inventory/stock-audit">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Stock audit
+        </a>
+        <a class="inv-quick-link" routerLink="/inventory/fifo">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          FIFO / Batches
+        </a>
+        <a class="inv-quick-link" routerLink="/inventory/recipes">Recipes</a>
+        <a class="inv-quick-link" routerLink="/inventory/financial">Financial</a>
+        <a class="inv-quick-link" routerLink="/inventory/scanner">Scanner</a>
+      </div>
+
+      <section class="inv-metrics" *ngIf="commandMetrics() as metrics">
+        <article class="inv-metric inv-metric--teal">
+          <span class="inv-metric-label">Live stock value</span>
+          <strong class="inv-metric-value">{{ metrics.stockValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <span class="inv-metric-hint">{{ metrics.products }} active products</span>
         </article>
-        <article class="command-metric amber">
-          <span>Low stock</span>
-          <strong>{{ metrics.lowStock }}</strong>
-          <small>{{ metrics.branchShortage }} branch shortage signals</small>
+        <article class="inv-metric inv-metric--amber">
+          <span class="inv-metric-label">Low stock</span>
+          <strong class="inv-metric-value">{{ metrics.lowStock }}</strong>
+          <span class="inv-metric-hint">{{ metrics.branchShortage }} branch shortages</span>
         </article>
-        <article class="command-metric red">
-          <span>Expiry + dead stock</span>
-          <strong>{{ metrics.expiryRisk + metrics.deadStock }}</strong>
-          <small>{{ metrics.expiryRisk }} expiry · {{ metrics.deadStock }} dead stock</small>
+        <article class="inv-metric inv-metric--red">
+          <span class="inv-metric-label">Expiry + dead stock</span>
+          <strong class="inv-metric-value">{{ metrics.expiryRisk + metrics.deadStock }}</strong>
+          <span class="inv-metric-hint">{{ metrics.expiryRisk }} exp · {{ metrics.deadStock }} dead</span>
         </article>
-        <article class="command-metric blue">
-          <span>Purchase spend</span>
-          <strong>{{ metrics.purchaseSpend | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>{{ metrics.supplierPending }} supplier pending drafts</small>
+        <article class="inv-metric inv-metric--blue">
+          <span class="inv-metric-label">Purchase spend</span>
+          <strong class="inv-metric-value">{{ metrics.purchaseSpend | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <span class="inv-metric-hint">{{ metrics.supplierPending }} pending drafts</span>
         </article>
-        <article class="command-metric purple">
-          <span>Wastage</span>
-          <strong>{{ metrics.wasteCost | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>FIFO and expiry control</small>
+        <article class="inv-metric inv-metric--purple">
+          <span class="inv-metric-label">Wastage</span>
+          <strong class="inv-metric-value">{{ metrics.wasteCost | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <span class="inv-metric-hint">FIFO and expiry control</span>
         </article>
-        <article class="command-metric black">
-          <span>Margin leakage</span>
-          <strong>{{ metrics.marginLeakage | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Loss from waste or weak margin</small>
+        <article class="inv-metric inv-metric--black">
+          <span class="inv-metric-label">Margin leakage</span>
+          <strong class="inv-metric-value">{{ metrics.marginLeakage | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <span class="inv-metric-hint">Waste + weak margin</span>
         </article>
       </section>
 
-      <section class="panel inventory-module-launcher">
-        <div class="section-title">
-          <div>
-            <span class="eyebrow">Separated inventory workspaces</span>
-            <h2>Open each command area on its own page</h2>
-          </div>
-          <small>No more squeezed cards in one long dashboard.</small>
+      <div class="inv-workspace">
+        <div class="inv-workspace-main">
+          <section class="panel inv-ops-panel">
+            <div class="inv-ops-header">
+              <span class="eyebrow">Stock control desk</span>
+              <button class="ghost-button mini" *ngIf="activeDesk()" type="button" (click)="activeDesk.set('')">Close</button>
+            </div>
+            <div class="inv-ops-tabs">
+              <button type="button" [class.active]="activeDesk() === 'stock'" (click)="activeDesk.set('stock')">Stock movement</button>
+              <button type="button" [class.active]="activeDesk() === 'product'" (click)="activeDesk.set('product'); showProductForm.set(true)">Product setup</button>
+              <button type="button" [class.active]="activeDesk() === 'batch'" (click)="activeDesk.set('batch')">Receive batch</button>
+              <button type="button" [class.active]="activeDesk() === 'supplier'" (click)="activeDesk.set('supplier')">Supplier</button>
+              <button type="button" [class.active]="activeDesk() === 'waste'" (click)="activeDesk.set('waste')">Waste / expiry</button>
+            </div>
+            <div class="inv-ops-body" [ngSwitch]="activeDesk()">
+              <div class="inv-ops-empty" *ngSwitchDefault>
+                <span>Select a task above to start working</span>
+              </div>
+              <form *ngSwitchCase="'stock'" [formGroup]="adjustForm" (ngSubmit)="adjustStock()">
+                <div class="inv-form-grid">
+                  <label class="field"><span>Product</span>
+                    <select formControlName="productId">
+                      <option value="">Select product</option>
+                      <option *ngFor="let product of products()" [value]="product.id">{{ product.name }} — {{ product.stock }} left</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Branch</span>
+                    <select formControlName="branchId">
+                      <option value="">Select branch</option>
+                      <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Type</span>
+                    <select formControlName="type">
+                      <option value="purchase-entry">Purchase entry</option>
+                      <option value="adjustment">Stock adjustment</option>
+                      <option value="expiry-writeoff">Expiry write-off</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Quantity (+/-)</span><input type="number" formControlName="quantity" /></label>
+                  <label class="field inv-field-wide"><span>Reason</span><textarea formControlName="reason" rows="2"></textarea></label>
+                  <div class="inv-form-action">
+                    <button class="primary-button" type="submit" [disabled]="adjustForm.invalid || saving()">Apply stock movement</button>
+                  </div>
+                </div>
+              </form>
+              <form *ngSwitchCase="'product'" [formGroup]="productForm" (ngSubmit)="saveProduct()">
+                <div class="inv-form-grid">
+                  <label class="field"><span>Name</span><input formControlName="name" /></label>
+                  <label class="field"><span>SKU</span><input formControlName="sku" /></label>
+                  <label class="field"><span>Category</span><input formControlName="category" /></label>
+                  <label class="field"><span>Unit</span>
+                    <select formControlName="unit">
+                      <option value="ml">ml</option><option value="gm">gm</option><option value="g">g</option>
+                      <option value="kg">kg</option><option value="l">l</option><option value="pcs">pcs</option>
+                      <option value="tube">tube</option><option value="bottle">bottle</option><option value="pack">pack</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Usage type</span>
+                    <select formControlName="usageType">
+                      <option value="retail">Retail</option>
+                      <option value="consumable">Consumable / professional</option>
+                      <option value="both">Retail + professional</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Supplier</span><input formControlName="supplier" /></label>
+                  <label class="field"><span>Branch</span>
+                    <select formControlName="branchId">
+                      <option value="">Select branch</option>
+                      <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Stock</span><input type="number" formControlName="stock" /></label>
+                  <label class="field"><span>Low stock threshold</span><input type="number" formControlName="lowStockThreshold" /></label>
+                  <label class="field"><span>Expiry date</span><input type="date" formControlName="expiryDate" /></label>
+                  <label class="field"><span>Unit cost</span><input type="number" formControlName="unitCost" /></label>
+                  <label class="field"><span>Retail price</span><input type="number" formControlName="price" /></label>
+                  <label class="field"><span>GST rate</span><input type="number" formControlName="gstRate" /></label>
+                  <div class="inv-form-actions">
+                    <button class="ghost-button" type="button" (click)="activeDesk.set(''); showProductForm.set(false)">Cancel</button>
+                    <button class="primary-button" type="submit" [disabled]="productForm.invalid || saving()">Save product</button>
+                  </div>
+                </div>
+              </form>
+              <form *ngSwitchCase="'batch'" [formGroup]="purchaseForm" (ngSubmit)="purchaseEntry()">
+                <div class="inv-form-grid">
+                  <label class="field"><span>Product</span>
+                    <select formControlName="productId">
+                      <option value="">Select product</option>
+                      <option *ngFor="let product of products()" [value]="product.id">{{ product.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Supplier</span>
+                    <select formControlName="supplierId">
+                      <option value="">No supplier</option>
+                      <option *ngFor="let supplier of suppliers()" [value]="supplier.id">{{ supplier.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Branch</span>
+                    <select formControlName="branchId">
+                      <option value="">Select branch</option>
+                      <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Batch number</span><input formControlName="batchNumber" /></label>
+                  <label class="field"><span>Expiry date</span><input type="date" formControlName="expiryDate" /></label>
+                  <label class="field"><span>Quantity</span><input type="number" formControlName="quantity" /></label>
+                  <label class="field"><span>Unit cost</span><input type="number" formControlName="unitCost" /></label>
+                  <div class="inv-form-action">
+                    <button class="primary-button" type="submit" [disabled]="purchaseForm.invalid || saving()">Receive batch</button>
+                  </div>
+                </div>
+              </form>
+              <form *ngSwitchCase="'supplier'" [formGroup]="supplierForm" (ngSubmit)="saveSupplier()">
+                <div class="inv-form-grid">
+                  <label class="field"><span>Name</span><input formControlName="name" /></label>
+                  <label class="field"><span>Contact</span><input formControlName="contactName" /></label>
+                  <label class="field"><span>Phone</span><input formControlName="phone" /></label>
+                  <label class="field"><span>Email</span><input type="email" formControlName="email" /></label>
+                  <label class="field"><span>GSTIN</span><input formControlName="gstin" /></label>
+                  <label class="field inv-field-wide"><span>Address</span><textarea formControlName="address" rows="2"></textarea></label>
+                  <div class="inv-form-actions">
+                    <a class="ghost-button" routerLink="/suppliers">Supplier register</a>
+                    <button class="primary-button" type="submit" [disabled]="supplierForm.invalid || saving()">Save supplier</button>
+                  </div>
+                </div>
+              </form>
+              <form *ngSwitchCase="'waste'" [formGroup]="wasteForm" (ngSubmit)="recordWaste()">
+                <div class="inv-form-grid">
+                  <label class="field"><span>Product</span>
+                    <select formControlName="productId">
+                      <option value="">Select product</option>
+                      <option *ngFor="let product of products()" [value]="product.id">{{ product.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Batch</span>
+                    <select formControlName="batchId">
+                      <option value="">Auto / no batch</option>
+                      <option *ngFor="let batch of batchesForProduct(wasteForm.value.productId)" [value]="batch.id">{{ batch.batchNumber }} · {{ batch.quantityAvailable }} left</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Branch</span>
+                    <select formControlName="branchId">
+                      <option value="">Select branch</option>
+                      <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>Quantity</span><input type="number" formControlName="quantity" /></label>
+                  <label class="field"><span>Reason</span>
+                    <select formControlName="reason">
+                      <option value="expired">Expired</option>
+                      <option value="damaged">Damaged</option>
+                      <option value="spillage">Spillage</option>
+                      <option value="service overuse">Service overuse</option>
+                    </select>
+                  </label>
+                  <label class="field inv-field-wide"><span>Notes</span><textarea formControlName="notes" rows="2"></textarea></label>
+                  <div class="inv-form-action">
+                    <button class="primary-button" type="submit" [disabled]="wasteForm.invalid || saving()">Record waste</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <section class="panel inv-table-panel">
+            <div class="inv-table-toolbar">
+              <label class="inv-search"><input [(ngModel)]="query" placeholder="Search by name, SKU or supplier…" /></label>
+              <button class="ghost-button mini" type="button" (click)="load()">Refresh</button>
+            </div>
+            <div class="inv-table-scroll">
+              <table class="inv-table">
+                <thead>
+                  <tr><th>Product</th><th>Type</th><th>Stock</th><th>Price</th><th>Supplier</th><th>Expiry</th></tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let product of filteredProducts()" [class.inv-row--low]="isLowStock(product)">
+                    <td><strong>{{ product.name }}</strong><small>{{ product.sku || product.id }}</small></td>
+                    <td><span class="inv-badge">{{ product.usageType }}</span></td>
+                    <td><span class="inv-stock" [class.inv-stock--low]="isLowStock(product)">{{ product.stock }} <small *ngIf="isLowStock(product)">low</small></span></td>
+                    <td>{{ product.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td><span class="inv-muted">{{ product.supplier || '-' }}</span></td>
+                    <td><span class="inv-muted">{{ product.expiryDate | date: 'mediumDate' }}</span></td>
+                  </tr>
+                  <tr *ngIf="!filteredProducts().length">
+                    <td colspan="6" class="inv-empty">No products match your search.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
-        <div class="inventory-module-grid">
-          <a class="inventory-module-card teal" routerLink="/inventory/reorder">
-            <span>AI reorder autopilot</span>
-            <strong>Approval-safe purchase plan</strong>
-            <small>{{ autopilotSuggestions().length }} live suggestion(s)</small>
-          </a>
-          <a class="inventory-module-card blue" routerLink="/inventory/product-360">
-            <span>Product 360</span>
-            <strong>{{ selectedProduct().name || 'Product intelligence' }}</strong>
-            <small>Stock, margin, batches and usage</small>
-          </a>
-          <a class="inventory-module-card amber" routerLink="/inventory/supplier-360">
-            <span>Supplier 360</span>
-            <strong>{{ selectedSupplier().name || 'Supplier intelligence' }}</strong>
-            <small>GSTIN, purchase, risk and WhatsApp PO</small>
-          </a>
-          <a class="inventory-module-card green" routerLink="/inventory/recipes">
-            <span>Service Recipe / BOM</span>
-            <strong>Professional stock usage</strong>
-            <small>{{ unmappedRecipeCount() }} service(s) need setup</small>
-          </a>
-          <a class="inventory-module-card violet" routerLink="/inventory/fifo">
-            <span>Batch + expiry + FIFO</span>
-            <strong>Next stock to consume</strong>
-            <small>{{ fifoBatches().length }} active batch(es)</small>
-          </a>
-          <a class="inventory-module-card red" routerLink="/inventory/stock-audit">
-            <span>Audit + leakage detection</span>
-            <strong>Expected vs actual risk</strong>
-            <small>{{ stockAuditRows().length }} risk signal(s)</small>
-          </a>
-          <a class="inventory-module-card slate" routerLink="/inventory/stock-audit" [queryParams]="{ focus: 'transfer' }">
-            <span>Branch transfer optimizer</span>
-            <strong>Move stock before buying</strong>
-            <small>{{ transferRecommendations().length }} transfer idea(s)</small>
-          </a>
-          <a class="inventory-module-card black" routerLink="/inventory/financial">
-            <span>Financial brain</span>
-            <strong>COGS, cash and margin</strong>
-            <small>{{ financialBrain().cashLocked | currency: 'INR':'symbol':'1.0-0' }} cash locked</small>
-          </a>
-          <a class="inventory-module-card orange" routerLink="/inventory/scanner">
-            <span>Scanner + digital twin</span>
-            <strong>Barcode, WhatsApp and scenarios</strong>
-            <small>{{ digitalTwin().stockouts }} projected stockout(s)</small>
-          </a>
-          <a class="inventory-module-card teal" routerLink="/pos">
-            <span>Inventory-to-POS intelligence</span>
-            <strong>Retail upsell hints for checkout</strong>
-            <small>{{ posUpsellHints().length }} retail hint(s)</small>
-          </a>
+
+        <div class="inv-workspace-side">
+          <ng-container *ngIf="intelligence() as intelligence">
+            <section class="panel inv-side-panel">
+              <div class="inv-side-header">
+                <span class="eyebrow">KPI drill-down</span>
+                <small>Click to explore</small>
+              </div>
+              <a class="inv-side-link" routerLink="/kpi-details/inventory/stock-value">
+                <span>Stock value</span>
+                <strong>{{ intelligence.metrics.stockValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              </a>
+              <a class="inv-side-link" routerLink="/kpi-details/inventory/reorder-suggestions">
+                <span>Reorder suggestions</span>
+                <strong>{{ intelligence.metrics.reorderCount }}</strong>
+              </a>
+              <a class="inv-side-link" routerLink="/kpi-details/inventory/expiring-soon">
+                <span>Expiring soon</span>
+                <strong>{{ intelligence.metrics.expiringSoon }}</strong>
+              </a>
+              <a class="inv-side-link" routerLink="/kpi-details/inventory/waste-cost">
+                <span>Waste cost</span>
+                <strong>{{ intelligence.metrics.wasteCost | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              </a>
+            </section>
+          </ng-container>
+
+          <section class="panel inv-side-panel">
+            <div class="inv-side-header">
+              <span class="eyebrow">Live feed</span>
+              <small>Recent movements</small>
+            </div>
+            <div class="inv-feed-list">
+              <article class="inv-feed-item" *ngFor="let t of transactions().slice(0, 5)">
+                <div class="inv-feed-body">
+                  <strong>{{ productName(t.productId) }}</strong>
+                  <span>{{ t.type }} · {{ t.quantity }} units</span>
+                </div>
+                <span class="inv-feed-time">{{ t.createdAt | date: 'shortDate' }}</span>
+              </article>
+              <article class="inv-feed-empty" *ngIf="!transactions().length">
+                <span>No movements yet.</span>
+              </article>
+            </div>
+          </section>
         </div>
-      </section>
-
-      <ng-container *ngIf="intelligence() as intelligence">
-        <div class="metrics-grid inventory-kpis">
-          <aura-kpi-card tone="teal" target="/kpi-details/inventory/stock-value">
-            <span>Stock value</span>
-            <strong>{{ intelligence.metrics.stockValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>{{ intelligence.metrics.products }} products · click for value report</small>
-          </aura-kpi-card>
-          <aura-kpi-card tone="amber" target="/kpi-details/inventory/reorder-suggestions">
-            <span>Reorder suggestions</span>
-            <strong>{{ intelligence.metrics.reorderCount }}</strong>
-            <small>Open purchase prediction</small>
-          </aura-kpi-card>
-          <aura-kpi-card tone="red" target="/kpi-details/inventory/expiring-soon">
-            <span>Expiring soon</span>
-            <strong>{{ intelligence.metrics.expiringSoon }}</strong>
-            <small>Open batch expiry alerts</small>
-          </aura-kpi-card>
-          <aura-kpi-card tone="blue" target="/kpi-details/inventory/waste-cost">
-            <span>Waste cost</span>
-            <strong>{{ intelligence.metrics.wasteCost | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Open waste analysis</small>
-          </aura-kpi-card>
-        </div>
-      </ng-container>
-
-      <section class="panel operations-panel">
-        <div class="section-title">
-          <div>
-            <span class="eyebrow">Inventory operations</span>
-            <h2>Single compact work desk</h2>
-          </div>
-          <div class="section-actions">
-            <small>Choose one task instead of scrolling through every form.</small>
-            <button class="ghost-button" *ngIf="activeDesk()" type="button" (click)="activeDesk.set('')">Close desk</button>
-          </div>
-        </div>
-        <div class="desk-tabs">
-          <button type="button" [class.active]="activeDesk() === 'stock'" (click)="activeDesk.set('stock')">Stock movement</button>
-          <button type="button" [class.active]="activeDesk() === 'product'" (click)="activeDesk.set('product'); showProductForm.set(true)">Product setup</button>
-          <button type="button" [class.active]="activeDesk() === 'batch'" (click)="activeDesk.set('batch')">Receive batch</button>
-          <button type="button" [class.active]="activeDesk() === 'supplier'" (click)="activeDesk.set('supplier')">Supplier</button>
-          <button type="button" [class.active]="activeDesk() === 'waste'" (click)="activeDesk.set('waste')">Waste / expiry</button>
-        </div>
-
-        <ng-template #closedDesk>
-          <div class="desk-closed">
-            <button type="button" (click)="activeDesk.set('stock')">
-              <strong>Stock movement</strong>
-              <span>Purchase, adjustment or expiry write-off.</span>
-            </button>
-            <button type="button" (click)="activeDesk.set('product'); showProductForm.set(true)">
-              <strong>Product setup</strong>
-              <span>Create retail or professional stock item.</span>
-            </button>
-            <button type="button" (click)="activeDesk.set('batch')">
-              <strong>Receive batch</strong>
-              <span>Batch, supplier and expiry entry.</span>
-            </button>
-            <button type="button" (click)="activeDesk.set('supplier')">
-              <strong>Supplier</strong>
-              <span>Vendor details and GST metadata.</span>
-            </button>
-            <button type="button" (click)="activeDesk.set('waste')">
-              <strong>Waste / expiry</strong>
-              <span>Track salon loss without scrolling.</span>
-            </button>
-          </div>
-        </ng-template>
-
-        <div class="desk-body" *ngIf="activeDesk(); else closedDesk" [ngSwitch]="activeDesk()">
-          <form *ngSwitchCase="'stock'" [formGroup]="adjustForm" (ngSubmit)="adjustStock()" class="compact-form">
-            <label class="field">
-              <span>Product</span>
-              <select formControlName="productId">
-                <option value="">Select product</option>
-                <option *ngFor="let product of products()" [value]="product.id">{{ product.name }} - {{ product.stock }} left</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Type</span>
-              <select formControlName="type">
-                <option value="purchase-entry">Purchase entry</option>
-                <option value="adjustment">Stock adjustment</option>
-                <option value="expiry-writeoff">Expiry write-off</option>
-              </select>
-            </label>
-            <label class="field"><span>Quantity (+/-)</span><input type="number" formControlName="quantity" /></label>
-            <label class="field full"><span>Reason</span><textarea formControlName="reason"></textarea></label>
-            <div class="form-actions">
-              <button class="primary-button" type="submit" [disabled]="adjustForm.invalid || saving()">Apply stock movement</button>
-            </div>
-          </form>
-
-          <form *ngSwitchCase="'product'" [formGroup]="productForm" (ngSubmit)="saveProduct()" class="compact-form">
-            <label class="field"><span>Name</span><input formControlName="name" /></label>
-            <label class="field"><span>SKU</span><input formControlName="sku" /></label>
-            <label class="field"><span>Category</span><input formControlName="category" /></label>
-            <label class="field">
-              <span>Unit</span>
-              <select formControlName="unit">
-                <option value="ml">ml</option>
-                <option value="gm">gm</option>
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-                <option value="l">l</option>
-                <option value="pcs">pcs</option>
-                <option value="tube">tube</option>
-                <option value="bottle">bottle</option>
-                <option value="jar">jar</option>
-                <option value="can">can</option>
-                <option value="tin">tin</option>
-                <option value="pack">pack</option>
-                <option value="box">box</option>
-                <option value="nos">nos</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Pack size</span>
-              <input type="number" min="0" step="0.01" formControlName="packSize" placeholder="1000" />
-            </label>
-            <label class="field">
-              <span>Consume unit</span>
-              <select formControlName="packUnit">
-                <option value="ml">ml</option>
-                <option value="gm">gm</option>
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-                <option value="l">l</option>
-                <option value="pcs">pcs</option>
-              </select>
-            </label>
-            <div class="bulk-preview">
-              <span>Bulk config</span>
-              <strong>{{ productBulkPreview() }}</strong>
-            </div>
-            <label class="field">
-              <span>Usage type</span>
-              <select formControlName="usageType">
-                <option value="retail">Retail</option>
-                <option value="consumable">Consumable / professional</option>
-                <option value="both">Retail + professional</option>
-              </select>
-            </label>
-            <label class="field"><span>Supplier</span><input formControlName="supplier" /></label>
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
-              </select>
-            </label>
-            <label class="field"><span>Stock</span><input type="number" formControlName="stock" /></label>
-            <label class="field"><span>Low stock threshold</span><input type="number" formControlName="lowStockThreshold" /></label>
-            <label class="field"><span>Expiry date</span><input type="date" formControlName="expiryDate" /></label>
-            <label class="field"><span>Unit cost</span><input type="number" formControlName="unitCost" /></label>
-            <label class="field"><span>Retail price</span><input type="number" formControlName="price" /></label>
-            <label class="field"><span>GST rate</span><input type="number" formControlName="gstRate" /></label>
-            <div class="form-actions">
-              <button class="ghost-button" type="button" (click)="activeDesk.set(''); showProductForm.set(false)">Cancel</button>
-              <button class="primary-button" type="submit" [disabled]="productForm.invalid || saving()">Save product</button>
-            </div>
-          </form>
-
-          <form *ngSwitchCase="'batch'" [formGroup]="purchaseForm" (ngSubmit)="purchaseEntry()" class="compact-form">
-            <label class="field">
-              <span>Product</span>
-              <select formControlName="productId">
-                <option value="">Select product</option>
-                <option *ngFor="let product of products()" [value]="product.id">{{ product.name }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Supplier</span>
-              <select formControlName="supplierId">
-                <option value="">No supplier</option>
-                <option *ngFor="let supplier of suppliers()" [value]="supplier.id">{{ supplier.name }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
-              </select>
-            </label>
-            <label class="field"><span>Batch number</span><input formControlName="batchNumber" /></label>
-            <label class="field"><span>Expiry date</span><input type="date" formControlName="expiryDate" /></label>
-            <label class="field"><span>Quantity</span><input type="number" formControlName="quantity" /></label>
-            <label class="field"><span>Unit cost</span><input type="number" formControlName="unitCost" /></label>
-            <div class="form-actions">
-              <button class="primary-button" type="submit" [disabled]="purchaseForm.invalid || saving()">Receive batch</button>
-            </div>
-          </form>
-
-          <form *ngSwitchCase="'supplier'" [formGroup]="supplierForm" (ngSubmit)="saveSupplier()" class="compact-form">
-            <label class="field"><span>Name</span><input formControlName="name" /></label>
-            <label class="field"><span>Contact</span><input formControlName="contactName" /></label>
-            <label class="field"><span>Phone</span><input formControlName="phone" /></label>
-            <label class="field"><span>Email</span><input type="email" formControlName="email" /></label>
-            <label class="field"><span>GSTIN</span><input formControlName="gstin" /></label>
-            <label class="field full"><span>Address</span><textarea formControlName="address"></textarea></label>
-            <div class="form-actions">
-              <a class="ghost-button" routerLink="/suppliers">Open supplier register</a>
-              <button class="primary-button" type="submit" [disabled]="supplierForm.invalid || saving()">Save supplier</button>
-            </div>
-          </form>
-
-          <form *ngSwitchCase="'waste'" [formGroup]="wasteForm" (ngSubmit)="recordWaste()" class="compact-form">
-            <label class="field">
-              <span>Product</span>
-              <select formControlName="productId">
-                <option value="">Select product</option>
-                <option *ngFor="let product of products()" [value]="product.id">{{ product.name }}</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Batch</span>
-              <select formControlName="batchId">
-                <option value="">Auto / no batch</option>
-                <option *ngFor="let batch of batchesForProduct(wasteForm.value.productId)" [value]="batch.id">{{ batch.batchNumber }} · {{ batch.quantityAvailable }} left</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Branch</span>
-              <select formControlName="branchId">
-                <option value="">Select branch</option>
-                <option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option>
-              </select>
-            </label>
-            <label class="field"><span>Quantity</span><input type="number" formControlName="quantity" /></label>
-            <label class="field">
-              <span>Reason</span>
-              <select formControlName="reason">
-                <option value="expired">Expired</option>
-                <option value="damaged">Damaged</option>
-                <option value="spillage">Spillage</option>
-                <option value="service overuse">Service overuse</option>
-              </select>
-            </label>
-            <label class="field full"><span>Notes</span><textarea formControlName="notes"></textarea></label>
-            <div class="form-actions">
-              <button class="primary-button" type="submit" [disabled]="wasteForm.invalid || saving()">Record waste</button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <div class="inventory-data-grid">
-        <section class="panel product-panel">
-          <div class="table-toolbar">
-            <label class="search-field"><span>Search products</span><input [(ngModel)]="query" /></label>
-            <button class="ghost-button" type="button" (click)="load()">Refresh</button>
-          </div>
-          <div class="table-wrap product-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Type</th>
-                  <th>Supplier</th>
-                  <th>Branch</th>
-                  <th>Stock</th>
-                  <th>Price</th>
-                  <th>Expiry</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let product of filteredProducts()">
-                  <td><strong>{{ product.name }}</strong><small>{{ product.sku }}</small></td>
-                  <td><span class="badge">{{ product.usageType }}</span></td>
-                  <td>{{ product.supplier }}</td>
-                  <td>{{ product.branchId }}</td>
-                  <td>{{ product.stock }}</td>
-                  <td>{{ product.price | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ product.expiryDate | date: 'mediumDate' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="panel side-summary">
-          <div class="section-title">
-            <div>
-              <span class="eyebrow">Live inventory feed</span>
-              <h2>Recent movements</h2>
-            </div>
-            <a class="ghost-button" routerLink="/kpi-details/inventory/waste-cost">Open report</a>
-          </div>
-          <div class="activity-list compact-feed">
-            <article *ngFor="let transaction of transactions().slice(0, 6)">
-              <strong>{{ productName(transaction.productId) }} · {{ transaction.type }}</strong>
-              <span>{{ transaction.quantity }} units · {{ transaction.reason }} · {{ transaction.createdAt | date: 'short' }}</span>
-            </article>
-            <article *ngIf="!transactions().length">
-              <strong>No movements yet</strong>
-              <span>Stock activity will appear after purchase, POS or adjustment.</span>
-            </article>
-          </div>
-        </section>
       </div>
     </section>
   `,
   styles: [`
-    .inventory-shell {
-      gap: 12px;
-    }
+    .inventory-shell { gap: 12px; }
 
     .inventory-hero {
       align-items: center;
       min-height: auto;
       padding: 12px 16px;
     }
-
     .inventory-hero h2 {
       font-size: 1.18rem;
       line-height: 1.2;
       margin-bottom: 4px;
     }
-
     .inventory-hero p {
       margin: 0;
       display: -webkit-box;
@@ -463,77 +352,309 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       -webkit-line-clamp: 1;
       -webkit-box-orient: vertical;
     }
-
-    .hero-actions,
-    .section-actions {
+    .hero-actions {
       display: flex;
       flex-wrap: wrap;
       justify-content: flex-end;
       gap: 8px;
     }
 
-    .section-actions {
-      align-items: center;
-    }
-
-    .inventory-kpis {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .inventory-command-board {
+    .inv-metrics {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
     }
-
-    .command-metric {
-      min-height: 96px;
+    .inv-metric {
+      display: grid;
+      gap: 6px;
       padding: 14px;
       border: 1px solid var(--line);
-      border-top: 4px solid var(--teal);
-      border-radius: 8px;
-      background: #fff;
-      box-shadow: var(--shadow);
+      border-radius: 10px;
+      background: var(--surface);
     }
-
-    .command-metric span,
-    .command-metric small {
-      display: block;
+    .inv-metric-body {
+      display: grid;
+      gap: 2px;
+    }
+    .inv-metric-label {
       color: var(--muted);
-      font-size: 0.76rem;
-      font-weight: 800;
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .inv-metric-value {
+      font-size: 1.35rem;
+      line-height: 1.1;
+    }
+    .inv-metric-hint {
+      color: var(--muted);
+      font-size: 0.74rem;
+    }
+    .inv-metric--teal { border-left: 4px solid var(--teal); }
+    .inv-metric--amber { border-left: 4px solid #b26b00; }
+    .inv-metric--red { border-left: 4px solid var(--red); }
+    .inv-metric--blue { border-left: 4px solid #2f5dcc; }
+    .inv-metric--purple { border-left: 4px solid #6f3fc8; }
+    .inv-metric--black { border-left: 4px solid #162033; }
+
+    .inv-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.7fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+    .inv-workspace-main {
+      display: grid;
+      gap: 14px;
+    }
+    .inv-workspace-side {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      height: 100%;
+    }
+    .inv-workspace-side .inv-side-panel:last-child {
+      flex: 1;
     }
 
-    .command-metric strong {
-      display: block;
-      margin: 6px 0 3px;
+    .inv-side-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .inv-side-header small { color: var(--muted); font-size: 11px; }
+    .inv-side-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 36px;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      border-radius: 10px;
       color: var(--ink);
-      font-size: 1.3rem;
-      line-height: 1;
+      text-decoration: none;
+      font-size: 13px;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .inv-side-link:hover {
+      background: rgba(79, 70, 229, 0.04);
+      border-color: rgba(79, 70, 229, 0.15);
+    }
+    .inv-side-link strong {
+      color: #4f46e5;
+      font-size: 14px;
     }
 
-    .command-metric.amber { border-top-color: #b26b00; }
-    .command-metric.red { border-top-color: var(--red); }
-    .command-metric.blue { border-top-color: #2f5dcc; }
-    .command-metric.purple { border-top-color: #6f3fc8; }
-    .command-metric.black { border-top-color: #162033; }
-
-    .inventory-module-launcher {
-      overflow: hidden;
+    .inv-ops-panel { padding: 14px; }
+    .inv-ops-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
     }
-
-    .inventory-module-launcher .section-title small {
+    .inv-ops-title { display: grid; gap: 2px; }
+    .inv-ops-title h2 { margin: 0; font-size: 1rem; }
+    .inv-ops-actions { display: flex; gap: 8px; }
+    .inv-ops-tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .inv-ops-tabs button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
       color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .inv-ops-tabs button.active {
+      border-color: var(--teal);
+      background: var(--teal);
+      color: #fff;
+    }
+    .inv-ops-tabs button svg { flex: 0 0 auto; }
+
+    .inv-ops-body { padding-top: 12px; }
+    .inv-ops-closed p { color: var(--muted); margin: 0; font-size: 0.88rem; }
+
+    .inv-form-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    .inv-form-row .field { margin-bottom: 0; }
+    .inv-field-wide { grid-column: span 2; }
+    .inv-form-action {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .inv-form-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 4px;
+    }
+    .inv-form textarea { min-height: 38px; resize: vertical; }
+
+    .inv-table-panel { padding: 12px; }
+    .inv-table-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .inv-search {
+      flex: 1;
+      display: grid;
+      gap: 4px;
+    }
+    .inv-search span {
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .inv-search input {
+      width: 100%;
+      min-height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      font-size: 0.86rem;
+    }
+    .inv-table-actions { display: flex; gap: 6px; }
+
+    .inv-table-scroll {
+      max-height: 340px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .inv-table {
+      width: 100%;
+      min-width: 500px;
+      border-collapse: collapse;
+    }
+    .inv-table th, .inv-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      font-size: 0.82rem;
+    }
+    .inv-table th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .inv-table tbody tr:last-child td { border-bottom: 0; }
+    .inv-table td strong, .inv-table td small { display: block; }
+    .inv-table td small { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
+    .inv-badge {
+      display: inline-flex;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eef3f2;
+      color: var(--teal-2);
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .inv-stock { font-weight: 800; }
+    .inv-stock--low { color: var(--red); }
+    .inv-date { color: var(--muted); font-size: 0.8rem; }
+    .inv-empty {
+      color: var(--muted);
+      text-align: center !important;
+      padding: 20px !important;
+    }
+
+    .inv-kpi-panel,
+    .inv-feed-panel { padding: 12px; }
+    .inv-kpi-header,
+    .inv-feed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .inv-kpi-header small,
+    .inv-feed-header small {
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+    .inv-kpi-list { display: grid; gap: 2px; }
+    .inv-kpi-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      color: var(--ink);
+      text-decoration: none;
+      transition: background 0.12s ease;
+    }
+    .inv-kpi-item:hover { background: var(--surface-2); }
+    .inv-kpi-label {
+      color: var(--muted);
+      font-size: 0.78rem;
       font-weight: 800;
     }
+    .inv-kpi-val { font-size: 0.95rem; }
 
+    .inv-feed-list { display: grid; gap: 6px; }
+    .inv-feed-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      transition: background 0.12s ease;
+    }
+    .inv-feed-item:hover { background: var(--surface-2); }
+    .inv-feed-body { display: grid; gap: 2px; min-width: 0; }
+    .inv-feed-body strong { font-size: 0.85rem; }
+    .inv-feed-body span { color: var(--muted); font-size: 0.74rem; }
+    .inv-feed-time { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+    .inv-feed-empty span { color: var(--muted); font-size: 0.8rem; }
+
+    .inventory-module-launcher { overflow: hidden; }
+    .inventory-module-launcher .section-title small { color: var(--muted); font-weight: 800; }
     .inventory-module-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
     }
-
     .inventory-module-card {
       min-height: 132px;
       display: grid;
@@ -551,27 +672,22 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       box-shadow: 0 16px 36px color-mix(in srgb, var(--ink) 6%, transparent);
       transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
     }
-
     .inventory-module-card:hover {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--teal) 35%, var(--line));
       box-shadow: 0 20px 44px color-mix(in srgb, var(--ink) 9%, transparent);
     }
-
-    .inventory-module-card span,
-    .inventory-module-card small {
+    .inventory-module-card span, .inventory-module-card small {
       display: block;
       color: var(--muted);
       font-size: .78rem;
       font-weight: 900;
     }
-
     .inventory-module-card strong {
       display: block;
       font-size: 1.06rem;
       line-height: 1.25;
     }
-
     .inventory-module-card.blue { border-top-color: #2f5dcc; }
     .inventory-module-card.amber { border-top-color: #b26b00; }
     .inventory-module-card.green { border-top-color: #177245; }
@@ -581,353 +697,18 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
     .inventory-module-card.black { border-top-color: #162033; }
     .inventory-module-card.orange { border-top-color: #d95f02; }
 
-    .inventory-ai-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
-      gap: 12px;
-      align-items: stretch;
-    }
-
-    .lower-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .autopilot-panel,
-    .product-360,
-    .supplier-360,
-    .pos-intelligence-panel {
-      min-height: 100%;
-    }
-
-    .autopilot-list,
-    .timeline,
-    .upsell-strip {
-      display: grid;
-      gap: 8px;
-    }
-
-    .autopilot-list article,
-    .timeline article,
-    .upsell-strip article {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-    }
-
-    .autopilot-list strong,
-    .autopilot-list span,
-    .autopilot-list small,
-    .timeline strong,
-    .timeline span,
-    .upsell-strip strong,
-    .upsell-strip span {
-      display: block;
-    }
-
-    .autopilot-list span,
-    .autopilot-list small,
-    .timeline span,
-    .upsell-strip span {
-      color: var(--muted);
-      font-size: 0.78rem;
-      line-height: 1.35;
-    }
-
-    .autopilot-list .right {
-      min-width: 120px;
-      text-align: right;
-    }
-
-    .mini-metrics {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .mini-metrics div,
-    .detail-list div {
-      padding: 9px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-    }
-
-    .mini-metrics span,
-    .detail-list span {
-      display: block;
-      color: var(--muted);
-      font-size: 0.72rem;
-      font-weight: 800;
-    }
-
-    .mini-metrics strong,
-    .detail-list strong {
-      display: block;
-      margin-top: 4px;
-      color: var(--ink);
-      font-size: 0.95rem;
-      line-height: 1.25;
-    }
-
-    .detail-list {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .inline-select {
-      width: min(260px, 100%);
-      min-height: 40px;
-      padding: 8px 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-    }
-
-    .inline-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-    }
-
-    .timeline.mini article {
-      display: block;
-    }
-
-    .draft-note {
-      margin: 8px 0 0;
-      padding: 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #f7fbfa;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    .compact-table {
-      overflow: auto;
-      max-height: 270px;
-    }
-
-    .compact-table table {
-      min-width: 620px;
-    }
-
-    .upsell-strip {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-    }
-
-    .operations-panel,
-    .product-panel,
-    .side-summary {
-      padding: 12px;
-    }
-
-    .operations-panel .section-title,
-    .side-summary .section-title {
-      align-items: center;
-      margin-bottom: 10px;
-      padding-bottom: 10px;
-    }
-
-    .inventory-kpis aura-kpi-card {
-      --kpi-min-height: 72px;
-      --kpi-padding: 10px 12px;
-      --kpi-gap: 3px;
-      --kpi-strong-size: 1.25rem;
-      --kpi-small-size: 0.72rem;
-    }
-
-    .desk-tabs {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .desk-tabs button {
-      min-height: 34px;
-      padding: 0 12px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: #fff;
-      color: var(--muted);
-      font-weight: 900;
-      white-space: nowrap;
-      cursor: pointer;
-    }
-
-    .desk-tabs button.active {
-      border-color: var(--teal);
-      background: var(--teal);
-      color: #fff;
-    }
-
-    .desk-body {
-      padding-top: 12px;
-    }
-
-    .desk-closed {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 10px;
-      padding-top: 12px;
-    }
-
-    .desk-closed button {
-      min-height: 68px;
-      padding: 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      text-align: left;
-      cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .desk-closed button:hover {
-      transform: translateY(-1px);
-      box-shadow: var(--shadow);
-    }
-
-    .desk-closed strong,
-    .desk-closed span {
-      display: block;
-    }
-
-    .desk-closed strong {
-      margin-bottom: 3px;
-      font-weight: 900;
-      font-size: 0.9rem;
-    }
-
-    .desk-closed span {
-      color: var(--muted);
-      font-size: 0.78rem;
-      line-height: 1.3;
-    }
-
-    .compact-form {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      align-items: end;
-    }
-
-    .compact-form .full,
-    .compact-form .form-actions {
-      grid-column: span 2;
-    }
-
-    .bulk-preview {
-      min-height: 58px;
-      display: grid;
-      align-content: center;
-      gap: 3px;
-      padding: 9px 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #f8fafc;
-    }
-
-    .bulk-preview span {
-      color: var(--muted);
-      font-size: 0.72rem;
-      font-weight: 900;
-    }
-
-    .bulk-preview strong {
-      color: var(--ink);
-      font-size: 0.88rem;
-      line-height: 1.25;
-    }
-
-    .compact-form textarea {
-      min-height: 42px;
-      resize: vertical;
-    }
-
-    .inventory-data-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.8fr);
-      gap: 14px;
-      align-items: start;
-    }
-
-    .product-table {
-      max-height: 292px;
-      overflow: auto;
-    }
-
-    .product-table table {
-      min-width: 760px;
-    }
-
-    .product-table thead th {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      background: var(--surface-2);
-    }
-
-    .compact-feed {
-      max-height: 292px;
-      overflow: auto;
-      padding-right: 4px;
-    }
-
-    .compact-feed article {
-      padding: 10px 0;
-    }
-
     @media (max-width: 1180px) {
-      .inventory-kpis,
-      .inventory-command-board,
-      .inventory-module-grid,
-      .desk-closed,
-      .compact-form,
-      .inventory-ai-grid,
-      .lower-grid,
-      .inventory-data-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .inventory-data-grid {
-        grid-template-columns: 1fr;
-      }
+      .inv-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .inv-workspace { grid-template-columns: 1fr; }
     }
-
     @media (max-width: 760px) {
-      .inventory-hero {
-        align-items: stretch;
-      }
-
-      .inventory-kpis,
-      .inventory-command-board,
-      .desk-closed,
-      .compact-form,
-      .inventory-ai-grid,
-      .lower-grid,
-      .compact-form .full,
-      .compact-form .form-actions {
-        grid-template-columns: 1fr;
-        grid-column: span 1;
-      }
-
-      .mini-metrics,
-      .detail-list,
-      .upsell-strip {
-        grid-template-columns: 1fr;
-      }
+      .inventory-hero { align-items: stretch; }
+      .inv-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .inv-form-row { grid-template-columns: 1fr; }
+      .inv-field-wide { grid-column: span 1; }
+    }
+    @media (max-width: 480px) {
+      .inv-metrics { grid-template-columns: 1fr; }
     }
   `]
 })

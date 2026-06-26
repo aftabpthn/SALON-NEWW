@@ -68,6 +68,10 @@ export class SidebarStore {
     this.search.set(value);
   }
 
+  collapseTo(ids: string[]): void {
+    this.expandedGroups.set(new Set(ids));
+  }
+
   toggleGroup(id: string): void {
     const next = new Set(this.expandedGroups());
     if (next.has(id)) next.delete(id);

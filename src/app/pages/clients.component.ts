@@ -1,7 +1,7 @@
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -9,7 +9,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 @Component({
   selector: 'app-clients',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero client-command-hero">
@@ -205,13 +205,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 (keydown.space)="openClient(client.id); $event.preventDefault()"
               >
                 <td>
-                  <a class="identity-cell" [routerLink]="['/clients', client.id]" (click)="$event.stopPropagation()">
+                  <span class="identity-cell">
                     <span class="avatar">{{ initials(client.name) }}</span>
                     <span>
                       <strong>{{ client.name }}</strong>
                       <small>{{ client.phone }} · {{ client.email || 'No email' }}</small>
                     </span>
-                  </a>
+                  </span>
                 </td>
                 <td>{{ client.gender || '-' }}</td>
                 <td>{{ client.birthday ? (client.birthday | date: 'mediumDate') : '-' }}</td>

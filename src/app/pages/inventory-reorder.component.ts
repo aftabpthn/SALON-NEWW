@@ -95,9 +95,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
       gap: 14px;
       align-items: center;
       padding: 14px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: #fff;
+      border: 1px solid rgba(79, 70, 229, 0.1);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
     }
 
     .reorder-list strong,

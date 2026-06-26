@@ -124,34 +124,11 @@ type PlanLifecycleDialog = {
           <small>{{ report().metrics?.active || activeMemberships().length }} active plans</small>
         </article>
         <article>
-          <span>Plans</span>
-          <strong>{{ membershipPlans().length }}</strong>
-          <small>{{ activeMembershipPlans().length }} visible in POS</small>
-        </article>
-        <article>
-          <span>Renewal risk</span>
-          <strong>{{ report().expiringSoon?.length || 0 }}</strong>
-          <small>Expiring in 30 days</small>
-        </article>
-      </section>
-
-      <section class="stats-grid membership-stats" *ngIf="activeTab() === 'overview'">
-        <article class="metric-card">
-          <span>Total members</span>
-          <strong>{{ totalMemberCount() }}</strong>
-          <small>{{ activeMemberCount() }} active members</small>
-        </article>
-        <article class="metric-card">
-          <span>Membership revenue</span>
+          <span>Revenue</span>
           <strong>{{ (report().metrics?.soldRevenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
           <small>Sold and renewed</small>
         </article>
-        <article class="metric-card">
-          <span>Redeemed discount</span>
-          <strong>{{ (report().metrics?.redeemedDiscount || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Invoice snapshot based</small>
-        </article>
-        <article class="metric-card">
+        <article>
           <span>Renewal risk</span>
           <strong>{{ report().expiringSoon?.length || 0 }}</strong>
           <small>Expiring in 30 days</small>
@@ -1351,48 +1328,42 @@ type PlanLifecycleDialog = {
     }
 
     .member-count-strip {
+      width: 100%;
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      padding: 10px;
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 16px;
-      background: #fff;
-      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.045);
+      gap: 12px;
+      align-items: stretch;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
     }
 
     .member-count-strip article {
-      display: grid;
-      gap: 2px;
-      min-height: 76px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: #f8fbfb;
-      border: 1px solid rgba(15, 23, 42, 0.06);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 82px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid rgba(79, 70, 229, 0.1);
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.06);
     }
 
     .member-count-strip span,
     .member-count-strip small {
       color: #64748b;
-      font-size: 0.78rem;
-      font-weight: 800;
+      font-size: 0.7rem;
+      font-weight: 750;
     }
 
     .member-count-strip strong {
-      color: #0f172a;
-      font-size: 1.45rem;
+      color: #4f46e5;
+      font-size: 1.25rem;
       font-variant-numeric: tabular-nums;
-      line-height: 1.05;
-    }
-
-    .membership-stats {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .membership-stats .metric-card {
-      min-height: 112px;
-      border-top: 3px solid #0f766e;
-      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05);
+      line-height: 1.2;
     }
 
     .membership-overview-grid {
@@ -1447,11 +1418,13 @@ type PlanLifecycleDialog = {
     .compact-workbench {
       align-items: stretch;
       grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.25fr);
+      gap: 24px;
     }
 
     .sticky-panel {
-      position: sticky;
-      top: 78px;
+      align-self: start;
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
     }
 
     .form-panel,
@@ -1461,10 +1434,14 @@ type PlanLifecycleDialog = {
       border-radius: 16px;
     }
 
+    .sticky-panel {
+      padding: 12px 14px;
+    }
+
     .form-panel form {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 10px;
     }
 
     .form-panel .full,
@@ -1472,29 +1449,44 @@ type PlanLifecycleDialog = {
       grid-column: 1 / -1;
     }
 
+    .sticky-panel .field { gap: 2px; }
+    .sticky-panel .field input,
+    .sticky-panel .field select { padding: 5px 8px; min-height: 30px; }
+    .sticky-panel > :last-child { margin-bottom: 0; }
+    .sticky-panel form { margin-bottom: 0; }
+    .sticky-panel .action-card { padding: 10px 12px; margin-top: 10px; }
+
     .field textarea {
-      min-height: 78px;
+      min-height: 60px;
       resize: vertical;
     }
 
     .compact-panel {
-      min-height: 100%;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
+    .compact-panel .section-title { margin-bottom: 0; }
 
     .plan-grid {
-      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
 
     .plan-card {
-      min-height: 160px;
+      min-height: 130px;
       justify-content: space-between;
+      padding: 14px 16px;
+      gap: 8px;
     }
+    .plan-card strong { font-size: 0.94rem; }
+    .plan-card > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+    .plan-card > div:first-child span { font-size: 0.8rem; opacity: 0.7; }
 
     .plan-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      margin: 8px 0;
+      gap: 4px;
     }
 
     .plan-meta span,
@@ -1504,9 +1496,9 @@ type PlanLifecycleDialog = {
       border-radius: 999px;
       background: #eaf7f4;
       color: #0f766e;
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 800;
-      padding: 5px 8px;
+      padding: 3px 7px;
     }
 
     .badge.danger {
@@ -1561,38 +1553,75 @@ type PlanLifecycleDialog = {
     }
 
     .selected-client-card {
-      margin-bottom: 12px;
+      margin-bottom: 0;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
+    .selected-client-card strong { font-size: 0.94rem; }
+    .selected-client-card span { font-size: 0.8rem; opacity: 0.7; }
 
     .wallet-panel {
-      margin-bottom: 12px;
+      margin-bottom: 0;
+      padding: 14px 16px;
     }
+    .wallet-panel > strong { font-size: 0.88rem; display: block; margin-bottom: 2px; }
+    .wallet-panel > span { font-size: 0.78rem; opacity: 0.7; }
 
     .wallet-snapshot-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin: 12px 0;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin: 10px 0;
     }
 
     .wallet-snapshot-grid div {
-      min-height: 72px;
-      padding: 12px;
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 14px;
+      padding: 8px 10px;
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      border-radius: 10px;
       background: #f8fbfb;
     }
+    .wallet-snapshot-grid div:has(b:empty) { display: none; }
 
     .wallet-snapshot-grid span,
     .wallet-snapshot-grid b {
       display: block;
     }
-
+    .wallet-snapshot-grid span { font-size: 0.68rem; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.03em; }
     .wallet-snapshot-grid b {
-      margin-top: 4px;
+      margin-top: 2px;
       color: #0f172a;
-      font-size: 0.94rem;
+      font-size: 0.85rem;
     }
+
+    .mini-membership-list article {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      border-radius: 12px;
+      background: #f8fbfb;
+      gap: 12px;
+    }
+    .mini-membership-list article > div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .mini-membership-list article strong { font-size: 0.88rem; }
+    .mini-membership-list article strong small { font-weight: 400; opacity: 0.6; font-size: 0.78rem; }
+    .mini-membership-list article span { font-size: 0.78rem; opacity: 0.7; }
+    .mini-membership-list article b { font-size: 1rem; color: #4f46e5; white-space: nowrap; }
+
+    .compact-empty {
+      padding: 24px 16px;
+      text-align: center;
+      gap: 6px;
+    }
+    .compact-empty strong { font-size: 0.9rem; }
+    .compact-empty span { font-size: 0.8rem; opacity: 0.6; }
 
     .compact-count-strip {
       margin-bottom: 16px;
@@ -1783,8 +1812,9 @@ type PlanLifecycleDialog = {
     }
 
     @media (max-width: 1180px) {
-      .membership-stats,
-      .member-count-strip,
+      .member-count-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .membership-overview-grid,
       .report-filter-grid,
       .report-grid,
@@ -1806,8 +1836,6 @@ type PlanLifecycleDialog = {
         width: 100%;
       }
 
-      .membership-stats,
-      .member-count-strip,
       .membership-overview-grid,
       .compact-workbench,
       .report-filter-grid,
@@ -1820,8 +1848,15 @@ type PlanLifecycleDialog = {
         grid-template-columns: 1fr;
       }
 
+      .member-count-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .sticky-panel {
-        position: static;
+        align-self: auto;
+        max-height: none;
+        overflow-y: visible;
+        padding: 16px;
       }
 
       .membership-tabs {
@@ -1830,6 +1865,16 @@ type PlanLifecycleDialog = {
 
       .membership-tabs .refresh-tab {
         margin-left: 0;
+      }
+
+      .wallet-snapshot-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .member-count-strip {
+        grid-template-columns: 1fr;
       }
     }
   `]

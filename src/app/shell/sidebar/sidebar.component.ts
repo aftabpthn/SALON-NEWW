@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, EventEmitter, HostListener, Input, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { Subject, filter, takeUntil } from 'rxjs';
 import { AppStateService, UserRole } from '../../core/state/app-state.service';
 import { WebSocketService } from '../../core/websocket.service';
 import { EnterpriseNavItem, SidebarService } from './sidebar.service';
@@ -20,7 +21,9 @@ type ScopeRecord = {
   templateUrl: './sidebar.component.html',
   styleUrls: ['./sidebar.component.css']
 })
-export class EnterpriseSidebarComponent {
+export class EnterpriseSidebarComponent implements OnInit, OnDestroy {
+  private readonly destroy$ = new Subject<void>();
+
   @Input() navItems: EnterpriseNavItem[] = [];
   @Input() tenants: ScopeRecord[] = [];
   @Input() branches: ScopeRecord[] = [];
@@ -68,6 +71,20 @@ export class EnterpriseSidebarComponent {
 
   get recents() {
     return this.sidebar.recents(this.navItems, this.store.recents(), this.store.search());
+  }
+
+  ngOnInit(): void {
+    this.syncExpanded(this.router.url);
+    this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd), takeUntil(this.destroy$)).subscribe((e) => this.syncExpanded(e.urlAfterRedirects));
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private syncExpanded(url: string): void {
+    this.store.collapseTo(this.sidebar.groupForPath(url));
   }
 
   navigate(path: string): void {

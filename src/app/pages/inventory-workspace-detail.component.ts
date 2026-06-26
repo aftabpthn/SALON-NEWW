@@ -211,7 +211,6 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
 
     .detail-shell {
       padding: 14px;
-      border-radius: 8px;
       overflow: hidden;
     }
 
@@ -221,7 +220,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
       justify-content: space-between;
       gap: 12px;
       padding-bottom: 12px;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid rgba(79, 70, 229, 0.1);
       margin-bottom: 12px;
     }
 
@@ -261,33 +260,24 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
     .filter-bar input {
       width: 100%;
       min-height: 36px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #fff;
+      border: 1px solid rgba(79, 70, 229, 0.12);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
       color: var(--ink);
       padding: 7px 9px;
       font: inherit;
       font-size: 0.86rem;
     }
 
-    .table-wrap {
-      max-height: 620px;
-      overflow: auto;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-    }
-
     table {
       width: 100%;
       min-width: 980px;
-      border-collapse: collapse;
     }
 
     th,
     td {
       padding: 10px 12px;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid rgba(79, 70, 229, 0.08);
       text-align: left;
       vertical-align: top;
       font-size: 0.82rem;
@@ -298,7 +288,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
       position: sticky;
       top: 0;
       z-index: 2;
-      background: #f7fbfa;
+      background: #f7faf9;
       color: var(--muted);
       font-size: 0.68rem;
       font-weight: 900;
@@ -337,7 +327,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
     .total-row td {
       position: sticky;
       bottom: 0;
-      background: #f7fbfa;
+      background: #f7faf9;
       font-weight: 900;
     }
 

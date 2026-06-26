@@ -1,4 +1,4 @@
-import { CommonModule, TitleCasePipe } from '@angular/common';
+import { CommonModule, LowerCasePipe, TitleCasePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -29,12 +29,12 @@ interface KpiRow {
 @Component({
   selector: 'app-kpi-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, TitleCasePipe, StateComponent],
+  imports: [CommonModule, RouterLink, TitleCasePipe, LowerCasePipe, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero kpi-hero">
         <div>
-          <span class="eyebrow">KPI details · {{ moduleName() | titlecase }}</span>
+          <span class="eyebrow">{{ moduleName() | titlecase }} · {{ kpiTitle() }}</span>
           <h2>{{ kpiTitle() }}</h2>
           <p>{{ kpiDescription() }}</p>
         </div>
@@ -44,23 +44,18 @@ interface KpiRow {
       <ng-container *ngIf="isInventory(); else genericDetail">
         <app-state [loading]="loading()" [error]="error()"></app-state>
 
-        <section class="panel kpi-summary-panel" *ngIf="!loading()">
-          <div class="kpi-summary-strip">
-            <article *ngFor="let stat of inventoryStats()">
-              <span>{{ stat.label }}</span>
-              <strong>{{ stat.value }}</strong>
-              <small>{{ stat.hint }}</small>
-            </article>
-          </div>
+        <section class="kpi-stats-grid" *ngIf="!loading()">
+          <article class="kpi-stat-card" *ngFor="let stat of inventoryStats()">
+            <span class="kpi-stat-label">{{ stat.label }}</span>
+            <strong class="kpi-stat-value">{{ stat.value }}</strong>
+            <small class="kpi-stat-hint">{{ stat.hint }}</small>
+          </article>
         </section>
 
         <section class="panel" *ngIf="!loading()">
           <div class="section-title">
-            <div>
-              <span class="eyebrow">Inventory drill-down</span>
-              <h3>{{ inventoryPanelTitle() }}</h3>
-            </div>
-            <small>{{ inventoryRows().length }} rows</small>
+            <h3>{{ inventoryPanelTitle() }}</h3>
+            <span class="row-count">{{ inventoryRows().length }} rows</span>
           </div>
           <div class="kpi-table-wrap">
             <table>
@@ -76,8 +71,8 @@ interface KpiRow {
                 <tr *ngFor="let row of inventoryRows()">
                   <td><strong>{{ row.title }}</strong></td>
                   <td>{{ row.meta }}</td>
-                  <td>{{ row.value }}</td>
-                  <td><span class="badge">{{ row.status }}</span></td>
+                  <td class="kpi-cell-value">{{ row.value }}</td>
+                  <td><span class="kpi-badge" [class]="'kpi-badge--' + (row.status | lowercase)">{{ row.status }}</span></td>
                 </tr>
                 <tr *ngIf="!inventoryRows().length">
                   <td colspan="4">
@@ -95,38 +90,32 @@ interface KpiRow {
 
       <ng-template #genericDetail>
         <app-state [loading]="loading()" [error]="error()"></app-state>
-        <section class="panel kpi-summary-panel" *ngIf="!loading()">
-          <div class="section-title">
-            <div>
-              <span class="eyebrow">Mapped KPI drill-down</span>
-              <h3>{{ genericData()?.definition?.title || kpiTitle() }}</h3>
-            </div>
-            <small>{{ genericRows().length }} rows</small>
-          </div>
-          <div class="kpi-summary-strip" *ngIf="genericStats().length">
-            <article *ngFor="let stat of genericStats()">
-              <span>{{ stat.label }}</span>
-              <strong>{{ stat.value }}</strong>
-              <small>{{ stat.hint }}</small>
-            </article>
-          </div>
+
+        <section class="kpi-stats-grid" *ngIf="!loading() && genericStats().length">
+          <article class="kpi-stat-card" *ngFor="let stat of genericStats()">
+            <span class="kpi-stat-label">{{ stat.label }}</span>
+            <strong class="kpi-stat-value">{{ stat.value }}</strong>
+            <small class="kpi-stat-hint">{{ stat.hint }}</small>
+          </article>
         </section>
 
         <section class="panel" *ngIf="genericData()?.aiInsights?.length">
-          <div class="section-title"><h3>Insights</h3></div>
-          <div class="quick-grid">
-            <article class="action-card" *ngFor="let insight of genericData()?.aiInsights || []">
-              <strong>{{ insight.title }}</strong>
-              <span>{{ insight.recommendation }}</span>
-              <small>{{ insight.severity }}</small>
+          <div class="section-title"><h3>AI Insights</h3></div>
+          <div class="kpi-insights-strip">
+            <article class="kpi-insight-card" *ngFor="let insight of genericData()?.aiInsights || []">
+              <div class="kpi-insight-body">
+                <strong>{{ insight.title }}</strong>
+                <span>{{ insight.recommendation }}</span>
+              </div>
+              <span class="kpi-insight-severity" [class]="'severity--' + (insight.severity | lowercase)">{{ insight.severity }}</span>
             </article>
           </div>
         </section>
 
         <section class="panel" *ngIf="!loading()">
           <div class="section-title">
-            <h3>Rows</h3>
-            <span class="badge">{{ genericData()?.exportControls?.message || 'Export controlled' }}</span>
+            <h3>Details</h3>
+            <span class="row-count">{{ genericRows().length }} rows</span>
           </div>
           <div class="kpi-table-wrap">
             <table>
@@ -135,8 +124,8 @@ interface KpiRow {
                 <tr *ngFor="let row of genericRows()">
                   <td><strong>{{ row.title }}</strong></td>
                   <td>{{ row.meta }}</td>
-                  <td>{{ row.value }}</td>
-                  <td><span class="badge">{{ row.status }}</span></td>
+                  <td class="kpi-cell-value">{{ row.value }}</td>
+                  <td><span class="kpi-badge" [class]="'kpi-badge--' + (row.status | lowercase)">{{ row.status }}</span></td>
                 </tr>
                 <tr *ngIf="!genericRows().length">
                   <td colspan="4">
@@ -165,30 +154,22 @@ interface KpiRow {
       margin-bottom: 4px;
     }
 
-    .kpi-summary-panel {
-      padding: 0;
-      overflow: hidden;
-    }
-
-    .kpi-summary-strip {
+    .kpi-stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      min-height: 82px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
     }
 
-    .kpi-summary-strip article {
+    .kpi-stat-card {
       display: grid;
-      align-content: center;
-      gap: 3px;
-      padding: 14px 18px;
-      border-right: 1px solid var(--line);
+      gap: 5px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
     }
 
-    .kpi-summary-strip article:last-child {
-      border-right: 0;
-    }
-
-    .kpi-summary-strip span {
+    .kpi-stat-label {
       color: var(--muted);
       font-size: 0.72rem;
       font-weight: 900;
@@ -196,13 +177,33 @@ interface KpiRow {
       text-transform: uppercase;
     }
 
-    .kpi-summary-strip strong {
-      font-size: 1.45rem;
-      line-height: 1.1;
+    .kpi-stat-value {
+      font-size: 1.55rem;
+      line-height: 1.15;
     }
 
-    .kpi-summary-strip small {
+    .kpi-stat-hint {
       color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .section-title h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .row-count {
+      color: var(--muted);
+      font-size: 0.78rem;
+      white-space: nowrap;
     }
 
     .kpi-table-wrap {
@@ -223,38 +224,128 @@ interface KpiRow {
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
       text-align: left;
+      vertical-align: middle;
     }
 
     .kpi-table-wrap th {
       position: sticky;
       top: 0;
       z-index: 2;
-      background: #f6f8f8;
+      background: var(--surface-2);
       color: var(--muted);
       font-size: 0.72rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
 
-    .badge {
-      display: inline-flex;
-      border-radius: 999px;
-      background: #eef3f2;
-      color: var(--teal-2);
-      padding: 3px 9px;
-      font-size: 0.72rem;
-      font-weight: 900;
-      text-transform: uppercase;
+    .kpi-table-wrap tbody tr:last-child td {
+      border-bottom: 0;
     }
 
-    @media (max-width: 900px) {
-      .kpi-summary-strip {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+    .kpi-cell-value {
+      font-weight: 800;
+    }
+
+    .kpi-badge {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      background: #eef3f2;
+      color: var(--teal-2);
+    }
+
+    .kpi-badge--reorder {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .kpi-badge--expiry, .kpi-badge--expiry-risk, .kpi-badge--waste {
+      background: #fce4ec;
+      color: #b71c1c;
+    }
+
+    .kpi-badge--low-stock, .kpi-badge--low {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .kpi-badge--healthy {
+      background: #e8f5e9;
+      color: #1b5e20;
+    }
+
+    .kpi-insights-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 10px;
+    }
+
+    .kpi-insight-card {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+
+    .kpi-insight-body {
+      display: grid;
+      gap: 4px;
+    }
+
+    .kpi-insight-body strong {
+      font-size: 0.92rem;
+    }
+
+    .kpi-insight-body span {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .kpi-insight-severity {
+      display: inline-flex;
+      white-space: nowrap;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      background: #eef3f2;
+      color: var(--muted);
+    }
+
+    .kpi-insight-severity.severity--positive {
+      background: #e8f5e9;
+      color: #1b5e20;
+    }
+
+    .kpi-insight-severity.severity--warning {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .kpi-insight-severity.severity--info {
+      background: #e3f2fd;
+      color: #0d47a1;
+    }
+
+    .empty-state {
+      display: grid;
+      gap: 4px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
     }
 
     @media (max-width: 640px) {
-      .kpi-summary-strip {
+      .kpi-stats-grid {
         grid-template-columns: 1fr;
       }
     }

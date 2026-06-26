@@ -380,7 +380,7 @@ const emptyRecords: Record<ClientMasterKind, ClientMasterRecord[]> = {
     .master-tabs .violet span { background: #f3efff; color: #6d28d9; }
     .master-tabs .amber span { background: #fff7e6; color: #a16207; }
     .master-tabs .rose span { background: #fff1f2; color: #be123c; }
-    .workspace { align-items: start; display: grid; grid-template-columns: minmax(320px, .82fr) minmax(560px, 1.18fr); gap: 16px; }
+    .workspace { align-items: stretch; display: grid; grid-template-columns: minmax(320px, .82fr) minmax(560px, 1.18fr); gap: 16px; }
     .list-panel, .editor-panel { display: grid; gap: 14px; padding: 16px; box-shadow: var(--elev-1); }
     .panel-heading { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
     .search, .form-grid label { color: var(--ink); display: grid; font-size: 13px; font-weight: 850; gap: 7px; }

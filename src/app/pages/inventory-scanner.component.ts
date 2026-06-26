@@ -156,16 +156,16 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
     .product-head p { margin: 0; color: var(--muted); }
     .product-head > strong { font-size: 32px; color: #0f766e; }
     .product-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
-    .product-metrics article { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #f8fbfa; }
+    .product-metrics article { border: 1px solid rgba(79, 70, 229, 0.1); border-radius: 18px; padding: 12px; background: rgba(255, 255, 255, 0.92); }
     .product-metrics span { color: var(--muted); display: block; font-size: 12px; font-weight: 800; text-transform: uppercase; }
     .product-metrics strong { display: block; margin-top: 4px; font-size: 18px; }
     .workflow-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-    .workflow-grid button { border: 1px solid var(--border); background: #fff; border-radius: 10px; padding: 12px 8px; font-weight: 800; cursor: pointer; }
-    .workflow-grid button:hover { border-color: #0f766e; color: #0f766e; }
-    .empty-match { display: grid; align-content: center; min-height: 280px; }
-    .empty-match p { color: var(--muted); max-width: 520px; }
-    .table-wrap { overflow: auto; }
-    table { min-width: 920px; }
+    .workflow-grid button { border: 1px solid rgba(79, 70, 229, 0.12); background: rgba(255, 255, 255, 0.92); border-radius: 14px; padding: 12px 8px; font-weight: 800; cursor: pointer; }
+    .workflow-grid button:hover { border-color: rgba(79, 70, 229, 0.32); color: #4f46e5; }
+    .empty-match { display: grid; align-content: center; justify-items: center; text-align: center; min-height: 300px; border: 2px dashed rgba(79, 70, 229, 0.18); border-radius: 24px; padding: 32px 24px; background: rgba(255, 255, 255, 0.92); gap: 8px; }
+    .empty-match::before { content: '📷'; font-size: 32px; opacity: 0.35; }
+    .empty-match h2 { margin: 0; font-size: 20px; font-weight: 700; color: #4f46e5; }
+    .empty-match p { color: var(--muted); max-width: 420px; margin: 0; line-height: 1.6; font-size: 14px; }
     @media (max-width: 980px) {
       .scanner-layout, .scanner-form, .product-metrics { grid-template-columns: 1fr; }
       .workflow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

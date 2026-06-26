@@ -104,9 +104,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
       grid-template-columns: minmax(0, 1fr) 180px;
       gap: 14px;
       padding: 14px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: #fff;
+      border: 1px solid rgba(79, 70, 229, 0.1);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.92);
     }
 
     .expiry-list article {
