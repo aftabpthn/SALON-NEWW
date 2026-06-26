@@ -64,13 +64,14 @@ async function request(baseUrl, path, { method = "GET", body } = {}) {
   const text = await response.text();
   return { response, body: text ? JSON.parse(text) : null };
 }
-async function requestBinary(baseUrl, path, { method = "POST", body, fileName, contentType = "application/octet-stream" } = {}) {
+async function requestBinary(baseUrl, path, { method = "POST", body, fileName, contentType = "application/octet-stream", extraHeaders = {} } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
       ...(await authHeaders(baseUrl)),
       "content-type": contentType,
-      "x-file-name": fileName || "migration-source.zip"
+      "x-file-name": fileName || "migration-source.zip",
+      ...extraHeaders
     },
     body
   });
@@ -903,6 +904,164 @@ test("large CSV file upload converts rows into chunks and queues job", async () 
   }
 });
 
+
+async function createLargeClientJob(baseUrl, rows, fileNamePrefix = "partial-large") {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const csv = ["name,phone,branchId,originalRecordId", ...rows].join("\n") + "\n";
+  const result = await requestBinary(baseUrl, "/migration/large-upload", {
+    body: Buffer.from(csv, "utf8"),
+    fileName: `${fileNamePrefix}-${stamp}.csv`,
+    contentType: "text/csv",
+    extraHeaders: { "x-resource": "clients", "x-source-software": "csv" }
+  });
+  assert.equal(result.response.status, 201);
+  assert.ok(result.body.job?.id);
+  return result.body.job.id;
+}
+
+function markLargeJobRowsCritical(jobId, rowIndexes = []) {
+  const rows = db.prepare(`
+    SELECT id, chunkId, sourceRowNumber
+    FROM migration_staging_rows
+    WHERE jobId = @jobId AND tenantId = @tenantId
+    ORDER BY sourceRowNumber ASC
+  `).all({ jobId, tenantId: "tenant_aura" });
+  const selected = new Set(rowIndexes);
+  const updateRow = db.prepare(`
+    UPDATE migration_staging_rows
+       SET status = @status, errors = @errors, updatedAt = datetime('now')
+     WHERE id = @id AND tenantId = @tenantId
+  `);
+  for (const [index, row] of rows.entries()) {
+    if (!selected.has(index)) continue;
+    updateRow.run({ id: row.id, tenantId: "tenant_aura", status: "error", errors: JSON.stringify(["Forced critical row for partial import test"]) });
+  }
+  const chunkId = rows[0]?.chunkId || "";
+  if (chunkId) {
+    const counts = db.prepare(`
+      SELECT
+        COUNT(*) AS totalRows,
+        SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errorRows,
+        SUM(CASE WHEN status = 'warning' THEN 1 ELSE 0 END) AS warningRows,
+        SUM(CASE WHEN status NOT IN ('error', 'warning') THEN 1 ELSE 0 END) AS validRows
+      FROM migration_staging_rows
+      WHERE jobId = @jobId AND chunkId = @chunkId AND tenantId = @tenantId
+    `).get({ jobId, chunkId, tenantId: "tenant_aura" });
+    db.prepare(`
+      UPDATE migration_file_chunks
+         SET status = @status, totalRows = @totalRows, validRows = @validRows, warningRows = @warningRows, errorRows = @errorRows
+       WHERE id = @chunkId AND tenantId = @tenantId
+    `).run({
+      chunkId,
+      tenantId: "tenant_aura",
+      status: Number(counts.errorRows || 0) ? "analyzed_with_errors" : "analyzed",
+      totalRows: Number(counts.totalRows || 0),
+      validRows: Number(counts.validRows || 0),
+      warningRows: Number(counts.warningRows || 0),
+      errorRows: Number(counts.errorRows || 0)
+    });
+  }
+}
+async function cleanupLargeJob(jobId) {
+  if (!jobId) return;
+  db.prepare("DELETE FROM clients WHERE id IN (SELECT targetId FROM migration_id_map WHERE jobId = @jobId AND tenantId = @tenantId AND resource = @resource)").run({ jobId, tenantId: "tenant_aura", resource: "clients" });
+  db.prepare("DELETE FROM migration_id_map WHERE jobId = @jobId AND tenantId = @tenantId").run({ jobId, tenantId: "tenant_aura" });
+  db.prepare("DELETE FROM migration_row_results WHERE jobId = @jobId AND tenantId = @tenantId").run({ jobId, tenantId: "tenant_aura" });
+  db.prepare("DELETE FROM migration_import_batches WHERE jobId = @jobId AND tenantId = @tenantId").run({ jobId, tenantId: "tenant_aura" });
+  db.prepare("DELETE FROM migration_staging_rows WHERE jobId = @jobId AND tenantId = @tenantId").run({ jobId, tenantId: "tenant_aura" });
+  db.prepare("DELETE FROM migration_file_chunks WHERE jobId = @jobId AND tenantId = @tenantId").run({ jobId, tenantId: "tenant_aura" });
+  db.prepare("DELETE FROM migration_large_jobs WHERE id = @jobId AND tenantId = @tenantId").run({ jobId, tenantId: "tenant_aura" });
+}
+
+test("large import blocks critical rows when allowPartialImport is false", async () => {
+  const server = await listen(createApp());
+  const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
+  let jobId = "";
+  try {
+    const stamp = Date.now();
+    jobId = await createLargeClientJob(baseUrl, [
+      `Large Partial Block ${stamp},+9191000${String(stamp).slice(-5)},branch_hyd,partial-block-valid-${stamp}`,
+      `Large Partial Bad ${stamp},+9191999${String(stamp).slice(-5)},missing_branch,partial-block-error-${stamp}`
+    ], "partial-block");
+    markLargeJobRowsCritical(jobId, [1]);
+    const result = await request(baseUrl, `/migration/large-jobs/${jobId}/resume`, {
+      method: "POST",
+      body: { maxChunks: 5, allowPartialImport: false, skipApprovalGate: false }
+    });
+    assert.equal(result.response.status, 200);
+    assert.equal(result.body.job.status, "failed");
+    assert.equal(result.body.job.importedRows, 0);
+    assert.match(result.body.job.failureReason, /critical_errors_present/);
+  } finally {
+    await cleanupLargeJob(jobId);
+    await close(server);
+  }
+});
+
+test("large import with critical rows and allowPartialImport imports valid rows and skips bad rows", async () => {
+  const server = await listen(createApp());
+  const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
+  let jobId = "";
+  try {
+    const stamp = Date.now();
+    const goodExternalId = `partial-valid-${stamp}`;
+    jobId = await createLargeClientJob(baseUrl, [
+      `Large Partial Import ${stamp},+9192000${String(stamp).slice(-5)},branch_hyd,${goodExternalId}`,
+      `Large Partial Bad ${stamp},+9192999${String(stamp).slice(-5)},missing_branch,partial-error-${stamp}`
+    ], "partial-import");
+    markLargeJobRowsCritical(jobId, [1]);
+    const result = await request(baseUrl, `/migration/large-jobs/${jobId}/resume`, {
+      method: "POST",
+      body: { maxChunks: 5, allowPartialImport: true, skipApprovalGate: true }
+    });
+    assert.equal(result.response.status, 200);
+    assert.equal(result.body.job.status, "completed_with_errors");
+    assert.equal(result.body.job.importedRows, 1);
+    assert.equal(result.body.job.skippedRows, 1);
+    assert.equal(result.body.job.errorRows, 1);
+    assert.equal(result.body.job.processedRows, 2);
+    assert.equal(result.body.job.chunks[0].status, "imported_with_errors");
+    const imported = db.prepare("SELECT targetId FROM migration_id_map WHERE tenantId = @tenantId AND jobId = @jobId AND resource = @resource AND sourceExternalId = @sourceExternalId").get({ tenantId: "tenant_aura", jobId, resource: "clients", sourceExternalId: goodExternalId });
+    assert.ok(imported?.targetId);
+  } finally {
+    await cleanupLargeJob(jobId);
+    await close(server);
+  }
+});
+
+test("large import partial mode marks all-error chunks skipped_with_errors and proof accepts completed_with_errors", async () => {
+  const server = await listen(createApp());
+  const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
+  let jobId = "";
+  try {
+    const stamp = Date.now();
+    jobId = await createLargeClientJob(baseUrl, [
+      `Large Partial Bad A ${stamp},+9193000${String(stamp).slice(-5)},missing_branch,partial-only-error-a-${stamp}`,
+      `Large Partial Bad B ${stamp},+9193001${String(stamp).slice(-5)},missing_branch,partial-only-error-b-${stamp}`
+    ], "partial-all-error");
+    markLargeJobRowsCritical(jobId, [0, 1]);
+    const result = await request(baseUrl, `/migration/large-jobs/${jobId}/resume`, {
+      method: "POST",
+      body: { maxChunks: 5, allowPartialImport: true, skipApprovalGate: true }
+    });
+    assert.equal(result.response.status, 200);
+    assert.equal(result.body.job.status, "completed_with_errors");
+    assert.equal(result.body.job.importedRows, 0);
+    assert.equal(result.body.job.skippedRows, 2);
+    assert.equal(result.body.job.errorRows, 2);
+    assert.equal(result.body.job.processedRows, 2);
+    assert.equal(result.body.job.chunks[0].status, "skipped_with_errors");
+    const proof = await request(baseUrl, `/migration/large-jobs/${jobId}/reconcile`, {
+      method: "POST",
+      body: { snapshotType: "post_import_operator_check" }
+    });
+    assert.equal(proof.response.status, 201);
+    assert.equal(proof.body.job.status, "completed_with_errors");
+  } finally {
+    await cleanupLargeJob(jobId);
+    await close(server);
+  }
+});
 test("large XLSX file upload converts sheet rows into chunks", async () => {
   const XLSX = (await import("xlsx")).default;
   const server = await listen(createApp());
@@ -1201,7 +1360,7 @@ test("large upload rejects ZIP with too many entries", async () => {
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
   try {
     const entries = {};
-    for (let i = 0; i < 201; i++) {
+    for (let i = 0; i < 301; i++) {
       entries[`file_${i}.csv`] = `name,phone\nUser${i},999999${String(i).padStart(4, "0")}\n`;
     }
     const zip = createZipArchive(entries);
@@ -1421,6 +1580,77 @@ test("large CSV upload 100K rows twice without cleanup — no UNIQUE constraint 
   } finally {
     if (jobId1) await request(baseUrl, `/migration/jobs/${jobId1}/rollback`, { method: "POST", body: {} }).catch(() => {});
     if (jobId2) await request(baseUrl, `/migration/jobs/${jobId2}/rollback`, { method: "POST", body: {} }).catch(() => {});
+    await close(server);
+  }
+});
+
+test("large worker tick honours owner approval and drives job to completed", async () => {
+  const server = await listen(createApp());
+  const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
+  let jobId = "";
+  try {
+    const stamp = Date.now();
+    const suffix = String(stamp).slice(-5);
+    // Auto large-upload job (mirrors "Use Large Import Mode" auto flow)
+    const csv = [
+      "name,phone,branchId,originalRecordId",
+      `Worker Tick Client A ${stamp},+9197000${suffix},branch_hyd,worker-tick-a-${stamp}`,
+      `Worker Tick Client B ${stamp},+9197001${suffix},branch_hyd,worker-tick-b-${stamp}`
+    ].join("\n") + "\n";
+    const upload = await requestBinary(baseUrl, "/migration/large-upload", {
+      body: Buffer.from(csv, "utf8"),
+      fileName: `worker-tick-${stamp}.csv`,
+      contentType: "text/csv",
+      extraHeaders: { "x-resource": "clients", "x-source-software": "csv" }
+    });
+    assert.equal(upload.response.status, 201);
+    jobId = upload.body.job.id;
+
+    // The auto-created job must now carry the source file hash (Part A fix).
+    const dbJob = db.prepare("SELECT settings, sourceSoftware FROM migration_large_jobs WHERE id = @id AND tenantId = @tenantId").get({ id: jobId, tenantId: "tenant_aura" });
+    const settings = JSON.parse(dbJob.settings || "{}");
+    assert.match(String(settings.sourceFileHash || ""), /^[a-f0-9]{64}$/, "auto large job must persist sourceFileHash");
+
+    // Submit approval keyed on the SAME source hash but a DIFFERENT jobId,
+    // proving the worker matches by hash and is not vetoed by jobId provenance.
+    const submitted = await request(baseUrl, "/migration/approvals", {
+      method: "POST",
+      body: {
+        jobId: "some-unrelated-job-id",
+        resource: "clients",
+        sourceSoftware: "csv",
+        fileName: `worker-tick-${stamp}.csv`,
+        sourceFileHash: settings.sourceFileHash,
+        totalRows: 2,
+        note: "Owner sign-off"
+      }
+    });
+    assert.equal(submitted.response.status, 201);
+    const approved = await request(baseUrl, `/migration/approvals/${submitted.body.id}/decide`, {
+      method: "POST",
+      body: { decision: "approved", note: "approved" }
+    });
+    assert.equal(approved.response.status, 200);
+    assert.equal(approved.body.status, "approved");
+
+    // Drive THIS job through the worker import path WITHOUT skipApprovalGate.
+    // Job-scoped resume exercises the same approval gate as worker/tick but is
+    // deterministic in the shared test DB (worker/tick claims the oldest queued
+    // job, which may belong to an earlier test). The owner approval above was
+    // keyed on the source hash with a mismatched jobId, so this only passes once
+    // approvalMatchesIdentity honours the hash instead of vetoing on jobId.
+    const resumed = await request(baseUrl, `/migration/large-jobs/${jobId}/resume`, {
+      method: "POST",
+      body: { maxChunks: 5, skipApprovalGate: false }
+    });
+    assert.equal(resumed.response.status, 200);
+
+    const finalJob = await request(baseUrl, `/migration/large-jobs/${jobId}`);
+    assert.equal(finalJob.response.status, 200);
+    assert.equal(finalJob.body.status, "completed", `expected completed, got ${finalJob.body.status} (${finalJob.body.failureReason || ""})`);
+    assert.equal(finalJob.body.importedRows, 2);
+  } finally {
+    await cleanupLargeJob(jobId);
     await close(server);
   }
 });

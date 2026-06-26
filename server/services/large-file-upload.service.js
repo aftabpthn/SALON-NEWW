@@ -11,10 +11,15 @@ import { migrationUploadStore } from "./migration-upload-store.service.js";
 import { migrationService } from "./migration.service.js";
 
 const CHUNK_SIZE = 5000;
+// Must match ANALYZER_FIX_VERSION in migration.service.js. Jobs whose stored
+// summary doesn't carry this version were analyzed by the old code and are
+// never reused — a re-upload re-analyzes fresh.
+const CURRENT_ANALYZER_FIX_VERSION = "2026-06-large-xref-invoicekey-1";
 const MAX_LARGE_FILE_BYTES = Number(process.env.MIGRATION_LARGE_UPLOAD_MAX_BYTES || 500 * 1024 * 1024);
-const MAX_ZIP_ENTRIES = 200;
+const MAX_ZIP_ENTRIES = 300;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set([".csv", ".xls", ".xlsx", ".zip"]);
+const SOURCE_KEYS = new Set(["zenoti", "salonist", "dingg", "fresha", "tally", "busy", "marg", "excel", "csv", "manual"]);
 const MAX_ZIP_ENTRY_UNCOMPRESSED_BYTES = 500 * 1024 * 1024;
 
 const ACCEPTED_CONTENT_TYPES = new Set([
@@ -86,8 +91,59 @@ function isSpreadsheetFile(name) { return /\.(xlsx|xls)$/i.test(name); }
 
 function now() { return new Date().toISOString(); }
 
+function existingLargeJobForUpload(upload, options = {}, access = {}) {
+  const sourceSoftware = sourceKey(options.sourceSoftware);
+  const resource = cleanText(options.resource) || "auto";
+  const branchId = cleanText(options.branchId) || access.branchId || "";
+  const job = db.prepare(`
+    SELECT * FROM migration_large_jobs
+     WHERE tenantId = @tenantId
+       AND sourceSoftware = @sourceSoftware
+       AND resource = @resource
+       AND branchId = @branchId
+       AND fileName = @fileName
+       AND fileSizeBytes = @fileSizeBytes
+       AND status NOT IN ('failed', 'cancelled', 'rolled_back')
+     ORDER BY createdAt DESC
+     LIMIT 1
+  `).get({
+    tenantId: access.tenantId,
+    sourceSoftware,
+    resource,
+    branchId,
+    fileName: upload.fileName,
+    fileSizeBytes: upload.sizeBytes
+  });
+  if (!job) return null;
+  // Never reuse a job analyzed by the old analyzer (no analyzerFixVersion in its
+  // summary). Such jobs carry stale staged rows and must be re-analyzed fresh.
+  let summary = {};
+  try { summary = JSON.parse(job.summary || "{}") || {}; } catch { summary = {}; }
+  if (cleanText(summary?.diagnostics?.analyzerFixVersion) !== CURRENT_ANALYZER_FIX_VERSION) return null;
+  const stats = db.prepare(`
+    SELECT COUNT(*) AS chunks, COALESCE(SUM(totalRows), 0) AS totalRows
+      FROM migration_file_chunks
+     WHERE tenantId = @tenantId AND jobId = @jobId
+  `).get({ tenantId: access.tenantId, jobId: job.id }) || {};
+  if (!Number(stats.chunks || 0)) return null;
+  return {
+    jobId: job.id,
+    chunks: Number(stats.chunks || 0),
+    totalRows: Number(stats.totalRows || job.totalRows || 0)
+  };
+}
+
 function cleanText(value) {
   return String(value || "").trim();
+}
+
+function cleanKey(value) {
+  return cleanText(value).toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function sourceKey(value) {
+  const cleaned = cleanKey(value || "excel").replace(/\s+/g, "-");
+  return SOURCE_KEYS.has(cleaned) ? cleaned : "excel";
 }
 
 function detectResourceFromName(name) {
@@ -166,6 +222,16 @@ function csvTextToRows(csvText) {
 
 export const largeFileUploadService = {
 
+  async handleStoredUpload(payload = {}, access = {}) {
+    const upload = migrationUploadStore.read(payload.fileRef, access);
+    return this._createJobFromUpload(upload, {
+      sourceSoftware: payload.sourceSoftware,
+      resource: payload.resource,
+      branchId: payload.branchId,
+      forceFresh: payload.forceFresh === true || String(payload.forceFresh).toLowerCase() === "true"
+    }, access);
+  },
+
   async handleUpload(buffer, headers = {}, access = {}) {
     const rawFileName = String(headers["x-file-name"] || "");
     const fileName = safeMigrationFileName(rawFileName) || "large-migration.zip";
@@ -199,14 +265,36 @@ export const largeFileUploadService = {
       }
       if (!totalValid) throw badRequest("No valid CSV or XLSX files found in ZIP archive.");
     }
-    const sourceSoftware = cleanText(headers["x-source-software"]) || "excel";
-    const resource = cleanText(headers["x-resource"]) || "auto";
-    const branchId = cleanText(headers["x-branch-id"]) || access.branchId || "";
     const upload = migrationUploadStore.storeBuffer({ fileName, mimeType: rawMimeType, buffer, purpose: "large-import" }, access);
+    return this._createJobFromUpload(upload, {
+      sourceSoftware: headers["x-source-software"],
+      resource: headers["x-resource"],
+      branchId: headers["x-branch-id"],
+      forceFresh: String(headers["x-force-fresh"] || "").toLowerCase() === "true"
+    }, access);
+  },
+
+  async _createJobFromUpload(upload, options = {}, access = {}) {
+    const sourceSoftware = sourceKey(options.sourceSoftware);
+    const resource = cleanText(options.resource) || "auto";
+    const branchId = cleanText(options.branchId) || access.branchId || "";
+    const forceFresh = options.forceFresh === true;
+    const existing = forceFresh ? null : existingLargeJobForUpload(upload, { sourceSoftware, resource, branchId }, access);
+    if (existing) {
+      const job = migrationService.largeJob(existing.jobId, access);
+      return {
+        job,
+        fileRef: upload.fileRef,
+        chunks: existing.chunks,
+        totalRows: existing.totalRows,
+        message: `Existing large import job reused. ${existing.chunks} chunk(s), ${existing.totalRows} rows already staged.`
+      };
+    }
     const job = migrationService.createLargeJob({
       sourceSoftware, resource, branchId,
       fileName: upload.fileName,
       fileSizeBytes: upload.sizeBytes,
+      sourceFileHash: cleanText(upload.sha256) || "",
       chunkSize: CHUNK_SIZE,
       id: `mlg_${randomUUID().slice(0, 12)}`
     }, access);

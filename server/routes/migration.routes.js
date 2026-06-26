@@ -200,6 +200,14 @@ migrationRouter.post(
 );
 
 migrationRouter.post(
+  "/migration/large-jobs/:id/discard",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    res.json(migrationService.discardLargeJob(req.params.id, req.access));
+  })
+);
+
+migrationRouter.post(
   "/migration/large-jobs/:id/retry-failed",
   requirePermission("write", migrationResource),
   asyncHandler((req, res) => {
@@ -217,6 +225,13 @@ migrationRouter.post(
   })
 );
 
+migrationRouter.post(
+  "/migration/large-upload/from-file-ref",
+  requirePermission("write", migrationResource),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await largeFileUploadService.handleStoredUpload(req.body || {}, req.access));
+  })
+);
 migrationRouter.post(
   "/migration/large-jobs/:id/queue",
   requirePermission("write", migrationResource),

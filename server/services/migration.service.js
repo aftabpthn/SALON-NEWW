@@ -9,6 +9,7 @@ import { extractZipEntries, createZipArchive } from "../utils/zip-archive.js";
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
 const makeIdLong = (prefix) => `${prefix}_${randomUUID().replace(/-/g, '')}`;
+const ANALYZER_FIX_VERSION = "2026-06-large-xref-invoicekey-1";
 const UNMAPPED_BRANCH_PREFIX = "__unmapped_branch__:";
 const BLOCKED_TIME_CLIENT_NAME = "Imported Blocked Time";
 const SOURCE_BRANCH_ALIASES = [
@@ -454,15 +455,32 @@ export const migrationService = {
     return largeMigrationJob(jobId, access);
   },
 
+  discardLargeJob(jobId, access) {
+    const job = requireLargeMigrationJob(jobId, access);
+    const scope = { tenantId: access.tenantId, jobId: job.id };
+    const removed = withBusyRetry(() => db.transaction(() => {
+      const staging = db.prepare("DELETE FROM migration_staging_rows WHERE tenantId = @tenantId AND jobId = @jobId").run(scope).changes || 0;
+      const chunks = db.prepare("DELETE FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId").run(scope).changes || 0;
+      const rowResults = db.prepare("DELETE FROM migration_row_results WHERE tenantId = @tenantId AND jobId = @jobId").run(scope).changes || 0;
+      const batches = db.prepare("DELETE FROM migration_import_batches WHERE tenantId = @tenantId AND jobId = @jobId").run(scope).changes || 0;
+      db.prepare("DELETE FROM migration_large_jobs WHERE tenantId = @tenantId AND id = @jobId").run(scope);
+      return { staging, chunks, rowResults, batches };
+    })());
+    auditMigration("migration.large_job.discarded", { jobId: job.id, ...removed }, access);
+    return { ok: true, jobId: job.id, discarded: removed, message: "Failed large import job cleared. Re-upload to start fresh." };
+  },
+
   retryFailedLargeJobChunks(jobId, payload, access) {
-    requireLargeMigrationJob(jobId, access);
+    const job = requireLargeMigrationJob(jobId, access);
     const reset = resetFailedLargeJobChunks(jobId, access, payload);
+    const settings = { ...parseJsonField(job.settings, {}), worker: workerSettings(payload) };
     recomputeLargeJobTotals(jobId, access);
     updateDirectRow("migration_large_jobs", jobId, {
       status: reset ? "queued" : "paused",
       workerId: "",
       lockedAt: "",
       heartbeatAt: "",
+      settings,
       failureReason: reset ? "" : "No failed chunks to retry",
       failedAt: "",
       resumeToken: `job:${jobId}:retry:${now()}`
@@ -1075,12 +1093,18 @@ function approvalIdentityFromSubmission(payload = {}) {
 }
 
 function approvalMatchesIdentity(approval = {}, identity = {}) {
+  // Additive matching: any one strong signal authorizes the import. A jobId or
+  // hash mismatch must NOT veto a valid match on another signal, otherwise the
+  // worker fails to honour an owner approval that referenced the same source
+  // file under a different jobId/hash provenance.
   const approvalHash = cleanText(approval.sourceFileHash);
   const identityHash = cleanText(identity.sourceFileHash);
-  if (identityHash) return approvalHash === identityHash;
+  if (identityHash && approvalHash && approvalHash === identityHash) return true;
+
   const approvalJobId = cleanText(approval.jobId);
   const identityJobId = cleanText(identity.jobId);
-  if (identityJobId) return approvalJobId === identityJobId;
+  if (identityJobId && approvalJobId && approvalJobId === identityJobId) return true;
+
   const fileMatches = cleanText(approval.fileName).toLowerCase() === cleanText(identity.fileName).toLowerCase();
   const rowsMatch = Number(approval.totalRows || 0) === Number(identity.totalRows || 0);
   const sourceMatches = cleanText(approval.sourceSoftware) === cleanText(identity.sourceSoftware);
@@ -1291,10 +1315,13 @@ function normalizeFlexiSourceRows(parsed = {}, sourceSoftware = "csv") {
     };
     rows.push(flexiRow("sales", { ...common, serviceName: "", lineItem: "" }, row, "dbo.SlipBalAmt/sales", index));
     rows.push(flexiRow("invoices", {
+      // Spread common first, then override originalRecordId — otherwise common's
+      // `sale:<docKey>` id clobbers the invoice key and payments (which point at
+      // `invoice:<docKey>`) can never resolve their invoice.
+      ...common,
       originalRecordId: `invoice:${flexiDocKey(row)}`,
       invoiceNumber: row.SSInvNo || row.DocNo,
       saleId: common.originalRecordId,
-      ...common,
       paid: flexiMoney(Math.max(0, numberValue(row.TotalAmt) - numberValue(row.BalAmt))),
       balance: flexiMoney(row.BalAmt)
     }, row, "dbo.SlipBalAmt/invoices", index));
@@ -1575,10 +1602,17 @@ function previewPayload(payload, access, { persist, dryRun, jobId = "" }) {
   assertImportPayloadLimits(payload, parsed);
   const sourceSoftware = sourceKey(payload.sourceSoftware);
   const normalized = normalizeParsedRows(parsed, payload, access, sourceSoftware);
-  const context = createContext(access, normalized);
+  const relationJobId = jobId || cleanText(payload.jobId);
+  // In Large Mode each chunk/resource is analyzed in isolation. Without the
+  // job's other staged rows as references, cross-chunk dependencies (payments →
+  // invoices, appointments/memberships/sales → clients) cannot resolve and are
+  // wrongly flagged as critical "reference could not be resolved" errors. Seed
+  // the resolution context with the job's already-staged dependency rows so
+  // these resolve exactly as they do in single-payload (normal-mode) analysis.
+  const crossReferences = relationJobId ? loadJobStagedReferenceRows(relationJobId, access) : [];
+  const context = createContext(access, crossReferences.length ? [...normalized, ...crossReferences] : normalized);
   const summary = emptySummary(sourceSoftware, parsed.fileName, dryRun);
   const sourceEvidence = migrationSourceEvidence(payload, access, parsed.fileName);
-  const relationJobId = jobId || cleanText(payload.jobId);
   const seen = new Set();
   const rows = normalized.map((row) => {
     const resolved = { ...row, payload: resolveMigrationRelations(row.payload, row, { access, jobId: relationJobId }) };
@@ -1589,6 +1623,17 @@ function previewPayload(payload, access, { persist, dryRun, jobId = "" }) {
   summary.affectedRecords = summary.validRows + summary.warningRows;
   summary.byBranch = branchSummary(rows);
   if (sourceEvidence) summary.sourceEvidence = sourceEvidence;
+  // Verifiable fix-version diagnostics so the UI/operator can confirm the new
+  // analyzer path actually ran for this upload (instead of a cached old job).
+  summary.diagnostics = {
+    analyzerFixVersion: ANALYZER_FIX_VERSION,
+    adapter: adapterFor(sourceSoftware),
+    sourceSoftware,
+    largeMode: Boolean(relationJobId),
+    crossChunkReferencesLoaded: crossReferences.length,
+    paymentInvoiceUnresolved: rows.filter((r) => r.resource === "payments" && /invoice reference could not be resolved/i.test(String(r.message || ""))).length,
+    clientPhoneMissing: rows.filter((r) => r.resource === "clients" && (r.warnings || []).some((w) => /phone missing/i.test(String(w)))).length
+  };
   const response = {
     sourceSoftware,
     fileName: parsed.fileName,
@@ -2078,6 +2123,14 @@ function validatePreparedRow(row, context, seen) {
     if (required === "staffId" && (payload.staffId || payload.staffName)) continue;
     if (required === "productId" && (payload.productId || payload.productName || payload.sku)) continue;
     if (required === "invoiceId" && (payload.invoiceId || payload.invoiceNumber)) continue;
+    // Legacy salon clients frequently have a name but no recorded phone. Blocking
+    // them drops real historical customers (and cascades to their visits/sales).
+    // Import the client and flag phone as a warning to backfill later, matching
+    // how the system already auto-creates phone-less clients from history.
+    if (required === "phone" && row.resource === "clients" && !empty(payload.name)) {
+      if (empty(payload.phone)) warnings.push("phone missing; client imported for backfill");
+      continue;
+    }
     if (empty(payload[required])) errors.push(`${required} is required`);
   }
   if (payload.branchId?.startsWith?.(UNMAPPED_BRANCH_PREFIX)) errors.push(`Unmapped branchName ${unmappedBranchName(payload.branchId)}`);
@@ -2131,6 +2184,11 @@ function importPreviewRows(preview, options) {
     if (row.status === "error") {
       counters.errorRows++;
       resourceCounter.errors++;
+      if (options.allowPartialImport === true) {
+        counters.skippedRows++;
+        resourceCounter.skipped++;
+        result = { action: "skipped", targetId: "", status: "error", message: row.message || "Critical row skipped by partial import" };
+      }
     } else {
       try {
         const rowImportTx = db.transaction(() => importOne(row, { ...options, context }));
@@ -2887,6 +2945,38 @@ function createContext(access, pendingRows = []) {
   for (const invoice of invoices) indexInvoiceRecord(context, invoice);
   for (const service of services) indexServiceRecord(context, service);
   return context;
+}
+
+const STAGED_REFERENCE_RESOURCES = ["clients", "staff", "services", "products", "invoices", "sales"];
+
+// Loads a large job's already-staged dependency rows so cross-chunk references
+// can be resolved during per-chunk analysis. Returns lightweight pending-row
+// shapes ({ resource, sourceExternalId, payload }) consumed by
+// addPendingDependencyReferences. Rows already imported/rolled back/cancelled
+// are excluded; status is otherwise irrelevant because references auto-create
+// from migrated history at import time.
+function loadJobStagedReferenceRows(jobId, access) {
+  const cleanJobId = cleanText(jobId);
+  if (!cleanJobId) return [];
+  const placeholders = STAGED_REFERENCE_RESOURCES.map(() => "?").join(", ");
+  let rows;
+  try {
+    rows = db.prepare(`
+      SELECT resource, sourceExternalId, payload
+        FROM migration_staging_rows
+       WHERE tenantId = ?
+         AND jobId = ?
+         AND resource IN (${placeholders})
+         AND status NOT IN ('imported', 'rolled_back', 'cancelled')
+    `).all(access.tenantId, cleanJobId, ...STAGED_REFERENCE_RESOURCES);
+  } catch {
+    return [];
+  }
+  return rows.map((row) => ({
+    resource: row.resource,
+    sourceExternalId: row.sourceExternalId,
+    payload: parseJsonField(row.payload, {})
+  }));
 }
 
 function addPendingDependencyReferences(context, pendingRows = []) {
@@ -3955,18 +4045,42 @@ function cancelLargeJobChunks(jobId, access) {
 
 function resetFailedLargeJobChunks(jobId, access, payload = {}) {
   const chunkNumber = integer(payload.chunkNumber, 0);
-  const where = ["tenantId = @tenantId", "jobId = @jobId", "status IN ('failed', 'imported_with_errors')"];
+  const retryCancelled = payload.includeCancelled === true;
+  const retryStatuses = retryCancelled
+    ? "'failed', 'imported_with_errors', 'cancelled'"
+    : "'failed', 'imported_with_errors'";
+  const where = ["tenantId = @tenantId", "jobId = @jobId", `status IN (${retryStatuses})`];
   const params = { tenantId: access.tenantId, jobId, ts: now() };
   if (chunkNumber) {
     where.push("chunkNumber = @chunkNumber");
     params.chunkNumber = chunkNumber;
   }
+  const whereSql = where.join(" AND ");
   const result = db.prepare(`
     UPDATE migration_file_chunks
        SET status = CASE WHEN errorRows > 0 THEN 'analyzed_with_errors' ELSE 'analyzed' END,
            failureReason = '', failedAt = '', updatedAt = @ts
-     WHERE ${where.join(" AND ")}
+     WHERE ${whereSql}
   `).run(params);
+  if (retryCancelled && result.changes) {
+    const chunkFilter = chunkNumber ? "AND chunkNumber = @chunkNumber" : "";
+    db.prepare(`
+      UPDATE migration_staging_rows
+         SET status = CASE
+           WHEN errors IS NOT NULL AND errors <> '' AND errors <> '[]' THEN 'error'
+           WHEN warnings IS NOT NULL AND warnings <> '' AND warnings <> '[]' THEN 'warning'
+           ELSE 'ok'
+         END,
+         updatedAt = @ts
+       WHERE tenantId = @tenantId
+         AND jobId = @jobId
+         AND status = 'cancelled'
+         AND chunkId IN (
+           SELECT id FROM migration_file_chunks
+           WHERE tenantId = @tenantId AND jobId = @jobId ${chunkFilter}
+         )
+    `).run(params);
+  }
   return result.changes || 0;
 }
 function processQueuedLargeMigrationJobs(payload = {}, access = {}) {
@@ -3987,7 +4101,7 @@ function processQueuedLargeMigrationJobs(payload = {}, access = {}) {
   for (const job of rows) {
     const jobAccess = workerAccessForJob(job, { ...access, workerId });
     const settings = parseJsonField(job.settings, {});
-    const worker = { ...settings.worker, ...payload, workerId, lockTimeoutMs, workerTick: true };
+    const worker = { ...settings, ...settings.worker, ...payload, workerId, lockTimeoutMs, workerTick: true };
     if (!claimLargeMigrationJob(job, worker, jobAccess)) {
       results.push({ jobId: job.id, ok: false, claimed: false, status: job.status });
       continue;
@@ -4017,6 +4131,7 @@ function workerSettings(payload = {}) {
     maxChunks: Math.max(1, Math.min(100, integer(payload.maxChunks, 5))),
     stopOnError: payload.stopOnError !== false,
     skipApprovalGate: payload.skipApprovalGate === true,
+    allowPartialImport: payload.allowPartialImport === true,
     migrationMode: payload.migrationMode !== false,
     queuedBy: cleanText(payload.queuedBy || "")
   };
@@ -4087,13 +4202,32 @@ function releaseLargeMigrationJob(jobId, worker, access) {
       resumeToken: `job:${jobId}:queued:${now()}`
     }, access);
   } else {
-    updateDirectRow("migration_large_jobs", jobId, {
-      status: "paused",
-      failureReason: "No analyzed chunks ready",
-      workerId: "",
-      lockedAt: "",
-      heartbeatAt: ""
-    }, access);
+    const importedSummary = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status IN ('imported_with_errors', 'skipped_with_errors') THEN 1 ELSE 0 END) AS withErrors
+      FROM migration_file_chunks
+      WHERE tenantId = @tenantId AND jobId = @jobId
+        AND status IN ('imported', 'imported_with_errors', 'skipped_with_errors')
+    `).get({ tenantId: access.tenantId, jobId }) || { total: 0, withErrors: 0 };
+    if (importedSummary.total > 0) {
+      updateDirectRow("migration_large_jobs", jobId, {
+        status: importedSummary.withErrors > 0 ? "completed_with_errors" : "completed",
+        completedAt: now(),
+        failureReason: "",
+        workerId: "",
+        lockedAt: "",
+        heartbeatAt: ""
+      }, access);
+    } else {
+      updateDirectRow("migration_large_jobs", jobId, {
+        status: "paused",
+        failureReason: "No analyzed chunks ready",
+        workerId: "",
+        lockedAt: "",
+        heartbeatAt: ""
+      }, access);
+    }
   }
   return largeMigrationJob(jobId, access);
 }
@@ -4112,7 +4246,7 @@ function assertLargeJobReadyForImport(jobId, payload = {}, access) {
   const chunks = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId ORDER BY chunkNumber ASC").all({ tenantId: access.tenantId, jobId }).map(deserializeDirectRow);
   if (!chunks.length) throw migrationJobNotReady("Large migration job has no chunks to import.");
   const readyStatuses = new Set(["analyzed", "analyzed_with_errors", "failed"]);
-  const closedStatuses = new Set(["imported", "imported_with_errors", "rolled_back", "cancelled"]);
+  const closedStatuses = new Set(["imported", "imported_with_errors", "skipped_with_errors", "rolled_back", "cancelled"]);
   const readyChunks = chunks.filter((chunk) => readyStatuses.has(chunk.status));
   const blockingChunks = chunks.filter((chunk) => !readyStatuses.has(chunk.status) && !closedStatuses.has(chunk.status));
   if (blockingChunks.length && payload.allowPartialImport !== true) {
@@ -4170,9 +4304,16 @@ function importStagedLargeJobChunk(jobId, chunkNumber, payload, access) {
   }
   const preview = stagedPreviewForChunk(job, chunk, access);
   if (!preview.allRows.length) throw badRequest("No staged rows found for this chunk.");
+  const settings = parseJsonField(job.settings, {});
+  const allowPartialImport = payload.allowPartialImport === true || settings.allowPartialImport === true || settings.worker?.allowPartialImport === true;
   const gate = migrationApprovalGate(access, preview.summary, approvalIdentityForJob(job, preview.summary));
-  if ((!gate.allowed || preview.summary.errorRows) && payload.skipApprovalGate !== true) {
-    throw badRequest(`Final staged chunk import blocked: ${gate.reason}`);
+  const hasCriticalErrors = Number(preview.summary.errorRows || 0) > 0;
+  const approvalReady = gate.approved || payload.skipApprovalGate === true;
+  if (hasCriticalErrors && !allowPartialImport) {
+    throw badRequest("Final staged chunk import blocked: critical_errors_present");
+  }
+  if (!approvalReady) {
+    throw badRequest("Final staged chunk import blocked: owner_approval_required_for_this_source");
   }
   const batchId = makeId("batch");
   insertMigrationRow("migration_import_batches", {
@@ -4192,12 +4333,16 @@ function importStagedLargeJobChunk(jobId, chunkNumber, payload, access) {
     jobId,
     sourceSoftware: job.sourceSoftware,
     migrationMode: payload.migrationMode !== false,
-    duplicateDecisions: stagedDuplicateDecisions(job.id, chunk.id, access)
+    duplicateDecisions: stagedDuplicateDecisions(job.id, chunk.id, access),
+    allowPartialImport
   }));
   const result = withBusyRetry(() => importTx());
+  const chunkStatus = result.importedRows > 0
+    ? (result.errorRows ? "imported_with_errors" : "imported")
+    : (allowPartialImport && result.errorRows ? "skipped_with_errors" : "imported");
   const summary = { ...preview.summary, ...result, completedAt: now(), chunkNumber: chunk.chunkNumber };
   updateDirectRow("migration_file_chunks", chunk.id, {
-    status: result.errorRows ? "imported_with_errors" : "imported",
+    status: chunkStatus,
     processedRows: preview.summary.totalRows,
     validRows: preview.summary.validRows,
     warningRows: result.warningRows,
@@ -4468,7 +4613,15 @@ function largeMigrationJob(id, access) {
   if (!row) return null;
   const chunks = db.prepare("SELECT * FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId ORDER BY chunkNumber ASC").all({ tenantId: access.tenantId, jobId: id }).map(deserializeDirectRow);
   const reconciliations = db.prepare("SELECT * FROM migration_reconciliation_snapshots WHERE tenantId = @tenantId AND jobId = @jobId ORDER BY createdAt DESC LIMIT 20").all({ tenantId: access.tenantId, jobId: id }).map(deserializeDirectRow);
-  return { ...deserializeDirectRow(row), chunks, reconciliations };
+  const base = deserializeDirectRow(row);
+  // The GET response must ALWAYS carry analyzer diagnostics so the UI can verify
+  // the new analyzer ran. Prefer what recompute persisted on the job summary;
+  // otherwise aggregate live from the chunk summaries (fallback for jobs whose
+  // summary wasn't re-stamped). Returns null only when chunks truly lack them
+  // (i.e. an old-analyzer job), which the UI surfaces as "version missing".
+  const diagnostics = base.summary?.diagnostics || aggregateJobDiagnostics(id, access) || null;
+  const summary = diagnostics ? { ...(base.summary || {}), diagnostics } : base.summary;
+  return { ...base, summary, diagnostics, chunks, reconciliations };
 }
 
 function requireLargeMigrationJob(id, access) {
@@ -4529,7 +4682,7 @@ function replaceStagingRows(jobId, chunkId, chunkNumber, preview, access, duplic
       replaceTx();
       return;
     } catch (err) {
-      if (err.message?.includes("UNIQUE constraint") && attempts < MAX_ATTEMPTS) continue;
+      if (err.message?.includes("UNIQUE constraint failed: migration_staging_rows.id") && attempts < MAX_ATTEMPTS) continue;
       throw err;
     }
   }
@@ -4545,21 +4698,54 @@ function recomputeLargeJobTotals(jobId, access) {
       COALESCE(SUM(errorRows), 0) errorRows,
       COALESCE(SUM(importedRows), 0) importedRows,
       COALESCE(SUM(skippedRows), 0) skippedRows,
+      COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) failedChunks,
       COALESCE(MAX(chunkNumber), 0) currentChunk
     FROM migration_file_chunks
     WHERE tenantId = @tenantId AND jobId = @jobId
   `).get({ tenantId: access.tenantId, jobId });
+  const { failedChunks: _failedChunks, ...persistedTotals } = totals;
   const imported = Number(totals.importedRows || 0);
   const processed = Number(totals.processedRows || 0);
   const total = Number(totals.totalRows || 0);
-  const status = imported > 0 && processed >= total && total > 0 ? "completed" : processed > 0 ? "processing" : "draft";
+  const errors = Number(totals.errorRows || 0);
+  const failedChunks = Number(totals.failedChunks || 0);
+  const status = failedChunks > 0
+    ? "failed"
+    : processed >= total && total > 0
+      ? (errors > 0 ? "completed_with_errors" : "completed")
+      : processed > 0 ? "processing" : "draft";
+  const diagnostics = aggregateJobDiagnostics(jobId, access);
+  const summary = diagnostics ? { ...totals, diagnostics } : totals;
   updateDirectRow("migration_large_jobs", jobId, {
-    ...totals,
+    ...persistedTotals,
     status,
-    summary: totals,
+    summary,
     resumeToken: `job:${jobId}:chunk:${totals.currentChunk || 0}`,
-    completedAt: status === "completed" ? now() : ""
+    completedAt: status === "completed" || status === "completed_with_errors" ? now() : ""
   }, access);
+}
+
+// Aggregates per-chunk analyzer diagnostics into a single job-level block so the
+// UI can confirm the new analyzer ran (version stamp), see cross-chunk reference
+// counts, and verify this is a fresh job (jobId + generatedAt) — not a cached one.
+function aggregateJobDiagnostics(jobId, access) {
+  const chunkRows = db.prepare(
+    "SELECT summary FROM migration_file_chunks WHERE tenantId = @tenantId AND jobId = @jobId"
+  ).all({ tenantId: access.tenantId, jobId });
+  const diags = chunkRows.map((r) => parseJsonField(r.summary, {})?.diagnostics).filter(Boolean);
+  if (!diags.length) return null;
+  const sum = (key) => diags.reduce((acc, d) => acc + Number(d[key] || 0), 0);
+  return {
+    analyzerFixVersion: diags.find((d) => d.analyzerFixVersion)?.analyzerFixVersion || "",
+    adapter: diags.find((d) => d.adapter)?.adapter || "",
+    sourceSoftware: diags.find((d) => d.sourceSoftware)?.sourceSoftware || "",
+    largeMode: true,
+    jobId,
+    generatedAt: now(),
+    crossChunkReferencesLoaded: sum("crossChunkReferencesLoaded"),
+    paymentInvoiceUnresolved: sum("paymentInvoiceUnresolved"),
+    clientPhoneMissing: sum("clientPhoneMissing")
+  };
 }
 
 function insertDirectRow(table, data) {
