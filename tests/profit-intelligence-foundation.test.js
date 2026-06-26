@@ -6,6 +6,8 @@ const serverApp = readFileSync("server/app.js", "utf8");
 const route = readFileSync("server/routes/profit-intelligence.routes.js", "utf8");
 const service = readFileSync("server/services/profit-intelligence.service.js", "utf8");
 const bookingService = readFileSync("server/services/profit-aware-booking.service.js", "utf8");
+const actionService = readFileSync("server/services/profit-action-queue.service.js", "utf8");
+const actionSchema = readFileSync("server/services/profit-action-queue-schema.service.js", "utf8");
 const appRoutes = readFileSync("src/app/app.routes.ts", "utf8");
 const appComponent = readFileSync("src/app/app.component.ts", "utf8");
 const page = readFileSync("src/app/pages/profit-intelligence.component.ts", "utf8");
@@ -270,12 +272,52 @@ test("Profit Intelligence exposes Customer Profit Score and Membership Liability
   }
 });
 
+test("Profit Intelligence exposes Autonomous Profit Action Queue", () => {
+  assert.ok(serverApp.includes("ensureProfitActionQueueSchema"), "app should ensure profit action queue schema");
+  assert.ok(actionSchema.includes("CREATE TABLE IF NOT EXISTS profit_action_queue"), "profit action queue table should be add-only");
+  for (const field of [
+    "id",
+    "tenantId",
+    "branchId",
+    "type",
+    "title",
+    "message",
+    "impactPaise",
+    "priority",
+    "status",
+    "sourceType",
+    "sourceId",
+    "payloadJson",
+    "approvedAt",
+    "completedAt"
+  ]) {
+    assert.ok(actionSchema.includes(field) || actionService.includes(field) || page.includes(field), `${field} should be part of profit action queue`);
+  }
+  for (const endpoint of [
+    "/profit-intelligence/actions",
+    "/profit-intelligence/actions/:id/approve",
+    "/profit-intelligence/actions/:id/complete",
+    "/profit-intelligence/actions/:id/dismiss"
+  ]) {
+    assert.ok(route.includes(endpoint), `${endpoint} should be exposed`);
+  }
+  assert.match(route, /\/profit-intelligence\/actions[\s\S]*requirePermission\("read",\s*\(\) => "finance"\)/, "action list should require read finance");
+  assert.match(route, /\/profit-intelligence\/actions[\s\S]*requirePermission\("write",\s*\(\) => "finance"\)/, "action mutations should require write finance");
+  for (const source of ["low_margin_service", "high_wastage", "high_expense", "pricing_recommendation", "discount_abuse", "membership_liability_risk"]) {
+    assert.ok(actionService.includes(source), `${source} should feed action queue`);
+  }
+  for (const label of ["Autonomous Profit Action Queue", "AI suggestions ready for execution", "Expected Impact", "Approve", "Complete", "Dismiss"]) {
+    assert.ok(page.includes(label), `${label} should be visible for action queue`);
+  }
+});
+
 test("Profit Intelligence page is routed and visible in Finance navigation", () => {
   assert.match(appRoutes, /profit-intelligence[\s\S]*ProfitIntelligenceComponent/, "Angular route should load ProfitIntelligenceComponent");
   assert.ok(appComponent.includes("path: '/profit-intelligence'"), "Finance navigation should include the page");
   assert.ok(page.includes("profit-intelligence/summary"), "page should call the summary endpoint");
   assert.ok(page.includes("profit-intelligence/breakdown"), "page should call the breakdown endpoint");
   assert.ok(page.includes("profit-intelligence/booking-recommendations"), "page should call booking recommendations endpoint");
+  assert.ok(page.includes("profit-intelligence/actions"), "page should call profit action queue endpoint");
   assert.ok(page.includes("grossMarginBps"), "page should expose gross margin");
   assert.ok(page.includes("netMarginBps"), "page should expose net margin");
   for (const label of ["Service wise margin", "Staff wise profitability", "Branch wise profit", "Category wise margin"]) {

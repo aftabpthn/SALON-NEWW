@@ -299,6 +299,40 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </article>
       </section>
 
+      <section class="action-grid">
+        <article class="table-panel action-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Autonomous Profit Action Queue</p>
+              <h2>AI suggestions ready for execution</h2>
+            </div>
+            <span>{{ actionQueue().length || 0 }} open actions</span>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Priority</th><th>Action</th><th>Source</th><th>Expected Impact</th><th>Status</th><th>Controls</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let action of actionQueue()">
+                  <td><strong class="severity-pill" [ngClass]="'severity-' + priorityClass(action.priority)">{{ action.priority }}</strong></td>
+                  <td><strong>{{ action.title }}</strong><span>{{ action.message }}</span></td>
+                  <td>{{ action.sourceType }}<span>{{ action.sourceId || '-' }}</span></td>
+                  <td><strong>{{ paise(action.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ action.status }}</td>
+                  <td>
+                    <div class="action-buttons">
+                      <button type="button" (click)="actionTransition(action, 'approve')" [disabled]="actionBusy() === action.id || action.status !== 'pending'">Approve</button>
+                      <button type="button" (click)="actionTransition(action, 'complete')" [disabled]="actionBusy() === action.id || action.status === 'completed' || action.status === 'dismissed'">Complete</button>
+                      <button type="button" (click)="actionTransition(action, 'dismiss')" [disabled]="actionBusy() === action.id || action.status === 'completed' || action.status === 'dismissed'">Dismiss</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!actionQueue().length"><td colspan="6" class="empty-cell">No profit actions queued yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <section class="customer-score-grid" *ngIf="summary() as report">
         <article class="table-panel customer-score-panel">
           <header>
@@ -721,6 +755,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .leak-grid { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 12px 14px; background: #fff; border-bottom: 1px solid #d9e1ea; }
     .leak-panel { border-top: 3px solid #991b1b; }
     .leak-panel table { min-width: 1040px; }
+    .action-grid { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 12px 14px; background: #fff; border-bottom: 1px solid #d9e1ea; }
+    .action-panel { border-top: 3px solid #0f8a7d; }
+    .action-panel table { min-width: 1040px; }
+    .action-buttons { display: flex; flex-wrap: wrap; gap: 6px; min-width: 210px; }
+    .action-buttons button { border: 1px solid #cbd5e1; background: #fff; color: #143d59; padding: 7px 9px; font-weight: 900; cursor: pointer; }
+    .action-buttons button:disabled { opacity: 0.45; cursor: not-allowed; }
     .customer-score-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 14px; background: #eef4f8; border-bottom: 1px solid #d9e1ea; }
     .customer-score-panel { border-top: 3px solid #143d59; }
     .liability-panel { border-top: 3px solid #8a6d0f; }
@@ -781,8 +821,10 @@ export class ProfitIntelligenceComponent implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);
   readonly breakdown = signal<ApiRecord | null>(null);
   readonly bookingRecommendations = signal<ApiRecord | null>(null);
+  readonly actionQueue = signal<ApiRecord[]>([]);
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly actionBusy = signal('');
   readonly today = new Date().toISOString().slice(0, 10);
   readonly filters = this.fb.group({
     from: [`${this.today.slice(0, 7)}-01`],
@@ -807,18 +849,43 @@ export class ProfitIntelligenceComponent implements OnInit {
     forkJoin({
       report: this.api.list<ApiRecord>('profit-intelligence/summary', this.filters.value),
       detail: this.api.list<ApiRecord>('profit-intelligence/breakdown', this.filters.value),
-      booking: this.api.list<ApiRecord>('profit-intelligence/booking-recommendations', this.filters.value)
+      booking: this.api.list<ApiRecord>('profit-intelligence/booking-recommendations', this.filters.value),
+      actions: this.api.list<ApiRecord[]>('profit-intelligence/actions', this.filters.value)
     }).subscribe({
-      next: ({ report, detail, booking }) => {
+      next: ({ report, detail, booking, actions }) => {
         this.summary.set(report);
         this.breakdown.set(detail);
         this.bookingRecommendations.set(booking);
+        this.actionQueue.set(actions || []);
         this.loading.set(false);
       },
       error: (error) => {
         this.error.set(this.api.errorText(error, 'Unable to load Profit Intelligence'));
         this.loading.set(false);
       }
+    });
+  }
+
+  actionTransition(action: ApiRecord, transition: 'approve' | 'complete' | 'dismiss'): void {
+    const id = String(action?.id || '');
+    if (!id) return;
+    this.actionBusy.set(id);
+    this.api.post<ApiRecord>(`profit-intelligence/actions/${id}/${transition}`, {}).subscribe({
+      next: () => {
+        this.actionBusy.set('');
+        this.refreshActions();
+      },
+      error: (error) => {
+        this.actionBusy.set('');
+        this.error.set(this.api.errorText(error, 'Unable to update profit action'));
+      }
+    });
+  }
+
+  refreshActions(): void {
+    this.api.list<ApiRecord[]>('profit-intelligence/actions', this.filters.value).subscribe({
+      next: (actions) => this.actionQueue.set(actions || []),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to refresh profit actions'))
     });
   }
 
@@ -838,5 +905,10 @@ export class ProfitIntelligenceComponent implements OnInit {
   severityClass(value: unknown): string {
     const text = String(value || 'green').toLowerCase();
     return text === 'high' ? 'red' : text === 'medium' ? 'amber' : text === 'low' ? 'green' : text;
+  }
+
+  priorityClass(value: unknown): string {
+    const text = String(value || 'medium').toLowerCase();
+    return text === 'high' ? 'red' : text === 'low' ? 'green' : 'amber';
   }
 }
