@@ -1,6 +1,7 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
+import { forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -111,6 +112,107 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </article>
       </section>
+
+      <section class="drilldown-grid" *ngIf="breakdown() as detail">
+        <article class="table-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Service profit</p>
+              <h2>Service wise margin</h2>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Sale</th><th>Product Cost</th><th>Staff Cost</th><th>Profit</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of detail.serviceProfit || []">
+                  <td><strong>{{ row.serviceName }}</strong><span>{{ row.category }}</span></td>
+                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                </tr>
+                <tr *ngIf="!(detail.serviceProfit || []).length"><td colspan="5" class="empty-cell">No service profit rows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="table-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Staff profit</p>
+              <h2>Staff wise profitability</h2>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Staff</th><th>Revenue</th><th>Commission</th><th>Product Usage</th><th>Net Profit</th><th>Avg Ticket</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of detail.staffProfit || []">
+                  <td><strong>{{ row.staffName }}</strong></td>
+                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.avgTicketPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                </tr>
+                <tr *ngIf="!(detail.staffProfit || []).length"><td colspan="6" class="empty-cell">No staff profit rows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="table-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Branch P&amp;L</p>
+              <h2>Branch wise profit</h2>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Branch</th><th>Revenue</th><th>COGS</th><th>Staff</th><th>Expenses</th><th>Net</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of detail.branchProfit || []">
+                  <td><strong>{{ row.branchName }}</strong><span>{{ row.invoiceCount }} invoices</span></td>
+                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.operatingExpensePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                </tr>
+                <tr *ngIf="!(detail.branchProfit || []).length"><td colspan="6" class="empty-cell">No branch profit rows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="table-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Category profit</p>
+              <h2>Category wise margin</h2>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Category</th><th>Revenue</th><th>Product Cost</th><th>Staff Cost</th><th>Profit</th><th>Margin</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of detail.categoryProfit || []">
+                  <td><strong>{{ row.category }}</strong><span>{{ row.itemCount }} items</span></td>
+                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ percent(row.netMarginBps) }}</td>
+                </tr>
+                <tr *ngIf="!(detail.categoryProfit || []).length"><td colspan="6" class="empty-cell">No category profit rows.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
     </section>
   `,
   styles: [`
@@ -130,7 +232,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .metrics-grid span, .metrics-grid small, header > span { color: #64748b; font-size: 12px; font-weight: 800; }
     .metrics-grid strong { font-size: 20px; line-height: 1; white-space: nowrap; }
     .insight-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px 14px; }
+    .drilldown-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 14px 14px; }
     .panel { background: #fff; border: 1px solid #d9e1ea; padding: 12px; display: grid; gap: 10px; align-content: start; }
+    .table-panel { background: #fff; border: 1px solid #d9e1ea; padding: 12px; display: grid; gap: 10px; align-content: start; min-width: 0; }
     header { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
     .eyebrow { margin: 0 0 4px; color: #5d6f87; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .rank-list { display: grid; border: 1px solid #d9e1ea; }
@@ -141,9 +245,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .source-grid div { display: grid; gap: 4px; border: 1px solid #d9e1ea; padding: 10px; }
     .warnings { display: grid; gap: 6px; }
     .warnings p, .empty-row { margin: 0; color: #9a3412; background: #fff7ed; border: 1px solid #fed7aa; padding: 9px 10px; font-size: 12px; font-weight: 800; }
+    .table-wrap { overflow: auto; border: 1px solid #d9e1ea; }
+    table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
+    th { background: #f1f5f9; color: #4b5f78; text-align: left; font-size: 11px; text-transform: uppercase; padding: 9px 10px; border-bottom: 1px solid #d9e1ea; }
+    td { padding: 10px; border-bottom: 1px solid #d9e1ea; vertical-align: top; }
+    td span { display: block; color: #64748b; font-size: 12px; margin-top: 3px; }
+    .empty-cell { color: #64748b; text-align: center; font-weight: 800; }
     @media (max-width: 1100px) {
       .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .insight-grid { grid-template-columns: 1fr; }
+      .insight-grid, .drilldown-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .page-title, header { align-items: flex-start; flex-direction: column; }
@@ -154,6 +264,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 })
 export class ProfitIntelligenceComponent implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);
+  readonly breakdown = signal<ApiRecord | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
   readonly today = new Date().toISOString().slice(0, 10);
@@ -171,9 +282,13 @@ export class ProfitIntelligenceComponent implements OnInit {
   load(): void {
     this.loading.set(true);
     this.error.set('');
-    this.api.list<ApiRecord>('profit-intelligence/summary', this.filters.value).subscribe({
-      next: (report) => {
+    forkJoin({
+      report: this.api.list<ApiRecord>('profit-intelligence/summary', this.filters.value),
+      detail: this.api.list<ApiRecord>('profit-intelligence/breakdown', this.filters.value)
+    }).subscribe({
+      next: ({ report, detail }) => {
         this.summary.set(report);
+        this.breakdown.set(detail);
         this.loading.set(false);
       },
       error: (error) => {

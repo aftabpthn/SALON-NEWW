@@ -12,3 +12,11 @@ profitIntelligenceRouter.get(
     res.json(profitIntelligenceService.summary(req.query, req.access));
   })
 );
+
+profitIntelligenceRouter.get(
+  "/profit-intelligence/breakdown",
+  requirePermission("read", () => "finance"),
+  asyncHandler((req, res) => {
+    res.json(profitIntelligenceService.breakdown(req.query, req.access));
+  })
+);

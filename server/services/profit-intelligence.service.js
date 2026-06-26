@@ -3,6 +3,7 @@ import { tenantService } from "./tenant.service.js";
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const OPERATING_EXPENSE_LIMIT = 1000;
+const BREAKDOWN_LIMIT = 12;
 
 const toPaise = (value) => Math.round((Number(value) || 0) * 100);
 const fromPaise = (value) => Math.round(Number(value || 0)) / 100;
@@ -87,6 +88,48 @@ function lineAmountPaise(line = {}) {
   const direct = line.total ?? line.amount ?? line.netAmount ?? line.lineTotal;
   if (direct !== undefined && direct !== null && direct !== "") return toPaise(direct);
   return toPaise(Number(line.price || line.rate || 0) * Number(line.quantity || line.qty || 1));
+}
+
+function lineName(line = {}) {
+  return String(line.name || line.serviceName || line.productName || line.itemName || line.id || "Unmapped").trim() || "Unmapped";
+}
+
+function lineServiceId(line = {}) {
+  return String(line.serviceId || line.service_id || line.id || "").trim();
+}
+
+function lineCategory(line = {}, serviceLookup = new Map()) {
+  const serviceId = lineServiceId(line);
+  const service = serviceId ? serviceLookup.get(serviceId) : null;
+  const category = line.category || service?.category || (revenueType(line) === "product" ? "Products" : "Services");
+  return String(category || "Uncategorized").trim() || "Uncategorized";
+}
+
+function mapKey(parts = []) {
+  return parts.map((part) => String(part || "").trim().toLowerCase()).join("|");
+}
+
+function addAmount(map, key, seed, field, amountPaise) {
+  if (!map.has(key)) map.set(key, { ...seed });
+  const row = map.get(key);
+  row[field] = Number(row[field] || 0) + Number(amountPaise || 0);
+  return row;
+}
+
+function marginRow(row = {}) {
+  const revenuePaise = Number(row.revenuePaise || 0);
+  const productCostPaise = Number(row.productCostPaise || 0);
+  const staffCostPaise = Number(row.staffCostPaise || 0);
+  const operatingExpensePaise = Number(row.operatingExpensePaise || 0);
+  const grossProfitPaise = revenuePaise - productCostPaise;
+  const netProfitPaise = grossProfitPaise - staffCostPaise - operatingExpensePaise;
+  return {
+    ...row,
+    grossProfitPaise,
+    netProfitPaise,
+    grossMarginBps: marginBps(grossProfitPaise, revenuePaise),
+    netMarginBps: marginBps(netProfitPaise, revenuePaise)
+  };
 }
 
 function parseJsonArray(value) {
@@ -186,11 +229,39 @@ export class ProfitIntelligenceService {
     };
   }
 
+  breakdown(query = {}, access = {}) {
+    const params = periodParams(query, access);
+    const invoices = this.invoiceRows(params);
+    const expenseRows = this.operatingExpenseRows(params);
+    const expenseTotals = this.classifiedExpenses(expenseRows);
+    const consumeRows = this.productConsumeRows(params);
+    const serviceLookup = this.serviceLookup(params);
+    const branchLookup = this.branchLookup(params);
+    const salesCommission = this.salesCommissionRows(params);
+    const payoutRows = this.staffPayoutRows(params);
+    const journalCogsRows = this.journalCogsRows(params);
+    const useJournalCogs = journalCogsRows.reduce((sum, row) => sum + Number(row.productCostPaise || 0), 0) > 0;
+
+    return {
+      period: { from: params.from, to: params.to, branchId: params.branchId },
+      serviceProfit: this.serviceProfitRows({ invoices, consumeRows, serviceLookup }),
+      staffProfit: this.staffProfitRows({ invoices, consumeRows }),
+      branchProfit: this.branchProfitRows({ invoices, expenseRows, consumeRows, salesCommission, payoutRows, journalCogsRows, useJournalCogs, branchLookup }),
+      categoryProfit: this.categoryProfitRows({ invoices, consumeRows, serviceLookup }),
+      sourceHealth: {
+        cogsSource: useJournalCogs ? "journalEntryLines" : consumeRows.length ? "productConsumeDrafts" : expenseTotals.productCostPaise > 0 ? "financeExpenses" : "missing",
+        staffCostSource: payoutRows.length ? "financeStaffPayouts" : salesCommission.length ? "salesCommission" : expenseTotals.staffCostPaise > 0 ? "financeExpenses" : "missing"
+      }
+    };
+  }
+
   invoiceRows(params) {
     if (!tableExists("invoices")) return [];
     return safeAll(`
       SELECT i.id, i.invoiceNumber, i.lineItems, i.total, i.subtotal, i.discount, i.status,
-        COALESCE(NULLIF(i.branchId, ''), s.branchId, '') AS branchId
+        COALESCE(NULLIF(i.branchId, ''), s.branchId, '') AS branchId,
+        COALESCE(s.staffId, '') AS staffId,
+        COALESCE(s.commissionTotal, 0) AS commissionTotal
       FROM invoices i
       LEFT JOIN sales s ON s.id = i.saleId AND s.tenantId = i.tenantId
       WHERE i.tenantId = @tenantId
@@ -199,6 +270,195 @@ export class ProfitIntelligenceService {
         AND (@branchId = '' OR COALESCE(NULLIF(i.branchId, ''), s.branchId, '') = @branchId)
       ORDER BY i.createdAt DESC
     `, params);
+  }
+
+  serviceProfitRows({ invoices = [], consumeRows = [], serviceLookup = new Map() }) {
+    const rows = new Map();
+    for (const invoice of invoices) {
+      const lines = parseJsonArray(invoice.lineItems);
+      const lineTotalPaise = lines.reduce((sum, line) => sum + lineAmountPaise(line), 0) || toPaise(invoice.total);
+      for (const line of lines) {
+        const serviceId = lineServiceId(line);
+        const service = serviceId ? serviceLookup.get(serviceId) : null;
+        const serviceName = service?.name || lineName(line);
+        const amountPaise = lineAmountPaise(line);
+        const staffCostPaise = lineTotalPaise ? Math.round(toPaise(invoice.commissionTotal) * amountPaise / lineTotalPaise) : 0;
+        const key = serviceId || mapKey([serviceName]);
+        const row = addAmount(rows, key, {
+          serviceId,
+          serviceName,
+          category: lineCategory(line, serviceLookup),
+          revenuePaise: 0,
+          productCostPaise: 0,
+          staffCostPaise: 0,
+          invoiceCount: 0
+        }, "revenuePaise", amountPaise);
+        row.staffCostPaise += staffCostPaise;
+        row.invoiceCount += 1;
+      }
+    }
+    for (const consume of consumeRows) {
+      const key = consume.serviceId || mapKey([consume.serviceName]);
+      const row = addAmount(rows, key, {
+        serviceId: consume.serviceId,
+        serviceName: consume.serviceName || "Unmapped service",
+        category: serviceLookup.get(consume.serviceId)?.category || "Services",
+        revenuePaise: 0,
+        productCostPaise: 0,
+        staffCostPaise: 0,
+        invoiceCount: 0
+      }, "productCostPaise", consume.productCostPaise);
+      if (!row.serviceName || row.serviceName === "Unmapped service") row.serviceName = consume.serviceName || row.serviceName;
+    }
+    return [...rows.values()].map(marginRow).sort((a, b) => b.netProfitPaise - a.netProfitPaise).slice(0, BREAKDOWN_LIMIT);
+  }
+
+  staffProfitRows({ invoices = [], consumeRows = [] }) {
+    const rows = new Map();
+    for (const invoice of invoices) {
+      const lines = parseJsonArray(invoice.lineItems);
+      const lineTotalPaise = lines.reduce((sum, line) => sum + lineAmountPaise(line), 0) || toPaise(invoice.total);
+      for (const line of lines) {
+        const amountPaise = lineAmountPaise(line);
+        const staffCostPaise = lineTotalPaise ? Math.round(toPaise(invoice.commissionTotal) * amountPaise / lineTotalPaise) : 0;
+        for (const split of this.staffSplits(line, invoice, amountPaise, staffCostPaise)) {
+          const key = split.staffId || mapKey([split.staffName]) || "unassigned";
+          const row = addAmount(rows, key, {
+            staffId: split.staffId,
+            staffName: split.staffName,
+            revenuePaise: 0,
+            productCostPaise: 0,
+            staffCostPaise: 0,
+            clientCount: 0,
+            ticketCount: 0
+          }, "revenuePaise", split.revenuePaise);
+          row.staffCostPaise += split.staffCostPaise;
+          row.ticketCount += 1;
+        }
+      }
+    }
+    for (const consume of consumeRows) {
+      const key = consume.staffId || mapKey([consume.staffName]) || "unassigned";
+      const row = addAmount(rows, key, {
+        staffId: consume.staffId,
+        staffName: consume.staffName || "Unassigned",
+        revenuePaise: 0,
+        productCostPaise: 0,
+        staffCostPaise: 0,
+        clientCount: 0,
+        ticketCount: 0
+      }, "productCostPaise", consume.productCostPaise);
+      if (!row.staffName || row.staffName === "Unassigned") row.staffName = consume.staffName || row.staffName;
+    }
+    return [...rows.values()]
+      .map((row) => marginRow({ ...row, avgTicketPaise: row.ticketCount ? Math.round(row.revenuePaise / row.ticketCount) : 0 }))
+      .sort((a, b) => b.netProfitPaise - a.netProfitPaise)
+      .slice(0, BREAKDOWN_LIMIT);
+  }
+
+  branchProfitRows({ invoices = [], expenseRows = [], consumeRows = [], salesCommission = [], payoutRows = [], journalCogsRows = [], useJournalCogs = false, branchLookup = new Map() }) {
+    const rows = new Map();
+    const hasConsumeCogs = consumeRows.some((row) => Number(row.productCostPaise || 0) > 0);
+    const hasPayouts = payoutRows.some((row) => Number(row.staffCostPaise || 0) > 0);
+    const hasSalesCommission = salesCommission.some((row) => Number(row.staffCostPaise || 0) > 0);
+    const seed = (branchId) => ({
+      branchId,
+      branchName: branchLookup.get(branchId)?.name || branchId || "All branches",
+      revenuePaise: 0,
+      productCostPaise: 0,
+      staffCostPaise: 0,
+      operatingExpensePaise: 0,
+      invoiceCount: 0
+    });
+    for (const invoice of invoices) {
+      const branchId = invoice.branchId || "";
+      const row = addAmount(rows, branchId, seed(branchId), "revenuePaise", toPaise(invoice.total));
+      row.invoiceCount += 1;
+    }
+    for (const expense of expenseRows) {
+      const branchId = expense.branchId || "";
+      const bucket = classifyExpense(expense.category);
+      if (bucket === "operatingExpense") {
+        addAmount(rows, branchId, seed(branchId), "operatingExpensePaise", toPaise(expense.amount));
+      } else if (bucket === "productCost" && !useJournalCogs && !hasConsumeCogs) {
+        addAmount(rows, branchId, seed(branchId), "productCostPaise", toPaise(expense.amount));
+      } else if (bucket === "staffCost" && !hasPayouts && !hasSalesCommission) {
+        addAmount(rows, branchId, seed(branchId), "staffCostPaise", toPaise(expense.amount));
+      }
+    }
+    if (useJournalCogs) {
+      for (const cogs of journalCogsRows) addAmount(rows, cogs.branchId || "", seed(cogs.branchId || ""), "productCostPaise", cogs.productCostPaise);
+    } else {
+      for (const consume of consumeRows) addAmount(rows, consume.branchId || "", seed(consume.branchId || ""), "productCostPaise", consume.productCostPaise);
+    }
+    if (payoutRows.length) {
+      for (const payout of payoutRows) addAmount(rows, payout.branchId || "", seed(payout.branchId || ""), "staffCostPaise", payout.staffCostPaise);
+    } else {
+      for (const commission of salesCommission) addAmount(rows, commission.branchId || "", seed(commission.branchId || ""), "staffCostPaise", commission.staffCostPaise);
+    }
+    return [...rows.values()].map(marginRow).sort((a, b) => b.netProfitPaise - a.netProfitPaise).slice(0, BREAKDOWN_LIMIT);
+  }
+
+  categoryProfitRows({ invoices = [], consumeRows = [], serviceLookup = new Map() }) {
+    const rows = new Map();
+    for (const invoice of invoices) {
+      const lines = parseJsonArray(invoice.lineItems);
+      const lineTotalPaise = lines.reduce((sum, line) => sum + lineAmountPaise(line), 0) || toPaise(invoice.total);
+      for (const line of lines) {
+        const category = lineCategory(line, serviceLookup);
+        const amountPaise = lineAmountPaise(line);
+        const staffCostPaise = lineTotalPaise ? Math.round(toPaise(invoice.commissionTotal) * amountPaise / lineTotalPaise) : 0;
+        const row = addAmount(rows, category, {
+          category,
+          revenuePaise: 0,
+          productCostPaise: 0,
+          staffCostPaise: 0,
+          itemCount: 0
+        }, "revenuePaise", amountPaise);
+        row.staffCostPaise += staffCostPaise;
+        row.itemCount += 1;
+      }
+    }
+    for (const consume of consumeRows) {
+      const category = serviceLookup.get(consume.serviceId)?.category || "Services";
+      addAmount(rows, category, {
+        category,
+        revenuePaise: 0,
+        productCostPaise: 0,
+        staffCostPaise: 0,
+        itemCount: 0
+      }, "productCostPaise", consume.productCostPaise);
+    }
+    return [...rows.values()].map(marginRow).sort((a, b) => b.netProfitPaise - a.netProfitPaise).slice(0, BREAKDOWN_LIMIT);
+  }
+
+  staffSplits(line = {}, invoice = {}, revenuePaise = 0, staffCostPaise = 0) {
+    const rawSplits = Array.isArray(line.staffSplits) ? line.staffSplits.filter((split) => split?.staffId) : [];
+    if (!rawSplits.length) {
+      return [{
+        staffId: line.staffId || invoice.staffId || "",
+        staffName: line.staffName || line.assignedStaffName || line.staffId || invoice.staffId || "Unassigned",
+        revenuePaise,
+        staffCostPaise
+      }];
+    }
+    const totalShare = rawSplits.reduce((sum, split) => sum + Number(split.share || Number(split.percent || 0) / 100 || 0), 0);
+    let allocatedRevenue = 0;
+    let allocatedStaff = 0;
+    return rawSplits.map((split, index) => {
+      const rawShare = Number(split.share || Number(split.percent || 0) / 100 || 0);
+      const share = totalShare > 0 ? rawShare / totalShare : 1 / rawSplits.length;
+      const splitRevenue = index === rawSplits.length - 1 ? revenuePaise - allocatedRevenue : Math.round(revenuePaise * share);
+      const splitStaff = index === rawSplits.length - 1 ? staffCostPaise - allocatedStaff : Math.round(staffCostPaise * share);
+      allocatedRevenue += splitRevenue;
+      allocatedStaff += splitStaff;
+      return {
+        staffId: split.staffId || "",
+        staffName: split.staffName || split.staffId || "Unassigned",
+        revenuePaise: splitRevenue,
+        staffCostPaise: splitStaff
+      };
+    });
   }
 
   paymentRows(params) {
@@ -218,7 +478,7 @@ export class ProfitIntelligenceService {
   operatingExpenseRows(params) {
     if (!tableExists("finance_expenses")) return [];
     return safeAll(`
-      SELECT id, category, vendor, amount, taxAmount, paymentMode, paidAt, createdAt, status
+      SELECT id, branchId, category, vendor, amount, taxAmount, paymentMode, paidAt, createdAt, status
       FROM finance_expenses
       WHERE tenantId = @tenantId
         AND COALESCE(NULLIF(paidAt, ''), createdAt) BETWEEN @startAt AND @endAt
@@ -227,6 +487,90 @@ export class ProfitIntelligenceService {
       ORDER BY COALESCE(NULLIF(paidAt, ''), createdAt) DESC
       LIMIT ${OPERATING_EXPENSE_LIMIT}
     `, params);
+  }
+
+  productConsumeRows(params) {
+    if (!tableExists("product_consume_drafts")) return [];
+    return safeAll(`
+      SELECT branch_id AS branchId, service_id AS serviceId, service_name AS serviceName,
+        staff_id AS staffId, staff_name AS staffName, COALESCE(SUM(actual_cost), 0) AS actualCost
+      FROM product_consume_drafts
+      WHERE tenant_id = @tenantId
+        AND created_at BETWEEN @startAt AND @endAt
+        AND lower(status) IN ('confirmed', 'posted', 'consumed', 'approved')
+        AND (@branchId = '' OR branch_id = @branchId)
+      GROUP BY branch_id, service_id, service_name, staff_id, staff_name
+    `, params).map((row) => ({ ...row, productCostPaise: toPaise(row.actualCost) }));
+  }
+
+  salesCommissionRows(params) {
+    if (!tableExists("sales")) return [];
+    return safeAll(`
+      SELECT branchId, staffId, COALESCE(SUM(commissionTotal), 0) AS commissionTotal
+      FROM sales
+      WHERE tenantId = @tenantId
+        AND createdAt BETWEEN @startAt AND @endAt
+        AND lower(COALESCE(status, 'completed')) NOT IN ('void', 'cancelled', 'canceled')
+        AND (@branchId = '' OR branchId = @branchId)
+      GROUP BY branchId, staffId
+    `, params).map((row) => ({ ...row, staffCostPaise: toPaise(row.commissionTotal) }));
+  }
+
+  staffPayoutRows(params) {
+    if (!tableExists("finance_staff_payouts")) return [];
+    return safeAll(`
+      SELECT branchId, staffId, COALESCE(SUM(netAmount), 0) AS netAmount
+      FROM finance_staff_payouts
+      WHERE tenantId = @tenantId
+        AND lower(COALESCE(status, 'pending')) NOT IN ('void', 'cancelled', 'canceled')
+        AND @from <= periodEnd
+        AND @to >= periodStart
+        AND (@branchId = '' OR branchId = @branchId)
+      GROUP BY branchId, staffId
+    `, params).map((row) => ({ ...row, staffCostPaise: toPaise(row.netAmount) }));
+  }
+
+  journalCogsRows(params) {
+    if (!tableExists("journalEntryLines") || !tableExists("journalEntries") || !tableExists("chartOfAccounts")) return [];
+    return safeAll(`
+      SELECT COALESCE(NULLIF(l.branchId, ''), e.branchId, '') AS branchId,
+        COALESCE(SUM(l.debitPaise - l.creditPaise), 0) AS cogsPaise
+      FROM journalEntryLines l
+      JOIN journalEntries e ON e.id = l.journalEntryId AND e.tenantId = l.tenantId
+      JOIN chartOfAccounts a ON a.id = l.accountId AND a.tenantId = l.tenantId
+      WHERE l.tenantId = @tenantId
+        AND e.status = 'posted'
+        AND e.businessDate BETWEEN @from AND @to
+        AND (a.accountSubType = 'cogs' OR a.code = '5000')
+        AND (@branchId = '' OR l.branchId = @branchId OR e.branchId = @branchId)
+      GROUP BY COALESCE(NULLIF(l.branchId, ''), e.branchId, '')
+    `, params).map((row) => ({ ...row, productCostPaise: clampPaise(row.cogsPaise) }));
+  }
+
+  serviceLookup(params) {
+    if (!tableExists("services")) return new Map();
+    const rows = safeAll(`
+      SELECT id, name, category, branchId
+      FROM services
+      WHERE tenantId = @tenantId
+        AND (@branchId = '' OR branchId = @branchId OR branchId = '')
+      LIMIT 5000
+    `, params);
+    return new Map(rows.flatMap((row) => [
+      [row.id, row],
+      [mapKey([row.name]), row]
+    ]));
+  }
+
+  branchLookup(params) {
+    if (!tableExists("branches")) return new Map();
+    const rows = safeAll(`
+      SELECT id, name
+      FROM branches
+      WHERE tenantId = @tenantId
+        AND (@branchId = '' OR id = @branchId)
+    `, params);
+    return new Map(rows.map((row) => [row.id, row]));
   }
 
   classifiedExpenses(rows = []) {
