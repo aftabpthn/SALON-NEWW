@@ -664,6 +664,28 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
                 </small>
               </label>
 
+              <section class="salary-quick-panel full" aria-label="Salary setup shortcut">
+                <div>
+                  <span class="eyebrow">Salary setup</span>
+                  <strong>{{ staffForm.get('basicSalary')?.value || 0 | currency:'INR':'symbol-narrow':'1.0-0' }} basic salary</strong>
+                  <small>Salary Add Employee ke andar hi set hogi. Save Employee ke saath payroll profile save hota hai.</small>
+                </div>
+                <div class="salary-quick-meta">
+                  <article>
+                    <span>Payment</span>
+                    <strong>{{ staffForm.get('paymentMode')?.value || 'Not set' }}</strong>
+                  </article>
+                  <article>
+                    <span>Payroll</span>
+                    <strong>{{ staffForm.get('supportAttendancePayroll')?.value ? 'Enabled' : 'Off' }}</strong>
+                  </article>
+                </div>
+                <div class="salary-quick-actions">
+                  <button type="button" class="primary" (click)="detailTab.set('attendance')">Open Salary Setup</button>
+                  <a class="refresh" routerLink="/staff-os/salary-workspace" [queryParams]="staffContextParams()">Salary Workspace</a>
+                </div>
+              </section>
+
               <label class="field">
                 <span>Employment type</span>
                 <select formControlName="employmentType">
@@ -2470,6 +2492,15 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .login-provision > div, .login-provision .check-field { grid-column: 1 / -1; }
     .check-field { align-items: center; border: 1px solid #edf2ef; border-radius: 8px; color: #34483f; display: grid; font-size: 13px; font-weight: 800; gap: 8px; grid-template-columns: auto 1fr; min-height: 43px; padding: 10px 11px; }
     .check-field input { width: 18px; height: 18px; padding: 0; }
+    .salary-quick-panel { align-items: center; background: #f6fbff; border: 1px solid #c8dff2; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; padding: 14px; }
+    .salary-quick-panel strong { color: #10201a; display: block; font-size: 16px; }
+    .salary-quick-panel small { color: #60766d; display: block; margin-top: 4px; }
+    .salary-quick-meta { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .salary-quick-meta article { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 4px; min-height: 54px; padding: 9px 10px; }
+    .salary-quick-meta span { color: #60766d; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .salary-quick-meta strong { font-size: 13px; overflow-wrap: anywhere; }
+    .salary-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .salary-quick-actions .primary, .salary-quick-actions .refresh { min-height: 34px; white-space: nowrap; }
     .incentive-command, .salary-command { align-items: center; background: #f0fbf7; border: 1px solid #b6d8cf; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
     .salary-command { background: #f8fafc; border-color: #cbd5e1; }
     .incentive-command strong, .salary-command strong { display: block; font-size: 16px; }
@@ -2514,7 +2545,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .live-panel-links a { border: 1px solid #cbd8d2; border-radius: 4px; color: #0f6eb3; font-size: 12px; font-weight: 900; min-height: 32px; padding: 8px 9px; text-align: center; text-decoration: none; }
     .drawer-action-buttons { display: grid; gap: 10px; }
     .drawer-action-buttons .refresh, .drawer-action-buttons .primary { width: 100%; }
-    @media (max-width: 900px) { .metrics, .task-grid, .split, .attendance-stats, .workspace-kpi-grid { grid-template-columns: 1fr 1fr; } .staff-attendance-mode .attendance-stats, .attendance-live-strip, .attendance-ops-grid, .roster-kpi-strip, .payroll-kpi-strip, .payroll-risk-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-attendance-mode .attendance-stats article:nth-child(2n), .attendance-live-strip article:nth-child(2n), .roster-kpi-strip article:nth-child(2n), .payroll-kpi-strip article:nth-child(2n) { border-right: 0; } .staff-workspace-shell, .commission-setup, .attendance-workspace, .attendance-wide { grid-template-columns: 1fr; } .commission-actions { justify-content: flex-start; } .staff-category-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .attendance-workspace .device-form, .attendance-workspace .gateway-form, .attendance-workspace .mapping-form, .attendance-workspace .consent-form, .attendance-workspace .payroll-form, .attendance-workspace .camera-form, .attendance-workspace .camera-form.staff-form, .workspace-manual-form.staff-form { grid-template-columns: 1fr; } .attendance-workspace .camera-form .drawer-actions { grid-template-columns: 1fr; } .login-provision { grid-column: 1 / -1; } .drawer-actions { position: static; grid-column: 1 / -1; grid-row: auto; border-left: 0; border-top: 1px solid #edf2ef; padding: 10px 0 0; } .live-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .live-panel-title, .catalog-mini-grid, .live-panel-links, .drawer-action-buttons { grid-column: 1 / -1; } }
+    @media (max-width: 900px) { .metrics, .task-grid, .split, .attendance-stats, .workspace-kpi-grid { grid-template-columns: 1fr 1fr; } .staff-attendance-mode .attendance-stats, .attendance-live-strip, .attendance-ops-grid, .roster-kpi-strip, .payroll-kpi-strip, .payroll-risk-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-attendance-mode .attendance-stats article:nth-child(2n), .attendance-live-strip article:nth-child(2n), .roster-kpi-strip article:nth-child(2n), .payroll-kpi-strip article:nth-child(2n) { border-right: 0; } .staff-workspace-shell, .commission-setup, .attendance-workspace, .attendance-wide { grid-template-columns: 1fr; } .commission-actions { justify-content: flex-start; } .staff-category-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); } .staff-form, .device-form, .gateway-form, .mapping-form, .consent-form, .payroll-form, .salary-editor-form, .task-create-form.staff-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .attendance-workspace .device-form, .attendance-workspace .gateway-form, .attendance-workspace .mapping-form, .attendance-workspace .consent-form, .attendance-workspace .payroll-form, .attendance-workspace .camera-form, .attendance-workspace .camera-form.staff-form, .workspace-manual-form.staff-form { grid-template-columns: 1fr; } .attendance-workspace .camera-form .drawer-actions { grid-template-columns: 1fr; } .login-provision, .salary-quick-panel { grid-column: 1 / -1; } .salary-quick-panel { grid-template-columns: 1fr; } .salary-quick-actions { justify-content: flex-start; } .drawer-actions { position: static; grid-column: 1 / -1; grid-row: auto; border-left: 0; border-top: 1px solid #edf2ef; padding: 10px 0 0; } .live-employee-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .live-panel-title, .catalog-mini-grid, .live-panel-links, .drawer-action-buttons { grid-column: 1 / -1; } }
     @media (max-width: 640px) {
       .staff-os { gap: 12px; padding: 0; }
       .drawer-shell { padding: 0; }
@@ -2562,7 +2593,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
       .staff-form { grid-template-columns: 1fr; }
       .field, .field.full { grid-template-columns: 1fr; }
       .field.full, .staff-form > .full, .staff-form .state { grid-column: 1 / -1; }
-      .advanced-grid, .incentive-command, .salary-command, .incentive-summary, .salary-summary, .rule-heading, .rule-row, .slab-row { grid-template-columns: 1fr; }
+      .advanced-grid, .incentive-command, .salary-command, .salary-quick-panel, .salary-quick-meta, .incentive-summary, .salary-summary, .rule-heading, .rule-row, .slab-row { grid-template-columns: 1fr; }
       .subdrawer { width: 100%; }
       .login-provision { grid-template-columns: 1fr; }
     }
@@ -2640,12 +2671,13 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
     { id: 'emergency', label: 'Emergency' },
     { id: 'native', label: 'Native Contact' },
     { id: 'incentive', label: 'Commissions' },
-    { id: 'attendance', label: 'Attendance & Salary' },
+    { id: 'attendance', label: 'Salary Setup' },
     { id: 'remarks', label: 'Remarks' }
   ];
   readonly integrationLinks: Record<StaffDetailTab, StaffIntegrationLink[]> = {
     core: [
       { label: 'Category Master', to: '/staff-os/staff-categories' },
+      { label: 'Salary Setup', to: '/staff-os/salary-workspace' },
       { label: 'Staff Profile', to: '/staff-os/staff-profile' },
       { label: 'Roster', to: '/staff-os/roster-calendar' }
     ],
@@ -2667,6 +2699,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
       { label: 'Leaderboard', to: '/staff-os/leaderboard' }
     ],
     attendance: [
+      { label: 'Salary Setup', to: '/staff-os/salary-workspace' },
       { label: 'Attendance', to: '/staff-os/attendance-dashboard' },
       { label: 'Payroll', to: '/staff-os/payroll-dashboard' },
       { label: 'Salary Structure', to: '/staff-os/payroll-salary-structure' },
