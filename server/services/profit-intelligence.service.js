@@ -100,6 +100,15 @@ function changeBps(current, previous) {
   return Math.round(((Number(current || 0) - Number(previous || 0)) / Math.abs(Number(previous || 1))) * 10000);
 }
 
+function numberParam(query = {}, key, fallback = 0) {
+  const value = Number(query[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clampPercent(value, min = -100, max = 100) {
+  return Math.max(min, Math.min(max, Number(value || 0)));
+}
+
 function classifyExpense(category = "") {
   const text = String(category || "").toLowerCase();
   if (/(cogs|consume|consumable|product cost|backbar|recipe)/.test(text)) return "productCost";
@@ -274,6 +283,7 @@ export class ProfitIntelligenceService {
       period: { from: params.from, to: params.to, branchId: params.branchId },
       metrics,
       ceoKpis: this.ceoKpis(params, metrics, profitBreakdown, expenseTotals.breakdown),
+      profitDigitalTwin: this.profitDigitalTwin(query, metrics),
       enterpriseAnalytics: this.enterpriseAnalytics(params, metrics, invoices, expenseRows, profitBreakdown),
       revenueBreakdown: breakdown,
       expenseBreakdown: expenseTotals.breakdown,
@@ -290,6 +300,68 @@ export class ProfitIntelligenceService {
         grossProfit: fromPaise(grossProfitPaise),
         netProfit: fromPaise(netProfitPaise)
       }
+    };
+  }
+
+  profitDigitalTwin(query = {}, metrics = {}) {
+    const assumptions = {
+      servicePriceChangePct: clampPercent(numberParam(query, "scenarioPriceChangePct", 0), -50, 100),
+      expectedRevenueChangePct: clampPercent(numberParam(query, "scenarioRevenueChangePct", 0), -75, 150),
+      staffCommissionChangePct: clampPercent(numberParam(query, "scenarioCommissionChangePct", 0), -50, 100),
+      productWastageReductionPct: clampPercent(numberParam(query, "scenarioWastageReductionPct", 0), 0, 80),
+      operatingExpenseChangePct: clampPercent(numberParam(query, "scenarioExpenseChangePct", 0), -50, 100),
+      rentChangePaise: toPaise(numberParam(query, "scenarioRentChangeRupees", 0))
+    };
+    const selectedScenario = this.simulateProfitScenario(metrics, assumptions);
+    const scenarios = [
+      this.simulateProfitScenario(metrics, { ...assumptions, servicePriceChangePct: assumptions.servicePriceChangePct + 5 }, "Price lift"),
+      this.simulateProfitScenario(metrics, { ...assumptions, productWastageReductionPct: Math.min(80, assumptions.productWastageReductionPct + 10) }, "Wastage control"),
+      this.simulateProfitScenario(metrics, { ...assumptions, operatingExpenseChangePct: assumptions.operatingExpenseChangePct - 5 }, "Expense control"),
+      this.simulateProfitScenario(metrics, { ...assumptions, expectedRevenueChangePct: assumptions.expectedRevenueChangePct + 10 }, "Demand growth")
+    ];
+    const recommendedScenario = scenarios.sort((a, b) => b.profitDeltaPaise - a.profitDeltaPaise)[0] || selectedScenario;
+    return {
+      ...selectedScenario,
+      scenarioAssumptions: assumptions,
+      recommendedScenario: {
+        name: recommendedScenario.name,
+        simulatedNetProfitPaise: recommendedScenario.simulatedNetProfitPaise,
+        profitDeltaPaise: recommendedScenario.profitDeltaPaise,
+        scenarioAssumptions: recommendedScenario.scenarioAssumptions
+      },
+      scenarioOptions: scenarios.map((item) => ({
+        name: item.name,
+        simulatedNetProfitPaise: item.simulatedNetProfitPaise,
+        profitDeltaPaise: item.profitDeltaPaise
+      }))
+    };
+  }
+
+  simulateProfitScenario(metrics = {}, assumptions = {}, name = "Selected scenario") {
+    const priceMultiplier = 1 + Number(assumptions.servicePriceChangePct || 0) / 100;
+    const demandMultiplier = 1 + Number(assumptions.expectedRevenueChangePct || 0) / 100;
+    const commissionMultiplier = 1 + Number(assumptions.staffCommissionChangePct || 0) / 100;
+    const wastageMultiplier = 1 - Number(assumptions.productWastageReductionPct || 0) / 100;
+    const expenseMultiplier = 1 + Number(assumptions.operatingExpenseChangePct || 0) / 100;
+    const simulatedRevenuePaise = Math.round(Number(metrics.revenuePaise || 0) * priceMultiplier * demandMultiplier);
+    const simulatedProductCostPaise = Math.max(0, Math.round(Number(metrics.productCostPaise || 0) * demandMultiplier * wastageMultiplier));
+    const simulatedStaffCostPaise = Math.max(0, Math.round(Number(metrics.staffCostPaise || 0) * demandMultiplier * commissionMultiplier));
+    const simulatedOperatingExpensePaise = Math.max(0, Math.round(Number(metrics.operatingExpensePaise || 0) * expenseMultiplier + Number(assumptions.rentChangePaise || 0)));
+    const simulatedGrossProfitPaise = simulatedRevenuePaise - simulatedProductCostPaise;
+    const simulatedNetProfitPaise = simulatedGrossProfitPaise - simulatedStaffCostPaise - simulatedOperatingExpensePaise - Number(metrics.refundPaise || 0);
+    return {
+      name,
+      baseRevenuePaise: Number(metrics.revenuePaise || 0),
+      simulatedRevenuePaise,
+      baseNetProfitPaise: Number(metrics.netProfitPaise || 0),
+      simulatedNetProfitPaise,
+      profitDeltaPaise: simulatedNetProfitPaise - Number(metrics.netProfitPaise || 0),
+      simulatedProductCostPaise,
+      simulatedStaffCostPaise,
+      simulatedOperatingExpensePaise,
+      grossMarginBps: marginBps(simulatedGrossProfitPaise, simulatedRevenuePaise),
+      netMarginBps: marginBps(simulatedNetProfitPaise, simulatedRevenuePaise),
+      scenarioAssumptions: assumptions
     };
   }
 

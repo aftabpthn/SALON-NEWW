@@ -121,6 +121,64 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </article>
       </section>
 
+      <section class="digital-twin-grid" *ngIf="summary()?.profitDigitalTwin as twin">
+        <article class="panel twin-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Profit Digital Twin</p>
+              <h2>What-if simulation</h2>
+            </div>
+            <span>{{ twin.name }}</span>
+          </header>
+          <form class="scenario-form" [formGroup]="filters" (ngSubmit)="load()">
+            <label><span>Price %</span><input type="number" formControlName="scenarioPriceChangePct" /></label>
+            <label><span>Revenue %</span><input type="number" formControlName="scenarioRevenueChangePct" /></label>
+            <label><span>Commission %</span><input type="number" formControlName="scenarioCommissionChangePct" /></label>
+            <label><span>Wastage Cut %</span><input type="number" formControlName="scenarioWastageReductionPct" min="0" max="80" /></label>
+            <label><span>Expense %</span><input type="number" formControlName="scenarioExpenseChangePct" /></label>
+            <label><span>Rent Change</span><input type="number" formControlName="scenarioRentChangeRupees" /></label>
+            <button class="primary-button" type="submit">Run Simulation</button>
+          </form>
+        </article>
+
+        <article class="panel twin-result">
+          <header>
+            <div>
+              <p class="eyebrow">Before vs after</p>
+              <h2>Profit impact</h2>
+            </div>
+            <span>{{ percent(twin.netMarginBps) }} net margin</span>
+          </header>
+          <div class="twin-metrics">
+            <div><span>Base Revenue</span><strong>{{ paise(twin.baseRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Sim Revenue</span><strong>{{ paise(twin.simulatedRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Base Profit</span><strong>{{ paise(twin.baseNetProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Sim Profit</span><strong>{{ paise(twin.simulatedNetProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div class="delta"><span>Profit Delta</span><strong>{{ paise(twin.profitDeltaPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Gross Margin</span><strong>{{ percent(twin.grossMarginBps) }}</strong></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <div>
+              <p class="eyebrow">Recommended scenario</p>
+              <h2>{{ twin.recommendedScenario?.name }}</h2>
+            </div>
+          </header>
+          <div class="rank-list">
+            <div>
+              <span>Expected profit</span>
+              <strong>{{ paise(twin.recommendedScenario?.simulatedNetProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            </div>
+            <div>
+              <span>Profit lift</span>
+              <strong>{{ paise(twin.recommendedScenario?.profitDeltaPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section class="enterprise-grid" *ngIf="summary()?.enterpriseAnalytics as analytics">
         <article class="panel analytics-card">
           <header>
@@ -463,6 +521,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .ceo-grid article { display: grid; gap: 4px; min-width: 0; min-height: 88px; padding: 11px 12px; background: #fff; border: 1px solid #d9e1ea; border-top: 3px solid #143d59; }
     .ceo-grid span, .ceo-grid small { color: #64748b; font-size: 12px; font-weight: 800; }
     .ceo-grid strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; line-height: 1.1; }
+    .digital-twin-grid { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr; gap: 10px; padding: 12px 14px; background: #fff; border-bottom: 1px solid #d9e1ea; }
+    .twin-panel { border-top: 3px solid #8a6d0f; }
+    .scenario-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 8px; }
+    .scenario-form .primary-button { width: 100%; }
+    .twin-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .twin-metrics div { display: grid; gap: 4px; border: 1px solid #d9e1ea; padding: 10px; }
+    .twin-metrics .delta { border-top: 3px solid #0f8a7d; }
+    .twin-metrics span { color: #64748b; font-size: 12px; font-weight: 800; }
+    .twin-metrics strong { font-size: 18px; white-space: nowrap; }
     .enterprise-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 10px; padding: 12px 14px; background: #f6f8fb; border-bottom: 1px solid #d9e1ea; }
     .analytics-card { border-top: 3px solid #0f8a7d; }
     .analytics-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -499,11 +566,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
     @media (max-width: 1100px) {
       .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .ceo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .enterprise-grid, .insight-grid, .drilldown-grid, .retention-grid { grid-template-columns: 1fr; }
+      .digital-twin-grid, .enterprise-grid, .insight-grid, .drilldown-grid, .retention-grid { grid-template-columns: 1fr; }
+      .scenario-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
       .page-title, header { align-items: flex-start; flex-direction: column; }
       .metrics-grid, .ceo-grid, .source-grid { grid-template-columns: 1fr; }
+      .scenario-form, .twin-metrics { grid-template-columns: 1fr; }
       .metrics-grid article, .metrics-grid article:first-child { border-left: 1px solid #d9e1ea; }
     }
   `]
@@ -516,7 +585,13 @@ export class ProfitIntelligenceComponent implements OnInit {
   readonly today = new Date().toISOString().slice(0, 10);
   readonly filters = this.fb.group({
     from: [`${this.today.slice(0, 7)}-01`],
-    to: [this.today]
+    to: [this.today],
+    scenarioPriceChangePct: [0],
+    scenarioRevenueChangePct: [0],
+    scenarioCommissionChangePct: [0],
+    scenarioWastageReductionPct: [0],
+    scenarioExpenseChangePct: [0],
+    scenarioRentChangeRupees: [0]
   });
 
   constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}

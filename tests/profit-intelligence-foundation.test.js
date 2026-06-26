@@ -122,6 +122,28 @@ test("Profit Intelligence exposes enterprise analytics", () => {
   }
 });
 
+test("Profit Intelligence exposes Profit Digital Twin simulation", () => {
+  for (const field of [
+    "profitDigitalTwin",
+    "baseRevenuePaise",
+    "simulatedRevenuePaise",
+    "baseNetProfitPaise",
+    "simulatedNetProfitPaise",
+    "profitDeltaPaise",
+    "scenarioAssumptions",
+    "recommendedScenario",
+    "simulateProfitScenario"
+  ]) {
+    assert.ok(service.includes(field), `${field} should be part of the Profit Digital Twin contract`);
+  }
+  for (const label of ["Profit Digital Twin", "What-if simulation", "Run Simulation", "Before vs after", "Profit impact", "Recommended scenario"]) {
+    assert.ok(page.includes(label), `${label} should be visible for Profit Digital Twin`);
+  }
+  for (const control of ["scenarioPriceChangePct", "scenarioRevenueChangePct", "scenarioCommissionChangePct", "scenarioWastageReductionPct", "scenarioExpenseChangePct", "scenarioRentChangeRupees"]) {
+    assert.ok(page.includes(control), `${control} should be wired to the scenario form`);
+  }
+});
+
 test("Profit Intelligence page is routed and visible in Finance navigation", () => {
   assert.match(appRoutes, /profit-intelligence[\s\S]*ProfitIntelligenceComponent/, "Angular route should load ProfitIntelligenceComponent");
   assert.ok(appComponent.includes("path: '/profit-intelligence'"), "Finance navigation should include the page");
