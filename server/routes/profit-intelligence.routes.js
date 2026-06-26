@@ -31,6 +31,14 @@ profitIntelligenceRouter.get(
   })
 );
 
+profitIntelligenceRouter.post(
+  "/profit-intelligence/copilot",
+  requirePermission("read", () => "finance"),
+  asyncHandler((req, res) => {
+    res.json(profitIntelligenceService.copilot(req.body, req.access));
+  })
+);
+
 profitIntelligenceRouter.get(
   "/profit-intelligence/actions",
   requirePermission("read", () => "finance"),

@@ -311,6 +311,37 @@ test("Profit Intelligence exposes Autonomous Profit Action Queue", () => {
   }
 });
 
+test("Profit Intelligence exposes Profit Copilot and Auto Board Report", () => {
+  assert.ok(route.includes("/profit-intelligence/copilot"), "Profit Copilot route should be exposed");
+  assert.match(route, /\/profit-intelligence\/copilot[\s\S]*requirePermission\("read",\s*\(\) => "finance"\)/, "Profit Copilot should require read finance");
+  for (const field of [
+    "copilot",
+    "copilotAnswer",
+    "copilotReasons",
+    "copilotMetrics",
+    "copilotActions",
+    "answer",
+    "reasons",
+    "metrics",
+    "recommendedActions",
+    "autoBoardReport",
+    "topWins",
+    "topRisks",
+    "nextActions",
+    "expectedRecoveryProfitPaise"
+  ]) {
+    assert.ok(service.includes(field) || route.includes(field) || page.includes(field), `${field} should be part of Profit Copilot or Auto Board Report`);
+  }
+  assert.ok(service.includes("rule-based"), "Profit Copilot should use rule-based engine without external AI dependency");
+  for (const source of ["enterpriseAnalytics", "profitLeaks", "recipeVariance", "pricingAutopilot", "membershipRisk"]) {
+    assert.ok(service.includes(source), `${source} should feed copilot and board report`);
+  }
+  for (const label of ["Profit Copilot", "Owner Q&amp;A", "Auto Board Report", "Monthly owner preview", "Top 5 wins", "Top 5 risks", "Next 5 actions", "Expected Recovery"]) {
+    assert.ok(page.includes(label), `${label} should be visible for Profit Copilot or Board Report`);
+  }
+  assert.ok(page.includes("profit-intelligence/copilot"), "page should call Profit Copilot endpoint");
+});
+
 test("Profit Intelligence page is routed and visible in Finance navigation", () => {
   assert.match(appRoutes, /profit-intelligence[\s\S]*ProfitIntelligenceComponent/, "Angular route should load ProfitIntelligenceComponent");
   assert.ok(appComponent.includes("path: '/profit-intelligence'"), "Finance navigation should include the page");

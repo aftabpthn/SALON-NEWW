@@ -333,6 +333,72 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </article>
       </section>
 
+      <section class="copilot-grid" *ngIf="summary() as report">
+        <article class="panel copilot-panel">
+          <header>
+            <div>
+              <p class="eyebrow">Profit Copilot</p>
+              <h2>Owner Q&amp;A</h2>
+            </div>
+            <span>Rule-based</span>
+          </header>
+          <form class="copilot-form" [formGroup]="filters" (ngSubmit)="askCopilot()">
+            <label>
+              <span>Question</span>
+              <input type="text" formControlName="copilotQuestion" placeholder="profit kam kyu hai?" />
+            </label>
+            <button class="primary-button" type="submit" [disabled]="copilotBusy()">Ask</button>
+          </form>
+          <div class="copilot-answer" *ngIf="copilotResponse() as copilot">
+            <strong>{{ copilot.answer }}</strong>
+            <div class="mini-table">
+              <div *ngFor="let reason of copilot.reasons || []">
+                <span>{{ reason.label || reason.type }}</span>
+                <strong>{{ paise(reason.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <small>{{ reason.message }}</small>
+              </div>
+              <div *ngIf="!(copilot.reasons || []).length" class="empty-row">No major reasons detected.</div>
+            </div>
+            <div class="rank-list suggestion-list">
+              <div *ngFor="let action of copilot.recommendedActions || []">
+                <span>{{ action.title }}</span>
+                <strong>{{ paise(action.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel board-panel" *ngIf="report.autoBoardReport as board">
+          <header>
+            <div>
+              <p class="eyebrow">Auto Board Report</p>
+              <h2>Monthly owner preview</h2>
+            </div>
+            <span>{{ report.period?.from }} to {{ report.period?.to }}</span>
+          </header>
+          <div class="board-metrics">
+            <div><span>Revenue</span><strong>{{ paise(board.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Gross Profit</span><strong>{{ paise(board.grossProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ percent(board.grossMarginBps) }}</small></div>
+            <div><span>Net Profit</span><strong>{{ paise(board.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ percent(board.marginBps) }}</small></div>
+            <div><span>Expected Recovery</span><strong>{{ paise(board.expectedRecoveryProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+          </div>
+          <div class="board-lists">
+            <div>
+              <h3>Top 5 wins</h3>
+              <p *ngFor="let item of board.topWins || []">{{ item }}</p>
+            </div>
+            <div>
+              <h3>Top 5 risks</h3>
+              <p *ngFor="let item of board.topRisks || []">{{ item }}</p>
+            </div>
+            <div>
+              <h3>Next 5 actions</h3>
+              <p *ngFor="let item of board.nextActions || []">{{ item }}</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section class="customer-score-grid" *ngIf="summary() as report">
         <article class="table-panel customer-score-panel">
           <header>
@@ -761,6 +827,20 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .action-buttons { display: flex; flex-wrap: wrap; gap: 6px; min-width: 210px; }
     .action-buttons button { border: 1px solid #cbd5e1; background: #fff; color: #143d59; padding: 7px 9px; font-weight: 900; cursor: pointer; }
     .action-buttons button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .copilot-grid { display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 10px; padding: 12px 14px; background: #eef4f8; border-bottom: 1px solid #d9e1ea; }
+    .copilot-panel { border-top: 3px solid #143d59; }
+    .board-panel { border-top: 3px solid #8a6d0f; }
+    .copilot-form { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
+    .copilot-form input { width: 100%; }
+    .copilot-answer { display: grid; gap: 10px; }
+    .board-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .board-metrics div { display: grid; gap: 4px; border: 1px solid #d9e1ea; padding: 10px; min-width: 0; }
+    .board-metrics span, .board-metrics small { color: #64748b; font-size: 12px; font-weight: 800; }
+    .board-metrics strong { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .board-lists { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .board-lists div { border: 1px solid #d9e1ea; padding: 10px; display: grid; gap: 6px; align-content: start; }
+    .board-lists h3 { margin: 0; font-size: 13px; }
+    .board-lists p { margin: 0; color: #38506d; font-size: 12px; font-weight: 800; }
     .customer-score-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 14px; background: #eef4f8; border-bottom: 1px solid #d9e1ea; }
     .customer-score-panel { border-top: 3px solid #143d59; }
     .liability-panel { border-top: 3px solid #8a6d0f; }
@@ -806,13 +886,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
     @media (max-width: 1100px) {
       .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .ceo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .digital-twin-grid, .customer-score-grid, .enterprise-grid, .insight-grid, .drilldown-grid, .retention-grid { grid-template-columns: 1fr; }
+      .digital-twin-grid, .copilot-grid, .customer-score-grid, .enterprise-grid, .insight-grid, .drilldown-grid, .retention-grid { grid-template-columns: 1fr; }
       .scenario-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .board-metrics, .board-lists { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
       .page-title, header { align-items: flex-start; flex-direction: column; }
       .metrics-grid, .ceo-grid, .source-grid { grid-template-columns: 1fr; }
-      .scenario-form, .twin-metrics { grid-template-columns: 1fr; }
+      .scenario-form, .copilot-form, .twin-metrics, .board-metrics, .board-lists { grid-template-columns: 1fr; }
       .metrics-grid article, .metrics-grid article:first-child { border-left: 1px solid #d9e1ea; }
     }
   `]
@@ -822,13 +903,16 @@ export class ProfitIntelligenceComponent implements OnInit {
   readonly breakdown = signal<ApiRecord | null>(null);
   readonly bookingRecommendations = signal<ApiRecord | null>(null);
   readonly actionQueue = signal<ApiRecord[]>([]);
+  readonly copilotResponse = signal<ApiRecord | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
   readonly actionBusy = signal('');
+  readonly copilotBusy = signal(false);
   readonly today = new Date().toISOString().slice(0, 10);
   readonly filters = this.fb.group({
     from: [`${this.today.slice(0, 7)}-01`],
     to: [this.today],
+    copilotQuestion: ['profit kam kyu hai?'],
     scenarioPriceChangePct: [0],
     scenarioRevenueChangePct: [0],
     scenarioCommissionChangePct: [0],
@@ -886,6 +970,24 @@ export class ProfitIntelligenceComponent implements OnInit {
     this.api.list<ApiRecord[]>('profit-intelligence/actions', this.filters.value).subscribe({
       next: (actions) => this.actionQueue.set(actions || []),
       error: (error) => this.error.set(this.api.errorText(error, 'Unable to refresh profit actions'))
+    });
+  }
+
+  askCopilot(): void {
+    this.copilotBusy.set(true);
+    this.error.set('');
+    this.api.post<ApiRecord>('profit-intelligence/copilot', {
+      ...this.filters.value,
+      question: this.filters.value.copilotQuestion || 'profit kam kyu hai?'
+    }).subscribe({
+      next: (response) => {
+        this.copilotResponse.set(response);
+        this.copilotBusy.set(false);
+      },
+      error: (error) => {
+        this.error.set(this.api.errorText(error, 'Unable to ask Profit Copilot'));
+        this.copilotBusy.set(false);
+      }
     });
   }
 

@@ -114,6 +114,11 @@ function roundPricePaise(value, stepPaise = 5000) {
   return Math.ceil(amount / stepPaise) * stepPaise;
 }
 
+function textValue(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
 function classifyExpense(category = "") {
   const text = String(category || "").toLowerCase();
   if (/(cogs|consume|consumable|product cost|backbar|recipe)/.test(text)) return "productCost";
@@ -284,18 +289,25 @@ export class ProfitIntelligenceService {
     };
     const profitBreakdown = this.breakdown(query, access);
     const recipeVariance = this.recipeVariance(params);
+    const ceoKpis = this.ceoKpis(params, metrics, profitBreakdown, expenseTotals.breakdown);
+    const pricingAutopilot = this.pricingAutopilot(query, profitBreakdown);
+    const profitLeaks = this.profitLeaks(params, metrics, invoices, payments, recipeVariance);
+    const customerProfitScore = this.customerProfitScore(profitBreakdown);
+    const membershipRisk = this.membershipRisk(profitBreakdown);
+    const enterpriseAnalytics = this.enterpriseAnalytics(params, metrics, invoices, expenseRows, profitBreakdown);
 
     return {
       period: { from: params.from, to: params.to, branchId: params.branchId },
       metrics,
-      ceoKpis: this.ceoKpis(params, metrics, profitBreakdown, expenseTotals.breakdown),
+      ceoKpis,
       profitDigitalTwin: this.profitDigitalTwin(query, metrics),
-      pricingAutopilot: this.pricingAutopilot(query, profitBreakdown),
+      pricingAutopilot,
       recipeVariance,
-      profitLeaks: this.profitLeaks(params, metrics, invoices, payments, recipeVariance),
-      customerProfitScore: this.customerProfitScore(profitBreakdown),
-      membershipRisk: this.membershipRisk(profitBreakdown),
-      enterpriseAnalytics: this.enterpriseAnalytics(params, metrics, invoices, expenseRows, profitBreakdown),
+      profitLeaks,
+      customerProfitScore,
+      membershipRisk,
+      enterpriseAnalytics,
+      autoBoardReport: this.autoBoardReport({ metrics, ceoKpis, revenueBreakdown: breakdown, expenseBreakdown: expenseTotals.breakdown, profitBreakdown, recipeVariance, pricingAutopilot, profitLeaks, membershipRisk, enterpriseAnalytics }),
       revenueBreakdown: breakdown,
       expenseBreakdown: expenseTotals.breakdown,
       sourceHealth: {
@@ -311,6 +323,148 @@ export class ProfitIntelligenceService {
         grossProfit: fromPaise(grossProfitPaise),
         netProfit: fromPaise(netProfitPaise)
       }
+    };
+  }
+
+  copilot(payload = {}, access = {}) {
+    const question = textValue(payload.question, "profit kam kyu hai?");
+    const report = this.summary(payload, access);
+    const reasons = this.copilotReasons(report);
+    const metrics = this.copilotMetrics(report);
+    const recommendedActions = this.copilotActions(report);
+    return {
+      engine: "rule-based",
+      question,
+      answer: this.copilotAnswer(question, report, reasons, recommendedActions),
+      reasons,
+      metrics,
+      recommendedActions
+    };
+  }
+
+  copilotAnswer(question = "", report = {}, reasons = [], actions = []) {
+    const q = String(question || "").toLowerCase();
+    const metrics = report.metrics || {};
+    const analytics = report.enterpriseAnalytics || {};
+    if (/(forecast|next month|agla mahina|agle mahine)/.test(q)) {
+      return `Next month forecast ${fromPaise(analytics.forecast?.nextMonthProfitPaise)} hai, basis: ${analytics.forecast?.basis || "current run-rate"}. Net margin abhi ${(Number(metrics.netMarginBps || 0) / 100).toFixed(1)}% hai.`;
+    }
+    if (/(top loss|loss reason|sabse bada|biggest)/.test(q)) {
+      const top = reasons[0];
+      return top
+        ? `Top loss/profit pressure reason: ${top.message} Estimated impact ${fromPaise(top.impactPaise)}. Next action: ${actions[0]?.title || "profit action queue review karein"}.`
+        : "Abhi koi major loss signal nahi mila. Margin stable hai; top services aur repeat customers par focus rakhein.";
+    }
+    if (/(kyu|why|kam|down|gir|profit)/.test(q)) {
+      const topReasons = reasons.slice(0, 3).map((item, index) => `${index + 1}. ${item.message}`).join(" ");
+      return topReasons
+        ? `Profit pressure ke main reasons: ${topReasons} Sabse pehla fix: ${actions[0]?.title || "pricing, wastage aur expenses review karein"}.`
+        : `Profit stable dikh raha hai. Net profit ${fromPaise(metrics.netProfitPaise)} aur net margin ${(Number(metrics.netMarginBps || 0) / 100).toFixed(1)}% hai.`;
+    }
+    return `Current revenue ${fromPaise(metrics.revenuePaise)}, net profit ${fromPaise(metrics.netProfitPaise)}, net margin ${(Number(metrics.netMarginBps || 0) / 100).toFixed(1)}%. Top recommendation: ${actions[0]?.title || "profit action queue review karein"}.`;
+  }
+
+  copilotReasons(report = {}) {
+    const reasons = [];
+    for (const leak of report.profitLeaks || []) {
+      reasons.push({
+        type: leak.type || "profit_leak",
+        label: leak.type || "Profit leak",
+        impactPaise: Math.max(0, Number(leak.estimatedImpactPaise || 0)),
+        message: leak.message || leak.recommendedAction || "Profit leak detected"
+      });
+    }
+    for (const row of report.recipeVariance?.rows || []) {
+      if (!["red", "amber", "high", "medium"].includes(String(row.severity || "").toLowerCase())) continue;
+      reasons.push({
+        type: "recipe_variance",
+        label: row.productName || row.serviceName || row.staffName || "Wastage",
+        impactPaise: Math.max(0, Number(row.variancePaise || 0)),
+        message: row.recommendation || "Recipe variance high hai"
+      });
+    }
+    for (const risk of report.membershipRisk || []) {
+      if (!["high", "medium"].includes(String(risk.severity || "").toLowerCase())) continue;
+      reasons.push({
+        type: "membership_liability_risk",
+        label: risk.planName || "Membership",
+        impactPaise: Math.abs(Math.min(0, Number(risk.riskImpactPaise || 0))) || Number(risk.remainingLiabilityPaise || 0),
+        message: risk.recommendation || "Membership liability risk high hai"
+      });
+    }
+    for (const alert of report.enterpriseAnalytics?.alerts || []) {
+      reasons.push({
+        type: alert.type || "analytics_alert",
+        label: alert.type || "Analytics alert",
+        impactPaise: 0,
+        message: alert.message || "Enterprise analytics alert"
+      });
+    }
+    return reasons.sort((a, b) => Number(b.impactPaise || 0) - Number(a.impactPaise || 0)).slice(0, 8);
+  }
+
+  copilotMetrics(report = {}) {
+    const metrics = report.metrics || {};
+    const forecast = report.enterpriseAnalytics?.forecast || {};
+    return [
+      { label: "Revenue", valuePaise: Number(metrics.revenuePaise || 0) },
+      { label: "Gross Profit", valuePaise: Number(metrics.grossProfitPaise || 0), valueBps: Number(metrics.grossMarginBps || 0) },
+      { label: "Net Profit", valuePaise: Number(metrics.netProfitPaise || 0), valueBps: Number(metrics.netMarginBps || 0) },
+      { label: "Next Month Forecast", valuePaise: Number(forecast.nextMonthProfitPaise || 0) }
+    ];
+  }
+
+  copilotActions(report = {}) {
+    const actions = [];
+    for (const rec of report.pricingAutopilot?.recommendations || []) {
+      if (Number(rec.expectedProfitLiftPaise || 0) <= 0) continue;
+      actions.push({ title: `Approve ${rec.serviceName} price review`, impactPaise: Number(rec.expectedProfitLiftPaise || 0), sourceType: "pricing_recommendation" });
+    }
+    for (const leak of report.profitLeaks || []) {
+      actions.push({ title: leak.recommendedAction || "Fix profit leak", impactPaise: Number(leak.estimatedImpactPaise || 0), sourceType: leak.type || "profit_leak" });
+    }
+    for (const row of report.recipeVariance?.rows || []) {
+      if (Number(row.variancePaise || 0) <= 0) continue;
+      actions.push({ title: row.recommendation || "Audit recipe variance", impactPaise: Number(row.variancePaise || 0), sourceType: "recipe_variance" });
+    }
+    for (const risk of report.membershipRisk || []) {
+      actions.push({ title: risk.recommendation || "Review membership liability", impactPaise: Math.abs(Math.min(0, Number(risk.riskImpactPaise || 0))), sourceType: "membership_liability_risk" });
+    }
+    for (const suggestion of report.enterpriseAnalytics?.suggestions || []) {
+      actions.push({ title: suggestion, impactPaise: 0, sourceType: "enterprise_suggestion" });
+    }
+    return actions.sort((a, b) => Number(b.impactPaise || 0) - Number(a.impactPaise || 0)).slice(0, 5);
+  }
+
+  autoBoardReport({ metrics = {}, ceoKpis = {}, revenueBreakdown = [], expenseBreakdown = [], profitBreakdown = {}, recipeVariance = {}, pricingAutopilot = {}, profitLeaks = [], membershipRisk = [], enterpriseAnalytics = {} } = {}) {
+    const topWins = [
+      Number(metrics.netProfitPaise || 0) > 0 ? `Net profit positive at ${fromPaise(metrics.netProfitPaise)}` : "",
+      ceoKpis.topService?.label && ceoKpis.topService.label !== "No data" ? `${ceoKpis.topService.label} top service profit contributor hai` : "",
+      ceoKpis.topStaff?.label && ceoKpis.topStaff.label !== "No data" ? `${ceoKpis.topStaff.label} top staff profit contributor hai` : "",
+      pricingAutopilot.recommendations?.[0]?.expectedProfitLiftPaise ? `Pricing Autopilot recovery ${fromPaise(pricingAutopilot.recommendations[0].expectedProfitLiftPaise)} identified` : "",
+      enterpriseAnalytics.forecast?.nextMonthProfitPaise > 0 ? `Next month forecast positive at ${fromPaise(enterpriseAnalytics.forecast.nextMonthProfitPaise)}` : "",
+      revenueBreakdown[0]?.label ? `${revenueBreakdown[0].label} strongest revenue source hai` : ""
+    ].filter(Boolean).slice(0, 5);
+    const topRisks = [
+      ...profitLeaks.map((item) => item.message || item.recommendedAction),
+      ...(recipeVariance.rows || []).filter((row) => ["red", "amber"].includes(String(row.severity || "").toLowerCase())).map((row) => row.recommendation),
+      ...membershipRisk.filter((row) => ["high", "medium"].includes(String(row.severity || "").toLowerCase())).map((row) => row.recommendation),
+      ...(enterpriseAnalytics.alerts || []).map((item) => item.message),
+      expenseBreakdown[0]?.category ? `${expenseBreakdown[0].category} highest expense line hai` : ""
+    ].filter(Boolean).slice(0, 5);
+    const nextActions = this.copilotActions({ pricingAutopilot, profitLeaks, recipeVariance, membershipRisk, enterpriseAnalytics }).map((item) => item.title).slice(0, 5);
+    const expectedRecoveryProfitPaise = this.copilotActions({ pricingAutopilot, profitLeaks, recipeVariance, membershipRisk, enterpriseAnalytics })
+      .reduce((sum, item) => sum + Math.max(0, Number(item.impactPaise || 0)), 0);
+    return {
+      revenuePaise: Number(metrics.revenuePaise || 0),
+      grossProfitPaise: Number(metrics.grossProfitPaise || 0),
+      netProfitPaise: Number(metrics.netProfitPaise || 0),
+      marginBps: Number(metrics.netMarginBps || 0),
+      grossMarginBps: Number(metrics.grossMarginBps || 0),
+      topWins: topWins.length ? topWins : ["No major wins detected yet."],
+      topRisks: topRisks.length ? topRisks : ["No major risks detected yet."],
+      nextActions: nextActions.length ? nextActions : ["Continue monitoring pricing, wastage and expense trend."],
+      expectedRecoveryProfitPaise
     };
   }
 
