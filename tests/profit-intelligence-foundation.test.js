@@ -97,6 +97,31 @@ test("Profit Intelligence exposes CEO dashboard KPIs", () => {
   }
 });
 
+test("Profit Intelligence exposes enterprise analytics", () => {
+  for (const field of [
+    "enterpriseAnalytics",
+    "comparisons",
+    "previousPeriod",
+    "previousYear",
+    "forecast",
+    "nextMonthProfitPaise",
+    "breakEven",
+    "profitTrend",
+    "expenseTrend",
+    "revenueHeatmap",
+    "alerts",
+    "suggestions"
+  ]) {
+    assert.ok(service.includes(field), `${field} should be part of the Stage 5 enterprise analytics contract`);
+  }
+  assert.match(service, /forecastNextMonthProfit/, "analytics should forecast next month profit");
+  assert.match(service, /revenueHeatmap/, "analytics should expose revenue heatmap");
+  assert.match(service, /profitSuggestions/, "analytics should expose AI-style profit suggestions");
+  for (const label of ["Enterprise analytics", "Trend & forecast", "Profit trend", "Revenue heatmap", "AI profit signals", "Next month forecast", "Break-even"]) {
+    assert.ok(page.includes(label), `${label} analytics panel should be visible`);
+  }
+});
+
 test("Profit Intelligence page is routed and visible in Finance navigation", () => {
   assert.match(appRoutes, /profit-intelligence[\s\S]*ProfitIntelligenceComponent/, "Angular route should load ProfitIntelligenceComponent");
   assert.ok(appComponent.includes("path: '/profit-intelligence'"), "Finance navigation should include the page");

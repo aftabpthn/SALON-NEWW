@@ -121,6 +121,91 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </article>
       </section>
 
+      <section class="enterprise-grid" *ngIf="summary()?.enterpriseAnalytics as analytics">
+        <article class="panel analytics-card">
+          <header>
+            <div>
+              <p class="eyebrow">Enterprise analytics</p>
+              <h2>Trend & forecast</h2>
+            </div>
+            <span>{{ analytics.periodGrain }}</span>
+          </header>
+          <div class="analytics-metrics">
+            <div>
+              <span>Prev period profit</span>
+              <strong>{{ percent(analytics.comparisons?.previousPeriod?.profitChangeBps) }}</strong>
+              <small>{{ paise(analytics.comparisons?.previousPeriod?.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }} baseline</small>
+            </div>
+            <div>
+              <span>YoY revenue</span>
+              <strong>{{ percent(analytics.comparisons?.previousYear?.revenueChangeBps) }}</strong>
+              <small>{{ paise(analytics.comparisons?.previousYear?.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }} baseline</small>
+            </div>
+            <div>
+              <span>Next month forecast</span>
+              <strong>{{ paise(analytics.forecast?.nextMonthProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <small>{{ analytics.forecast?.basis }}</small>
+            </div>
+            <div>
+              <span>Break-even</span>
+              <strong>{{ analytics.breakEven?.breakEvenDays || 0 }} days</strong>
+              <small>{{ analytics.breakEven?.status }} - {{ paise(analytics.breakEven?.fixedCostPaise) | currency: 'INR':'symbol':'1.0-0' }} fixed</small>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <div>
+              <p class="eyebrow">Profit trend</p>
+              <h2>Recent P&amp;L movement</h2>
+            </div>
+          </header>
+          <div class="mini-table">
+            <div *ngFor="let row of (analytics.profitTrend || []).slice(-7)">
+              <span>{{ row.date }}</span>
+              <strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <small>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }} revenue</small>
+            </div>
+            <div *ngIf="!(analytics.profitTrend || []).length" class="empty-row">No trend data.</div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <div>
+              <p class="eyebrow">Revenue heatmap</p>
+              <h2>Best revenue windows</h2>
+            </div>
+          </header>
+          <div class="mini-table">
+            <div *ngFor="let row of analytics.revenueHeatmap || []">
+              <span>{{ row.weekday }} {{ row.hour }}:00</span>
+              <strong>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <small>{{ row.invoiceCount || 0 }} invoices</small>
+            </div>
+            <div *ngIf="!(analytics.revenueHeatmap || []).length" class="empty-row">No heatmap data.</div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <div>
+              <p class="eyebrow">Alerts & suggestions</p>
+              <h2>AI profit signals</h2>
+            </div>
+          </header>
+          <div class="warnings analytics-warnings" *ngIf="(analytics.alerts || []).length">
+            <p *ngFor="let alert of analytics.alerts">{{ alert.message }}</p>
+          </div>
+          <div class="rank-list suggestion-list">
+            <div *ngFor="let suggestion of analytics.suggestions || []">
+              <span>{{ suggestion }}</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section class="insight-grid" *ngIf="summary() as report">
         <article class="panel">
           <header>
@@ -378,6 +463,18 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .ceo-grid article { display: grid; gap: 4px; min-width: 0; min-height: 88px; padding: 11px 12px; background: #fff; border: 1px solid #d9e1ea; border-top: 3px solid #143d59; }
     .ceo-grid span, .ceo-grid small { color: #64748b; font-size: 12px; font-weight: 800; }
     .ceo-grid strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; line-height: 1.1; }
+    .enterprise-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 10px; padding: 12px 14px; background: #f6f8fb; border-bottom: 1px solid #d9e1ea; }
+    .analytics-card { border-top: 3px solid #0f8a7d; }
+    .analytics-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .analytics-metrics div { display: grid; gap: 4px; min-width: 0; border: 1px solid #d9e1ea; padding: 10px; }
+    .analytics-metrics span, .analytics-metrics small, .mini-table span, .mini-table small { color: #64748b; font-size: 12px; font-weight: 800; }
+    .analytics-metrics strong { font-size: 18px; line-height: 1; white-space: nowrap; }
+    .mini-table { display: grid; border: 1px solid #d9e1ea; }
+    .mini-table > div { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 10px; border-bottom: 1px solid #d9e1ea; }
+    .mini-table > div:last-child { border-bottom: 0; }
+    .mini-table small { grid-column: 1 / -1; }
+    .analytics-warnings { margin-bottom: 8px; }
+    .suggestion-list > div { display: block; }
     .insight-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px 14px; }
     .drilldown-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 14px 14px; }
     .retention-grid { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 0 14px 14px; }
@@ -402,7 +499,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     @media (max-width: 1100px) {
       .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .ceo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .insight-grid, .drilldown-grid, .retention-grid { grid-template-columns: 1fr; }
+      .enterprise-grid, .insight-grid, .drilldown-grid, .retention-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .page-title, header { align-items: flex-start; flex-direction: column; }

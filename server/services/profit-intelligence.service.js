@@ -18,6 +18,33 @@ function monthStart(dateText = istDate()) {
   return `${dateText.slice(0, 7)}-01`;
 }
 
+function dateValue(dateText = istDate()) {
+  const [year, month, day] = String(dateText).slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(year || 1970, (month || 1) - 1, day || 1));
+}
+
+function dateText(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDaysText(date, days) {
+  const value = dateValue(date);
+  value.setUTCDate(value.getUTCDate() + Number(days || 0));
+  return dateText(value);
+}
+
+function addYearsText(date, years) {
+  const value = dateValue(date);
+  value.setUTCFullYear(value.getUTCFullYear() + Number(years || 0));
+  return dateText(value);
+}
+
+function periodDays(from, to) {
+  const diff = dateValue(to).getTime() - dateValue(from).getTime();
+  if (Number.isNaN(diff) || diff < 0) return 1;
+  return Math.floor(diff / 86400000) + 1;
+}
+
 function periodWindow(from, to, params = {}) {
   return {
     ...params,
@@ -66,6 +93,11 @@ function periodParams(query = {}, access = {}) {
 function marginBps(amountPaise, revenuePaise) {
   if (!revenuePaise) return 0;
   return Math.round((Number(amountPaise || 0) / Number(revenuePaise || 1)) * 10000);
+}
+
+function changeBps(current, previous) {
+  if (!previous) return current ? 10000 : 0;
+  return Math.round(((Number(current || 0) - Number(previous || 0)) / Math.abs(Number(previous || 1))) * 10000);
 }
 
 function classifyExpense(category = "") {
@@ -242,6 +274,7 @@ export class ProfitIntelligenceService {
       period: { from: params.from, to: params.to, branchId: params.branchId },
       metrics,
       ceoKpis: this.ceoKpis(params, metrics, profitBreakdown, expenseTotals.breakdown),
+      enterpriseAnalytics: this.enterpriseAnalytics(params, metrics, invoices, expenseRows, profitBreakdown),
       revenueBreakdown: breakdown,
       expenseBreakdown: expenseTotals.breakdown,
       sourceHealth: {
@@ -257,6 +290,40 @@ export class ProfitIntelligenceService {
         grossProfit: fromPaise(grossProfitPaise),
         netProfit: fromPaise(netProfitPaise)
       }
+    };
+  }
+
+  enterpriseAnalytics(params, metrics, invoices = [], expenseRows = [], breakdown = {}) {
+    const days = periodDays(params.from, params.to);
+    const previousTo = addDaysText(params.from, -1);
+    const previousFrom = addDaysText(previousTo, 1 - days);
+    const previousMetrics = this.basicMetrics(periodWindow(previousFrom, previousTo, params));
+    const previousYearMetrics = this.basicMetrics(periodWindow(addYearsText(params.from, -1), addYearsText(params.to, -1), params));
+    const fixedCostPaise = Number(metrics.staffCostPaise || 0) + Number(metrics.operatingExpensePaise || 0);
+    const avgDailyGrossProfitPaise = Math.round(Number(metrics.grossProfitPaise || 0) / Math.max(days, 1));
+    const breakEvenDays = avgDailyGrossProfitPaise > 0 ? Math.ceil(fixedCostPaise / avgDailyGrossProfitPaise) : 0;
+    const highExpense = this.highestExpense(this.classifiedExpenses(expenseRows).breakdown);
+    return {
+      periodGrain: days > 370 ? "yearly" : days > 93 ? "monthly" : days > 31 ? "weekly" : "daily",
+      comparisons: {
+        previousPeriod: this.metricComparison(metrics, previousMetrics, { from: previousFrom, to: previousTo }),
+        previousYear: this.metricComparison(metrics, previousYearMetrics, { from: addYearsText(params.from, -1), to: addYearsText(params.to, -1) })
+      },
+      forecast: {
+        nextMonthProfitPaise: this.forecastNextMonthProfit(metrics, params),
+        basis: "Current period average daily net profit"
+      },
+      breakEven: {
+        fixedCostPaise,
+        avgDailyGrossProfitPaise,
+        breakEvenDays,
+        status: breakEvenDays && breakEvenDays <= days ? "covered" : breakEvenDays ? "at-risk" : "blocked"
+      },
+      profitTrend: this.profitTrendRows(params),
+      expenseTrend: this.expenseTrendRows(expenseRows),
+      revenueHeatmap: this.revenueHeatmap(invoices),
+      alerts: this.analyticsAlerts(metrics, highExpense),
+      suggestions: this.profitSuggestions(metrics, breakdown, highExpense)
     };
   }
 
@@ -305,6 +372,93 @@ export class ProfitIntelligenceService {
     return { revenuePaise, grossProfitPaise, netProfitPaise };
   }
 
+  metricComparison(current = {}, previous = {}, period = {}) {
+    return {
+      period,
+      revenuePaise: Number(previous.revenuePaise || 0),
+      netProfitPaise: Number(previous.netProfitPaise || 0),
+      revenueChangeBps: changeBps(current.revenuePaise, previous.revenuePaise),
+      profitChangeBps: changeBps(current.netProfitPaise, previous.netProfitPaise),
+      grossProfitChangeBps: changeBps(current.grossProfitPaise, previous.grossProfitPaise)
+    };
+  }
+
+  forecastNextMonthProfit(metrics = {}, params = {}) {
+    const days = periodDays(params.from, params.to);
+    const to = dateValue(params.to);
+    const nextMonth = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 1));
+    const nextMonthDays = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 0)).getUTCDate();
+    return Math.round((Number(metrics.netProfitPaise || 0) / Math.max(days, 1)) * nextMonthDays);
+  }
+
+  profitTrendRows(params) {
+    const days = Math.min(periodDays(params.from, params.to), 31);
+    const start = addDaysText(params.to, 1 - days);
+    return Array.from({ length: days }, (_, index) => {
+      const date = addDaysText(start, index);
+      const metrics = this.basicMetrics(periodWindow(date, date, params));
+      return {
+        date,
+        revenuePaise: metrics.revenuePaise,
+        grossProfitPaise: metrics.grossProfitPaise,
+        netProfitPaise: metrics.netProfitPaise
+      };
+    });
+  }
+
+  expenseTrendRows(expenseRows = []) {
+    const rows = new Map();
+    for (const expense of expenseRows) {
+      const date = String(expense.paidAt || expense.createdAt || "").slice(0, 10) || "Unmapped";
+      const row = rows.get(date) || { date, productCostPaise: 0, staffCostPaise: 0, operatingExpensePaise: 0, totalExpensePaise: 0 };
+      const bucket = `${classifyExpense(expense.category)}Paise`;
+      const amountPaise = toPaise(expense.amount);
+      row[bucket] += amountPaise;
+      row.totalExpensePaise += amountPaise;
+      rows.set(date, row);
+    }
+    return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-31);
+  }
+
+  revenueHeatmap(invoices = []) {
+    const rows = new Map();
+    const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    for (const invoice of invoices) {
+      const raw = String(invoice.createdAt || "");
+      const parsed = raw ? new Date(raw) : null;
+      const weekday = parsed && !Number.isNaN(parsed.getTime()) ? weekdays[parsed.getDay()] : "Unmapped";
+      const hour = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getHours() : Number(raw.slice(11, 13) || 0);
+      const key = `${weekday}|${hour}`;
+      const row = rows.get(key) || { weekday, hour, invoiceCount: 0, revenuePaise: 0 };
+      row.invoiceCount += 1;
+      row.revenuePaise += toPaise(invoice.total);
+      rows.set(key, row);
+    }
+    return [...rows.values()].sort((a, b) => b.revenuePaise - a.revenuePaise).slice(0, 12);
+  }
+
+  analyticsAlerts(metrics = {}, highExpense = {}) {
+    const alerts = [];
+    if (metrics.revenuePaise > 0 && metrics.netMarginBps < 1500) alerts.push({ type: "low-margin", severity: "high", message: "Net margin below 15%. Review pricing, COGS and staff cost." });
+    if (metrics.revenuePaise > 0 && marginBps(metrics.operatingExpensePaise, metrics.revenuePaise) > 3500) alerts.push({ type: "high-expense", severity: "medium", message: "Operating expenses above 35% of revenue." });
+    if (metrics.revenuePaise > 0 && marginBps(metrics.productCostPaise, metrics.revenuePaise) > 3000) alerts.push({ type: "high-cogs", severity: "medium", message: "Product cost above 30% of revenue. Check recipes and backbar usage." });
+    if (highExpense.amountPaise > 0 && metrics.revenuePaise > 0 && marginBps(highExpense.amountPaise, metrics.revenuePaise) > 2000) alerts.push({ type: "expense-spike", severity: "medium", message: `${highExpense.label} is consuming more than 20% of revenue.` });
+    return alerts;
+  }
+
+  profitSuggestions(metrics = {}, breakdown = {}, highExpense = {}) {
+    const suggestions = [];
+    const lowService = [...(breakdown.serviceProfit || [])].sort((a, b) => Number(a.netMarginBps || 0) - Number(b.netMarginBps || 0))[0];
+    if (lowService && lowService.revenuePaise > 0 && lowService.netMarginBps < 2500) {
+      suggestions.push(`${lowService.serviceName} margin low hai; service price, recipe quantity ya commission rule review karein.`);
+    }
+    if (metrics.revenuePaise > 0 && marginBps(metrics.staffCostPaise, metrics.revenuePaise) > 3000) suggestions.push("Staff cost 30% se upar hai; roster, incentive slab aur commission mix check karein.");
+    if (metrics.revenuePaise > 0 && marginBps(metrics.productCostPaise, metrics.revenuePaise) > 2500) suggestions.push("COGS high dikh raha hai; product consume approval aur recipe wastage compare karein.");
+    if (highExpense.amountPaise > 0) suggestions.push(`${highExpense.label} highest expense hai; vendor rate aur monthly cap review karein.`);
+    if (!suggestions.length) suggestions.push("Profit signals stable hain; top services aur repeat customers par marketing focus rakhein.");
+    return suggestions.slice(0, 5);
+  }
+
   breakdown(query = {}, access = {}) {
     const params = periodParams(query, access);
     const invoices = this.invoiceRows(params);
@@ -343,7 +497,7 @@ export class ProfitIntelligenceService {
   invoiceRows(params) {
     if (!tableExists("invoices")) return [];
     return safeAll(`
-      SELECT i.id, i.invoiceNumber, i.lineItems, i.total, i.subtotal, i.discount, i.status,
+      SELECT i.id, i.invoiceNumber, i.lineItems, i.total, i.subtotal, i.discount, i.status, i.createdAt,
         i.clientId,
         COALESCE(NULLIF(i.branchId, ''), s.branchId, '') AS branchId,
         COALESCE(s.staffId, '') AS staffId,
