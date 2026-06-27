@@ -144,6 +144,30 @@ interface InvoiceActivityActionReportRow {
   suggestedAction: string;
 }
 
+interface CancelledVoidBillReportRow {
+  date: string;
+  time: string;
+  invoiceNumber: string;
+  invoiceId: string;
+  clientName: string;
+  clientPhone: string;
+  staffName: string;
+  amount: number;
+  paid: number;
+  due: number;
+  status: string;
+  reason: string;
+  actionByUser: string;
+  actionTime: string;
+}
+
+interface CancelledVoidBillSummary {
+  totalBill: number;
+  totalSale: number;
+  receivedAmount: number;
+  pendingAmount: number;
+}
+
 interface InvoiceActivityExportRow {
   [key: string]: string | number | boolean | null | undefined;
 }
@@ -393,6 +417,107 @@ interface InvoiceActivityRow {
                 <small>{{ report.summary?.criticalRiskActivities || 0 }} critical activity</small>
               </article>
             </div>
+
+            <section class="cancelled-void-panel">
+              <div class="section-title invoice-activity-title">
+                <div>
+                  <span class="eyebrow">Cancelled / Void-ed Bill</span>
+                  <h3>Cancelled and soft-deleted bill register</h3>
+                </div>
+                <div class="invoice-activity-filter-actions">
+                  <button class="ghost-button mini" type="button" (click)="exportCancelledVoidCsv()" [disabled]="!cancelledVoidRowsCache.length">Download CSV</button>
+                  <button class="ghost-button mini" type="button" (click)="exportCancelledVoidPdf()" [disabled]="!cancelledVoidRowsCache.length">Download PDF</button>
+                </div>
+              </div>
+
+              <div class="cancelled-void-summary">
+                <article>
+                  <span>Total Bill</span>
+                  <strong>{{ cancelledVoidSummaryCache.totalBill }}</strong>
+                </article>
+                <article>
+                  <span>Total Sale</span>
+                  <strong>{{ currency(cancelledVoidSummaryCache.totalSale) }}</strong>
+                </article>
+                <article>
+                  <span>Received Amount</span>
+                  <strong>{{ currency(cancelledVoidSummaryCache.receivedAmount) }}</strong>
+                </article>
+                <article>
+                  <span>Pending Amount</span>
+                  <strong>{{ currency(cancelledVoidSummaryCache.pendingAmount) }}</strong>
+                </article>
+              </div>
+
+              <div class="cancelled-void-toolbar">
+                <label class="field cancelled-void-search">
+                  <span>Search</span>
+                  <input
+                    [(ngModel)]="cancelledVoidSearch"
+                    (ngModelChange)="rebuildCancelledVoidViewModel()"
+                    placeholder="Name, phone or invoice"
+                  />
+                </label>
+                <span>{{ cancelledVoidRowsCache.length }} matched</span>
+              </div>
+
+              <div class="table-wrap cancelled-void-table" *ngIf="cancelledVoidRowsCache.length; else noCancelledVoidBills">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Contact</th>
+                      <th>Invoice No</th>
+                      <th>Price</th>
+                      <th>Paid</th>
+                      <th>Balance</th>
+                      <th>Date</th>
+                      <th>Reason</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of cancelledVoidRowsPreview">
+                      <td>{{ row.clientName }}</td>
+                      <td>{{ row.clientPhone }}</td>
+                      <td>
+                        <strong>{{ row.invoiceNumber }}</strong>
+                        <small>{{ statusLabel(row.status) }}</small>
+                      </td>
+                      <td>{{ currency(row.amount) }}</td>
+                      <td>{{ currency(row.paid) }}</td>
+                      <td>{{ currency(row.due) }}</td>
+                      <td>
+                        <strong>{{ row.date }}</strong>
+                        <small>{{ row.time }}</small>
+                      </td>
+                      <td>
+                        <strong>{{ row.reason }}</strong>
+                        <small>{{ row.staffName }} / {{ row.actionByUser }}</small>
+                      </td>
+                      <td>
+                        <div class="review-actions">
+                          <a
+                            class="ghost-button mini edit-action"
+                            routerLink="/pos/invoices"
+                            [queryParams]="{ invoice: row.invoiceId || row.invoiceNumber }"
+                          >
+                            Open invoice
+                          </a>
+                          <button type="button" class="ghost-button mini" (click)="reviewCancelledVoidBill(row)">Review</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <ng-template #noCancelledVoidBills>
+                <div class="empty-state compact">
+                  <strong>No cancelled/voided bills found</strong>
+                  <span>Change filters or run report after soft-delete/void activity.</span>
+                </div>
+              </ng-template>
+            </section>
 
             <div class="report-grid">
               <article class="report-card">
@@ -948,6 +1073,66 @@ interface InvoiceActivityRow {
       gap: 12px;
     }
 
+    .cancelled-void-panel {
+      display: grid;
+      gap: 14px;
+      padding: 14px;
+      border: 1px solid rgba(220, 38, 38, 0.18);
+      border-radius: var(--radius-md);
+      background: #fff;
+    }
+
+    .cancelled-void-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .cancelled-void-summary article {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fbfdff;
+    }
+
+    .cancelled-void-summary span,
+    .cancelled-void-toolbar span {
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .cancelled-void-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 420px) auto;
+      gap: 12px;
+      align-items: end;
+      justify-content: space-between;
+    }
+
+    .cancelled-void-search {
+      margin: 0;
+    }
+
+    .cancelled-void-table table {
+      min-width: 1180px;
+    }
+
+    .cancelled-void-table th,
+    .cancelled-void-table td {
+      white-space: normal;
+    }
+
+    .cancelled-void-table small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
     .report-card {
       display: grid;
       gap: 12px;
@@ -1266,6 +1451,7 @@ interface InvoiceActivityRow {
 
       .invoice-summary-grid,
       .report-summary-grid,
+      .cancelled-void-summary,
       .approval-timeline,
       .finance-impact-grid,
       .audit-trail-grid,
@@ -1296,6 +1482,10 @@ interface InvoiceActivityRow {
         grid-template-columns: 1fr;
       }
 
+      .cancelled-void-toolbar {
+        grid-template-columns: 1fr;
+      }
+
       .span-2 {
         grid-column: span 1;
       }
@@ -1306,6 +1496,7 @@ interface InvoiceActivityRow {
 
       .invoice-summary-grid,
       .report-summary-grid,
+      .cancelled-void-summary,
       .approval-timeline,
       .finance-impact-grid,
       .audit-trail-grid,
@@ -1340,12 +1531,21 @@ export class PosInvoiceActivityComponent implements OnInit {
   paymentAdjustmentRowsPreview: PaymentAdjustmentReportRow[] = [];
   deletedReportRowsCache: InvoiceActivityActionReportRow[] = [];
   deletedReportRowsPreview: InvoiceActivityActionReportRow[] = [];
+  cancelledVoidRowsCache: CancelledVoidBillReportRow[] = [];
+  cancelledVoidRowsPreview: CancelledVoidBillReportRow[] = [];
+  cancelledVoidSummaryCache: CancelledVoidBillSummary = {
+    totalBill: 0,
+    totalSale: 0,
+    receivedAmount: 0,
+    pendingAmount: 0
+  };
   restoredReportRowsCache: InvoiceActivityActionReportRow[] = [];
   restoredReportRowsPreview: InvoiceActivityActionReportRow[] = [];
   paymentUpdateReportRowsCache: InvoiceActivityActionReportRow[] = [];
   paymentUpdateReportRowsPreview: InvoiceActivityActionReportRow[] = [];
   reportExportRowsCache: InvoiceActivityExportRow[] = [];
   search = '';
+  cancelledVoidSearch = '';
   clientSearch = '';
   staffFilter = 'all';
   branchFilter = 'all';
@@ -1501,12 +1701,42 @@ export class PosInvoiceActivityComponent implements OnInit {
     return Array.isArray(report?.paymentUpdateReport) ? report.paymentUpdateReport : [];
   }
 
+  rebuildCancelledVoidViewModel(): void {
+    const query = this.cancelledVoidSearch.trim().toLowerCase();
+    const rows = this.buildCancelledVoidRows()
+      .filter((row) => {
+        if (!query) {
+          return true;
+        }
+        return [
+          row.clientName,
+          row.clientPhone,
+          row.invoiceNumber,
+          row.staffName,
+          row.reason,
+          row.actionByUser,
+          row.status
+        ].join(' ').toLowerCase().includes(query);
+      })
+      .sort((a, b) => new Date(b.actionTime).getTime() - new Date(a.actionTime).getTime());
+
+    this.cancelledVoidRowsCache = rows;
+    this.cancelledVoidRowsPreview = rows.slice(0, 25);
+    this.cancelledVoidSummaryCache = {
+      totalBill: rows.length,
+      totalSale: rows.reduce((sum, row) => sum + row.amount, 0),
+      receivedAmount: rows.reduce((sum, row) => sum + row.paid, 0),
+      pendingAmount: rows.reduce((sum, row) => sum + row.due, 0)
+    };
+  }
+
   exportRowCount(): number {
     return this.reportExportRowsCache.length;
   }
 
   resetFilters(): void {
     this.search = '';
+    this.cancelledVoidSearch = '';
     this.clientSearch = '';
     this.staffFilter = 'all';
     this.branchFilter = 'all';
@@ -1551,6 +1781,19 @@ export class PosInvoiceActivityComponent implements OnInit {
     this.selectRow(row);
     window.setTimeout(() => {
       document.querySelector('.activity-detail-drawer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  reviewCancelledVoidBill(row: CancelledVoidBillReportRow): void {
+    const activity = this.findActivityForCancelledVoidRow(row);
+    if (activity) {
+      this.reviewNow(activity);
+      return;
+    }
+    this.search = row.invoiceNumber;
+    this.applyLocalFilters();
+    window.setTimeout(() => {
+      document.querySelector('.invoice-activity-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }
 
@@ -1619,6 +1862,51 @@ export class PosInvoiceActivityComponent implements OnInit {
       ...this.paymentAdjustmentRows(report).slice(0, 12).map((row) => `${this.paymentModeLabel(row.paymentMode)} - count ${row.count}, amount ${this.currency(row.totalAmount)}, diff ${this.currency(row.paymentDifference)}`)
     ];
     this.downloadFile(`invoice-activity-report-${this.todayKey()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportCancelledVoidCsv(): void {
+    const rows = this.cancelledVoidRowsCache;
+    if (!rows.length) {
+      return;
+    }
+    const headers: Array<keyof CancelledVoidBillReportRow> = [
+      'date',
+      'time',
+      'clientName',
+      'clientPhone',
+      'invoiceNumber',
+      'staffName',
+      'amount',
+      'paid',
+      'due',
+      'status',
+      'reason',
+      'actionByUser'
+    ];
+    const csv = [
+      headers.join(','),
+      ...rows.map((row) => headers.map((header) => this.csvCell(row[header])).join(','))
+    ].join('\n');
+    this.downloadFile(`cancelled-voided-bill-report-${this.todayKey()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  exportCancelledVoidPdf(): void {
+    const rows = this.cancelledVoidRowsCache;
+    if (!rows.length) {
+      return;
+    }
+    const lines = [
+      'Aura Salon OS - Cancelled / Void-ed Bill Report',
+      `Generated: ${this.formatDateTime(new Date().toISOString())}`,
+      `Total Bill: ${this.cancelledVoidSummaryCache.totalBill}`,
+      `Total Sale: ${this.currency(this.cancelledVoidSummaryCache.totalSale)}`,
+      `Received Amount: ${this.currency(this.cancelledVoidSummaryCache.receivedAmount)}`,
+      `Pending Amount: ${this.currency(this.cancelledVoidSummaryCache.pendingAmount)}`,
+      '',
+      'Name | Contact | Invoice | Price | Paid | Balance | Date | Reason',
+      ...rows.slice(0, 40).map((row) => `${row.clientName} | ${row.clientPhone} | ${row.invoiceNumber} | ${this.currency(row.amount)} | ${this.currency(row.paid)} | ${this.currency(row.due)} | ${row.date} ${row.time} | ${row.reason}`)
+    ];
+    this.downloadFile(`cancelled-voided-bill-report-${this.todayKey()}.pdf`, this.simplePdf(lines), 'application/pdf');
   }
 
   hasApprovalWorkflow(row: InvoiceActivityRow): boolean {
@@ -1877,6 +2165,7 @@ export class PosInvoiceActivityComponent implements OnInit {
     });
     this.branchOptionsCache = Array.from(branches, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
     this.applyLocalFilters();
+    this.rebuildCancelledVoidViewModel();
   }
 
   private rebuildReportViewModel(report: InvoiceActivityReportResponse | null): void {
@@ -1888,6 +2177,7 @@ export class PosInvoiceActivityComponent implements OnInit {
     this.paymentAdjustmentRowsPreview = this.paymentAdjustmentRowsCache.slice(0, 6);
     this.deletedReportRowsCache = this.deletedReportRows(report);
     this.deletedReportRowsPreview = this.deletedReportRowsCache.slice(0, 6);
+    this.rebuildCancelledVoidViewModel();
     this.restoredReportRowsCache = this.restoredReportRows(report);
     this.restoredReportRowsPreview = this.restoredReportRowsCache.slice(0, 6);
     this.paymentUpdateReportRowsCache = this.paymentUpdateReportRows(report);
@@ -1936,6 +2226,101 @@ export class PosInvoiceActivityComponent implements OnInit {
       suggestedAction: row.suggestedAction,
       reason: row.deleteReason || row.approvalReason || row.rejectionReason
     }));
+  }
+
+  private buildCancelledVoidRows(): CancelledVoidBillReportRow[] {
+    const byKey = new Map<string, CancelledVoidBillReportRow>();
+
+    this.deletedReportRowsCache.forEach((row) => {
+      const cancelledRow = this.cancelledVoidRowFromReport(row);
+      byKey.set(this.cancelledVoidRowKey(cancelledRow), cancelledRow);
+    });
+
+    this.rows()
+      .filter((row) => this.isCancelledVoidActivity(row))
+      .forEach((row) => {
+        const cancelledRow = this.cancelledVoidRowFromActivity(row);
+        byKey.set(this.cancelledVoidRowKey(cancelledRow), cancelledRow);
+      });
+
+    return Array.from(byKey.values());
+  }
+
+  private cancelledVoidRowFromReport(row: InvoiceActivityActionReportRow): CancelledVoidBillReportRow {
+    const activity = this.findActivityForActionReportRow(row);
+    const sourceDate = activity?.invoiceCreatedAt || activity?.actionTime || row.date;
+    return {
+      date: this.formatDate(sourceDate),
+      time: activity ? this.formatTime(activity.invoiceCreatedAt || activity.actionTime) : '-',
+      invoiceNumber: row.invoiceNumber || activity?.invoiceNumber || 'Unknown invoice',
+      invoiceId: activity?.invoiceId || row.invoiceNumber || '',
+      clientName: row.clientName || activity?.clientName || 'Unknown client',
+      clientPhone: row.clientPhone || activity?.clientPhone || '-',
+      staffName: row.staffName || activity?.staffName || 'Unassigned',
+      amount: this.numberValue(row.amount || activity?.total),
+      paid: this.numberValue(row.paid || activity?.paid),
+      due: this.numberValue(row.due || activity?.balance),
+      status: row.status || activity?.status || 'deleted',
+      reason: this.cancelledVoidReason(row, activity),
+      actionByUser: row.actionByUser || activity?.actionByUser || 'System',
+      actionTime: activity?.actionTime || this.dateValue(row.date)
+    };
+  }
+
+  private cancelledVoidRowFromActivity(row: InvoiceActivityRow): CancelledVoidBillReportRow {
+    const sourceDate = row.invoiceCreatedAt || row.actionTime;
+    return {
+      date: this.formatDate(sourceDate),
+      time: this.formatTime(sourceDate),
+      invoiceNumber: row.invoiceNumber,
+      invoiceId: row.invoiceId,
+      clientName: row.clientName,
+      clientPhone: row.clientPhone,
+      staffName: row.staffName,
+      amount: row.total,
+      paid: row.paid,
+      due: row.balance,
+      status: row.status || row.actionType,
+      reason: row.deleteReason || row.approvalReason || row.rejectionReason || row.riskReason || 'Cancelled / voided invoice activity',
+      actionByUser: row.actionByUser,
+      actionTime: row.actionTime
+    };
+  }
+
+  private cancelledVoidReason(row: InvoiceActivityActionReportRow, activity: InvoiceActivityRow | null): string {
+    return activity?.deleteReason
+      || activity?.approvalReason
+      || activity?.rejectionReason
+      || row.riskReason
+      || 'Soft-deleted / cancelled invoice';
+  }
+
+  private cancelledVoidRowKey(row: CancelledVoidBillReportRow): string {
+    return `${row.invoiceId || row.invoiceNumber}_${row.actionTime}`;
+  }
+
+  private isCancelledVoidActivity(row: InvoiceActivityRow): boolean {
+    const status = `${row.actionType} ${row.status} ${row.deleteReason} ${row.approvalReason}`.toLowerCase();
+    return row.actionType === 'deleted'
+      || status.includes('delete')
+      || status.includes('void')
+      || status.includes('cancel');
+  }
+
+  private findActivityForCancelledVoidRow(row: CancelledVoidBillReportRow): InvoiceActivityRow | null {
+    return this.rows().find((activity) => {
+      if (row.invoiceId && activity.invoiceId === row.invoiceId) {
+        return true;
+      }
+      return activity.invoiceNumber === row.invoiceNumber && this.isCancelledVoidActivity(activity);
+    }) || null;
+  }
+
+  private findActivityForActionReportRow(row: InvoiceActivityActionReportRow): InvoiceActivityRow | null {
+    return this.rows().find((activity) => (
+      activity.invoiceNumber === row.invoiceNumber
+      || (activity.invoiceId && activity.invoiceId === row.invoiceNumber)
+    ) && this.isCancelledVoidActivity(activity)) || null;
   }
 
   private csvCell(value: unknown): string {
