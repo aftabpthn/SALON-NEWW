@@ -289,6 +289,7 @@ type MigrationRecoveryReport = {
             <button class="primary-button" [disabled]="!hasSelectedSourcePayload() || loading() || alreadyImportedCurrentFile()" (click)="runImport()">{{ operationButtonLabel('import', 'Final import') }}</button>
             <button class="ghost-button" type="button" [disabled]="!templateColumns().length" (click)="downloadTemplate()">Template</button>
           </div>
+          <p class="estimate-text" *ngIf="hasSelectedSourcePayload()">{{ analyzeEstimateText() }}</p>
           <div class="migration-progress-panel" *ngIf="migrationProgressVisible()">
             <div>
               <span>{{ activeMigrationLabel() }}</span>
@@ -349,7 +350,7 @@ type MigrationRecoveryReport = {
             <article><span>Job ID</span><strong>{{ largeJob()?.id || '-' }}</strong><small>{{ largeJob()?.resumeToken || 'Create a staged job from analyzed data' }}</small></article>
             <article><span>Rows</span><strong>{{ largeJob()?.totalRows || summary()?.totalRows || 0 }}</strong><small>{{ largeJob()?.processedRows || 0 }} processed</small></article>
             <article><span>Imported</span><strong>{{ largeJob()?.importedRows || 0 }}</strong><small>{{ largeJob()?.skippedRows || 0 }} skipped</small></article>
-            <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeReadyChunks() }}/{{ largeJobChunks().length }} chunks ready · {{ csvStagedRows() }} staged rows</small></article>
+            <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeJobProgressDetail() }}</small></article>
           </div>
           <p class="muted" *ngIf="largeUploadStatus() === 'complete' && largeJob()">
             Auto-created by Large Import Mode. Chunks are already staged and queued for processing.
@@ -930,6 +931,7 @@ type MigrationRecoveryReport = {
     .toggle-field { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
     .toggle-field input { width: 20px; min-height: 20px; padding: 0; }
     .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+    .estimate-text { margin: -4px 0 12px; border: 1px solid #d7e6e2; border-radius: 8px; background: #f8fffd; color: #475569; padding: 10px 12px; font-size: 13px; font-weight: 800; line-height: 1.45; }
     .normalizer-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; border: 1px solid #cfe0dc; border-radius: 8px; background: #f8fffd; padding: 12px; }
     .normalizer-card span, .migration-progress-panel span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     .normalizer-card strong, .migration-progress-panel strong { display: block; margin-top: 4px; }
@@ -1843,6 +1845,99 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     return Math.max(0, Math.min(100, Math.round(((Number(job?.importedRows || 0) + Number(job?.skippedRows || 0) + Number(job?.errorRows || 0)) / total) * 100)));
   }
 
+  largeJobProgressDetail(): string {
+    const chunks = this.largeJobChunks();
+    const totalChunks = chunks.length;
+    const analyzedStatuses = new Set(['analyzed', 'analyzed_with_errors', 'failed', 'imported', 'imported_with_errors', 'skipped_with_errors']);
+    const importedStatuses = new Set(['imported', 'imported_with_errors', 'skipped_with_errors']);
+    const analyzed = chunks.filter((chunk) => analyzedStatuses.has(String(chunk.status || ''))).length;
+    const imported = chunks.filter((chunk) => importedStatuses.has(String(chunk.status || ''))).length;
+    const failed = chunks.filter((chunk) => String(chunk.status || '') === 'failed').length;
+    if (!totalChunks) {
+      const stagedRows = Number(this.csvStagedRows() || 0);
+      return stagedRows ? `${this.formatCount(stagedRows)} staged rows - ETA ${this.estimatedAnalyzeTimeText()}` : `No chunks yet - ETA ${this.estimatedAnalyzeTimeText()}`;
+    }
+    return `${analyzed}/${totalChunks} analyzed - ${imported}/${totalChunks} imported - ${failed} failed - ETA ${this.estimatedAnalyzeTimeText()}`;
+  }
+
+  analyzeEstimateText(): string {
+    const mode = this.largeUploadMode() || this.shouldAnalyzeAsLargePackage() ? 'Large Analyze' : 'Analyze';
+    const running = this.loading() && this.activeMigrationOperation() === 'analyze';
+    const prefix = running ? `${mode} running` : this.summary() ? `${mode} re-run estimate` : `${mode} estimate`;
+    return `${prefix}: ${this.analyzeWorkloadLabel()} - approx ${this.estimatedAnalyzeTimeText()}.`;
+  }
+
+  private analyzeWorkloadLabel(): string {
+    const rows = this.estimatedAnalyzeRows();
+    const chunks = this.estimatedAnalyzeChunks(rows);
+    if (rows) {
+      const chunkText = chunks > 1 ? ` across about ${chunks} chunks` : '';
+      return `${this.formatCount(rows)} rows${chunkText}`;
+    }
+    const name = this.fileName();
+    const fileText = this.fileSize() ? this.fileSizeLabel() : 'selected file';
+    const modeText = this.largeUploadMode() ? ' in Large Import Mode' : '';
+    return `${fileText}${name ? ` ${name}` : ''}${modeText}`;
+  }
+
+  private estimatedAnalyzeRows(): number {
+    return Number(
+      this.normalizerResult()?.summary?.totalRows
+      || this.largeJob()?.totalRows
+      || this.summary()?.totalRows
+      || this.commandCenterReport()?.simulator?.estimatedImportRows
+      || 0
+    );
+  }
+
+  private estimatedAnalyzeChunks(rows = this.estimatedAnalyzeRows()): number {
+    const actualChunks = this.largeJobChunks().length;
+    if (actualChunks) return actualChunks;
+    const fileName = this.fileName().toLowerCase();
+    const chunkable = this.largeUploadMode() || rows > 50000 || fileName.endsWith('.zip') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    if (!chunkable || !rows) return 0;
+    return Math.max(1, Math.ceil(rows / Math.max(100, this.largeChunkSize())));
+  }
+
+  private estimatedAnalyzeTimeText(): string {
+    const rows = this.estimatedAnalyzeRows();
+    const chunks = this.estimatedAnalyzeChunks(rows);
+    const fileName = this.fileName().toLowerCase();
+    const archiveLike = fileName.endsWith('.zip') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const largeMode = this.largeUploadMode() || this.shouldAnalyzeAsLargePackage() || rows > 50000 || chunks > 1;
+    if (rows) {
+      const rowBatches = Math.max(1, Math.ceil(rows / 10000));
+      const minSeconds = largeMode ? 20 + Math.max(1, chunks) * 4 : 8 + rowBatches * 4;
+      const maxSeconds = largeMode ? 45 + Math.max(1, chunks) * 10 : 20 + rowBatches * 8;
+      return this.durationRange(minSeconds, maxSeconds);
+    }
+    const sizeMb = Number(this.fileSize() || 0) / 1024 / 1024;
+    if (!sizeMb) return 'available after file select';
+    if (largeMode || archiveLike) {
+      return this.durationRange(Math.max(60, sizeMb * 2), Math.max(180, sizeMb * 8));
+    }
+    return this.durationRange(Math.max(15, sizeMb * 1.5), Math.max(45, sizeMb * 5));
+  }
+
+  private durationRange(minSeconds: number, maxSeconds: number): string {
+    const min = Math.max(5, Math.round(minSeconds));
+    const max = Math.max(min, Math.round(maxSeconds));
+    const left = this.durationLabel(min);
+    const right = this.durationLabel(max);
+    return left === right ? `~${left}` : `~${left}-${right}`;
+  }
+
+  private durationLabel(seconds: number): string {
+    if (seconds < 60) {
+      const rounded = Math.max(10, Math.round(seconds / 10) * 10);
+      return `${rounded} sec`;
+    }
+    return `${Math.max(1, Math.round(seconds / 60))} min`;
+  }
+
+  private formatCount(value: number): string {
+    return Math.round(Number(value || 0)).toLocaleString('en-IN');
+  }
   largeMigrationChecklist(): Array<{ label: string; done: boolean }> {
     return [
       { label: 'Source file uploaded', done: this.canPrepareLargeMigration() },
