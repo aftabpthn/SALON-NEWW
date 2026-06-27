@@ -74,6 +74,53 @@ type InvoiceLine = {
             <option value="unpaid">Unpaid / due</option>
           </select>
         </label>
+        <label class="field">
+          <span>Client</span>
+          <select [(ngModel)]="clientFilter">
+            <option value="">All clients</option>
+            <option *ngFor="let client of clientFilterOptions()" [value]="client.id">{{ client.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Staff</span>
+          <select [(ngModel)]="staffFilter">
+            <option value="">All staff</option>
+            <option *ngFor="let staff of staffFilterOptions()" [value]="staff.id">{{ staff.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Recovery status</span>
+          <select [(ngModel)]="recoveryStatus">
+            <option value="all">All due/recovered</option>
+            <option value="pending">Pending due</option>
+            <option value="partial">Partial recovered</option>
+            <option value="recovered">Recovered</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Aging bucket</span>
+          <select [(ngModel)]="agingBucket">
+            <option value="">All buckets</option>
+            <option value="0-7 days">0-7 days</option>
+            <option value="8-15 days">8-15 days</option>
+            <option value="16-30 days">16-30 days</option>
+            <option value="30+ days">30+ days</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Payment mode</span>
+          <select [(ngModel)]="paymentModeFilter">
+            <option value="">All modes</option>
+            <option *ngFor="let mode of paymentModeOptions()" [value]="mode.id">{{ mode.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Received by</span>
+          <select [(ngModel)]="receivedByFilter">
+            <option value="">All receivers</option>
+            <option *ngFor="let receiver of receivedByOptions()" [value]="receiver.id">{{ receiver.label }}</option>
+          </select>
+        </label>
         <label class="field span-2">
           <span>Search</span>
           <input [(ngModel)]="query" placeholder="Invoice, client, staff, service, product, payment mode" />
@@ -110,6 +157,7 @@ type InvoiceLine = {
             <div class="hero-actions">
               <span class="badge">{{ filteredLines().length }} line(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()">Export CSV</button>
+              <button class="ghost-button" type="button" (click)="exportPdf()">Export PDF</button>
             </div>
           </div>
 
@@ -171,7 +219,7 @@ type InvoiceLine = {
 
     .report-filter-panel {
       display: grid;
-      grid-template-columns: repeat(3, minmax(140px, 1fr)) minmax(260px, 1.6fr) minmax(180px, 0.8fr) auto;
+      grid-template-columns: repeat(4, minmax(140px, 1fr));
       gap: 12px;
       align-items: end;
     }
@@ -321,6 +369,12 @@ export class InvoiceReportsComponent implements OnInit {
   to = this.today();
   status = '';
   query = '';
+  clientFilter = '';
+  staffFilter = '';
+  recoveryStatus = 'all';
+  agingBucket = '';
+  paymentModeFilter = '';
+  receivedByFilter = '';
 
   readonly reportDefinitions: ReportDefinition[] = [
     { id: 'overview', title: 'Invoice Summary', badge: '01', description: 'Gross, discount, GST, paid, due and invoice count.' },
@@ -330,7 +384,8 @@ export class InvoiceReportsComponent implements OnInit {
     { id: 'memberships', title: 'Membership / Package Sales', badge: '05', description: 'Membership, package and prepaid credit selling.' },
     { id: 'gst', title: 'GST + HSN/SAC', badge: '06', description: 'GST rate wise taxable and tax breakup.' },
     { id: 'payments', title: 'Payment Collection', badge: '07', description: 'Cash, UPI, card, wallet, online and split payment.' },
-    { id: 'due-aging', title: 'Due / Unpaid Aging', badge: '08', description: 'Client-wise and invoice-wise pending recovery.' },
+    { id: 'due-aging', title: 'Due / Unpaid Aging', badge: '08', description: 'Original unpaid invoice, recovery payment, receiver and aging audit.' },
+    { id: 'staff-unpaid', title: 'Staff Unpaid Services', badge: '8A', description: 'Staff/service wise unpaid, recovered and pending due accountability.' },
     { id: 'wallet', title: 'Wallet Ledger', badge: '09', description: 'Wallet used, wallet balance and liability.' },
     { id: 'audit', title: 'Refund / Void / Adjustment', badge: '10', description: 'Delete, edit, restore, refund and approval trail.' },
     { id: 'branch-closing', title: 'Branch Day Closing', badge: '11', description: 'Date and branch wise closing with GST and due.' },
@@ -366,7 +421,10 @@ export class InvoiceReportsComponent implements OnInit {
       { key: 'mode', label: 'Mode' }, { key: 'amount', label: 'Collected', type: 'currency' }, { key: 'invoices', label: 'Invoices', type: 'number' }, { key: 'splitCount', label: 'Split usage', type: 'number' }, { key: 'risk', label: 'Reconcile risk', type: 'badge' }
     ],
     'due-aging': [
-      { key: 'invoiceNumber', label: 'Invoice' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'date', label: 'Date', type: 'date' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'paid', label: 'Paid', type: 'currency' }, { key: 'lastPaymentDate', label: 'Last payment', type: 'date' }, { key: 'unpaidSinceDays', label: 'Unpaid since', type: 'number' }, { key: 'invoiceAgeDays', label: 'Invoice age', type: 'number' }, { key: 'lastRecoveryTouchDate', label: 'Last touch', type: 'date' }, { key: 'lastRecoveryTouchDays', label: 'Touch age' }, { key: 'bucket', label: 'Bucket', type: 'badge' }, { key: 'recoveryAction', label: 'Recovery action', type: 'badge' }
+      { key: 'invoiceNumber', label: 'Invoice' }, { key: 'originalInvoiceDate', label: 'Invoice date' }, { key: 'originalInvoiceTime', label: 'Invoice time' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'serviceNames', label: 'Services' }, { key: 'totalAmount', label: 'Total', type: 'currency' }, { key: 'paid', label: 'Paid', type: 'currency' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'paymentStatus', label: 'Status', type: 'badge' }, { key: 'bucket', label: 'Aging bucket', type: 'badge' }, { key: 'duePaidDate', label: 'Due paid date' }, { key: 'duePaidTime', label: 'Due paid time' }, { key: 'receivedAmount', label: 'Received due', type: 'currency' }, { key: 'paymentMode', label: 'Mode' }, { key: 'receivedBy', label: 'Received by' }, { key: 'receiverId', label: 'Receiver ID' }, { key: 'settlementPaymentId', label: 'Settlement/payment ID' }, { key: 'paymentReference', label: 'Reference no.' }, { key: 'daysToRecovery', label: 'Days to recovery', type: 'number' }, { key: 'partialPaymentHistory', label: 'Partial payment history' }
+    ],
+    'staff-unpaid': [
+      { key: 'staffName', label: 'Staff' }, { key: 'serviceName', label: 'Service' }, { key: 'invoiceCount', label: 'Invoices', type: 'number' }, { key: 'totalBilled', label: 'Total billed', type: 'currency' }, { key: 'totalUnpaid', label: 'Total unpaid', type: 'currency' }, { key: 'totalRecovered', label: 'Recovered', type: 'currency' }, { key: 'pendingDue', label: 'Pending due', type: 'currency' }, { key: 'recoveryRate', label: 'Recovery rate', type: 'percent' }
     ],
     wallet: [
       { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'walletUsed', label: 'Wallet used', type: 'currency' }, { key: 'walletBalance', label: 'Wallet balance', type: 'currency' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'lastActivity', label: 'Last activity', type: 'date' }, { key: 'source', label: 'Source', type: 'badge' }
@@ -441,8 +499,10 @@ export class InvoiceReportsComponent implements OnInit {
     const lines = this.lines().filter((line) => {
       const statusMatch = !this.status || (this.status === 'unpaid' ? line.due > 0 : String(line.status).toLowerCase().includes(this.status));
       const dateMatch = this.inDateRange(line.date);
+      const clientMatch = !this.clientFilter || String(line.clientId || '') === String(this.clientFilter);
+      const staffMatch = !this.staffFilter || String(line.staffId || line.staffName || '') === String(this.staffFilter) || String(line.staffName || '') === String(this.staffFilter);
       const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.paymentModes}`.toLowerCase();
-      return statusMatch && dateMatch && (!query || text.includes(query));
+      return statusMatch && dateMatch && clientMatch && staffMatch && (!query || text.includes(query));
     });
     return lines;
   }
@@ -490,6 +550,7 @@ export class InvoiceReportsComponent implements OnInit {
     if (report === 'gst') return this.gstRows();
     if (report === 'payments') return this.paymentRows();
     if (report === 'due-aging') return this.dueRows();
+    if (report === 'staff-unpaid') return this.staffUnpaidRows();
     if (report === 'wallet') return this.walletRows();
     if (report === 'audit') return this.auditRows();
     if (report === 'branch-closing') return this.branchClosingRows();
@@ -549,6 +610,24 @@ export class InvoiceReportsComponent implements OnInit {
     link.download = `invoice-report-${this.activeReport()}-${Date.now()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  exportPdf(): void {
+    const report = this.activeDefinition();
+    const rows = this.activeRows();
+    const summaryLines = this.unpaidExportSummaryLines();
+    const body = [
+      `${report.title}`,
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.from || 'All'} to ${this.to || 'All'}`,
+      ...summaryLines,
+      '',
+      ...rows.slice(0, 80).map((row, index) => {
+        const cells = this.activeColumns().map((column) => `${column.label}: ${this.formatCell(row, column)}`).join(' | ');
+        return `${index + 1}. ${cells}`;
+      })
+    ];
+    this.downloadFile(`invoice-report-${this.activeReport()}-${Date.now()}.pdf`, this.simplePdf(body), 'application/pdf');
   }
 
   private overviewRows(): ApiRecord[] {
@@ -664,31 +743,256 @@ export class InvoiceReportsComponent implements OnInit {
   }
 
   private dueRows(): ApiRecord[] {
-    const invoiceRows = this.uniqueInvoiceRows().filter((line) => line.due > 0);
+    const invoiceRows = this.uniqueInvoiceRows().filter((line) => line.due > 0 || this.dueRecoveryPayments(line.invoiceId).length > 0);
     return invoiceRows.map((line) => {
+      const invoiceLines = this.filteredLines().filter((item) => item.invoiceId === line.invoiceId);
+      const recoveryPayments = this.dueRecoveryPayments(line.invoiceId);
+      const latestRecovery = recoveryPayments[recoveryPayments.length - 1] || null;
+      const receivedAmount = this.money(recoveryPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0));
       const lastPaymentDate = this.lastPaymentDate(line.invoiceId);
       const unpaidSinceDate = lastPaymentDate || line.date;
       const unpaidSinceDays = this.ageDays(unpaidSinceDate);
       const invoiceAgeDays = this.ageDays(line.date);
       const lastRecoveryTouchDate = this.lastRecoveryTouchDate(line.invoiceId, line.invoiceNumber, line.clientId);
+      const bucket = this.unpaidBucket(line.due > 0 ? invoiceAgeDays : this.recoveryDays(line.date, latestRecovery));
+      const paymentStatus = this.unpaidRecoveryStatus(line.due, receivedAmount);
+      const paymentMode = latestRecovery ? this.paymentMode(latestRecovery) : '';
+      const receiverId = latestRecovery ? this.paymentReceiverId(latestRecovery) : '';
       return {
+        invoiceId: line.invoiceId,
         invoiceNumber: line.invoiceNumber,
+        originalInvoiceDate: this.dateKey(line.date),
+        originalInvoiceTime: this.timeLabel(line.date),
         clientName: line.clientName,
         clientPhone: line.clientPhone,
         staffName: line.staffName,
+        staffId: line.staffId,
+        serviceNames: this.serviceNamesForInvoice(invoiceLines),
+        totalAmount: this.invoiceTotal(line.invoiceId),
         date: line.date,
         due: line.due,
         paid: line.paid,
+        paymentStatus,
         lastPaymentDate,
         unpaidSinceDays,
         invoiceAgeDays,
         lastRecoveryTouchDate,
         lastRecoveryTouchDays: lastRecoveryTouchDate ? this.ageDays(lastRecoveryTouchDate) : '',
         ageDays: unpaidSinceDays,
-        bucket: this.unpaidBucket(unpaidSinceDays),
-        recoveryAction: this.recoveryAction(unpaidSinceDays)
+        bucket,
+        recoveryAction: this.recoveryAction(invoiceAgeDays),
+        duePaidDate: latestRecovery ? this.dateKey(this.paymentDate(latestRecovery)) : '',
+        duePaidTime: latestRecovery ? this.timeLabel(this.paymentDate(latestRecovery)) : '',
+        receivedAmount,
+        paymentMode: paymentMode ? this.modeLabel(paymentMode) : '',
+        receivedBy: latestRecovery ? this.paymentReceiver(latestRecovery) : '',
+        receiverId,
+        settlementPaymentId: latestRecovery ? this.paymentSettlementId(latestRecovery) : '',
+        paymentReference: latestRecovery ? this.paymentReference(latestRecovery) : '',
+        daysToRecovery: latestRecovery ? this.recoveryDays(line.date, latestRecovery) : '',
+        partialPaymentHistory: this.partialPaymentHistory(recoveryPayments)
       };
-    }).sort((a, b) => Number(b['due']) - Number(a['due']));
+    }).filter((row) => this.matchesRecoveryFilters(row))
+      .sort((a, b) => Number(b['due']) - Number(a['due']) || Number(b['receivedAmount']) - Number(a['receivedAmount']));
+  }
+
+  private staffUnpaidRows(): ApiRecord[] {
+    const serviceLines = this.filteredLines().filter((line) => line.itemType === 'service');
+    return this.group(serviceLines, (line) => `${line.staffName || 'Unassigned'}|${line.itemName || 'Service'}`)
+      .map((items) => {
+        const invoiceIds = new Set(items.map((item) => item.invoiceId));
+        const pendingDue = this.money(items.reduce((sum, line) => sum + this.lineDueShare(line), 0));
+        const totalRecovered = this.money(items.reduce((sum, line) => sum + this.lineRecoveredShare(line), 0));
+        const totalUnpaid = this.money(pendingDue + totalRecovered);
+        const recoveryRate = totalUnpaid > 0 ? this.money((totalRecovered / totalUnpaid) * 100) : 0;
+        return {
+          staffName: items[0].staffName,
+          serviceName: items[0].itemName,
+          invoiceCount: invoiceIds.size,
+          totalBilled: this.sum(items, 'final'),
+          totalUnpaid,
+          totalRecovered,
+          pendingDue,
+          recoveryRate
+        };
+      })
+      .filter((row) => Number(row['totalUnpaid']) > 0 || Number(row['pendingDue']) > 0)
+      .sort((a, b) => Number(b['pendingDue']) - Number(a['pendingDue']) || Number(b['totalUnpaid']) - Number(a['totalUnpaid']));
+  }
+
+  clientFilterOptions(): Array<{ id: string; label: string }> {
+    const map = new Map<string, string>();
+    for (const line of this.lines()) {
+      if (line.clientId) map.set(line.clientId, `${line.clientName}${line.clientPhone ? ` · ${line.clientPhone}` : ''}`);
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  staffFilterOptions(): Array<{ id: string; label: string }> {
+    const map = new Map<string, string>();
+    for (const line of this.lines()) {
+      const id = line.staffId || line.staffName;
+      if (id) map.set(id, line.staffName || id);
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  paymentModeOptions(): Array<{ id: string; label: string }> {
+    const modes = new Set(this.payments().map((payment) => this.paymentMode(payment)).filter(Boolean));
+    return [...modes].map((id) => ({ id, label: this.modeLabel(id) })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  receivedByOptions(): Array<{ id: string; label: string }> {
+    const map = new Map<string, string>();
+    for (const payment of this.payments().filter((item) => this.isReceivedDuePayment(item))) {
+      const id = this.paymentReceiverId(payment);
+      if (id) map.set(id, this.paymentReceiver(payment));
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  private matchesRecoveryFilters(row: ApiRecord): boolean {
+    const statusMatch = this.recoveryStatus === 'all' || row['paymentStatus'] === this.recoveryStatus;
+    const bucketMatch = !this.agingBucket || row['bucket'] === this.agingBucket;
+    const modeMatch = !this.paymentModeFilter || String(row['paymentMode'] || '').toLowerCase() === this.modeLabel(this.paymentModeFilter).toLowerCase();
+    const receiverMatch = !this.receivedByFilter || String(row['receiverId'] || '') === String(this.receivedByFilter);
+    return statusMatch && bucketMatch && modeMatch && receiverMatch;
+  }
+
+  private dueRecoveryPayments(invoiceId: string): ApiRecord[] {
+    return this.payments()
+      .filter((payment) => String(payment.invoiceId || payment.invoice_id || '') === String(invoiceId))
+      .filter((payment) => this.isReceivedDuePayment(payment))
+      .sort((a, b) => this.dateMs(this.paymentDate(a)) - this.dateMs(this.paymentDate(b)));
+  }
+
+  private isReceivedDuePayment(payment: ApiRecord): boolean {
+    const referenceText = [
+      payment['reference'],
+      payment['referenceNo'],
+      payment['reference_no'],
+      payment['paymentReference'],
+      payment['payment_reference'],
+      payment['remarks'],
+      payment['note'],
+      payment['notes'],
+      payment['description']
+    ].join(' ').toLowerCase();
+    return referenceText.includes('pos unpaid receive')
+      || referenceText.includes('old unpaid')
+      || referenceText.includes('receive due')
+      || referenceText.includes('received due');
+  }
+
+  private paymentAmount(payment: ApiRecord): number {
+    return this.money(Number(payment['amount'] || payment['paidAmount'] || payment['paid_amount'] || 0));
+  }
+
+  private paymentMode(payment: ApiRecord): string {
+    return String(payment['mode'] || payment['paymentMode'] || payment['payment_mode'] || 'cash');
+  }
+
+  private paymentDate(payment: ApiRecord): string {
+    return String(payment['paidAt'] || payment['paid_at'] || payment['paymentDate'] || payment['payment_date'] || payment['createdAt'] || payment['created_at'] || payment['date'] || '');
+  }
+
+  private paymentReference(payment: ApiRecord): string {
+    return String(payment['referenceNo'] || payment['reference_no'] || payment['reference'] || payment['paymentReference'] || payment['payment_reference'] || payment['providerPaymentId'] || payment['provider_payment_id'] || '');
+  }
+
+  private paymentSettlementId(payment: ApiRecord): string {
+    return String(payment['id'] || payment['paymentId'] || payment['payment_id'] || payment['providerPaymentId'] || payment['provider_payment_id'] || payment['providerOrderId'] || payment['provider_order_id'] || '');
+  }
+
+  private paymentReceiverId(payment: ApiRecord): string {
+    return String(payment['createdBy'] || payment['created_by'] || payment['receivedBy'] || payment['received_by'] || payment['cashierId'] || payment['cashier_id'] || payment['staffId'] || payment['staff_id'] || payment['userId'] || payment['user_id'] || '').trim();
+  }
+
+  private paymentReceiver(payment: ApiRecord): string {
+    const receiverId = this.paymentReceiverId(payment);
+    const staff = this.staffById(receiverId);
+    return String(payment['receivedByName'] || payment['received_by_name'] || payment['cashierName'] || payment['cashier_name'] || staff?.name || receiverId || 'Counter');
+  }
+
+  private staffById(staffId: string): ApiRecord | undefined {
+    return this.lines().find((line) => line.staffId === staffId)?.staffName
+      ? { name: this.lines().find((line) => line.staffId === staffId)?.staffName }
+      : undefined;
+  }
+
+  private serviceNamesForInvoice(lines: InvoiceLine[]): string {
+    const names = [...new Set(lines.filter((line) => line.itemType === 'service').map((line) => line.itemName).filter(Boolean))];
+    return names.join(', ') || '-';
+  }
+
+  private invoiceTotal(invoiceId: string): number {
+    const lines = this.filteredLines().filter((line) => line.invoiceId === invoiceId);
+    return this.money(lines.reduce((sum, line) => sum + Number(line.final || 0), 0));
+  }
+
+  private lineDueShare(line: InvoiceLine): number {
+    const total = this.invoiceTotal(line.invoiceId);
+    if (total <= 0 || line.due <= 0) return 0;
+    return this.money((Number(line.final || 0) / total) * line.due);
+  }
+
+  private lineRecoveredShare(line: InvoiceLine): number {
+    const total = this.invoiceTotal(line.invoiceId);
+    if (total <= 0) return 0;
+    const recovered = this.dueRecoveryPayments(line.invoiceId).reduce((sum, payment) => sum + this.paymentAmount(payment), 0);
+    return this.money((Number(line.final || 0) / total) * recovered);
+  }
+
+  private unpaidRecoveryStatus(due: number, receivedAmount: number): string {
+    if (due > 0 && receivedAmount > 0) return 'partial';
+    if (due > 0) return 'pending';
+    if (receivedAmount > 0) return 'recovered';
+    return 'paid';
+  }
+
+  private recoveryDays(invoiceDate: string, payment: ApiRecord | null): number {
+    if (!payment) return this.ageDays(invoiceDate);
+    const start = this.dateMs(invoiceDate);
+    const end = this.dateMs(this.paymentDate(payment));
+    if (!start || !end) return 0;
+    return Math.max(0, Math.floor((end - start) / (24 * 60 * 60 * 1000)));
+  }
+
+  private partialPaymentHistory(payments: ApiRecord[]): string {
+    if (!payments.length) return '';
+    return payments.map((payment) => {
+      const amount = this.paymentAmount(payment).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+      const date = this.dateKey(this.paymentDate(payment));
+      const mode = this.modeLabel(this.paymentMode(payment));
+      const receiver = this.paymentReceiver(payment);
+      const settlement = this.paymentSettlementId(payment);
+      return `${date} ${this.timeLabel(this.paymentDate(payment))} · ${amount} · ${mode} · ${receiver}${settlement ? ` · ${settlement}` : ''}`;
+    }).join(' ; ');
+  }
+
+  private unpaidExportSummaryLines(): string[] {
+    const rows = this.dueRows();
+    const totalRecovered = this.sum(rows, 'receivedAmount');
+    const pendingDue = this.sum(rows, 'due');
+    const totalUnpaid = this.money(totalRecovered + pendingDue);
+    const agingSummary = this.group(rows, (row) => String(row['bucket'] || 'No bucket'))
+      .map((items) => `${items[0]['bucket']}: ${items.length} invoice(s), INR ${this.sum(items, 'due').toLocaleString('en-IN')} pending`)
+      .join(' | ');
+    const topClients = this.group(rows, (row) => String(row['clientName'] || 'Client'))
+      .map((items) => ({ name: String(items[0]['clientName']), due: this.sum(items, 'due') }))
+      .sort((a, b) => b.due - a.due)
+      .slice(0, 5)
+      .map((item) => `${item.name} INR ${item.due.toLocaleString('en-IN')}`)
+      .join(', ');
+    const topStaff = this.staffUnpaidRows().slice(0, 5).map((row) => `${row['staffName']} INR ${Number(row['pendingDue'] || 0).toLocaleString('en-IN')}`).join(', ');
+    return [
+      `Total unpaid exposure: INR ${totalUnpaid.toLocaleString('en-IN')}`,
+      `Recovered due: INR ${totalRecovered.toLocaleString('en-IN')}`,
+      `Pending due: INR ${pendingDue.toLocaleString('en-IN')}`,
+      `Aging summary: ${agingSummary || 'No due rows'}`,
+      `Top clients: ${topClients || 'No client due'}`,
+      `Top staff: ${topStaff || 'No staff due'}`
+    ];
   }
 
   private walletRows(): ApiRecord[] {
@@ -967,8 +1271,7 @@ export class InvoiceReportsComponent implements OnInit {
     if (days > 30) return '30+ days';
     if (days >= 16) return '16-30 days';
     if (days >= 8) return '8-15 days';
-    if (days >= 4) return '4-7 days';
-    return '0-3 days';
+    return '0-7 days';
   }
 
   private recoveryAction(days: number): string {
@@ -1089,6 +1392,12 @@ export class InvoiceReportsComponent implements OnInit {
     return Number.isNaN(date.getTime()) ? String(value).slice(0, 10) : date.toISOString().slice(0, 10);
   }
 
+  private timeLabel(value: string): string {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  }
+
   private dateMs(value: unknown): number {
     if (!value) return 0;
     const date = new Date(String(value));
@@ -1108,6 +1417,43 @@ export class InvoiceReportsComponent implements OnInit {
 
   private csvCell(value: unknown): string {
     return `"${String(value ?? '').replace(/"/g, '""')}"`;
+  }
+
+  private downloadFile(filename: string, content: BlobPart, type: string): void {
+    const blob = content instanceof Blob ? content : new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private simplePdf(lines: string[]): Blob {
+    const escaped = lines.flatMap((line) => {
+      const text = String(line || '').replace(/[()\\]/g, '\\$&');
+      const chunks = text.match(/.{1,96}/g) || [''];
+      return chunks;
+    });
+    const content = ['BT', '/F1 10 Tf', '40 790 Td', '14 TL', ...escaped.map((line) => `(${line}) Tj T*`), 'ET'].join('\n');
+    const objects = [
+      '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+      '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+      '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
+      '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+      `5 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj`
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    for (const object of objects) {
+      offsets.push(pdf.length);
+      pdf += `${object}\n`;
+    }
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i < offsets.length; i += 1) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf], { type: 'application/pdf' });
   }
 
   private money(value: number): number {

@@ -561,6 +561,10 @@ type ProductConsumeDraftRow = {
                       <th>Due date</th>
                       <th>Received date</th>
                       <th>Mode</th>
+                      <th>Received by</th>
+                      <th>Payment ID</th>
+                      <th>Reference</th>
+                      <th class="right">Days</th>
                       <th class="right">Due received</th>
                       <th class="right">Pending after</th>
                     </tr>
@@ -574,6 +578,10 @@ type ProductConsumeDraftRow = {
                       <td>{{ dateTimeLabel(line.dueDate) }}</td>
                       <td>{{ dateTimeLabel(line.receivedDate) }}</td>
                       <td>{{ modeLabel(line.mode) }}</td>
+                      <td>{{ line.receivedBy }}</td>
+                      <td>{{ line.settlementPaymentId || '-' }}</td>
+                      <td>{{ line.paymentReference || '-' }}</td>
+                      <td class="right">{{ line.daysToRecovery }}</td>
                       <td class="right invoice-paid-amount">{{ line.amount | currency: 'INR':'symbol':'1.0-0' }}</td>
                       <td class="right invoice-due-amount">{{ line.pendingAfter | currency: 'INR':'symbol':'1.0-0' }}</td>
                     </tr>
@@ -1704,6 +1712,11 @@ export class PosInvoicesComponent implements OnInit {
     mode: string;
     amount: number;
     reference: string;
+    paymentReference: string;
+    receivedBy: string;
+    receiverId: string;
+    settlementPaymentId: string;
+    daysToRecovery: number;
     pendingAfter: number;
   }> {
     const receivedPayments = (row.payments || [])
@@ -1720,6 +1733,11 @@ export class PosInvoicesComponent implements OnInit {
         mode: String(payment.mode || 'cash'),
         amount,
         reference: String(payment.reference || payment.remarks || 'Old due received'),
+        paymentReference: String(payment.referenceNo || payment.reference_no || payment.reference || payment.paymentReference || payment.payment_reference || ''),
+        receivedBy: this.paymentReceiverLabel(payment),
+        receiverId: String(payment.createdBy || payment.created_by || payment.receivedBy || payment.received_by || payment.cashierId || payment.cashier_id || ''),
+        settlementPaymentId: String(payment.id || payment.paymentId || payment.payment_id || payment.providerPaymentId || payment.provider_payment_id || ''),
+        daysToRecovery: this.recoveryDays(row.createdAt || row.dueDate, payment),
         pendingAfter: pending
       };
     });
@@ -1737,6 +1755,18 @@ export class PosInvoicesComponent implements OnInit {
       .map(([mode, amount]) => `${this.modeLabel(mode)} ${this.money(amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}`)
       .join(', ');
     return `Unpaid received: ${this.money(total).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}${modes ? ` via ${modes}` : ''}`;
+  }
+
+  paymentReceiverLabel(payment: ApiRecord): string {
+    const receiverId = String(payment.createdBy || payment.created_by || payment.receivedBy || payment.received_by || payment.cashierId || payment.cashier_id || payment.staffId || payment.staff_id || '').trim();
+    return String(payment.receivedByName || payment.received_by_name || payment.cashierName || payment.cashier_name || receiverId || 'Counter');
+  }
+
+  recoveryDays(invoiceDate: string, payment: ApiRecord): number {
+    const start = this.dateMs(invoiceDate);
+    const end = this.dateMs(payment.paidAt || payment.paid_at || payment.createdAt || payment.created_at || payment.date);
+    if (!start || !end) return 0;
+    return Math.max(0, Math.floor((end - start) / (24 * 60 * 60 * 1000)));
   }
 
   modeLabel(modeId: string): string {
