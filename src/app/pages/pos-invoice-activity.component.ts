@@ -9,6 +9,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 type InvoiceActivityKind = 'edited' | 'deleted' | 'restored' | 'payment_updated';
 type InvoicePaymentStatus = 'all' | 'paid' | 'partial' | 'due';
 type InvoiceRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+type InvoiceActivityView = 'activity' | 'cancelled' | 'reports';
 
 interface InvoiceActivityChange {
   category: string;
@@ -235,8 +236,8 @@ interface InvoiceActivityRow {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack invoice-activity-page">
+      <div class="module-hero invoice-activity-hero">
         <div>
           <span class="eyebrow">POS / invoice activity</span>
           <h2>Invoice Audit Center</h2>
@@ -289,7 +290,22 @@ interface InvoiceActivityRow {
         </article>
       </div>
 
-      <div class="panel" *ngIf="!loading() && !error()">
+      <div class="invoice-activity-tabs" *ngIf="!loading() && !error()">
+        <button type="button" [class.active]="activityView === 'activity'" (click)="setActivityView('activity')">
+          <span>Activity log</span>
+          <strong>{{ filteredRowsCache.length }}</strong>
+        </button>
+        <button type="button" [class.active]="activityView === 'cancelled'" (click)="setActivityView('cancelled')">
+          <span>Cancelled / Void</span>
+          <strong>{{ cancelledVoidRowsCache.length }}</strong>
+        </button>
+        <button type="button" [class.active]="activityView === 'reports'" (click)="setActivityView('reports')">
+          <span>Reports</span>
+          <strong>{{ reports()?.summary?.totalActivities || 0 }}</strong>
+        </button>
+      </div>
+
+      <div class="panel invoice-activity-shell" *ngIf="!loading() && !error()">
         <div class="section-title invoice-activity-title">
           <div>
             <span class="eyebrow">Level 2 filters</span>
@@ -373,11 +389,11 @@ interface InvoiceActivityRow {
           </label>
         </div>
 
-        <section class="report-center">
+        <section class="report-center" *ngIf="activityView !== 'activity'">
           <div class="section-title invoice-activity-title">
             <div>
-              <span class="eyebrow">Level 7 reports</span>
-              <h3>Invoice activity reports</h3>
+              <span class="eyebrow">{{ activityView === 'cancelled' ? 'Cancelled bill control' : 'Level 7 reports' }}</span>
+              <h3>{{ activityView === 'cancelled' ? 'Cancelled / Void-ed Bill' : 'Invoice activity reports' }}</h3>
             </div>
             <div class="invoice-activity-filter-actions">
               <span *ngIf="reports() as report">Generated {{ formatDateTime(report.generatedAt || '') }}</span>
@@ -390,7 +406,7 @@ interface InvoiceActivityRow {
           <app-state [loading]="reportLoading()" [error]="reportError()"></app-state>
 
           <ng-container *ngIf="reports() as report">
-            <div class="report-summary-grid">
+            <div class="report-summary-grid" *ngIf="activityView === 'reports'">
               <article>
                 <span>Total activity</span>
                 <strong>{{ report.summary?.totalActivities || 0 }}</strong>
@@ -418,7 +434,7 @@ interface InvoiceActivityRow {
               </article>
             </div>
 
-            <section class="cancelled-void-panel">
+            <section class="cancelled-void-panel" *ngIf="activityView === 'cancelled'">
               <div class="section-title invoice-activity-title">
                 <div>
                   <span class="eyebrow">Cancelled / Void-ed Bill</span>
@@ -519,7 +535,7 @@ interface InvoiceActivityRow {
               </ng-template>
             </section>
 
-            <div class="report-grid">
+            <div class="report-grid" *ngIf="activityView === 'reports'">
               <article class="report-card">
                 <div class="report-card-title">
                   <span>Daily invoice edit/delete report</span>
@@ -654,25 +670,17 @@ interface InvoiceActivityRow {
           </ng-container>
         </section>
 
+        <ng-container *ngIf="activityView === 'activity'">
         <div class="table-wrap invoice-activity-table" *ngIf="filteredRowsCache.length; else noActivity">
           <table>
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Invoice number</th>
-                <th>Client</th>
-                <th>Phone</th>
-                <th>Staff</th>
-                <th>Branch</th>
-                <th>Action</th>
+                <th>Activity</th>
+                <th>Invoice & client</th>
+                <th>Staff / branch</th>
                 <th>Payment</th>
-                <th>Amount</th>
-                <th>Amount change</th>
-                <th>Advance adjusted</th>
-                <th>Counter paid</th>
-                <th>By user</th>
-                <th>Created / changed</th>
-                <th>Status</th>
+                <th>Financial impact</th>
+                <th>Audit user</th>
                 <th>Risk</th>
                 <th>Review</th>
               </tr>
@@ -682,36 +690,40 @@ interface InvoiceActivityRow {
                 *ngFor="let row of filteredRowsCache; trackBy: trackByRow"
                 [class.selected-row]="selectedRow()?.id === row.id"
               >
-                <td>{{ formatDate(row.actionTime) }}</td>
+                <td>
+                  <strong>{{ formatDate(row.actionTime) }}</strong>
+                  <small>{{ formatTime(row.actionTime) }}</small>
+                  <span class="badge" [ngClass]="actionBadgeClass(row.actionType)">{{ actionLabel(row.actionType) }}</span>
+                </td>
                 <td>
                   <strong>{{ row.invoiceNumber }}</strong>
                   <small *ngIf="row.invoiceId">{{ row.invoiceId }}</small>
+                  <small>{{ row.clientName }} / {{ row.clientPhone }}</small>
                 </td>
-                <td>{{ row.clientName }}</td>
-                <td>{{ row.clientPhone }}</td>
-                <td>{{ row.staffName }}</td>
-                <td>{{ row.branchName }}</td>
-                <td><span class="badge" [ngClass]="actionBadgeClass(row.actionType)">{{ actionLabel(row.actionType) }}</span></td>
-                <td>{{ paymentModesLabel(row) }}</td>
+                <td>
+                  <strong>{{ row.staffName }}</strong>
+                  <small>{{ row.branchName }}</small>
+                </td>
+                <td>
+                  <strong>{{ paymentModesLabel(row) }}</strong>
+                  <small>{{ statusLabel(row.status) }}</small>
+                </td>
                 <td>
                   <strong>{{ currency(row.total) }}</strong>
                   <small>Paid {{ currency(row.paid) }} / Due {{ currency(row.balance) }}</small>
+                  <small>
+                    <b [class.amount-down]="row.financeImpact.amountDifference < 0" [class.amount-up]="row.financeImpact.amountDifference > 0">{{ signedCurrency(row.financeImpact.amountDifference) }}</b>
+                    · Adv {{ currency(row.advanceAdjusted) }} · Counter {{ currency(row.counterPaid) }}
+                  </small>
                 </td>
                 <td>
-                  <strong [class.amount-down]="row.financeImpact.amountDifference < 0" [class.amount-up]="row.financeImpact.amountDifference > 0">{{ signedCurrency(row.financeImpact.amountDifference) }}</strong>
-                  <small>{{ currency(row.financeImpact.originalTotal) }} -> {{ currency(row.financeImpact.updatedTotal) }}</small>
-                </td>
-                <td>{{ currency(row.advanceAdjusted) }}</td>
-                <td>{{ currency(row.counterPaid) }}</td>
-                <td>{{ row.actionByUser }}</td>
-                <td>
-                  <strong>{{ formatTime(row.invoiceCreatedAt || row.actionTime) }}</strong>
+                  <strong>{{ row.actionByUser }}</strong>
+                  <small>Created {{ formatTime(row.invoiceCreatedAt || row.actionTime) }}</small>
                   <small>Changed {{ formatTime(row.actionTime) }}</small>
                 </td>
-                <td><span class="badge" [ngClass]="statusBadgeClass(row.status)">{{ statusLabel(row.status) }}</span></td>
                 <td>
                   <span class="badge" [ngClass]="riskBadgeClass(row.riskLevel)">{{ riskLabel(row.riskLevel) }}</span>
-                  <small>{{ row.riskReason }}</small>
+                  <small class="risk-copy">{{ row.riskReason }}</small>
                 </td>
                 <td>
                   <div class="review-actions">
@@ -730,6 +742,7 @@ interface InvoiceActivityRow {
             </tbody>
           </table>
         </div>
+        </ng-container>
 
         <aside class="activity-detail-drawer" *ngIf="selectedRow() as selected">
           <div class="drawer-header">
@@ -1003,6 +1016,75 @@ interface InvoiceActivityRow {
     </section>
   `,
   styles: [`
+    .invoice-activity-page {
+      gap: 14px;
+    }
+
+    .invoice-activity-hero {
+      padding: 22px 24px;
+    }
+
+    .invoice-activity-shell {
+      padding: 16px;
+    }
+
+    .invoice-activity-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .invoice-activity-tabs button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 48px;
+      padding: 10px 14px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .invoice-activity-tabs button:hover {
+      border-color: var(--line);
+      background: #f8fafc;
+    }
+
+    .invoice-activity-tabs button.active {
+      border-color: #111827;
+      background: #111827;
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+    }
+
+    .invoice-activity-tabs span {
+      font-size: 0.82rem;
+      font-weight: 900;
+    }
+
+    .invoice-activity-tabs strong {
+      min-width: 34px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.08);
+      text-align: center;
+      font-size: 0.8rem;
+    }
+
+    .invoice-activity-tabs button.active strong {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
     .invoice-activity-title {
       align-items: end;
       margin-bottom: 16px;
@@ -1020,7 +1102,7 @@ interface InvoiceActivityRow {
 
     .invoice-activity-filter-grid {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
       margin-bottom: 18px;
     }
@@ -1167,12 +1249,90 @@ interface InvoiceActivityRow {
     }
 
     .invoice-activity-table table {
-      min-width: 1420px;
+      min-width: 1040px;
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 0.86rem;
+    }
+
+    .invoice-activity-table {
+      max-height: min(680px, calc(100vh - 230px));
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      overflow: auto;
+    }
+
+    .invoice-activity-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    .invoice-activity-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    .invoice-activity-table tr:hover {
+      background: #f8fbff;
+    }
+
+    .invoice-activity-table td:nth-child(1) {
+      width: 118px;
+    }
+
+    .invoice-activity-table td:nth-child(2) {
+      width: 210px;
+    }
+
+    .invoice-activity-table td:nth-child(3),
+    .invoice-activity-table td:nth-child(4) {
+      width: 145px;
+    }
+
+    .invoice-activity-table td:nth-child(5),
+    .invoice-activity-table td:nth-child(6) {
+      width: 165px;
+    }
+
+    .invoice-activity-table td:nth-child(8) {
+      width: 170px;
     }
 
     .invoice-activity-table small {
+      display: block;
       color: var(--muted);
       line-height: 1.35;
+    }
+
+    .invoice-activity-table .badge {
+      margin-top: 6px;
+    }
+
+    .invoice-activity-table .risk-copy {
+      display: -webkit-box;
+      max-height: 42px;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .invoice-activity-table .review-actions {
+      justify-content: flex-start;
     }
 
     .invoice-activity-table tr.selected-row {
@@ -1446,7 +1606,7 @@ interface InvoiceActivityRow {
 
     @media (max-width: 1260px) {
       .invoice-activity-filter-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .invoice-summary-grid,
@@ -1470,6 +1630,10 @@ interface InvoiceActivityRow {
     }
 
     @media (max-width: 760px) {
+      .invoice-activity-tabs {
+        grid-template-columns: 1fr;
+      }
+
       .invoice-activity-title {
         align-items: stretch;
       }
@@ -1520,6 +1684,7 @@ export class PosInvoiceActivityComponent implements OnInit {
   reportLoading = signal(false);
   reportError = signal('');
   reports = signal<InvoiceActivityReportResponse | null>(null);
+  activityView: InvoiceActivityView = 'activity';
   filteredRowsCache: InvoiceActivityRow[] = [];
   staffOptionsCache: string[] = [];
   branchOptionsCache: Array<{ id: string; name: string }> = [];
@@ -1573,6 +1738,13 @@ export class PosInvoiceActivityComponent implements OnInit {
     this.load();
     this.loadReports();
     this.loadTodayInvoices();
+  }
+
+  setActivityView(view: InvoiceActivityView): void {
+    this.activityView = view;
+    if (view !== 'activity') {
+      this.selectedRow.set(null);
+    }
   }
 
   loadTodayInvoices(): void {

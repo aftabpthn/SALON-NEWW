@@ -31,3 +31,23 @@ test("pos invoice activity exposes cancelled and voided bill register polish", (
   assert.match(component, /reviewCancelledVoidBill/);
   assert.match(component, /isCancelledVoidActivity/);
 });
+
+test("pos invoice activity uses compact tabbed report layout", () => {
+  for (const label of [
+    "Activity log",
+    "Cancelled / Void",
+    "Reports",
+    "Invoice & client",
+    "Staff / branch",
+    "Financial impact",
+    "Audit user"
+  ]) {
+    assert.match(component, new RegExp(label.replace(/[/?]/g, "\\$&")), `missing compact layout label: ${label}`);
+  }
+
+  assert.match(component, /activityView: InvoiceActivityView = 'activity'/);
+  assert.match(component, /setActivityView\(view: InvoiceActivityView\)/);
+  assert.match(component, /activityView !== 'activity'/);
+  assert.match(component, /max-height: min\(680px, calc\(100vh - 230px\)\)/);
+  assert.match(component, /-webkit-line-clamp: 2/);
+});
