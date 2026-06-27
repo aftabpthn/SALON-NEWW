@@ -176,6 +176,18 @@ type PlanLifecycleDialog = {
           <h3>{{ (report().metrics?.pendingLiability || 0) | currency: 'INR':'symbol':'1.0-0' }}</h3>
           <p>{{ report().metrics?.creditsRemaining || 0 }} credits still available for redemption.</p>
         </article>
+
+        <article class="overview-card">
+          <span class="eyebrow">Membership Wallet</span>
+          <h3>{{ selectedClientBenefitsLabel() }}</h3>
+          <p>Wallet, prepaid credit, family sharing and package eligibility stay connected to POS billing.</p>
+        </article>
+
+        <article class="overview-card">
+          <span class="eyebrow">Active packages</span>
+          <h3>{{ report().metrics?.creditsRemaining || 0 }} credits</h3>
+          <p>Service package, visit-pack and combo balances are tracked from membership wallet snapshots.</p>
+        </article>
       </section>
 
       <section class="plan-reference-layout" *ngIf="activeTab() === 'plans'">
@@ -353,13 +365,20 @@ type PlanLifecycleDialog = {
               <select formControlName="planType">
                 <option value="discount">Discount card</option>
                 <option value="prepaid_credit">Prepaid value credit</option>
+                <option value="visit_pack">Visit pack</option>
+                <option value="service_credit">Service credit</option>
+                <option value="combo">Combo package</option>
+                <option value="unlimited">Unlimited with fair usage</option>
+                <option value="family">Family membership</option>
+                <option value="corporate">Corporate membership</option>
+                <option value="tiered">Tiered loyalty level</option>
               </select>
             </label>
             <label class="field"><span>Plan name</span><input formControlName="name" placeholder="Aura Gold 30%" /></label>
             <label class="field"><span>Plan code</span><input formControlName="code" placeholder="aura_gold" /></label>
             <label class="field"><span>{{ isPrepaidPlanForm() ? 'You pay' : 'Selling price' }}</span><input type="number" formControlName="price" /></label>
-            <label class="field" *ngIf="!isPrepaidPlanForm()"><span>Service discount %</span><input type="number" formControlName="discountPercent" /></label>
-            <label class="field" *ngIf="!isPrepaidPlanForm()"><span>Product discount %</span><input type="number" formControlName="productDiscountPercent" /></label>
+            <label class="field" *ngIf="usesDiscountFields()"><span>Service discount %</span><input type="number" formControlName="discountPercent" /></label>
+            <label class="field" *ngIf="usesDiscountFields()"><span>Product discount %</span><input type="number" formControlName="productDiscountPercent" /></label>
             <ng-container *ngIf="isPrepaidPlanForm()">
               <label class="field"><span>We add</span><input type="number" formControlName="bonusAmount" /></label>
               <label class="field"><span>You get credit</span><input type="number" formControlName="creditAmount" /></label>
@@ -403,6 +422,51 @@ type PlanLifecycleDialog = {
                 <button class="ghost-button mini" type="button" (click)="applyPrepaidPreset(50000, 20000, 365)">50k -> 70k</button>
               </div>
             </ng-container>
+            <ng-container *ngIf="isServiceCreditPlanForm()">
+              <label class="field">
+                <span>Credit unit</span>
+                <select formControlName="creditUnit">
+                  <option value="visit">Visits</option>
+                  <option value="service">Service credits</option>
+                </select>
+              </label>
+              <label class="field"><span>Credits / visits</span><input type="number" formControlName="creditAmount" /></label>
+              <label class="field full"><span>Included services</span><input formControlName="includedServicesValue" placeholder="Haircut, Facial or service IDs, comma separated" /></label>
+            </ng-container>
+            <ng-container *ngIf="isUnlimitedPlanForm()">
+              <label class="field"><span>Monthly fair usage cap</span><input type="number" formControlName="monthlyCap" /></label>
+              <label class="field full"><span>Unlimited services</span><input formControlName="includedServicesValue" placeholder="Haircut, Hair Wash or service IDs" /></label>
+            </ng-container>
+            <ng-container *ngIf="isFamilyPlanForm()">
+              <label class="field"><span>Family member limit</span><input type="number" formControlName="familyMemberLimit" /></label>
+              <label class="field checkbox-field"><span>Share benefits</span><input type="checkbox" formControlName="familyShareBenefits" /></label>
+            </ng-container>
+            <ng-container *ngIf="isCorporatePlanForm()">
+              <label class="field"><span>Company label</span><input formControlName="corporateLabel" placeholder="TCS / Infosys" /></label>
+              <label class="field"><span>Email domain</span><input formControlName="corporateDomain" placeholder="company.com" /></label>
+              <label class="field checkbox-field"><span>Employee ID required</span><input type="checkbox" formControlName="corporateEmployeeIdRequired" /></label>
+            </ng-container>
+            <ng-container *ngIf="isTieredPlanForm()">
+              <label class="field"><span>Tier name</span><input formControlName="tierName" placeholder="Gold" /></label>
+              <label class="field"><span>Spend threshold</span><input type="number" formControlName="tierSpendThreshold" /></label>
+              <label class="field"><span>Visit threshold</span><input type="number" formControlName="tierVisitThreshold" /></label>
+            </ng-container>
+            <div class="field full plan-type-preview" *ngIf="!isPrepaidPlanForm()">
+              <strong>{{ structuredPlanPreview() }}</strong>
+              <span>{{ structuredPlanRulePreview() }}</span>
+            </div>
+            <label class="field checkbox-field">
+              <span>Birthday benefit</span>
+              <input type="checkbox" formControlName="birthdayBenefit" />
+            </label>
+            <label class="field checkbox-field">
+              <span>Anniversary benefit</span>
+              <input type="checkbox" formControlName="anniversaryBenefit" />
+            </label>
+            <label class="field checkbox-field">
+              <span>Priority booking</span>
+              <input type="checkbox" formControlName="priorityBooking" />
+            </label>
             <label class="field"><span>GST %</span><input type="number" formControlName="gstRate" /></label>
             <label class="field"><span>Validity days</span><input type="number" formControlName="validityDays" /></label>
             <label class="field">
@@ -413,8 +477,8 @@ type PlanLifecycleDialog = {
               </select>
             </label>
             <label class="field full"><span>Description</span><textarea formControlName="description"></textarea></label>
-            <label class="field full"><span>Included services JSON</span><textarea formControlName="includedServicesText" placeholder='[{"serviceId":"svc_1","credits":1}]'></textarea></label>
-            <label class="field full"><span>Benefit rules JSON</span><textarea formControlName="benefitRulesText" placeholder='{"maxDiscount":1000,"blackoutDates":[]}'></textarea></label>
+            <label class="field full"><span>Advanced included services JSON</span><textarea formControlName="includedServicesText" placeholder='[{"serviceId":"svc_1","credits":1}]'></textarea></label>
+            <label class="field full"><span>Advanced benefit rules JSON</span><textarea formControlName="benefitRulesText" placeholder='{"maxDiscount":1000,"blackoutDates":[]}'></textarea></label>
             <button class="primary-button" type="submit" [disabled]="planForm.invalid || saving()">{{ editingPlanId() ? 'Save changes' : 'Save plan' }}</button>
           </form>
         </aside>
@@ -476,6 +540,79 @@ type PlanLifecycleDialog = {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div class="two-grid compact-workbench self-service-grid">
+          <section class="form-panel">
+            <div class="section-title compact-title">
+              <div>
+                <span class="eyebrow">Owner/manager approval</span>
+                <h3>Membership self-service control center</h3>
+              </div>
+              <button class="ghost-button mini" type="button" (click)="loadSelfServiceSummary()">Load summary</button>
+            </div>
+            <div class="self-service-filter-grid">
+              <label class="field">
+                <span>Client</span>
+                <select [(ngModel)]="selfServiceClientId" (ngModelChange)="onSelfServiceClientChanged()">
+                  <option value="">Select client</option>
+                  <option *ngFor="let client of clients()" [value]="client.id">{{ clientWalletOption(client) }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Membership</span>
+                <select [(ngModel)]="selfServiceMembershipId">
+                  <option value="">Select membership</option>
+                  <option *ngFor="let membership of selectedSelfServiceClientMemberships()" [value]="membership.id">{{ membership.planName || membership.id }}</option>
+                </select>
+              </label>
+              <label class="field full">
+                <span>Cancellation reason</span>
+                <textarea [(ngModel)]="selfServiceCancelReason" placeholder="Reason required before request"></textarea>
+              </label>
+            </div>
+            <div class="inline-actions">
+              <button class="ghost-button mini" type="button" (click)="createSelfServiceStatusLink()">Status link</button>
+              <button class="ghost-button mini" type="button" (click)="createWhatsAppSummary()">WhatsApp summary</button>
+              <button class="ghost-button mini" type="button" (click)="createSelfServiceRenewLink()">Renew link</button>
+              <button class="ghost-button mini danger-text" type="button" (click)="createSelfServiceCancelRequest()">Request cancellation approval</button>
+            </div>
+            <p class="inline-hint" *ngIf="selfServiceLastLink">{{ selfServiceLastLink }}</p>
+          </section>
+
+          <section class="form-panel">
+            <div class="section-title compact-title">
+              <div>
+                <span class="eyebrow">Enterprise controls</span>
+                <h3>Manual credit adjustment</h3>
+              </div>
+              <button class="ghost-button mini" type="button" (click)="refreshSelfServiceRequests()">Pending approval</button>
+            </div>
+            <div class="self-service-filter-grid">
+              <label class="field">
+                <span>Credit delta</span>
+                <input type="number" [(ngModel)]="selfServiceCreditDelta" />
+              </label>
+              <label class="field full">
+                <span>Reason</span>
+                <textarea [(ngModel)]="selfServiceCreditReason" placeholder="Required for manual credit adjustment"></textarea>
+              </label>
+            </div>
+            <div class="inline-actions">
+              <button class="ghost-button mini" type="button" (click)="createSelfServicePaymentMethodUpdate()">Payment method update</button>
+              <button class="primary-button mini" type="button" (click)="createManualCreditAdjustmentRequest()">Create pending approval</button>
+            </div>
+            <div class="quick-grid" *ngIf="selfServiceRequests().length">
+              <article class="action-card" *ngFor="let request of selfServiceRequests().slice(0, 4)">
+                <strong>{{ selfServiceLabel(request['requestType']) }}</strong>
+                <span>{{ request['status'] || 'pending approval' }}</span>
+                <div class="inline-actions">
+                  <button class="ghost-button mini" type="button" (click)="approveSelfServiceRequest(request)">Approve</button>
+                  <button class="ghost-button mini danger-text" type="button" (click)="rejectSelfServiceRequest(request)">Reject</button>
+                </div>
+              </article>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -2359,12 +2496,26 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     discountPercent: [30, Validators.required],
     productDiscountPercent: [0],
     creditAmount: [0],
+    creditUnit: ['amount'],
     bonusAmount: [0],
     benefitPercent: [0],
     perVisitLimitType: ['none'],
     perVisitLimitValue: [0],
     serviceRestrictionType: ['all'],
     serviceRestrictionValue: [''],
+    includedServicesValue: [''],
+    monthlyCap: [4],
+    familyMemberLimit: [4],
+    familyShareBenefits: [true],
+    corporateLabel: [''],
+    corporateDomain: [''],
+    corporateEmployeeIdRequired: [true],
+    tierName: ['Gold'],
+    tierSpendThreshold: [50000],
+    tierVisitThreshold: [0],
+    birthdayBenefit: [false],
+    anniversaryBenefit: [false],
+    priorityBooking: [false],
     allowProductRedeem: [false],
     gstRate: [18],
     validityDays: [365, Validators.required],
@@ -2518,58 +2669,106 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     if (!this.editingPlanId()) this.resetPlanForm();
   }
 
+  private advancedPlanJson(): { includedServices: unknown[]; benefitRules: Record<string, unknown> } | null {
+    try {
+      return {
+        includedServices: JSON.parse(this.planForm.value.includedServicesText || '[]'),
+        benefitRules: JSON.parse(this.planForm.value.benefitRulesText || '{}')
+      };
+    } catch {
+      this.error.set('Advanced included services or benefit rules must be valid JSON.');
+      return null;
+    }
+  }
+
+  private structuredIncludedServices(base: unknown[]): unknown[] {
+    const structured = this.parseServiceList(this.planForm.value.includedServicesValue || '').map((value) => ({
+      serviceId: value,
+      serviceName: value,
+      credits: Math.max(1, Math.floor(Number(this.planForm.value.creditAmount || 1)))
+    }));
+    if (!structured.length) return base;
+    const existing = new Set(base.map((item: unknown) => String((item as ApiRecord)?.['serviceId'] || item || '').toLowerCase()));
+    return [...base, ...structured.filter((item) => !existing.has(String(item.serviceId).toLowerCase()))];
+  }
+
+  private buildStructuredBenefitRules(baseRules: Record<string, unknown>): Record<string, unknown> {
+    const planType = String(this.planForm.value.planType || 'discount');
+    const price = Number(this.planForm.value.price || 0);
+    const creditAmount = Math.max(0, Number(this.planForm.value.creditAmount || 0));
+    const bonusAmount = Math.max(0, Number(this.planForm.value.bonusAmount || 0));
+    const creditValue = planType === 'prepaid_credit'
+      ? Math.max(0, creditAmount || price + bonusAmount)
+      : creditAmount;
+    const serviceRestrictionType = String(this.planForm.value.serviceRestrictionType || 'all');
+    const serviceRestrictionValue = String(this.planForm.value.serviceRestrictionValue || this.planForm.value.includedServicesValue || '').trim();
+    const perVisitLimitType = String(this.planForm.value.perVisitLimitType || 'none');
+    const perVisitLimitValue = Math.max(0, Number(this.planForm.value.perVisitLimitValue || 0));
+    const occasionBenefits = {
+      birthday: Boolean(this.planForm.value.birthdayBenefit),
+      anniversary: Boolean(this.planForm.value.anniversaryBenefit),
+      freeService: Boolean(this.planForm.value.birthdayBenefit || this.planForm.value.anniversaryBenefit)
+    };
+    return {
+      ...baseRules,
+      planType,
+      prepaidCredit: planType === 'prepaid_credit',
+      creditAmount: creditValue,
+      creditUnit: this.planCreditUnit(planType),
+      bonusAmount: planType === 'prepaid_credit' ? Math.max(0, creditValue - price || bonusAmount) : bonusAmount,
+      benefitPercent: Number(this.planForm.value.benefitPercent || 0) || (price > 0 ? Math.round((Math.max(0, creditValue - price) / price) * 100) : 0),
+      redemptionMode: planType === 'prepaid_credit' ? 'prepaid_credit' : this.planRedemptionMode(planType),
+      allowProductRedeem: !!this.planForm.value.allowProductRedeem,
+      perVisitLimit: {
+        type: perVisitLimitType,
+        value: perVisitLimitType === 'none' ? 0 : perVisitLimitValue
+      },
+      serviceRestriction: {
+        type: serviceRestrictionType,
+        value: serviceRestrictionType === 'all' ? '' : serviceRestrictionValue
+      },
+      fairUsage: {
+        monthlyCap: this.isUnlimitedPlanForm() ? Math.max(1, Math.floor(Number(this.planForm.value.monthlyCap || 4))) : 0
+      },
+      family: {
+        memberLimit: this.isFamilyPlanForm() ? Math.max(1, Math.floor(Number(this.planForm.value.familyMemberLimit || 1))) : 0,
+        shareBenefits: Boolean(this.planForm.value.familyShareBenefits)
+      },
+      corporate: {
+        label: String(this.planForm.value.corporateLabel || '').trim(),
+        domain: String(this.planForm.value.corporateDomain || '').trim(),
+        employeeIdRequired: Boolean(this.planForm.value.corporateEmployeeIdRequired)
+      },
+      tier: {
+        name: String(this.planForm.value.tierName || '').trim(),
+        spendThreshold: Math.max(0, Number(this.planForm.value.tierSpendThreshold || 0)),
+        visitThreshold: Math.max(0, Number(this.planForm.value.tierVisitThreshold || 0))
+      },
+      occasionBenefits,
+      priorityBooking: Boolean(this.planForm.value.priorityBooking)
+    };
+  }
+
   savePlan(): void {
     if (this.planForm.invalid) return;
     this.saving.set(true);
     this.error.set('');
-    let includedServices: unknown[] = [];
-    let benefitRules: Record<string, unknown> = {};
-    try {
-      includedServices = JSON.parse(this.planForm.value.includedServicesText || '[]');
-      benefitRules = JSON.parse(this.planForm.value.benefitRulesText || '{}');
-    } catch {
-      this.error.set('Included services or benefit rules must be valid JSON.');
+    const advanced = this.advancedPlanJson();
+    if (!advanced) {
       this.saving.set(false);
       return;
     }
+    const includedServices = this.structuredIncludedServices(advanced.includedServices);
+    const benefitRules = this.buildStructuredBenefitRules(advanced.benefitRules);
     const planType = String(this.planForm.value.planType || 'discount');
     const price = Number(this.planForm.value.price || 0);
-    const bonusAmount = Math.max(0, Number(this.planForm.value.bonusAmount || 0));
-    const creditAmount = Math.max(0, Number(this.planForm.value.creditAmount || 0) || price + bonusAmount);
-    const benefitPercent = Number(this.planForm.value.benefitPercent || 0) || (price > 0 ? Math.round((Math.max(0, creditAmount - price) / price) * 100) : 0);
-    if (planType === 'prepaid_credit') {
-      const perVisitLimitType = String(this.planForm.value.perVisitLimitType || 'none');
-      const perVisitLimitValue = Math.max(0, Number(this.planForm.value.perVisitLimitValue || 0));
-      const serviceRestrictionType = String(this.planForm.value.serviceRestrictionType || 'all');
-      const serviceRestrictionValue = String(this.planForm.value.serviceRestrictionValue || '').trim();
-      benefitRules = {
-        ...benefitRules,
-        planType,
-        prepaidCredit: true,
-        creditAmount,
-        bonusAmount: Math.max(0, creditAmount - price || bonusAmount),
-        benefitPercent,
-        redemptionMode: 'prepaid_credit',
-        allowProductRedeem: !!this.planForm.value.allowProductRedeem,
-        perVisitLimit: {
-          type: perVisitLimitType,
-          value: perVisitLimitType === 'none' ? 0 : perVisitLimitValue
-        },
-        serviceRestriction: {
-          type: serviceRestrictionType,
-          value: serviceRestrictionType === 'all' ? '' : serviceRestrictionValue
-        }
-      };
-    } else {
-      benefitRules = { ...benefitRules, planType };
-    }
     const payload = {
       code: this.planForm.value.code,
       name: this.planForm.value.name,
       description: this.planForm.value.description,
       price,
-      discountPercent: planType === 'prepaid_credit' ? 0 : Number(this.planForm.value.discountPercent || 0),
-      productDiscountPercent: planType === 'prepaid_credit' ? 0 : Number(this.planForm.value.productDiscountPercent || 0),
+      discountPercent: this.planUsesCreditOnly(planType) ? 0 : Number(this.planForm.value.discountPercent || 0),
+      productDiscountPercent: this.planUsesCreditOnly(planType) ? 0 : Number(this.planForm.value.productDiscountPercent || 0),
       gstRate: Number(this.planForm.value.gstRate || 18),
       validityDays: Number(this.planForm.value.validityDays || 365),
       includedServices,
@@ -2602,6 +2801,11 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const planType = this.membershipPlanType(plan);
     const perVisitLimit = (plan.benefitRules?.['perVisitLimit'] || {}) as ApiRecord;
     const serviceRestriction = (plan.benefitRules?.['serviceRestriction'] || {}) as ApiRecord;
+    const fairUsage = (plan.benefitRules?.['fairUsage'] || {}) as ApiRecord;
+    const family = (plan.benefitRules?.['family'] || {}) as ApiRecord;
+    const corporate = (plan.benefitRules?.['corporate'] || {}) as ApiRecord;
+    const tier = (plan.benefitRules?.['tier'] || {}) as ApiRecord;
+    const occasionBenefits = (plan.benefitRules?.['occasionBenefits'] || {}) as ApiRecord;
     this.planForm.patchValue({
       id: plan.id,
       version: plan.version || 1,
@@ -2613,12 +2817,26 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       discountPercent: plan.discountPercent,
       productDiscountPercent: plan.productDiscountPercent || 0,
       creditAmount: plan.creditAmount || 0,
+      creditUnit: String(plan.benefitRules?.['creditUnit'] || this.planCreditUnit(planType)),
       bonusAmount: plan.bonusAmount || 0,
       benefitPercent: plan.benefitPercent || 0,
       perVisitLimitType: String(perVisitLimit['type'] || plan.perVisitLimitType || 'none'),
       perVisitLimitValue: Number(perVisitLimit['value'] || plan.perVisitLimitValue || 0),
       serviceRestrictionType: String(serviceRestriction['type'] || plan.serviceRestrictionType || 'all'),
       serviceRestrictionValue: String(serviceRestriction['value'] || plan.serviceRestrictionValue || ''),
+      includedServicesValue: this.includedServicesText(plan.includedServices || []),
+      monthlyCap: Number(fairUsage['monthlyCap'] || 4),
+      familyMemberLimit: Number(family['memberLimit'] || 4),
+      familyShareBenefits: family['shareBenefits'] !== false,
+      corporateLabel: String(corporate['label'] || ''),
+      corporateDomain: String(corporate['domain'] || ''),
+      corporateEmployeeIdRequired: corporate['employeeIdRequired'] !== false,
+      tierName: String(tier['name'] || 'Gold'),
+      tierSpendThreshold: Number(tier['spendThreshold'] || 50000),
+      tierVisitThreshold: Number(tier['visitThreshold'] || 0),
+      birthdayBenefit: Boolean(occasionBenefits['birthday']),
+      anniversaryBenefit: Boolean(occasionBenefits['anniversary']),
+      priorityBooking: Boolean(plan.benefitRules?.['priorityBooking']),
       allowProductRedeem: Boolean(plan.benefitRules?.['allowProductRedeem'] || plan.allowProductRedeem),
       gstRate: plan.gstRate || 18,
       validityDays: plan.validityDays,
@@ -2641,12 +2859,26 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       discountPercent: 30,
       productDiscountPercent: 0,
       creditAmount: 0,
+      creditUnit: 'amount',
       bonusAmount: 0,
       benefitPercent: 0,
       perVisitLimitType: 'none',
       perVisitLimitValue: 0,
       serviceRestrictionType: 'all',
       serviceRestrictionValue: '',
+      includedServicesValue: '',
+      monthlyCap: 4,
+      familyMemberLimit: 4,
+      familyShareBenefits: true,
+      corporateLabel: '',
+      corporateDomain: '',
+      corporateEmployeeIdRequired: true,
+      tierName: 'Gold',
+      tierSpendThreshold: 50000,
+      tierVisitThreshold: 0,
+      birthdayBenefit: false,
+      anniversaryBenefit: false,
+      priorityBooking: false,
       allowProductRedeem: false,
       gstRate: 18,
       validityDays: 365,
@@ -2662,18 +2894,15 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const value = this.membershipForm.value;
     const plan = this.membershipPlans().find((item) => item.id === value.planId);
     const staff = this.staffById(String(value.staffId || ''));
-    const planCredits = this.membershipPlanType(plan) === 'prepaid_credit'
-      ? this.membershipPlanCreditAmount(plan)
-      : Number(value.planCredits || 0);
-    const serviceCredits = this.membershipPlanType(plan) === 'prepaid_credit'
-      ? [{ type: 'prepaid_credit', credits: planCredits, remaining: planCredits, planId: plan?.id || '', bonusAmount: this.membershipPlanBonusAmount(plan), benefitPercent: plan?.benefitPercent || 0, benefitRules: plan?.benefitRules || {} }]
-      : undefined;
+    const planCredits = this.membershipPlanCreditAmount(plan) || Number(value.planCredits || 0);
+    const serviceCredits = this.planServiceCredits(plan, planCredits);
     this.api.post('membership-enterprise/sell', {
       ...value,
       staffName: staff ? this.staffName(staff.id) : '',
       price: plan?.price || 0,
       paidAmount: Number(value.paidAmount || plan?.price || 0),
       planCredits,
+      planType: this.membershipPlanType(plan),
       serviceCredits
     }).subscribe({
       next: (result) => {
@@ -3870,9 +4099,66 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     return String(this.planForm.value.planType || 'discount') === 'prepaid_credit';
   }
 
+  isServiceCreditPlanForm(): boolean {
+    return ['visit_pack', 'service_credit', 'combo'].includes(String(this.planForm.value.planType || 'discount'));
+  }
+
+  isUnlimitedPlanForm(): boolean {
+    return String(this.planForm.value.planType || 'discount') === 'unlimited';
+  }
+
+  isFamilyPlanForm(): boolean {
+    return String(this.planForm.value.planType || 'discount') === 'family';
+  }
+
+  isCorporatePlanForm(): boolean {
+    return String(this.planForm.value.planType || 'discount') === 'corporate';
+  }
+
+  isTieredPlanForm(): boolean {
+    return String(this.planForm.value.planType || 'discount') === 'tiered';
+  }
+
+  usesDiscountFields(): boolean {
+    return !['prepaid_credit', 'visit_pack', 'service_credit', 'combo', 'unlimited'].includes(String(this.planForm.value.planType || 'discount'));
+  }
+
+  private planUsesCreditOnly(planType: string): boolean {
+    return ['prepaid_credit', 'visit_pack', 'service_credit', 'combo', 'unlimited'].includes(planType);
+  }
+
+  private planCreditUnit(planType: string): string {
+    if (planType === 'prepaid_credit') return 'amount';
+    if (planType === 'visit_pack') return 'visit';
+    if (planType === 'unlimited') return 'unlimited';
+    return 'service';
+  }
+
+  private planRedemptionMode(planType: string): string {
+    if (planType === 'visit_pack') return 'visit_credit';
+    if (planType === 'unlimited') return 'unlimited_fair_usage';
+    if (planType === 'service_credit' || planType === 'combo') return 'service_credit';
+    return 'discount';
+  }
+
+  private parseServiceList(value: unknown): string[] {
+    return String(value || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private includedServicesText(value: unknown[]): string {
+    return (value || [])
+      .map((item: unknown) => String((item as ApiRecord)?.['serviceName'] || (item as ApiRecord)?.['serviceId'] || item || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+
   applyPrepaidPreset(price: number, bonusAmount: number, validityDays: number): void {
     this.planForm.patchValue({
       planType: 'prepaid_credit',
+      creditUnit: 'amount',
       price,
       bonusAmount,
       creditAmount: price + bonusAmount,
@@ -3904,10 +4190,38 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     return `${limit} · applies on ${restriction}${this.planForm.value.allowProductRedeem ? ' · products allowed' : ''}.`;
   }
 
+  structuredPlanPreview(): string {
+    const planType = String(this.planForm.value.planType || 'discount');
+    const credits = Math.max(0, Number(this.planForm.value.creditAmount || 0));
+    if (planType === 'visit_pack') return `${credits || 10} visits`;
+    if (planType === 'service_credit') return `${credits || 3} service credits`;
+    if (planType === 'combo') return `${credits || 3} combo service credits`;
+    if (planType === 'unlimited') return `Unlimited services, ${Number(this.planForm.value.monthlyCap || 4)} / month`;
+    if (planType === 'family') return `Family plan ${Number(this.planForm.value.familyMemberLimit || 4)} members`;
+    if (planType === 'corporate') return `Corporate ${this.planForm.value.corporateLabel || 'company'} ${Number(this.planForm.value.discountPercent || 0)}%`;
+    if (planType === 'tiered') return `Tier ${this.planForm.value.tierName || 'Gold'} after ${this.moneyLabel(Number(this.planForm.value.tierSpendThreshold || 0))}`;
+    return `${Number(this.planForm.value.discountPercent || 0)}% service discount`;
+  }
+
+  structuredPlanRulePreview(): string {
+    const services = this.planForm.value.includedServicesValue ? `Services: ${this.planForm.value.includedServicesValue}` : 'All eligible services';
+    const occasion = [this.planForm.value.birthdayBenefit ? 'birthday' : '', this.planForm.value.anniversaryBenefit ? 'anniversary' : ''].filter(Boolean).join(' + ');
+    const priority = this.planForm.value.priorityBooking ? 'priority booking' : '';
+    return [services, occasion ? `Occasion: ${occasion}` : '', priority].filter(Boolean).join(' · ') || 'Standard membership rules';
+  }
+
   planSummary(plan: PosMembershipPlan): string {
-    if (this.membershipPlanType(plan) === 'prepaid_credit') {
+    const planType = this.membershipPlanType(plan);
+    const rules = plan.benefitRules || {};
+    if (planType === 'prepaid_credit') {
       return `Pay ${this.moneyLabel(plan.price)} · Get ${this.moneyLabel(this.membershipPlanCreditAmount(plan))} credit · ${plan.benefitPercent || 0}% bonus`;
     }
+    if (planType === 'visit_pack') return `${this.membershipPlanCreditAmount(plan)} visits · ${plan.validityDays} days`;
+    if (planType === 'service_credit' || planType === 'combo') return `${this.membershipPlanCreditAmount(plan)} ${planType === 'combo' ? 'combo' : 'service'} credits · ${this.includedServicesText(plan.includedServices || []) || 'selected services'}`;
+    if (planType === 'unlimited') return `Unlimited · ${Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4)} / month`;
+    if (planType === 'family') return `Family ${Number(((rules['family'] || {}) as ApiRecord)['memberLimit'] || 4)} members`;
+    if (planType === 'corporate') return `Corporate ${String(((rules['corporate'] || {}) as ApiRecord)['label'] || plan.name)} · ${plan.discountPercent}%`;
+    if (planType === 'tiered') return `Tier ${String(((rules['tier'] || {}) as ApiRecord)['name'] || plan.name)} after ${this.moneyLabel(Number(((rules['tier'] || {}) as ApiRecord)['spendThreshold'] || 0))}`;
     return `${this.moneyLabel(plan.price)} · ${plan.discountPercent}% service · ${plan.productDiscountPercent || 0}% product`;
   }
 
@@ -3918,12 +4232,40 @@ export class MembershipsComponent implements OnInit, OnDestroy {
 
   private membershipPlanCreditAmount(plan: PosMembershipPlan | null | undefined): number {
     const rules = plan?.benefitRules || {};
+    const planType = this.membershipPlanType(plan);
+    if (planType === 'unlimited') return Math.max(1, Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4));
     return Math.max(0, Number(plan?.creditAmount || rules['creditAmount'] || rules['credits'] || 0));
   }
 
   private membershipPlanBonusAmount(plan: PosMembershipPlan | null | undefined): number {
     const rules = plan?.benefitRules || {};
     return Math.max(0, Number(plan?.bonusAmount || rules['bonusAmount'] || Math.max(0, this.membershipPlanCreditAmount(plan) - Number(plan?.price || 0))));
+  }
+
+  private planServiceCredits(plan: PosMembershipPlan | undefined, planCredits: number): ApiRecord[] | undefined {
+    if (!plan) return undefined;
+    const planType = this.membershipPlanType(plan);
+    const rules = plan.benefitRules || {};
+    if (planType === 'prepaid_credit') {
+      return [{ type: 'prepaid_credit', credits: planCredits, remaining: planCredits, planId: plan.id || '', bonusAmount: this.membershipPlanBonusAmount(plan), benefitPercent: plan.benefitPercent || 0, benefitRules: rules }];
+    }
+    if (planType === 'visit_pack' || planType === 'service_credit' || planType === 'combo') {
+      const included = Array.isArray(plan.includedServices) && plan.includedServices.length ? plan.includedServices : this.parseServiceList(plan.serviceRestrictionValue || '').map((name) => ({ serviceId: name, serviceName: name }));
+      if (!included.length) return [{ type: planType, credits: planCredits, remaining: planCredits, planId: plan.id || '', benefitRules: rules }];
+      return included.map((item: unknown) => ({
+        type: planType,
+        serviceId: String((item as ApiRecord)?.['serviceId'] || ''),
+        serviceName: String((item as ApiRecord)?.['serviceName'] || (item as ApiRecord)?.['name'] || (item as ApiRecord)?.['serviceId'] || 'Service credit'),
+        credits: Number((item as ApiRecord)?.['credits'] || planCredits || 1),
+        remaining: Number((item as ApiRecord)?.['credits'] || planCredits || 1),
+        planId: plan.id || '',
+        benefitRules: rules
+      }));
+    }
+    if (planType === 'unlimited') {
+      return [{ type: 'unlimited_service', credits: planCredits, remaining: planCredits, planId: plan.id || '', fairUsage: rules['fairUsage'] || {}, benefitRules: rules }];
+    }
+    return undefined;
   }
 
   private moneyLabel(value: number): string {
@@ -3945,6 +4287,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       productDiscountPercent: Number(plan.productDiscountPercent || 0),
       planType,
       creditAmount,
+      creditUnit: String(benefitRules['creditUnit'] || this.planCreditUnit(planType)),
       bonusAmount,
       benefitPercent: Number(plan.benefitPercent || benefitRules['benefitPercent'] || (price > 0 ? Math.round((bonusAmount / price) * 100) : 0)),
       perVisitLimitType: String(plan.perVisitLimitType || perVisitLimit['type'] || 'none'),

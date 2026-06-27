@@ -50,6 +50,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>Auto-renew</span><strong>{{ membershipProfile().autoRenew ? 'On' : 'Off' }}</strong></div>
               <div><span>Credits</span><strong>{{ membershipProfile().creditsRemaining || 0 }} / {{ membershipProfile().planCredits || 0 }}</strong></div>
               <div><span>Price</span><strong>{{ membershipProfile().price | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Plan type</span><strong>{{ label(wallet().activeMembership?.planType || wallet().memberships?.[0]?.planType || currentPlan().benefitRules?.planType) }}</strong></div>
+              <div><span>Business label</span><strong>{{ wallet().businessLabel || wallet().memberships?.[0]?.businessLabel || '-' }}</strong></div>
             </div>
           </section>
 
@@ -86,6 +88,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>Active packages</span><strong>{{ wallet().packageSummary?.activeCount || 0 }}</strong></div>
               <div><span>Package credits</span><strong>{{ wallet().packageSummary?.creditsRemaining || 0 }}</strong></div>
               <div><span>Family sharing</span><strong>{{ wallet().familySharing?.status || 'not_shared' }}</strong></div>
+              <div><span>Fair usage</span><strong>{{ fairUsageLabel(wallet()) }}</strong></div>
+              <div><span>Corporate rule</span><strong>{{ corporateLabel(wallet()) }}</strong></div>
+              <div><span>Occasion benefit</span><strong>{{ occasionBenefitLabel(wallet()) }}</strong></div>
+              <div><span>Tier status</span><strong>{{ tierLabel(wallet()) }}</strong></div>
             </div>
             <ng-template #noWallet>
               <div class="empty-panel compact-empty"><strong>No wallet snapshot.</strong><span>Client wallet record was not found.</span></div>
@@ -226,6 +232,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>Product discount</span><strong>{{ planData.productDiscountPercent || 0 }}%</strong></div>
               <div><span>Validity</span><strong>{{ planData.validityDays }} days</strong></div>
               <div><span>Status</span><strong>{{ planData.status }}</strong></div>
+              <div><span>Plan type</span><strong>{{ label(planData.benefitRules?.planType) }}</strong></div>
+              <div><span>Business label</span><strong>{{ planBusinessLabel(planData) }}</strong></div>
             </div>
           </section>
           <section class="panel">
@@ -262,6 +270,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <span>{{ wallet.activePlanName || 'No active benefits' }} · Wallet {{ wallet.walletBalance | currency: 'INR':'symbol':'1.0-0' }}</span>
               <span>Credits {{ wallet.serviceCredits?.remaining || 0 }} left / {{ wallet.serviceCredits?.used || 0 }} used · Product {{ wallet.productDiscount || wallet.productDiscountPercent || 0 }}%</span>
               <span>Packages {{ wallet.packageSummary?.activeCount || 0 }} · Expiry {{ wallet.expiryDate || '-' }} · Auto-renew {{ wallet.autoRenew ? 'On' : 'Off' }} · Family {{ wallet.familySharing?.status || 'not_shared' }}</span>
+              <span>{{ fairUsageLabel(wallet) }} · {{ corporateLabel(wallet) }} · {{ tierLabel(wallet) }}</span>
             </article>
           </div>
           <ng-template #noWalletSnapshots>
@@ -466,6 +475,49 @@ export class Membership360Component implements OnInit {
 
   label(value: unknown): string {
     return String(value || '-').replace(/[_\-.]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  fairUsageLabel(wallet: ApiRecord): string {
+    const rows = Array.isArray(wallet['fairUsage']) ? wallet['fairUsage'] as ApiRecord[] : [];
+    const row = rows[0] || ((wallet['memberships'] as ApiRecord[] | undefined)?.find((item) => item['fairUsage'])?.['fairUsage'] as ApiRecord | undefined);
+    if (!row || !Number(row['monthlyCap'] || 0)) return 'No cap';
+    return `${row['monthlyUsed'] || 0}/${row['monthlyCap']} this month`;
+  }
+
+  corporateLabel(wallet: ApiRecord): string {
+    const rows = Array.isArray(wallet['corporate']) ? wallet['corporate'] as ApiRecord[] : [];
+    const corporate = rows[0] || ((wallet['memberships'] as ApiRecord[] | undefined)?.find((item) => item['corporate'])?.['corporate'] as ApiRecord | undefined);
+    if (!corporate || !Object.keys(corporate).length) return 'Not linked';
+    return `${corporate['label'] || corporate['domain'] || 'Corporate'}${corporate['employeeIdRequired'] ? ' ID required' : ''}`;
+  }
+
+  occasionBenefitLabel(wallet: ApiRecord): string {
+    const rows = Array.isArray(wallet['occasionBenefits']) ? wallet['occasionBenefits'] as ApiRecord[] : [];
+    const benefit = rows[0] || ((wallet['memberships'] as ApiRecord[] | undefined)?.find((item) => item['occasionBenefits'])?.['occasionBenefits'] as ApiRecord | undefined);
+    if (!benefit || !Object.keys(benefit).length) return 'None';
+    return [benefit['birthday'] ? 'Birthday' : '', benefit['anniversary'] ? 'Anniversary' : ''].filter(Boolean).join(' + ') || 'Configured';
+  }
+
+  tierLabel(wallet: ApiRecord): string {
+    const rows = Array.isArray(wallet['tierSuggestions']) ? wallet['tierSuggestions'] as ApiRecord[] : [];
+    const tier = rows[0] || ((wallet['memberships'] as ApiRecord[] | undefined)?.find((item) => item['tierSuggestion'])?.['tierSuggestion'] as ApiRecord | undefined);
+    if (!tier || !Object.keys(tier).length) return 'No tier';
+    return tier['eligible'] ? `${tier['tierName'] || 'Next tier'} ready` : `${tier['gapSpend'] || 0} spend gap`;
+  }
+
+  planBusinessLabel(plan: ApiRecord): string {
+    const rules = (plan['benefitRules'] || {}) as ApiRecord;
+    const planType = String(rules['planType'] || 'discount');
+    const credits = Number(rules['creditAmount'] || 0);
+    if (planType === 'prepaid_credit') return `Get ${(credits || 0).toLocaleString('en-IN')} credit`;
+    if (planType === 'visit_pack') return `${credits || 10} visits`;
+    if (planType === 'service_credit') return `${credits || 1} service credits`;
+    if (planType === 'combo') return `${credits || 1} combo credits`;
+    if (planType === 'unlimited') return `Unlimited ${Number((rules['fairUsage'] as ApiRecord | undefined)?.['monthlyCap'] || 4)} / month`;
+    if (planType === 'family') return `Family ${Number((rules['family'] as ApiRecord | undefined)?.['memberLimit'] || 4)} members`;
+    if (planType === 'corporate') return `Corporate ${(rules['corporate'] as ApiRecord | undefined)?.['label'] || plan['name'] || ''}`;
+    if (planType === 'tiered') return `Tier ${(rules['tier'] as ApiRecord | undefined)?.['name'] || plan['name'] || ''}`;
+    return `${plan['discountPercent'] || 0}% discount`;
   }
 
   eventTone(event: ApiRecord): string {

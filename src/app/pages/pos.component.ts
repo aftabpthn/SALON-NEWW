@@ -713,6 +713,9 @@ type PackageClientNotice = {
             Redeeming {{ redeemableBenefitTypeLabel(benefit) }} {{ benefit.planName || benefit.name || benefit.membershipId }}.
             {{ selectedRedeemableBenefitRemainingCredits() }} credits available · {{ membershipCreditRedeemCap(benefit) }} eligible for this bill.
           </p>
+          <div class="inline-hint" *ngIf="membershipEligibilityNotes().length">
+            <span *ngFor="let note of membershipEligibilityNotes()">{{ note }}</span>
+          </div>
           <section class="benefit-mapping-box" *ngIf="selectedRedeemableBenefit() as benefit">
             <div class="benefit-mapping-box__header">
               <div>
@@ -2872,6 +2875,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       && (String(rules['planType'] || '') === 'prepaid_credit' || rules['prepaidCredit'] === true || !!this.prepaidCreditLine(benefit));
   }
 
+  private isCreditBenefit(benefit?: ApiRecord): boolean {
+    const rules = this.benefitRulesFor(benefit);
+    const planType = String(rules['planType'] || '');
+    return this.isPrepaidCreditBenefit(benefit)
+      || ['visit_pack', 'service_credit', 'combo', 'unlimited'].includes(planType)
+      || this.redeemableBenefitTypeLabel(benefit) === 'package';
+  }
+
   private membershipCreditAllowedForItem(item: SaleItem, benefit?: ApiRecord): boolean {
     const rules = this.benefitRulesFor(benefit);
     if (item.type === 'product') return Boolean(rules['allowProductRedeem']);
@@ -2889,8 +2900,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   membershipCreditRedeemCap(benefit: ApiRecord | undefined = this.selectedRedeemableBenefit()): number {
     if (!benefit) return 0;
     const remaining = this.selectedRedeemableBenefitRemainingCredits();
-    if (!this.isPrepaidCreditBenefit(benefit)) return remaining;
+    if (!this.isCreditBenefit(benefit)) return remaining;
     const eligible = this.redeemableServiceLines(benefit).reduce((sum, line) => sum + this.money(line.finalAmount), 0);
+    if (!this.isPrepaidCreditBenefit(benefit)) return Math.min(remaining, this.redeemableServiceLines(benefit).length || remaining);
     const rules = this.benefitRulesFor(benefit);
     const limit = this.readJsonObject(rules['perVisitLimit']) || {};
     const limitType = String(limit['type'] || 'none');
@@ -2906,8 +2918,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   redeemableServiceLines(benefit: ApiRecord | undefined = this.selectedRedeemableBenefit()): RedeemableServiceLine[] {
     const serviceItems = this.items()
       .map((item, lineIndex) => ({ item, lineIndex }))
-      .filter(({ item }) => item.type === 'service' || item.type === 'package_redeem' || (this.isPrepaidCreditBenefit(benefit) && item.type === 'product'))
-      .filter(({ item }) => !this.isPrepaidCreditBenefit(benefit) || this.membershipCreditAllowedForItem(item, benefit));
+      .filter(({ item }) => item.type === 'service' || item.type === 'package_redeem' || (this.isCreditBenefit(benefit) && item.type === 'product'))
+      .filter(({ item }) => !this.isCreditBenefit(benefit) || this.membershipCreditAllowedForItem(item, benefit));
     const cacheKey = serviceItems
       .map(({ item, lineIndex }) => `${benefit?.['membershipId'] || benefit?.['id'] || ''}:${lineIndex}:${item.type}:${item.id}:${item.name}:${item.staffName}:${item.quantity}:${item.price}:${item.discountValue}:${this.lineTotal(item)}`)
       .join('|');
@@ -2958,7 +2970,37 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   redeemableBenefitOption(benefit: ApiRecord): string {
     const remaining = this.redeemableBenefitRemainingCredits(benefit);
     const expiry = benefit['expiryDate'] ? ` · exp ${String(benefit['expiryDate']).slice(0, 10)}` : '';
-    return `${this.redeemableBenefitTypeLabel(benefit)} · ${benefit['planName'] || benefit['name'] || benefit['membershipId']} · ${remaining} credits${expiry}`;
+    const rules = this.benefitRulesFor(benefit);
+    const planType = String(rules['planType'] || this.redeemableBenefitTypeLabel(benefit));
+    const label = benefit['businessLabel'] || this.membershipBusinessLabel({
+      name: String(benefit['planName'] || benefit['name'] || benefit['membershipId'] || 'Benefit'),
+      price: 0,
+      discountPercent: 0,
+      benefitRules: rules,
+      validityDays: 0,
+      active: true,
+      createdAt: ''
+    } as PosMembershipPlan);
+    return `${planType.replace('_', ' ')} · ${label} · ${remaining} credits${expiry}`;
+  }
+
+  membershipEligibilityNotes(): string[] {
+    const wallet = (this.membershipEligibility()?.['wallet'] || {}) as ApiRecord;
+    const notes: string[] = [];
+    if (wallet['businessLabel']) notes.push(`Active benefit: ${wallet['businessLabel']}`);
+    const fairUsage = Array.isArray(wallet['fairUsage']) ? wallet['fairUsage'] as ApiRecord[] : [];
+    for (const item of fairUsage.slice(0, 2)) {
+      notes.push(`Fair usage ${item['planName'] || ''}: ${item['monthlyUsed'] || 0}/${item['monthlyCap'] || 0} used this month.`);
+    }
+    const family = wallet['familySharing'] as ApiRecord | undefined;
+    if (family?.['status'] === 'shared') notes.push(`Family shared benefits active (${family['activeLinks'] || 0} link).`);
+    const corporate = Array.isArray(wallet['corporate']) ? wallet['corporate'] as ApiRecord[] : [];
+    if (corporate[0]?.['label']) notes.push(`Corporate rule: ${corporate[0]['label']}${corporate[0]['employeeIdRequired'] ? ' employee ID required' : ''}.`);
+    const occasions = Array.isArray(wallet['occasionBenefits']) ? wallet['occasionBenefits'] as ApiRecord[] : [];
+    if (occasions.some((item) => item['birthday'] || item['anniversary'])) notes.push('Birthday/anniversary membership benefit configured.');
+    const tiers = Array.isArray(wallet['tierSuggestions']) ? wallet['tierSuggestions'] as ApiRecord[] : [];
+    if (tiers[0]?.['eligible']) notes.push(`Tier upgrade ready: ${tiers[0]['tierName'] || 'next tier'}.`);
+    return notes.slice(0, 5);
   }
 
   selectRedeemableBenefit(value: string): void {
@@ -3893,12 +3935,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const creditAmount = this.membershipPlanCreditAmount(plan);
     const bonusAmount = this.membershipPlanBonusAmount(plan);
     const benefitRules = plan.benefitRules || {};
-    const serviceCredits = planType === 'prepaid_credit'
-      ? [{ type: 'prepaid_credit', credits: creditAmount, remaining: creditAmount, planId: plan.id, bonusAmount, benefitPercent: plan.benefitPercent || 0, benefitRules }]
-      : [
-          { type: 'bill_discount', percent: Number(plan.discountPercent || 0), planId: plan.id },
-          { type: 'product_discount', percent: Number(plan.productDiscountPercent || 0), planId: plan.id }
-        ];
+    const serviceCredits = this.planServiceCreditsForSale(plan, planType, creditAmount, benefitRules);
     this.items.update((items) => [
       ...items,
       {
@@ -3909,11 +3946,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         price: Number(plan.price || 0),
         gstRate: 18,
         ...this.defaultItemStaff(),
-        discountPercent: planType === 'prepaid_credit' ? 0 : Number(plan.discountPercent || 0),
+        discountPercent: this.planUsesCredits(planType) ? 0 : Number(plan.discountPercent || 0),
         validityDays: Number(plan.validityDays || 365),
         planType,
-        planCredits: planType === 'prepaid_credit' ? creditAmount : 0,
-        creditsRemaining: planType === 'prepaid_credit' ? creditAmount : 0,
+        planCredits: this.planUsesCredits(planType) ? creditAmount : 0,
+        creditsRemaining: this.planUsesCredits(planType) ? creditAmount : 0,
         bonusAmount,
         benefitRules,
         serviceCredits
@@ -3921,6 +3958,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     ]);
     this.normalizeBenefitServiceMappings();
     this.clearCoupon();
+  }
+
+  private planUsesCredits(planType: string): boolean {
+    return ['prepaid_credit', 'visit_pack', 'service_credit', 'combo', 'unlimited'].includes(planType);
+  }
+
+  private planServiceCreditsForSale(plan: PosMembershipPlan, planType: string, creditAmount: number, benefitRules: ApiRecord): ApiRecord[] {
+    if (planType === 'prepaid_credit') {
+      return [{ type: 'prepaid_credit', credits: creditAmount, remaining: creditAmount, planId: plan.id, bonusAmount: this.membershipPlanBonusAmount(plan), benefitPercent: plan.benefitPercent || 0, benefitRules }];
+    }
+    if (['visit_pack', 'service_credit', 'combo'].includes(planType)) {
+      const included = Array.isArray(plan.includedServices) && plan.includedServices.length ? plan.includedServices as ApiRecord[] : [{}];
+      return included.map((item) => ({
+        type: planType,
+        serviceId: String(item['serviceId'] || ''),
+        serviceName: String(item['serviceName'] || item['name'] || item['serviceId'] || plan.name),
+        credits: Number(item['credits'] || creditAmount || 1),
+        remaining: Number(item['credits'] || creditAmount || 1),
+        planId: plan.id,
+        creditUnit: planType === 'visit_pack' ? 'visit' : 'service',
+        benefitRules
+      }));
+    }
+    if (planType === 'unlimited') {
+      return [{ type: 'unlimited_service', credits: creditAmount, remaining: creditAmount, planId: plan.id, creditUnit: 'unlimited', fairUsage: benefitRules['fairUsage'] || {}, benefitRules }];
+    }
+    return [
+      { type: 'bill_discount', percent: Number(plan.discountPercent || 0), planId: plan.id, benefitRules },
+      { type: 'product_discount', percent: Number(plan.productDiscountPercent || 0), planId: plan.id, benefitRules }
+    ];
   }
 
   addMembershipPlanFromSelect(select: HTMLSelectElement): void {
@@ -5095,10 +5162,28 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   membershipPlanLabel(plan: PosMembershipPlan): string {
+    const businessLabel = this.membershipBusinessLabel(plan);
+    if (businessLabel) return `${plan.name} - ${businessLabel}`;
     if (this.membershipPlanType(plan) === 'prepaid_credit') {
       return `${plan.name} - Pay ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get ₹${Math.round(this.membershipPlanCreditAmount(plan)).toLocaleString('en-IN')} credit`;
     }
     return `${plan.name} - ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / ${Number(plan.discountPercent || 0)}% every bill`;
+  }
+
+  private membershipBusinessLabel(plan: PosMembershipPlan | null | undefined): string {
+    if (!plan) return '';
+    const rules = plan.benefitRules || {};
+    const planType = this.membershipPlanType(plan);
+    const credits = this.membershipPlanCreditAmount(plan);
+    if (planType === 'prepaid_credit') return `Pay ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get ₹${Math.round(credits).toLocaleString('en-IN')} credit`;
+    if (planType === 'visit_pack') return `${credits || 10} visits`;
+    if (planType === 'service_credit') return `${credits || 1} service credits`;
+    if (planType === 'combo') return `${credits || 1} combo credits`;
+    if (planType === 'unlimited') return `Unlimited ${Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4)} / month`;
+    if (planType === 'family') return `Family ${Number(((rules['family'] || {}) as ApiRecord)['memberLimit'] || 4)} members`;
+    if (planType === 'corporate') return `Corporate ${String(((rules['corporate'] || {}) as ApiRecord)['label'] || plan.name)} ${Number(plan.discountPercent || 0)}%`;
+    if (planType === 'tiered') return `Tier ${String(((rules['tier'] || {}) as ApiRecord)['name'] || plan.name)} after ₹${Math.round(Number(((rules['tier'] || {}) as ApiRecord)['spendThreshold'] || 0)).toLocaleString('en-IN')}`;
+    return '';
   }
 
   private membershipPlanType(plan: PosMembershipPlan | null | undefined): string {
@@ -5108,6 +5193,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private membershipPlanCreditAmount(plan: PosMembershipPlan | null | undefined): number {
     const rules = plan?.benefitRules || {};
+    if (this.membershipPlanType(plan) === 'unlimited') return Math.max(1, Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4));
     return Math.max(0, Number(plan?.creditAmount || rules['creditAmount'] || rules['credits'] || 0));
   }
 

@@ -70,6 +70,7 @@ const COMMISSION_RATES = {
   downgrade: 0.03,
   cancel: 0.03
 };
+const MEMBERSHIP_PLAN_TYPES = new Set(["discount", "prepaid_credit", "visit_pack", "service_credit", "combo", "unlimited", "family", "corporate", "tiered"]);
 
 function text(value) {
   return String(value || "").trim();
@@ -99,6 +100,50 @@ function compactPlan(plan = {}) {
     discountPercent: Number(plan.discountPercent || 0),
     productDiscountPercent: Number(plan.productDiscountPercent || 0)
   };
+}
+
+function nextAnnualDate(value) {
+  const raw = String(value || "").slice(5, 10);
+  if (!/^\d{2}-\d{2}$/.test(raw)) return "";
+  const year = Number(today().slice(0, 4));
+  const current = `${year}-${raw}`;
+  return current >= today() ? current : `${year + 1}-${raw}`;
+}
+
+function planTypeFromRules(plan = {}, payload = {}) {
+  const rules = plan?.benefitRules && typeof plan.benefitRules === "object" ? plan.benefitRules : {};
+  const type = String(payload.planType || plan.planType || rules.planType || (rules.prepaidCredit ? "prepaid_credit" : "discount"));
+  return MEMBERSHIP_PLAN_TYPES.has(type) ? type : "discount";
+}
+
+function planCreditUnit(planType) {
+  if (planType === "prepaid_credit") return "amount";
+  if (planType === "visit_pack") return "visit";
+  if (planType === "unlimited") return "unlimited";
+  return "service";
+}
+
+function includedServiceEntries(plan = {}, fallbackCredits = 1) {
+  const rows = Array.isArray(plan.includedServices) ? plan.includedServices : [];
+  return rows.map((item) => ({
+    serviceId: String(item?.serviceId || item?.id || item || ""),
+    serviceName: String(item?.serviceName || item?.name || item?.serviceId || item || "Service credit"),
+    credits: Math.max(1, Number(item?.credits || fallbackCredits || 1))
+  })).filter((item) => item.serviceId || item.serviceName);
+}
+
+function planBusinessLabel(plan = {}, planType = planTypeFromRules(plan)) {
+  const rules = plan.benefitRules || {};
+  const credits = Math.max(0, Number(plan.creditAmount || rules.creditAmount || 0));
+  if (planType === "prepaid_credit") return `Pay ₹${Math.round(Number(plan.price || 0)).toLocaleString("en-IN")} / Get ₹${Math.round(credits).toLocaleString("en-IN")} credit`;
+  if (planType === "visit_pack") return `${credits || 10} visits`;
+  if (planType === "service_credit") return `${credits || 1} service credits`;
+  if (planType === "combo") return `${credits || includedServiceEntries(plan).length || 1} combo credits`;
+  if (planType === "unlimited") return `Unlimited ${Number(rules.fairUsage?.monthlyCap || 4)} / month`;
+  if (planType === "family") return `Family ${Number(rules.family?.memberLimit || 4)} members`;
+  if (planType === "corporate") return `Corporate ${rules.corporate?.label || plan.name || ""} ${Number(plan.discountPercent || 0)}%`;
+  if (planType === "tiered") return `Tier ${rules.tier?.name || plan.name || ""} after ₹${Math.round(Number(rules.tier?.spendThreshold || 0)).toLocaleString("en-IN")}`;
+  return `${Number(plan.discountPercent || 0)}% service discount`;
 }
 
 function entitlementTypeFromMembership(membership = {}) {
@@ -341,6 +386,53 @@ export class MembershipEnterpriseService {
     return this.getPlan(id, access);
   }
 
+  planSaleCredits({ plan = {}, payload = {}, planType = "discount" } = {}) {
+    const planRules = plan?.benefitRules && typeof plan.benefitRules === "object" ? plan.benefitRules : {};
+    const price = money(payload.price ?? plan?.price ?? 0);
+    const requestedCredits = Number(payload.planCredits ?? planRules.creditAmount ?? 0);
+    const bonusAmount = Number(payload.bonusAmount ?? planRules.bonusAmount ?? 0);
+    const prepaidCredits = Math.max(0, Number(requestedCredits || (planType === "prepaid_credit" ? price + bonusAmount : 0)));
+    if (Array.isArray(payload.serviceCredits) && payload.serviceCredits.length) {
+      return payload.serviceCredits.map((credit) => ({
+        ...credit,
+        planId: credit.planId || plan?.id || "",
+        benefitRules: credit.benefitRules || planRules,
+        remaining: Number(credit.remaining ?? credit.credits ?? prepaidCredits ?? 0)
+      }));
+    }
+    if (planType === "prepaid_credit") {
+      return [{ type: "prepaid_credit", credits: prepaidCredits, remaining: prepaidCredits, planId: plan?.id || "", bonusAmount, benefitPercent: Number(planRules.benefitPercent || 0), benefitRules: planRules }];
+    }
+    if (["visit_pack", "service_credit", "combo"].includes(planType)) {
+      const credits = Math.max(1, Number(requestedCredits || planRules.creditAmount || 1));
+      const included = includedServiceEntries(plan, credits);
+      const rows = included.length ? included : [{ serviceId: "", serviceName: plan?.name || "Service credit", credits }];
+      return rows.map((row) => ({
+        type: planType,
+        serviceId: row.serviceId,
+        serviceName: row.serviceName,
+        credits: row.credits,
+        remaining: row.credits,
+        planId: plan?.id || "",
+        creditUnit: planCreditUnit(planType),
+        benefitRules: planRules
+      }));
+    }
+    if (planType === "unlimited") {
+      const monthlyCap = Math.max(1, Number(planRules.fairUsage?.monthlyCap || payload.monthlyCap || 4));
+      return [{ type: "unlimited_service", credits: monthlyCap, remaining: monthlyCap, planId: plan?.id || "", creditUnit: "unlimited", fairUsage: { monthlyCap }, benefitRules: planRules }];
+    }
+    return [
+      { type: "bill_discount", percent: Number(payload.discountPercent ?? plan?.discountPercent ?? 0), planId: plan?.id || "", benefitRules: planRules },
+      ...(Number(plan?.productDiscountPercent || 0) > 0 ? [{ type: "product_discount", percent: Number(plan.productDiscountPercent || 0), planId: plan?.id || "", benefitRules: planRules }] : [])
+    ];
+  }
+
+  totalCreditsForSale(serviceCredits = [], planType = "discount") {
+    if (planType === "discount" || planType === "family" || planType === "corporate" || planType === "tiered") return 0;
+    return Math.max(0, serviceCredits.reduce((sum, credit) => sum + Number(credit.remaining ?? credit.credits ?? 0), 0));
+  }
+
   sellMembership(payload = {}, access) {
     if (!payload.clientId) throw badRequest("clientId is required");
     const client = repositories.clients.getById(payload.clientId, scope(access));
@@ -354,12 +446,10 @@ export class MembershipEnterpriseService {
     const planName = payload.planName || plan?.name || "Membership";
     const discountPercent = Number(payload.discountPercent ?? plan?.discountPercent ?? 0);
     const planRules = plan?.benefitRules && typeof plan.benefitRules === "object" ? plan.benefitRules : {};
-    const isPrepaidCredit = payload.planType === "prepaid_credit" || planRules.planType === "prepaid_credit" || planRules.prepaidCredit === true;
-    const credits = Number(payload.planCredits ?? (isPrepaidCredit ? planRules.creditAmount : 0) ?? 0);
-    const bonusAmount = Number(payload.bonusAmount ?? (isPrepaidCredit ? planRules.bonusAmount : 0) ?? 0);
-    const serviceCredits = payload.serviceCredits || (isPrepaidCredit
-      ? [{ type: "prepaid_credit", credits, remaining: credits, planId: plan?.id || "", bonusAmount, benefitPercent: Number(planRules.benefitPercent || 0), benefitRules: planRules }]
-      : [{ type: "bill_discount", percent: discountPercent, planId: plan?.id || "" }]);
+    const planType = planTypeFromRules(plan, payload);
+    const serviceCredits = this.planSaleCredits({ plan, payload: { ...payload, discountPercent }, planType });
+    const credits = this.totalCreditsForSale(serviceCredits, planType);
+    const bonusAmount = Number(payload.bonusAmount ?? (planType === "prepaid_credit" ? planRules.bonusAmount : 0) ?? 0);
     const membership = repositories.memberships.create({
       id: makeId("mem"),
       clientId: payload.clientId,
@@ -372,7 +462,7 @@ export class MembershipEnterpriseService {
       autoRenew: payload.autoRenew ? 1 : 0,
       loyaltyMultiplier: Number(payload.loyaltyMultiplier || 1),
       status: "active",
-      redeemHistory: [{ date: takenDate, type: "membership_sale", planId: plan?.id || "", planType: isPrepaidCredit ? "prepaid_credit" : "discount", credits, bonusAmount, invoiceId: payload.invoiceId || "", saleId: payload.saleId || "" }],
+      redeemHistory: [{ date: takenDate, type: "membership_sale", planId: plan?.id || "", planType, credits, bonusAmount, invoiceId: payload.invoiceId || "", saleId: payload.saleId || "", businessLabel: planBusinessLabel(plan, planType) }],
       branchId
     }, scope(access));
     this.ledger({
@@ -391,6 +481,8 @@ export class MembershipEnterpriseService {
       expiresOn,
       snapshot: {
         plan,
+        planType,
+        businessLabel: planBusinessLabel(plan, planType),
         membership,
         staffId: payload.staffId || payload.saleStaffId || "",
         staffName: payload.staffName || "",
@@ -433,6 +525,9 @@ export class MembershipEnterpriseService {
     if (!best && Number(client.totalSpend || 0) >= 1000) recommendations.push("Repeat/high spender client ko membership offer karo.");
     if (best && daysLeft !== null && daysLeft <= 30) recommendations.push("Membership renewal due hai, renewal offer WhatsApp queue me bhej sakte hain.");
     if (expired.length && !best) recommendations.push("Expired membership client hai, renewal recovery flow start karo.");
+    if (wallet.tierSuggestions?.length) recommendations.push(`${wallet.tierSuggestions[0].tierName || "Next tier"} eligibility ready hai, controlled upgrade action review karo.`);
+    if (wallet.fairUsage?.some((item) => item.status === "near_limit")) recommendations.push("Unlimited membership fair-usage cap near hai, front desk ko alert dikhao.");
+    if (wallet.occasionBenefits?.length) recommendations.push("Birthday/anniversary benefit configured hai; client date match par free-service reminder bhejo.");
     return {
       clientId,
       branchId,
@@ -487,6 +582,12 @@ export class MembershipEnterpriseService {
       activeLinks: familyRows.length,
       status: familyRows.length ? "shared" : "not_shared"
     };
+    const tierSuggestions = activeMemberships.map((item) => item.tierSuggestion).filter((item) => item?.eligible);
+    const fairUsage = activeMemberships
+      .filter((item) => Number(item.fairUsage?.monthlyCap || 0) > 0)
+      .map((item) => ({ membershipId: item.membershipId, planName: item.planName, ...item.fairUsage }));
+    const corporate = activeMemberships.map((item) => item.corporate).filter((item) => item && Object.keys(item).length);
+    const occasionBenefits = activeMemberships.map((item) => item.occasionBenefits).filter((item) => item && Object.keys(item).length);
     return {
       clientId,
       clientName: client.name || "",
@@ -535,6 +636,11 @@ export class MembershipEnterpriseService {
       autoRenew: Boolean(best?.autoRenew),
       renewDue: Boolean(daysLeft !== null && daysLeft <= 30),
       familySharing,
+      fairUsage,
+      corporate,
+      occasionBenefits,
+      tierSuggestions,
+      businessLabel: best?.businessLabel || "",
       discountAllowed: Boolean(best?.planBenefits.serviceDiscountPercent),
       bestDiscountPercent: Number(best?.planBenefits.serviceDiscountPercent || 0),
       productDiscountPercent: Number(best?.planBenefits.productDiscountPercent || 0),
@@ -1135,6 +1241,61 @@ export class MembershipEnterpriseService {
         const dueOn = addDays(membership.validityDate, -daysBefore);
         if (dueOn < today()) continue;
         const reminder = this.createReminder(membership, null, client, daysBefore, dueOn, access);
+        if (reminder) created.push(reminder);
+      }
+      const snapshot = this.membershipWalletSnapshot(membership, membership.clientId, [], access);
+      if (snapshot.serviceCredits.remaining > 0 && snapshot.serviceCredits.remaining <= 2) {
+        const reminder = this.createTypedReminder({
+          membership,
+          plan: this.resolveMembershipPlan(membership, access),
+          client,
+          reminderType: "low_credits",
+          dueOn: today(),
+          message: `Hi ${client?.name || "there"}, your ${membership.planName} has only ${snapshot.serviceCredits.remaining} credit(s) left.`,
+          payload: { remainingCredits: snapshot.serviceCredits.remaining, planType: snapshot.planType }
+        }, access);
+        if (reminder) created.push(reminder);
+      }
+      if (snapshot.fairUsage.monthlyCap && snapshot.fairUsage.status === "near_limit") {
+        const reminder = this.createTypedReminder({
+          membership,
+          plan: this.resolveMembershipPlan(membership, access),
+          client,
+          reminderType: "fair_usage_near_limit",
+          dueOn: today(),
+          message: `${membership.planName} fair usage: ${snapshot.fairUsage.monthlyUsed}/${snapshot.fairUsage.monthlyCap} used this month.`,
+          payload: snapshot.fairUsage
+        }, access);
+        if (reminder) created.push(reminder);
+      }
+      if (snapshot.tierSuggestion?.eligible) {
+        const reminder = this.createTypedReminder({
+          membership,
+          plan: this.resolveMembershipPlan(membership, access),
+          client,
+          reminderType: "tier_upgrade_eligible",
+          dueOn: today(),
+          message: `${client?.name || "Client"} is eligible for ${snapshot.tierSuggestion.tierName || "next tier"} membership upgrade.`,
+          payload: snapshot.tierSuggestion
+        }, access);
+        if (reminder) created.push(reminder);
+      }
+      const occasionRules = snapshot.occasionBenefits || {};
+      for (const [reminderType, dateValue] of [
+        ["birthday_benefit", occasionRules.birthday ? client?.birthday : ""],
+        ["anniversary_benefit", occasionRules.anniversary ? client?.anniversary : ""]
+      ]) {
+        const dueOn = nextAnnualDate(dateValue);
+        if (!dueOn) continue;
+        const reminder = this.createTypedReminder({
+          membership,
+          plan: this.resolveMembershipPlan(membership, access),
+          client,
+          reminderType,
+          dueOn,
+          message: `Hi ${client?.name || "there"}, your ${membership.planName} ${reminderType.replace("_", " ")} is available on ${dueOn}.`,
+          payload: { occasionDate: dueOn, benefit: reminderType }
+        }, access);
         if (reminder) created.push(reminder);
       }
     }
@@ -3158,6 +3319,34 @@ export class MembershipEnterpriseService {
     return records;
   }
 
+  currentMonthUsage(membership = {}) {
+    const prefix = today().slice(0, 7);
+    const history = Array.isArray(membership.redeemHistory) ? membership.redeemHistory : [];
+    return history
+      .filter((item) => String(item?.date || item?.createdAt || "").slice(0, 7) === prefix)
+      .reduce((sum, item) => sum + Math.max(1, Number(item?.creditsUsed || item?.credits || item?.quantity || 0)), 0);
+  }
+
+  tierSuggestionForClient(client = {}, plan = {}) {
+    const rules = plan?.benefitRules || {};
+    const tier = rules.tier || {};
+    const spendThreshold = Number(tier.spendThreshold || 0);
+    const visitThreshold = Number(tier.visitThreshold || 0);
+    const totalSpend = Number(client.totalSpend || client.total_spend || 0);
+    const visitCount = Number(client.visitCount || client.visit_count || 0);
+    const eligible = Boolean((spendThreshold > 0 && totalSpend >= spendThreshold) || (visitThreshold > 0 && visitCount >= visitThreshold));
+    return {
+      eligible,
+      tierName: tier.name || plan.name || "",
+      spendThreshold,
+      visitThreshold,
+      totalSpend,
+      visitCount,
+      gapSpend: Math.max(0, spendThreshold - totalSpend),
+      gapVisits: Math.max(0, visitThreshold - visitCount)
+    };
+  }
+
   discountPercent(membership = {}) {
     const credits = Array.isArray(membership.serviceCredits) ? membership.serviceCredits : [];
     return Number(credits.find((item) => item?.type === "bill_discount")?.percent || 0);
@@ -3170,6 +3359,8 @@ export class MembershipEnterpriseService {
 
   membershipWalletSnapshot(membership = {}, viewerClientId = "", familyRows = [], access = {}) {
     const plan = this.resolveMembershipPlan(membership, access);
+    const client = repositories.clients.getById(membership.clientId, scope(access)) || {};
+    const planType = planTypeFromRules(plan);
     const history = Array.isArray(membership.redeemHistory) ? membership.redeemHistory : [];
     const totalCredits = Math.max(Number(membership.planCredits || 0), Number(membership.creditsRemaining || 0), 0);
     const remainingCredits = Math.max(Number(membership.creditsRemaining || 0), 0);
@@ -3182,12 +3373,20 @@ export class MembershipEnterpriseService {
       ? membership.serviceCredits.find((credit) => credit?.type === "prepaid_credit")
       : null;
     const creditRules = prepaidCredit?.benefitRules && typeof prepaidCredit.benefitRules === "object" ? prepaidCredit.benefitRules : {};
+    const benefitRules = { ...(plan.benefitRules || {}), ...creditRules };
+    const fairUsage = benefitRules.fairUsage || {};
+    const monthlyCap = Math.max(0, Number(fairUsage.monthlyCap || 0));
+    const monthlyUsed = planType === "unlimited" ? this.currentMonthUsage(membership) : 0;
+    const monthlyRemaining = monthlyCap > 0 ? Math.max(0, monthlyCap - monthlyUsed) : remainingCredits;
+    const effectiveRemaining = planType === "unlimited" ? monthlyRemaining : remainingCredits;
     return {
       membershipId: membership.id,
       clientId: membership.clientId,
       ownedByViewer,
       shareSource: ownedByViewer ? "own" : "family",
       entitlementType,
+      planType,
+      businessLabel: planBusinessLabel(plan, planType),
       membership,
       planId: plan.id || this.membershipPlanId(membership),
       planName: membership.planName || plan.name || "Membership",
@@ -3199,14 +3398,25 @@ export class MembershipEnterpriseService {
         serviceDiscountPercent: Number(this.discountPercent(membership) || plan.discountPercent || 0),
         productDiscountPercent: Number(this.productDiscountPercent(membership) || plan.productDiscountPercent || 0),
         includedServices: plan.includedServices || [],
-        benefitRules: { ...(plan.benefitRules || {}), ...creditRules }
+        benefitRules
       },
       serviceCredits: {
         total: totalCredits,
         used: usedCredits,
-        remaining: remainingCredits,
+        remaining: effectiveRemaining,
+        rawRemaining: remainingCredits,
         history: history.filter((item) => Number(item?.credits || item?.creditsUsed || 0) > 0).slice(0, 10)
       },
+      fairUsage: {
+        monthlyCap,
+        monthlyUsed,
+        monthlyRemaining,
+        status: monthlyCap > 0 && monthlyRemaining <= 0 ? "limit_reached" : monthlyCap > 0 && monthlyRemaining <= 1 ? "near_limit" : "available"
+      },
+      corporate: benefitRules.corporate || {},
+      occasionBenefits: benefitRules.occasionBenefits || {},
+      priorityBooking: Boolean(benefitRules.priorityBooking),
+      tierSuggestion: this.tierSuggestionForClient(client, plan),
       familySharing: {
         enabled: sharingRows.length > 0,
         role: ownedByViewer ? "owner" : "shared_member",
@@ -3327,12 +3537,25 @@ export class MembershipEnterpriseService {
 
   createReminder(membership, plan, client, daysBefore, dueOn, access) {
     if (!membership?.validityDate || !client) return null;
+    return this.createTypedReminder({
+      membership,
+      plan,
+      client,
+      reminderType: "renewal",
+      dueOn,
+      daysBefore,
+      message: `Hi ${client.name || "there"}, your ${membership.planName} membership expires on ${membership.validityDate}. Reply to renew.`,
+      payload: { phone: client.phone || "", membershipName: membership.planName, expiresOn: membership.validityDate }
+    }, access);
+  }
+
+  createTypedReminder({ membership, plan, client, reminderType = "renewal", dueOn = today(), daysBefore = 0, message = "", payload = {} } = {}, access) {
+    if (!membership?.id || !client) return null;
     const existing = db.prepare(
       `SELECT id FROM membership_whatsapp_reminders
        WHERE tenant_id = ? AND client_id = ? AND membership_id = ? AND reminder_type = ? AND due_on = ?`
-    ).get(access.tenantId, client.id, membership.id, "renewal", dueOn);
+    ).get(access.tenantId, client.id, membership.id, reminderType, dueOn);
     if (existing) return null;
-    const message = `Hi ${client.name || "there"}, your ${membership.planName} membership expires on ${membership.validityDate}. Reply to renew.`;
     const row = {
       id: makeId("mwa"),
       tenant_id: access.tenantId,
@@ -3340,12 +3563,12 @@ export class MembershipEnterpriseService {
       client_id: client.id,
       membership_id: membership.id,
       plan_id: plan?.id || this.membershipPlanId(membership),
-      reminder_type: "renewal",
+      reminder_type: reminderType,
       due_on: dueOn,
       days_before: daysBefore,
       status: "queued",
       message,
-      payload_json: stringify({ phone: client.phone || "", membershipName: membership.planName, expiresOn: membership.validityDate }, {}),
+      payload_json: stringify({ phone: client.phone || "", membershipName: membership.planName, ...payload }, {}),
       approved_by: "",
       sent_at: "",
       created_at: now(),
