@@ -143,6 +143,7 @@ import { localizationPreferenceRouter } from "./routes/localization-preference.r
 import { liveConsultationRouter } from "./routes/live-consultation.routes.js";
 import { membershipEnterpriseRouter } from "./routes/membership-enterprise.routes.js";
 import { migrationRouter } from "./routes/migration.routes.js";
+import { migrationService } from "./services/migration.service.js";
 import { mobileRouter } from "./routes/mobile.routes.js";
 import { offlineRouter } from "./routes/offline.routes.js";
 import { offlineSyncRouter } from "./routes/offline-sync.routes.js";
@@ -269,6 +270,13 @@ export function createApp() {
     res.vary("x-tenant-id");
     res.vary("x-branch-id");
     next();
+  });
+
+  // Public, no-auth probe to confirm the running API has the new analyzer code.
+  // Open http://127.0.0.1:4000/api/migration-analyzer-version in a browser:
+  // if it returns the version below, the API was restarted with the fixes.
+  app.get("/api/migration-analyzer-version", (_req, res) => {
+    res.json(migrationService.analyzerVersion());
   });
 
   app.get("/api/versions", (_req, res) => {

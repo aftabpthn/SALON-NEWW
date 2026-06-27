@@ -237,6 +237,9 @@ function assertImportPayloadLimits(payload, parsed) {
 }
 
 export const migrationService = {
+  analyzerVersion() {
+    return { analyzerFixVersion: ANALYZER_FIX_VERSION, ts: now() };
+  },
   adapters() {
     return SOURCE_ADAPTERS;
   },
