@@ -2,12 +2,13 @@ import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
 type ReportColumn = { key: string; label: string; type?: 'currency' | 'number' | 'percent' | 'date' | 'badge' };
 type ReportDefinition = { id: string; title: string; description: string; badge: string };
+type DueRecoveryReport = { summary: ApiRecord; rows: ApiRecord[] };
 
 type InvoiceLine = {
   invoiceId: string;
@@ -101,6 +102,9 @@ type InvoiceLine = {
           <span>Aging bucket</span>
           <select [(ngModel)]="agingBucket">
             <option value="">All buckets</option>
+            <option value="0-10">0-10 days</option>
+            <option value="11-20">11-20 days</option>
+            <option value="21+">21+ days</option>
             <option value="0-7 days">0-7 days</option>
             <option value="8-15 days">8-15 days</option>
             <option value="16-30 days">16-30 days</option>
@@ -134,6 +138,7 @@ type InvoiceLine = {
       </section>
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
+      <div class="state success" *ngIf="notice()">{{ notice() }}</div>
 
       <ng-container *ngIf="!loading() && !error()">
         <div class="metrics-grid invoice-report-kpis">
@@ -182,6 +187,15 @@ type InvoiceLine = {
             </article>
           </div>
 
+          <div class="metrics-grid due-recovery-kpis" *ngIf="activeReport() === 'due-recovery'">
+            <article class="metric-card"><span>Total pending due</span><strong>{{ (dueRecoverySummary()['totalPendingDue'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open balance</small></article>
+            <article class="metric-card"><span>Pending invoices</span><strong>{{ dueRecoverySummary()['pendingInvoiceCount'] || 0 }}</strong><small>Need recovery</small></article>
+            <article class="metric-card"><span>0-10 days</span><strong>{{ (dueRecoverySummary()['bucket0To10'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Soft reminder</small></article>
+            <article class="metric-card"><span>11-20 days</span><strong>{{ (dueRecoverySummary()['bucket11To20'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Manager call queue</small></article>
+            <article class="metric-card"><span>21+ days</span><strong>{{ (dueRecoverySummary()['bucket21Plus'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Daily follow-up risk</small></article>
+            <article class="metric-card"><span>Recovered this month</span><strong>{{ (dueRecoverySummary()['recoveredThisMonth'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Closed from old dues</small></article>
+          </div>
+
           <div class="table-wrap enterprise-report-table">
             <table>
               <thead>
@@ -192,7 +206,25 @@ type InvoiceLine = {
               <tbody>
                 <tr *ngFor="let row of activeRows()">
                   <td *ngFor="let column of activeColumns()" [class.right]="isRight(column)">
-                    <span [class.badge]="column.type === 'badge'">{{ formatCell(row, column) }}</span>
+                    <ng-container *ngIf="activeReport() === 'due-recovery' && column.key === 'actions'; else normalReportCell">
+                      <div class="due-recovery-actions">
+                        <a class="ghost-button mini" [routerLink]="['/pos/invoices']" [queryParams]="{ invoice: row['invoiceId'] }">Open invoice</a>
+                        <a class="ghost-button mini" [routerLink]="['/pos/invoices']" [queryParams]="{ invoice: row['invoiceId'], due: 1 }">Receive due</a>
+                        <button
+                          class="primary-button mini"
+                          type="button"
+                          [disabled]="!canSendDueReminder(row) || actionLoading() === row['invoiceId']"
+                          [title]="dueReminderDisabledReason(row)"
+                          (click)="sendDueReminder(row)"
+                        >
+                          {{ actionLoading() === row['invoiceId'] ? 'Sending...' : 'Send payment reminder' }}
+                        </button>
+                        <small *ngIf="dueReminderDisabledReason(row)">{{ dueReminderDisabledReason(row) }}</small>
+                      </div>
+                    </ng-container>
+                    <ng-template #normalReportCell>
+                      <span [class.badge]="column.type === 'badge'">{{ formatCell(row, column) }}</span>
+                    </ng-template>
                   </td>
                 </tr>
                 <tr *ngIf="!activeRows().length">
@@ -329,6 +361,24 @@ type InvoiceLine = {
       background: #f8fafc;
     }
 
+    .due-recovery-kpis {
+      margin-bottom: 14px;
+    }
+
+    .due-recovery-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-width: 360px;
+    }
+
+    .due-recovery-actions small {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
     .right {
       text-align: right;
       white-space: nowrap;
@@ -363,6 +413,10 @@ export class InvoiceReportsComponent implements OnInit {
   readonly branches = signal<ApiRecord[]>([]);
   readonly walletTransactions = signal<ApiRecord[]>([]);
   readonly auditLogs = signal<ApiRecord[]>([]);
+  readonly dueRecoverySummary = signal<ApiRecord>({});
+  readonly dueRecoveryReportRows = signal<ApiRecord[]>([]);
+  readonly actionLoading = signal('');
+  readonly notice = signal('');
   readonly activeReport = signal('staff-services');
   readonly clientFilterOptions = computed(() => {
     const map = new Map<string, string>();
@@ -412,6 +466,7 @@ export class InvoiceReportsComponent implements OnInit {
     { id: 'gst', title: 'GST + HSN/SAC', badge: '06', description: 'GST rate wise taxable and tax breakup.' },
     { id: 'payments', title: 'Payment Collection', badge: '07', description: 'Cash, UPI, card, wallet, online and split payment.' },
     { id: 'due-aging', title: 'Due / Unpaid Aging', badge: '08', description: 'Original unpaid invoice, recovery payment, receiver and aging audit.' },
+    { id: 'due-recovery', title: 'Due Recovery', badge: '8B', description: 'Unpaid queue, payment link reminder status and receive-due actions.' },
     { id: 'staff-unpaid', title: 'Staff Unpaid Services', badge: '8A', description: 'Staff/service wise unpaid, recovered and pending due accountability.' },
     { id: 'wallet', title: 'Wallet Ledger', badge: '09', description: 'Wallet used, wallet balance and liability.' },
     { id: 'audit', title: 'Refund / Void / Adjustment', badge: '10', description: 'Delete, edit, restore, refund and approval trail.' },
@@ -449,6 +504,9 @@ export class InvoiceReportsComponent implements OnInit {
     ],
     'due-aging': [
       { key: 'invoiceNumber', label: 'Invoice' }, { key: 'originalInvoiceDate', label: 'Invoice date' }, { key: 'originalInvoiceTime', label: 'Invoice time' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'serviceNames', label: 'Services' }, { key: 'totalAmount', label: 'Total', type: 'currency' }, { key: 'paid', label: 'Paid', type: 'currency' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'paymentStatus', label: 'Status', type: 'badge' }, { key: 'bucket', label: 'Aging bucket', type: 'badge' }, { key: 'duePaidDate', label: 'Due paid date' }, { key: 'duePaidTime', label: 'Due paid time' }, { key: 'receivedAmount', label: 'Received due', type: 'currency' }, { key: 'paymentMode', label: 'Mode' }, { key: 'receivedBy', label: 'Received by' }, { key: 'receiverId', label: 'Receiver ID' }, { key: 'settlementPaymentId', label: 'Settlement/payment ID' }, { key: 'paymentReference', label: 'Reference no.' }, { key: 'daysToRecovery', label: 'Days to recovery', type: 'number' }, { key: 'partialPaymentHistory', label: 'Partial payment history' }
+    ],
+    'due-recovery': [
+      { key: 'invoiceNumber', label: 'Invoice' }, { key: 'invoiceDate', label: 'Date' }, { key: 'invoiceTime', label: 'Time' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'serviceNames', label: 'Services' }, { key: 'totalAmount', label: 'Total', type: 'currency' }, { key: 'paidAmount', label: 'Paid', type: 'currency' }, { key: 'dueAmount', label: 'Due', type: 'currency' }, { key: 'agingBucket', label: 'Aging', type: 'badge' }, { key: 'recoveryStatus', label: 'Recovery', type: 'badge' }, { key: 'lastPaymentAt', label: 'Last payment', type: 'date' }, { key: 'paymentLinkStatus', label: 'Reminder status', type: 'badge' }, { key: 'reminderChannel', label: 'Channel', type: 'badge' }, { key: 'lastReminderSentAt', label: 'Last reminder', type: 'date' }, { key: 'actions', label: 'Action' }
     ],
     'staff-unpaid': [
       { key: 'staffName', label: 'Staff' }, { key: 'serviceName', label: 'Service' }, { key: 'invoiceCount', label: 'Invoices', type: 'number' }, { key: 'totalBilled', label: 'Total billed', type: 'currency' }, { key: 'totalUnpaid', label: 'Total unpaid', type: 'currency' }, { key: 'totalRecovered', label: 'Recovered', type: 'currency' }, { key: 'pendingDue', label: 'Pending due', type: 'currency' }, { key: 'recoveryRate', label: 'Recovery rate', type: 'percent' }
@@ -494,6 +552,7 @@ export class InvoiceReportsComponent implements OnInit {
   load(): void {
     this.loading.set(true);
     this.error.set('');
+    this.notice.set('');
     forkJoin({
       invoices: this.safeList('invoices', { limit: 5000 }),
       sales: this.safeList('sales', { limit: 5000 }),
@@ -502,7 +561,8 @@ export class InvoiceReportsComponent implements OnInit {
       staff: this.safeList('staff', { limit: 5000 }),
       branches: this.safeList('branches', { limit: 1000 }),
       walletTransactions: this.safeList('walletTransactions', { limit: 5000 }),
-      auditLogs: this.safeList('auditLogs', { limit: 5000 })
+      auditLogs: this.safeList('auditLogs', { limit: 5000 }),
+      dueRecovery: this.loadDueRecoveryReport()
     }).subscribe({
       next: (data) => {
         this.invoices.set(data.invoices || []);
@@ -511,6 +571,8 @@ export class InvoiceReportsComponent implements OnInit {
         this.branches.set(data.branches || []);
         this.walletTransactions.set(data.walletTransactions || []);
         this.auditLogs.set(data.auditLogs || []);
+        this.dueRecoverySummary.set(data.dueRecovery?.summary || {});
+        this.dueRecoveryReportRows.set(data.dueRecovery?.rows || []);
         this.lines.set(this.buildLines(data.invoices || [], data.sales || [], data.payments || [], data.clients || [], data.staff || [], data.branches || []));
         this.loading.set(false);
       },
@@ -577,6 +639,7 @@ export class InvoiceReportsComponent implements OnInit {
     if (report === 'gst') return this.gstRows();
     if (report === 'payments') return this.paymentRows();
     if (report === 'due-aging') return this.dueRows();
+    if (report === 'due-recovery') return this.dueRecoveryRows();
     if (report === 'staff-unpaid') return this.staffUnpaidRows();
     if (report === 'wallet') return this.walletRows();
     if (report === 'audit') return this.auditRows();
@@ -1228,6 +1291,82 @@ export class InvoiceReportsComponent implements OnInit {
           paymentModes
         };
       });
+    });
+  }
+
+  private loadDueRecoveryReport() {
+    return this.api.list<DueRecoveryReport>('reports/invoices/due-recovery', {
+      from: this.from,
+      to: this.to,
+      status: this.recoveryStatus === 'all' ? '' : this.recoveryStatus,
+      agingBucket: ['0-10', '11-20', '21+'].includes(this.agingBucket) ? this.agingBucket : '',
+      clientId: this.clientFilter,
+      staffId: this.staffFilter,
+      q: this.query,
+      limit: 10000
+    }).pipe(catchError(() => of({ summary: {}, rows: [] } as DueRecoveryReport)));
+  }
+
+  private refreshDueRecoveryReport(): void {
+    this.loadDueRecoveryReport().subscribe((report) => {
+      this.dueRecoverySummary.set(report.summary || {});
+      this.dueRecoveryReportRows.set(report.rows || []);
+    });
+  }
+
+  private dueRecoveryRows(): ApiRecord[] {
+    return this.dueRecoveryReportRows().filter((row) => {
+      const statusMatch = this.recoveryStatus === 'all' || !this.recoveryStatus || row['recoveryStatus'] === this.recoveryStatus;
+      const bucketMatch = !this.agingBucket || row['agingBucket'] === this.agingBucket || !['0-10', '11-20', '21+'].includes(this.agingBucket);
+      const clientMatch = !this.clientFilter || String(row['clientId'] || '') === String(this.clientFilter);
+      const query = this.query.trim().toLowerCase();
+      const haystack = `${row['invoiceNumber']} ${row['clientName']} ${row['clientPhone']} ${row['staffName']} ${row['serviceNames']}`.toLowerCase();
+      return statusMatch && bucketMatch && clientMatch && (!query || haystack.includes(query));
+    });
+  }
+
+  canSendDueReminder(row: ApiRecord): boolean {
+    return Number(row['dueAmount'] || 0) > 0
+      && !!String(row['clientPhone'] || '').trim()
+      && !row['closed']
+      && !['closed', 'waived', 'written_off', 'voided', 'cancelled', 'deleted'].includes(String(row['invoiceStatus'] || '').toLowerCase());
+  }
+
+  dueReminderDisabledReason(row: ApiRecord): string {
+    if (Number(row['dueAmount'] || 0) <= 0) return 'Invoice already paid';
+    if (!String(row['clientPhone'] || '').trim()) return 'Client phone missing';
+    if (row['closed']) return 'Invoice closed';
+    const status = String(row['invoiceStatus'] || '').toLowerCase();
+    if (['closed', 'waived', 'written_off', 'voided', 'cancelled', 'deleted'].includes(status)) return 'Invoice closed';
+    return '';
+  }
+
+  sendDueReminder(row: ApiRecord): void {
+    const invoiceId = String(row['invoiceId'] || '');
+    if (!invoiceId || !this.canSendDueReminder(row)) return;
+    this.error.set('');
+    this.notice.set('');
+    this.actionLoading.set(invoiceId);
+    this.api.post<ApiRecord>(`reports/invoices/due-recovery/${invoiceId}/send-reminder`, {
+      channel: 'whatsapp',
+      messageType: 'payment_link_due_reminder',
+      provider: 'razorpay'
+    }).pipe(
+      finalize(() => this.actionLoading.set(''))
+    ).subscribe({
+      next: (result) => {
+        this.notice.set(`Payment reminder queued for ${row['invoiceNumber'] || invoiceId}.`);
+        this.dueRecoveryReportRows.update((rows) => rows.map((entry) => String(entry['invoiceId']) === invoiceId ? ({
+          ...entry,
+          lastReminderSentAt: result['sentAt'] || result['queuedAt'] || new Date().toISOString(),
+          reminderChannel: result['channel'] || 'whatsapp',
+          paymentLinkStatus: result['status'] || 'queued',
+          paymentLinkUrl: result['paymentLinkUrl'] || entry['paymentLinkUrl'] || '',
+          paymentLinkId: result['paymentLinkId'] || entry['paymentLinkId'] || ''
+        }) : entry));
+        this.refreshDueRecoveryReport();
+      },
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to send payment reminder'))
     });
   }
 

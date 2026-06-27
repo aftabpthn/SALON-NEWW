@@ -97,6 +97,7 @@ import { discountWebhooksRouter } from "./routes/discount-webhooks.routes.js";
 import { discountRulesRouter } from "./routes/discount-rules.routes.js";
 import { discountSimulationsRouter } from "./routes/discount-simulations.routes.js";
 import { discountAnomaliesRouter } from "./routes/discount-anomalies.routes.js";
+import { dueRecoveryReportRouter } from "./routes/due-recovery-report.routes.js";
 import { crossBranchAnalyticsRouter } from "./routes/cross-branch-analytics.routes.js";
 import { pricingIncrementalityRouter } from "./routes/pricing-incrementality.routes.js";
 import { pricingMarketRouter } from "./routes/pricing-market.routes.js";
@@ -297,6 +298,7 @@ export function createApp() {
   app.use("/api/v1", statutoryComplianceRouter);
   app.use("/api/v1", billingRouter);
   app.use("/api/v1", billingAnalyticsRouter);
+  app.use("/api/v1", dueRecoveryReportRouter);
   app.use("/api/v1", commissionRouter);
   app.use("/api/v1", dailyClosingRouter);
   app.use("/api/v1", cashDrawerEodRouter);
@@ -478,6 +480,7 @@ export function createApp() {
   app.use("/api", statutoryComplianceRouter);
   app.use("/api", billingRouter);
   app.use("/api", billingAnalyticsRouter);
+  app.use("/api", dueRecoveryReportRouter);
   app.use("/api", commissionRouter);
   app.use("/api", dailyClosingRouter);
   app.use("/api", cashDrawerEodRouter);
