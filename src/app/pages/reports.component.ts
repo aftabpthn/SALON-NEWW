@@ -581,6 +581,7 @@ export class ReportsComponent implements OnInit {
 
   private readonly defaultQuickLinks: ApiRecord[] = [
     { label: 'Inward Revenue', path: '/reports/inward-revenue', module: 'FlexiSalon import' },
+    { label: 'Sale Summary', path: '/reports/invoices', module: 'Sale list with bill' },
     { label: 'Invoice Reports', path: '/reports/invoices', module: 'Invoice intelligence' },
     { label: 'Staff Sales', path: '/reports/staff-sales', module: 'POS attribution' },
     { label: 'Commission Preview', path: '/reports/commission-preview', module: 'Payroll' },

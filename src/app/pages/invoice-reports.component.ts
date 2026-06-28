@@ -9,6 +9,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
 type ReportColumn = { key: string; label: string; type?: 'currency' | 'number' | 'percent' | 'date' | 'badge' };
 type ReportDefinition = { id: string; title: string; description: string; badge: string };
 type DueRecoveryReport = { summary: ApiRecord; rows: ApiRecord[] };
+type SaleSummary = {
+  totalBill: number;
+  billAverage: number;
+  totalSale: number;
+  receivedAmount: number;
+  pendingAmount: number;
+  prepaidPayment: number;
+  returnSales: number;
+  totalTipAmount: number;
+  totalTax: number;
+};
 
 type InvoiceLine = {
   invoiceId: string;
@@ -35,6 +46,12 @@ type InvoiceLine = {
   due: number;
   status: string;
   paymentModes: string;
+  addedBy: string;
+  couponCode: string;
+  couponDiscount: number;
+  loyaltyDiscount: number;
+  prepaidAmount: number;
+  tipAmount: number;
 };
 
 @Component({
@@ -127,7 +144,7 @@ type InvoiceLine = {
         </label>
         <label class="field span-2">
           <span>Search</span>
-          <input [(ngModel)]="query" placeholder="Invoice, client, staff, service, product, payment mode" />
+          <input [(ngModel)]="query" [placeholder]="searchPlaceholder()" />
         </label>
         <div class="branch-context-card">
           <span>Header branch</span>
@@ -141,21 +158,34 @@ type InvoiceLine = {
       <div class="state success" *ngIf="notice()">{{ notice() }}</div>
 
       <ng-container *ngIf="!loading() && !error()">
-        <div class="metrics-grid invoice-report-kpis">
-          <article class="metric-card"><span>Gross billed</span><strong>{{ summary().gross | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discount</small></article>
-          <article class="metric-card"><span>Discount</span><strong>{{ summary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ summary().discountRate }}% leakage watch</small></article>
-          <article class="metric-card"><span>Net taxable</span><strong>{{ summary().taxable | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST base</small></article>
-          <article class="metric-card"><span>GST</span><strong>{{ summary().gst | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tax collected</small></article>
-          <article class="metric-card"><span>Final sale</span><strong>{{ summary().final | currency: 'INR':'symbol':'1.0-0' }}</strong><small>After tax</small></article>
-          <article class="metric-card"><span>Due</span><strong>{{ summary().due | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open recovery</small></article>
-          <article class="metric-card"><span>Product sales</span><strong>{{ summary().products | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Retail revenue</small></article>
-          <article class="metric-card"><span>Membership sales</span><strong>{{ summary().memberships | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Plans + packages</small></article>
+        <div class="metrics-grid invoice-report-kpis" *ngIf="activeReport() === 'sale-summary'; else defaultInvoiceKpis">
+          <article class="metric-card"><span>Total Bill</span><strong>{{ saleSummary().totalBill }}</strong><small>Bill count</small></article>
+          <article class="metric-card"><span>Bill Average</span><strong>{{ saleSummary().billAverage | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Average invoice value</small></article>
+          <article class="metric-card"><span>Total Sale</span><strong>{{ saleSummary().totalSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Final billed value</small></article>
+          <article class="metric-card"><span>Received Amount</span><strong>{{ saleSummary().receivedAmount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Paid / collected</small></article>
+          <article class="metric-card"><span>Pending Amount</span><strong>{{ saleSummary().pendingAmount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open balance</small></article>
+          <article class="metric-card"><span>Prepaid Payment</span><strong>{{ saleSummary().prepaidPayment | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Wallet / advance</small></article>
+          <article class="metric-card"><span>Return Sales</span><strong>{{ saleSummary().returnSales | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Refund / negative sale</small></article>
+          <article class="metric-card"><span>Total Tip Amount</span><strong>{{ saleSummary().totalTipAmount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Staff tips</small></article>
+          <article class="metric-card"><span>Total Tax</span><strong>{{ saleSummary().totalTax | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST collected</small></article>
         </div>
+        <ng-template #defaultInvoiceKpis>
+          <div class="metrics-grid invoice-report-kpis">
+            <article class="metric-card"><span>Gross billed</span><strong>{{ summary().gross | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discount</small></article>
+            <article class="metric-card"><span>Discount</span><strong>{{ summary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ summary().discountRate }}% leakage watch</small></article>
+            <article class="metric-card"><span>Net taxable</span><strong>{{ summary().taxable | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST base</small></article>
+            <article class="metric-card"><span>GST</span><strong>{{ summary().gst | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tax collected</small></article>
+            <article class="metric-card"><span>Final sale</span><strong>{{ summary().final | currency: 'INR':'symbol':'1.0-0' }}</strong><small>After tax</small></article>
+            <article class="metric-card"><span>Due</span><strong>{{ summary().due | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open recovery</small></article>
+            <article class="metric-card"><span>Product sales</span><strong>{{ summary().products | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Retail revenue</small></article>
+            <article class="metric-card"><span>Membership sales</span><strong>{{ summary().memberships | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Plans + packages</small></article>
+          </div>
+        </ng-template>
 
         <section class="panel report-command-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">18 connected reports</span>
+              <span class="eyebrow">19 connected reports</span>
               <h2>{{ activeDefinition().title }}</h2>
               <p>{{ activeDefinition().description }}</p>
             </div>
@@ -417,7 +447,7 @@ export class InvoiceReportsComponent implements OnInit {
   readonly dueRecoveryReportRows = signal<ApiRecord[]>([]);
   readonly actionLoading = signal('');
   readonly notice = signal('');
-  readonly activeReport = signal('staff-services');
+  readonly activeReport = signal('sale-summary');
   readonly clientFilterOptions = computed(() => {
     const map = new Map<string, string>();
     for (const line of this.lines()) {
@@ -458,6 +488,7 @@ export class InvoiceReportsComponent implements OnInit {
   receivedByFilter = '';
 
   readonly reportDefinitions: ReportDefinition[] = [
+    { id: 'sale-summary', title: 'Sale Summary', badge: '00', description: 'Sale list with bill, client, payment, prepaid, coupon, loyalty and GST details.' },
     { id: 'overview', title: 'Invoice Summary', badge: '01', description: 'Gross, discount, GST, paid, due and invoice count.' },
     { id: 'staff-services', title: 'Staff Service Sales', badge: '02', description: 'Staff ne kaunsi service ki aur kitna revenue banaya.' },
     { id: 'staff-discounts', title: 'Staff Discount Performance', badge: '03', description: 'Without discount vs with discount staff revenue.' },
@@ -481,6 +512,9 @@ export class InvoiceReportsComponent implements OnInit {
   ];
 
   private readonly columns: Record<string, ReportColumn[]> = {
+    'sale-summary': [
+      { key: 'invoiceNumber', label: 'Invoice No' }, { key: 'clientName', label: 'Name' }, { key: 'clientPhone', label: 'Contact' }, { key: 'itemDescription', label: 'Item Description' }, { key: 'itemTypes', label: 'Item Types' }, { key: 'actualPrice', label: 'Actual Price', type: 'currency' }, { key: 'price', label: 'Price', type: 'currency' }, { key: 'paid', label: 'Paid', type: 'currency' }, { key: 'prepaid', label: 'Prepaid', type: 'currency' }, { key: 'balance', label: 'Balance', type: 'currency' }, { key: 'modes', label: 'Modes' }, { key: 'status', label: 'Status', type: 'badge' }, { key: 'date', label: 'Date' }, { key: 'addedBy', label: 'Added By' }, { key: 'invoiceDate', label: 'Invoice Date' }, { key: 'couponCode', label: 'Coupon Code' }, { key: 'couponDiscount', label: 'Coupon Discount', type: 'currency' }, { key: 'loyaltyDiscount', label: 'Loyalty Discount', type: 'currency' }, { key: 'gst', label: 'GST', type: 'currency' }
+    ],
     overview: [
       { key: 'metric', label: 'Metric' }, { key: 'value', label: 'Value', type: 'currency' }, { key: 'count', label: 'Count', type: 'number' }, { key: 'note', label: 'Note' }
     ],
@@ -590,7 +624,7 @@ export class InvoiceReportsComponent implements OnInit {
       const dateMatch = this.inDateRange(line.date);
       const clientMatch = !this.clientFilter || String(line.clientId || '') === String(this.clientFilter);
       const staffMatch = !this.staffFilter || String(line.staffId || line.staffName || '') === String(this.staffFilter) || String(line.staffName || '') === String(this.staffFilter);
-      const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.paymentModes}`.toLowerCase();
+      const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.paymentModes} ${line.couponCode} ${line.addedBy}`.toLowerCase();
       return statusMatch && dateMatch && clientMatch && staffMatch && (!query || text.includes(query));
     });
     return lines;
@@ -621,6 +655,23 @@ export class InvoiceReportsComponent implements OnInit {
     };
   }
 
+  saleSummary(): SaleSummary {
+    const rows = this.saleSummaryRows();
+    const totalSale = this.sum(rows, 'price');
+    const returnSales = this.sum(rows.filter((row) => Number(row['price'] || 0) < 0 || String(row['status'] || '').toLowerCase().includes('return')), 'price');
+    return {
+      totalBill: rows.length,
+      billAverage: rows.length ? this.money(totalSale / rows.length) : 0,
+      totalSale,
+      receivedAmount: this.sum(rows, 'paid'),
+      pendingAmount: this.sum(rows, 'balance'),
+      prepaidPayment: this.sum(rows, 'prepaid'),
+      returnSales: Math.abs(returnSales),
+      totalTipAmount: this.sum(rows, 'tipAmount'),
+      totalTax: this.sum(rows, 'gst')
+    };
+  }
+
   activeDefinition(): ReportDefinition {
     return this.reportDefinitions.find((report) => report.id === this.activeReport()) || this.reportDefinitions[0];
   }
@@ -631,6 +682,7 @@ export class InvoiceReportsComponent implements OnInit {
 
   activeRows(): ApiRecord[] {
     const report = this.activeReport();
+    if (report === 'sale-summary') return this.saleSummaryRows();
     if (report === 'overview') return this.overviewRows();
     if (report === 'staff-services') return this.staffServiceRows();
     if (report === 'staff-discounts') return this.staffDiscountRows();
@@ -678,6 +730,12 @@ export class InvoiceReportsComponent implements OnInit {
 
   isRight(column: ReportColumn): boolean {
     return ['currency', 'number', 'percent'].includes(column.type || '');
+  }
+
+  searchPlaceholder(): string {
+    return this.activeReport() === 'sale-summary'
+      ? 'Invoice, name or phone'
+      : 'Invoice, client, staff, service, product, payment mode';
   }
 
   branchLabel(): string {
@@ -731,6 +789,37 @@ export class InvoiceReportsComponent implements OnInit {
       { metric: 'Due', value: summary.due, count: this.dueRows().length, note: 'Open recovery queue' },
       { metric: 'Wallet liability', value: this.sum(this.walletRows(), 'walletBalance'), count: this.walletRows().length, note: 'Client wallet balance' }
     ];
+  }
+
+  private saleSummaryRows(): ApiRecord[] {
+    return this.uniqueInvoiceRows().map((line) => {
+      const invoiceLines = this.filteredLines().filter((item) => item.invoiceId === line.invoiceId);
+      const itemDescription = [...new Set(invoiceLines.map((item) => item.itemName).filter(Boolean))].join(', ');
+      const itemTypes = [...new Set(invoiceLines.map((item) => item.itemType).filter(Boolean))].join(', ');
+      return {
+        invoiceSortAt: line.date,
+        invoiceNumber: line.invoiceNumber,
+        clientName: line.clientName,
+        clientPhone: line.clientPhone,
+        itemDescription,
+        itemTypes,
+        actualPrice: this.sum(invoiceLines, 'gross'),
+        price: this.sum(invoiceLines, 'final'),
+        paid: line.paid,
+        prepaid: this.uniqueInvoiceSum(invoiceLines, 'prepaidAmount'),
+        balance: line.due,
+        modes: line.paymentModes,
+        status: line.status,
+        date: this.dateKey(line.date),
+        addedBy: line.addedBy,
+        invoiceDate: `${this.dateKey(line.date)} ${this.timeLabel(line.date)}`.trim(),
+        couponCode: line.couponCode,
+        couponDiscount: this.uniqueInvoiceSum(invoiceLines, 'couponDiscount'),
+        loyaltyDiscount: this.uniqueInvoiceSum(invoiceLines, 'loyaltyDiscount'),
+        gst: this.sum(invoiceLines, 'gst'),
+        tipAmount: this.uniqueInvoiceSum(invoiceLines, 'tipAmount')
+      };
+    }).sort((a, b) => this.dateMs(b['invoiceSortAt']) - this.dateMs(a['invoiceSortAt']) || String(b['invoiceNumber']).localeCompare(String(a['invoiceNumber'])));
   }
 
   private staffServiceRows(): ApiRecord[] {
@@ -1255,6 +1344,12 @@ export class InvoiceReportsComponent implements OnInit {
       const total = this.money(Number(invoice.total ?? invoice.grand_total ?? sale.total ?? 0));
       const paid = this.money(Number(invoice.paid ?? invoice.paid_amount ?? invoicePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)));
       const due = this.money(Number(invoice.balance ?? invoice.due_amount ?? Math.max(0, total - paid)));
+      const prepaidAmount = this.prepaidAmount(invoice, sale, invoicePayments);
+      const couponCode = String(invoice.couponCode || invoice.coupon_code || sale.couponCode || sale.coupon_code || '');
+      const couponDiscount = this.money(Number(invoice.couponDiscount || invoice.coupon_discount || sale.couponDiscount || sale.coupon_discount || 0));
+      const loyaltyDiscount = this.money(Number(invoice.loyaltyDiscount || invoice.loyalty_discount || sale.loyaltyDiscount || sale.loyalty_discount || invoice.loyaltyPointsDiscount || invoice.loyalty_points_discount || 0));
+      const tipAmount = this.money(Number(invoice.tipAmount || invoice.tip_amount || sale.tipAmount || sale.tip_amount || 0));
+      const addedBy = String(invoice.addedBy || invoice.added_by || invoice.createdByName || invoice.created_by_name || invoice.createdBy || invoice.created_by || sale.addedBy || sale.createdBy || staffPerson.name || 'Counter');
       return items.map((item) => {
         const itemStaffId = String(item.staffId || item.staff_id || item.assignedStaffId || item.assigned_staff_id || staffId || '');
         const itemStaff = staffMap.get(itemStaffId) || staffPerson;
@@ -1288,7 +1383,13 @@ export class InvoiceReportsComponent implements OnInit {
           paid,
           due,
           status: String(invoice.status || invoice.payment_status || (due > 0 ? 'unpaid' : 'paid')),
-          paymentModes
+          paymentModes,
+          addedBy,
+          couponCode,
+          couponDiscount,
+          loyaltyDiscount,
+          prepaidAmount,
+          tipAmount
         };
       });
     });
@@ -1476,6 +1577,35 @@ export class InvoiceReportsComponent implements OnInit {
     const explicit = item.total ?? item.lineTotal ?? item.line_total ?? item.finalAmount ?? item.final_amount;
     if (explicit !== undefined && explicit !== null && explicit !== '') return this.money(Number(explicit));
     return this.money(taxable + gst);
+  }
+
+  private prepaidAmount(invoice: ApiRecord, sale: ApiRecord, payments: ApiRecord[]): number {
+    const explicit = invoice.prepaidAmount
+      ?? invoice.prepaid_amount
+      ?? invoice.advanceAdjusted
+      ?? invoice.advance_adjusted
+      ?? invoice.walletUsed
+      ?? invoice.wallet_used
+      ?? sale.prepaidAmount
+      ?? sale.prepaid_amount
+      ?? sale.advanceAdjusted
+      ?? sale.advance_adjusted
+      ?? sale.walletUsed
+      ?? sale.wallet_used;
+    if (explicit !== undefined && explicit !== null && explicit !== '') {
+      return this.money(Number(explicit));
+    }
+    return this.money(payments
+      .filter((payment) => {
+        const mode = String(payment.mode || payment.paymentMode || payment.payment_mode || '').toLowerCase();
+        const reference = String(payment.reference || payment.referenceNo || payment.note || payment.notes || '').toLowerCase();
+        return mode.includes('wallet')
+          || mode.includes('advance')
+          || mode.includes('prepaid')
+          || reference.includes('advance')
+          || reference.includes('prepaid');
+      })
+      .reduce((sum, payment) => sum + Number(payment.amount || payment.paidAmount || payment.paid_amount || 0), 0));
   }
 
   private normalizedItemType(item: ApiRecord): string {
