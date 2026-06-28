@@ -195,6 +195,7 @@ export const routes: Routes = [
   { path: 'reports/staff-sales', loadComponent: () => import('./pages/staff-sales-report.component').then(m => m.StaffSalesReportComponent), title: 'Staff Sales Report' },
   { path: 'reports/invoices', loadComponent: () => import('./pages/invoice-reports.component').then(m => m.InvoiceReportsComponent), title: 'Invoice Reports Command Center' },
   { path: 'reports/inward-revenue', loadComponent: () => import('./pages/inward-revenue-report.component').then(m => m.InwardRevenueReportComponent), title: 'Inward Revenue Report' },
+  { path: 'reports/financial-summary', loadComponent: () => import('./pages/financial-summary-report.component').then(m => m.FinancialSummaryReportComponent), title: 'Financial Summary' },
   { path: 'reports', loadComponent: () => import('./pages/reports.component').then(m => m.ReportsComponent), title: 'Reports & Analytics' },
   { path: 'saas', loadComponent: () => import('./pages/saas-onboarding.component').then(m => m.SaasOnboardingComponent), title: 'SaaS Control' },
   { path: 'super-admin', loadComponent: () => import('./pages/super-admin.component').then(m => m.SuperAdminComponent), title: 'SaaS Super Admin' },

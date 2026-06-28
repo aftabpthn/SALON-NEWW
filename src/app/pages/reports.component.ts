@@ -20,6 +20,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/analytics">Analytics engine</a>
+          <a class="ghost-button" routerLink="/reports/financial-summary">Financial summary</a>
           <a class="ghost-button" routerLink="/reports/invoices">Invoice reports</a>
           <a class="ghost-button" routerLink="/reports/inward-revenue">Inward revenue</a>
           <a class="ghost-button" routerLink="/appointment-activity">Appointment activity</a>
@@ -580,6 +581,7 @@ export class ReportsComponent implements OnInit {
   private initialized = false;
 
   private readonly defaultQuickLinks: ApiRecord[] = [
+    { label: 'Financial Summary', path: '/reports/financial-summary', module: 'Owner accounting' },
     { label: 'Inward Revenue', path: '/reports/inward-revenue', module: 'FlexiSalon import' },
     { label: 'Sale Summary', path: '/reports/invoices', module: 'Sale list with bill' },
     { label: 'Invoice Reports', path: '/reports/invoices', module: 'Invoice intelligence' },
