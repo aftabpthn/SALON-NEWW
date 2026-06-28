@@ -8,7 +8,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
 type MatrixCell = { key: string; label: string; tone?: 'section' | 'primary' | 'normal' };
 type MatrixColumn = { key: string; label: string; from?: string; to?: string };
-type ReportTab = 'summary' | 'payments' | 'daily-sheet' | 'daily-revenue' | 'member-sales' | 'sales-tax';
+type ReportTab = 'summary' | 'payments' | 'daily-sheet' | 'daily-revenue' | 'member-sales' | 'sales-tax' | 'wallet-ledger';
 type PaymentDistributionRow = {
   date: string;
   invoiceDateValue: string;
@@ -101,6 +101,26 @@ type SalesTaxRow = {
   taxStatus: string;
   itemType: string;
 };
+type WalletLedgerRow = ApiRecord & {
+  id: string;
+  date: string;
+  time: string;
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  branchName: string;
+  transactionType: string;
+  creditAmount: number;
+  debitAmount: number;
+  balanceAfter: number;
+  reason: string;
+  referenceLabel: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  paymentMode: string;
+  addedBy: string;
+  source: string;
+};
 
 @Component({
   selector: 'app-financial-summary-report',
@@ -130,6 +150,7 @@ type SalesTaxRow = {
         <button type="button" [class.active]="activeTab === 'daily-revenue'" (click)="setActiveTab('daily-revenue')">Daily Revenue</button>
         <button type="button" [class.active]="activeTab === 'member-sales'" (click)="setActiveTab('member-sales')">Member vs Non-Member Sales</button>
         <button type="button" [class.active]="activeTab === 'sales-tax'" (click)="setActiveTab('sales-tax')">Sales Tax / GST</button>
+        <button type="button" [class.active]="activeTab === 'wallet-ledger'" (click)="setActiveTab('wallet-ledger')">Wallet / Ewallet Ledger</button>
       </div>
 
       <section class="panel filter-panel">
@@ -170,6 +191,52 @@ type SalesTaxRow = {
           <span>Search</span>
           <input type="search" [(ngModel)]="memberSalesSearch" placeholder="Client, phone or membership plan" />
         </label>
+        <label class="field" *ngIf="activeTab === 'wallet-ledger'">
+          <span>Client</span>
+          <input type="search" [(ngModel)]="walletLedgerSearch" placeholder="Client, phone or reference" />
+        </label>
+        <label class="field" *ngIf="activeTab === 'wallet-ledger'">
+          <span>Transaction type</span>
+          <select [(ngModel)]="walletLedgerTypeFilter">
+            <option value="">All types</option>
+            <option value="credit">Credit</option>
+            <option value="debit">Debit</option>
+            <option value="refund">Refund</option>
+            <option value="adjustment">Adjustment</option>
+            <option value="overpayment">Overpayment</option>
+            <option value="membership_wallet">Membership wallet</option>
+          </select>
+        </label>
+        <label class="field" *ngIf="activeTab === 'wallet-ledger'">
+          <span>Source</span>
+          <select [(ngModel)]="walletLedgerSourceFilter">
+            <option value="">All sources</option>
+            <option value="POS">POS</option>
+            <option value="manual">Manual</option>
+            <option value="membership">Membership</option>
+            <option value="package">Package</option>
+            <option value="refund">Refund</option>
+          </select>
+        </label>
+        <label class="field" *ngIf="activeTab === 'wallet-ledger'">
+          <span>Payment mode</span>
+          <select [(ngModel)]="walletLedgerPaymentModeFilter">
+            <option value="">All modes</option>
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="card">Card</option>
+            <option value="wallet">Wallet</option>
+          </select>
+        </label>
+        <label class="field" *ngIf="activeTab === 'wallet-ledger'">
+          <span>Risk level</span>
+          <select [(ngModel)]="walletLedgerRiskFilter">
+            <option value="">All risks</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </label>
         <label class="field">
           <span>From</span>
           <input type="date" [(ngModel)]="from" />
@@ -187,6 +254,119 @@ type SalesTaxRow = {
       </section>
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
+
+      <ng-container *ngIf="!loading() && !error() && activeTab === 'wallet-ledger'">
+        <section class="panel report-section">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Wallet liability and audit</span>
+              <h3>Wallet / Ewallet Ledger</h3>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · credit, debit, balance-after and abuse audit.</p>
+            </div>
+            <div class="hero-actions">
+              <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!walletLedgerRows().length">Ledger CSV</button>
+              <button class="ghost-button" type="button" (click)="exportWalletOwnerPdf()" [disabled]="!walletLedgerRows().length">Owner PDF</button>
+              <button class="ghost-button" type="button" (click)="exportWalletAuditPdf()" [disabled]="!walletLedgerAlerts().length">Audit PDF</button>
+            </div>
+          </div>
+
+          <div class="summary-strip">
+            <article *ngFor="let card of walletLedgerCards()">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <small>{{ card.detail }}</small>
+            </article>
+          </div>
+
+          <div class="financial-table-wrap" *ngIf="walletLedgerRows().length; else noWalletLedgerRows">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Client</th>
+                  <th>Phone</th>
+                  <th>Branch</th>
+                  <th>Type</th>
+                  <th class="right">Credit</th>
+                  <th class="right">Debit</th>
+                  <th class="right">Balance after</th>
+                  <th>Reason</th>
+                  <th>Reference</th>
+                  <th>Mode</th>
+                  <th>Added by</th>
+                  <th>Source</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of walletLedgerRows()">
+                  <td>{{ row.date }}</td>
+                  <td>{{ row.time }}</td>
+                  <td><strong>{{ row.clientName }}</strong></td>
+                  <td>{{ row.clientPhone || '-' }}</td>
+                  <td>{{ row.branchName || '-' }}</td>
+                  <td><span class="badge">{{ row.transactionType }}</span></td>
+                  <td class="right">{{ row.creditAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td class="right">{{ row.debitAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td class="right"><strong>{{ row.balanceAfter | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ row.reason || '-' }}</td>
+                  <td>{{ row.referenceLabel || '-' }}</td>
+                  <td>{{ row.paymentMode || '-' }}</td>
+                  <td>{{ row.addedBy || '-' }}</td>
+                  <td>{{ row.source || '-' }}</td>
+                  <td>
+                    <a class="row-action" *ngIf="row.clientId" [routerLink]="['/clients', row.clientId]">Client</a>
+                    <a class="row-action" *ngIf="row.invoiceId || row.invoiceNumber" [routerLink]="['/pos/invoices']" [queryParams]="{ q: row.invoiceNumber || row.invoiceId }">Invoice</a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ng-template #noWalletLedgerRows>
+            <div class="empty-panel compact-empty">
+              <strong>No wallet ledger rows.</strong>
+              <span>Selected date/filter range me wallet credit/debit activity nahi mili.</span>
+            </div>
+          </ng-template>
+        </section>
+
+        <section class="panel daily-revenue-alerts">
+          <div class="mini-section-title"><span>Abuse / audit alerts</span><strong>Wallet control signals</strong></div>
+          <div class="financial-table-wrap" *ngIf="walletLedgerAlerts().length; else noWalletAlerts">
+            <table>
+              <thead>
+                <tr>
+                  <th>Risk</th>
+                  <th>Alert type</th>
+                  <th>Client</th>
+                  <th class="right">Amount</th>
+                  <th>Staff/user</th>
+                  <th>Reference</th>
+                  <th>Suggested action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let alert of walletLedgerAlerts()">
+                  <td><span class="badge">{{ alert['riskLevel'] || 'medium' }}</span></td>
+                  <td><strong>{{ alert['alertType'] }}</strong></td>
+                  <td>{{ alert['clientName'] || '-' }}</td>
+                  <td class="right">{{ (+alert['amount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ alert['staffUser'] || '-' }}</td>
+                  <td>{{ alert['reference'] || '-' }}</td>
+                  <td>{{ alert['suggestedAction'] || 'Review wallet ledger' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ng-template #noWalletAlerts>
+            <div class="empty-panel compact-empty">
+              <strong>No wallet abuse alerts.</strong>
+              <span>Manual high credit, negative balance, debit without invoice aur stale wallet risks clear hain.</span>
+            </div>
+          </ng-template>
+        </section>
+      </ng-container>
 
       <ng-container *ngIf="!loading() && !error() && activeTab === 'summary'">
         <div class="summary-strip">
@@ -1762,6 +1942,7 @@ export class FinancialSummaryReportComponent implements OnInit {
   readonly sales = signal<ApiRecord[]>([]);
   readonly branches = signal<ApiRecord[]>([]);
   readonly walletTransactions = signal<ApiRecord[]>([]);
+  readonly walletLedgerReport = signal<ApiRecord>({ summary: {}, rows: [], alerts: [] });
   readonly clients = signal<ApiRecord[]>([]);
   readonly memberships = signal<ApiRecord[]>([]);
   readonly financeExpenses = signal<ApiRecord[]>([]);
@@ -1776,6 +1957,11 @@ export class FinancialSummaryReportComponent implements OnInit {
   paymentTypeFilter = '';
   paymentDateBasis: 'payment' | 'invoice' = 'payment';
   paymentSearch = '';
+  walletLedgerSearch = '';
+  walletLedgerTypeFilter = '';
+  walletLedgerSourceFilter = '';
+  walletLedgerPaymentModeFilter = '';
+  walletLedgerRiskFilter = '';
   memberClientTypeFilter: 'all' | 'members' | 'non-members' = 'all';
   memberSalesSearch = '';
   from = this.defaultFrom();
@@ -1837,6 +2023,7 @@ export class FinancialSummaryReportComponent implements OnInit {
       sales: this.safeList('sales', { limit: 10000 }),
       branches: this.safeList('branches', { limit: 1000 }),
       walletTransactions: this.safeList('walletTransactions', { limit: 10000 }),
+      walletLedgerReport: this.api.list<ApiRecord>('reports/financial-summary/wallet-ledger', this.walletLedgerParams()).pipe(catchError(() => of({ summary: {}, rows: [], alerts: [] } as ApiRecord))),
       financeSummary: this.api.list<ApiRecord>('finance/summary').pipe(catchError(() => of({} as ApiRecord)))
     }).subscribe({
       next: (data) => {
@@ -1845,6 +2032,7 @@ export class FinancialSummaryReportComponent implements OnInit {
         this.sales.set(data.sales || []);
         this.branches.set(data.branches || []);
         this.walletTransactions.set(data.walletTransactions || []);
+        this.walletLedgerReport.set(data.walletLedgerReport || { summary: {}, rows: [], alerts: [] });
         this.financeSummary.set(data.financeSummary || {});
         this.invalidateDailyRevenueCache();
         this.loading.set(false);
@@ -1991,7 +2179,102 @@ export class FinancialSummaryReportComponent implements OnInit {
     if (this.activeTab === 'daily-sheet') return !this.dailySheetSummary().totalBills;
     if (this.activeTab === 'daily-revenue') return !this.dailyRevenueRows().length;
     if (this.activeTab === 'sales-tax') return !this.salesTaxRows().length;
+    if (this.activeTab === 'wallet-ledger') return !this.walletLedgerRows().length;
     return !this.visibleMemberSalesRows().length;
+  }
+
+  walletLedgerRows(): WalletLedgerRow[] {
+    const rows = this.arrayValue(this.walletLedgerReport()['rows']) as WalletLedgerRow[];
+    const search = this.walletLedgerSearch.trim().toLowerCase();
+    const type = this.walletLedgerTypeFilter.trim().toLowerCase();
+    const source = this.walletLedgerSourceFilter.trim().toLowerCase();
+    const paymentMode = this.walletLedgerPaymentModeFilter.trim().toLowerCase();
+    return rows.filter((row) => {
+      const text = `${row.clientName} ${row.clientPhone} ${row.referenceLabel} ${row.reason}`.toLowerCase();
+      return (!search || text.includes(search))
+        && (!type || String(row.transactionType || '').toLowerCase().includes(type))
+        && (!source || String(row.source || '').toLowerCase().includes(source))
+        && (!paymentMode || String(row.paymentMode || '').toLowerCase().includes(paymentMode));
+    });
+  }
+
+  walletLedgerAlerts(): ApiRecord[] {
+    const risk = this.walletLedgerRiskFilter.trim().toLowerCase();
+    return this.arrayValue(this.walletLedgerReport()['alerts']).filter((alert) => !risk || String(alert['riskLevel'] || '').toLowerCase() === risk);
+  }
+
+  walletLedgerCards(): Array<{ label: string; value: string; detail: string }> {
+    const summary = (this.walletLedgerReport()['summary'] || {}) as ApiRecord;
+    return [
+      { label: 'Total wallet liability', value: this.formatMoney(Number(summary['totalWalletLiability'] || 0)), detail: 'active client wallet balance' },
+      { label: 'Wallet transaction count', value: String(this.walletLedgerRows().length), detail: 'filtered ledger rows' },
+      { label: 'Total credited', value: this.formatMoney(this.walletLedgerRows().reduce((sum, row) => sum + Number(row.creditAmount || 0), 0)), detail: 'wallet money added' },
+      { label: 'Total debited', value: this.formatMoney(this.walletLedgerRows().reduce((sum, row) => sum + Number(row.debitAmount || 0), 0)), detail: 'wallet money used' },
+      { label: 'Net wallet movement', value: this.formatMoney(this.walletLedgerRows().reduce((sum, row) => sum + Number(row.creditAmount || 0) - Number(row.debitAmount || 0), 0)), detail: 'credit less debit' },
+      { label: 'Clients with wallet balance', value: String(summary['clientsWithWalletBalance'] || 0), detail: 'liability clients' },
+      { label: 'Manual adjustments', value: String(summary['manualAdjustments'] || 0), detail: 'manual wallet edits' },
+      { label: 'Abuse alerts', value: String(this.walletLedgerAlerts().length), detail: 'needs audit review' }
+    ];
+  }
+
+  exportWalletLedgerCsv(): void {
+    const rows = this.walletLedgerRows();
+    const csv = [
+      ['Date', 'Time', 'Client name', 'Client phone', 'Branch', 'Transaction type', 'Credit amount', 'Debit amount', 'Balance after', 'Reason', 'Reference', 'Payment mode', 'Added by', 'Source'],
+      ...rows.map((row) => [
+        row.date,
+        row.time,
+        row.clientName,
+        row.clientPhone,
+        row.branchName,
+        row.transactionType,
+        row.creditAmount,
+        row.debitAmount,
+        row.balanceAfter,
+        row.reason,
+        row.referenceLabel,
+        row.paymentMode,
+        row.addedBy,
+        row.source
+      ])
+    ].map((row) => row.map((cell) => this.csvCell(cell)).join(',')).join('\n');
+    this.downloadFile(`wallet-ledger-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  exportWalletOwnerPdf(): void {
+    const lines = [
+      'Wallet / Ewallet Ledger Owner Summary',
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      ...this.walletLedgerCards().map((card) => `${card.label}: ${card.value} - ${card.detail}`),
+      'Recent ledger:',
+      ...this.walletLedgerRows().slice(0, 25).map((row) => `${row.date} ${row.time} | ${row.clientName} | credit ${this.formatMoney(Number(row.creditAmount || 0))} | debit ${this.formatMoney(Number(row.debitAmount || 0))} | balance ${this.formatMoney(Number(row.balanceAfter || 0))}`)
+    ];
+    this.downloadFile(`wallet-ledger-owner-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportWalletAuditPdf(): void {
+    const lines = [
+      'Wallet / Ewallet Ledger Audit Alerts',
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      ...this.walletLedgerAlerts().slice(0, 45).map((alert) => `${alert['riskLevel'] || 'medium'} | ${alert['alertType']} | ${alert['clientName'] || '-'} | ${this.formatMoney(Number(alert['amount'] || 0))} | ${alert['suggestedAction'] || 'Review wallet ledger'}`)
+    ];
+    this.downloadFile(`wallet-ledger-audit-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  private walletLedgerParams(): ApiRecord {
+    return {
+      fromDate: this.from,
+      toDate: this.to,
+      client: this.walletLedgerSearch,
+      transactionType: this.walletLedgerTypeFilter,
+      source: this.walletLedgerSourceFilter,
+      paymentMode: this.walletLedgerPaymentModeFilter,
+      riskLevel: this.walletLedgerRiskFilter,
+      branchId: this.api.selectedBranchId(),
+      limit: 5000
+    };
   }
 
   periodModeLabel(): string {
@@ -2038,6 +2321,10 @@ export class FinancialSummaryReportComponent implements OnInit {
     }
     if (this.activeTab === 'payments') {
       this.exportPaymentDistributionCsv();
+      return;
+    }
+    if (this.activeTab === 'wallet-ledger') {
+      this.exportWalletLedgerCsv();
       return;
     }
     const columns = this.matrixColumns();

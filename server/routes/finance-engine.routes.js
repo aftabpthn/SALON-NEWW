@@ -15,6 +15,44 @@ financeEngineRouter.get(
   })
 );
 
+financeEngineRouter.get(
+  "/reports/financial-summary/wallet-ledger",
+  requirePermission("read", () => "finance"),
+  asyncHandler((req, res) => {
+    res.json(financeEngineService.walletLedgerReport(req.query, req.access));
+  })
+);
+
+financeEngineRouter.get(
+  "/reports/financial-summary/wallet-abuse-alerts",
+  requirePermission("read", () => "finance"),
+  asyncHandler((req, res) => {
+    res.json(financeEngineService.walletAbuseAlerts(req.query, req.access));
+  })
+);
+
+financeEngineRouter.get(
+  "/reports/financial-summary/wallet-ledger/export.csv",
+  requirePermission("read", () => "finance"),
+  asyncHandler((req, res) => {
+    const csv = financeEngineService.walletLedgerCsv(req.query, req.access);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="wallet-ledger.csv"');
+    res.send(csv);
+  })
+);
+
+financeEngineRouter.get(
+  "/reports/financial-summary/wallet-audit/export.pdf",
+  requirePermission("read", () => "finance"),
+  asyncHandler((req, res) => {
+    const pdf = financeEngineService.walletAuditPdf(req.query, req.access);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="wallet-audit.pdf"');
+    res.send(Buffer.from(pdf, "binary"));
+  })
+);
+
 financeEngineRouter.post(
   "/finance/cash-drawers/open",
   requirePermission("write", () => "finance"),
