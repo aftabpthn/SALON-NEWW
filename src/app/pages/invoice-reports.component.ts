@@ -21,6 +21,17 @@ type SaleSummary = {
   totalTax: number;
 };
 
+type ProductSalesSummary = {
+  totalProduct: number;
+  productsSale: number;
+  taxOnProducts: number;
+  taxableAmount: number;
+  discount: number;
+  productsSaleAfterDiscount: number;
+  grossMargin: number;
+  lowStockItems: number;
+};
+
 type InvoiceLine = {
   invoiceId: string;
   invoiceNumber: string;
@@ -32,6 +43,12 @@ type InvoiceLine = {
   clientPhone: string;
   staffId: string;
   staffName: string;
+  productId: string;
+  productSku: string;
+  productBarcode: string;
+  productCategory: string;
+  productStock: number;
+  productUnitCost: number;
   itemName: string;
   itemType: string;
   quantity: number;
@@ -170,6 +187,18 @@ type InvoiceLine = {
           <article class="metric-card"><span>Total Tax</span><strong>{{ saleSummary().totalTax | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST collected</small></article>
         </div>
         <ng-template #defaultInvoiceKpis>
+          <div class="metrics-grid invoice-report-kpis product-sales-kpis" *ngIf="activeReport() === 'products'; else regularInvoiceKpis">
+            <article class="metric-card"><span>Total Product</span><strong>{{ productSalesSummary().totalProduct }}</strong><small>Retail line count</small></article>
+            <article class="metric-card"><span>Products Sale</span><strong>{{ productSalesSummary().productsSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Gross product sale</small></article>
+            <article class="metric-card"><span>Tax On Products</span><strong>{{ productSalesSummary().taxOnProducts | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST on retail</small></article>
+            <article class="metric-card"><span>Taxable Amount</span><strong>{{ productSalesSummary().taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>After discount before GST</small></article>
+            <article class="metric-card"><span>Discount</span><strong>{{ productSalesSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Retail discount</small></article>
+            <article class="metric-card"><span>Products Sale After Discount</span><strong>{{ productSalesSummary().productsSaleAfterDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net retail billed</small></article>
+            <article class="metric-card"><span>Gross Margin</span><strong>{{ productSalesSummary().grossMargin | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Approx. after COGS</small></article>
+            <article class="metric-card"><span>Low Stock Items</span><strong>{{ productSalesSummary().lowStockItems }}</strong><small>Sold products needing reorder watch</small></article>
+          </div>
+        </ng-template>
+        <ng-template #regularInvoiceKpis>
           <div class="metrics-grid invoice-report-kpis">
             <article class="metric-card"><span>Gross billed</span><strong>{{ summary().gross | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discount</small></article>
             <article class="metric-card"><span>Discount</span><strong>{{ summary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ summary().discountRate }}% leakage watch</small></article>
@@ -214,6 +243,14 @@ type InvoiceLine = {
               <span>{{ insight.label }}</span>
               <strong>{{ insight.value }}</strong>
               <small>{{ insight.detail }}</small>
+            </article>
+          </div>
+
+          <div class="product-sales-control-grid" *ngIf="activeReport() === 'products'">
+            <article *ngFor="let card of productSalesControlCards()">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <small>{{ card.detail }}</small>
             </article>
           </div>
 
@@ -299,6 +336,10 @@ type InvoiceLine = {
       border-top: 4px solid var(--primary);
     }
 
+    .product-sales-kpis {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
     .report-command-panel {
       display: grid;
       gap: 16px;
@@ -372,6 +413,34 @@ type InvoiceLine = {
       font-size: 20px;
     }
 
+    .product-sales-control-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .product-sales-control-grid article {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, #fff, #f8fbfa);
+      padding: 12px;
+    }
+
+    .product-sales-control-grid span,
+    .product-sales-control-grid small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .product-sales-control-grid strong {
+      display: block;
+      margin: 4px 0;
+      font-size: 18px;
+    }
+
     .enterprise-report-table {
       max-height: 660px;
       overflow: auto;
@@ -418,7 +487,8 @@ type InvoiceLine = {
       .report-filter-panel,
       .invoice-report-kpis,
       .report-tab-grid,
-      .insight-strip {
+      .insight-strip,
+      .product-sales-control-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -427,7 +497,8 @@ type InvoiceLine = {
       .report-filter-panel,
       .invoice-report-kpis,
       .report-tab-grid,
-      .insight-strip {
+      .insight-strip,
+      .product-sales-control-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -440,6 +511,7 @@ export class InvoiceReportsComponent implements OnInit {
   readonly invoices = signal<ApiRecord[]>([]);
   readonly payments = signal<ApiRecord[]>([]);
   readonly clients = signal<ApiRecord[]>([]);
+  readonly products = signal<ApiRecord[]>([]);
   readonly branches = signal<ApiRecord[]>([]);
   readonly walletTransactions = signal<ApiRecord[]>([]);
   readonly auditLogs = signal<ApiRecord[]>([]);
@@ -525,7 +597,7 @@ export class InvoiceReportsComponent implements OnInit {
       { key: 'staffName', label: 'Staff' }, { key: 'withoutDiscount', label: 'Without discount', type: 'currency' }, { key: 'withDiscount', label: 'With discount', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'discountRate', label: 'Discount %', type: 'percent' }, { key: 'serviceRevenue', label: 'Services', type: 'currency' }, { key: 'productRevenue', label: 'Products', type: 'currency' }, { key: 'membershipRevenue', label: 'Memberships', type: 'currency' }, { key: 'risk', label: 'Risk', type: 'badge' }
     ],
     products: [
-      { key: 'itemName', label: 'Product' }, { key: 'staffName', label: 'Staff' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'gross', label: 'Gross', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'taxable', label: 'Taxable', type: 'currency' }, { key: 'gst', label: 'GST', type: 'currency' }, { key: 'final', label: 'Final', type: 'currency' }, { key: 'invoices', label: 'Invoices', type: 'number' }
+      { key: 'product', label: 'Product' }, { key: 'name', label: 'Name' }, { key: 'contact', label: 'Contact' }, { key: 'invoiceNo', label: 'Invoice No' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'price', label: 'Price', type: 'currency' }, { key: 'totalPrice', label: 'Total Price', type: 'currency' }, { key: 'taxPercent', label: 'Tax in %', type: 'percent' }, { key: 'taxOnProducts', label: 'Tax On Products', type: 'currency' }, { key: 'taxableAmount', label: 'Taxable Amount', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'totalPriceAfterDiscount', label: 'Total Price After Discount', type: 'currency' }, { key: 'staff', label: 'Staff' }, { key: 'date', label: 'Date' }, { key: 'skuBarcode', label: 'SKU / Barcode' }, { key: 'stockSignal', label: 'Stock Signal', type: 'badge' }, { key: 'grossMargin', label: 'Gross Margin', type: 'currency' }, { key: 'marginPercent', label: 'Margin %', type: 'percent' }
     ],
     memberships: [
       { key: 'itemName', label: 'Membership / package' }, { key: 'staffName', label: 'Sold by' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'gross', label: 'Gross', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'final', label: 'Final', type: 'currency' }, { key: 'liability', label: 'Future liability', type: 'currency' }, { key: 'invoices', label: 'Invoices', type: 'number' }
@@ -592,6 +664,7 @@ export class InvoiceReportsComponent implements OnInit {
       sales: this.safeList('sales', { limit: 5000 }),
       payments: this.safeList('payments', { limit: 5000 }),
       clients: this.safeList('clients', { limit: 5000 }),
+      products: this.safeList('products', { limit: 10000 }),
       staff: this.safeList('staff', { limit: 5000 }),
       branches: this.safeList('branches', { limit: 1000 }),
       walletTransactions: this.safeList('walletTransactions', { limit: 5000 }),
@@ -602,12 +675,13 @@ export class InvoiceReportsComponent implements OnInit {
         this.invoices.set(data.invoices || []);
         this.payments.set(data.payments || []);
         this.clients.set(data.clients || []);
+        this.products.set(data.products || []);
         this.branches.set(data.branches || []);
         this.walletTransactions.set(data.walletTransactions || []);
         this.auditLogs.set(data.auditLogs || []);
         this.dueRecoverySummary.set(data.dueRecovery?.summary || {});
         this.dueRecoveryReportRows.set(data.dueRecovery?.rows || []);
-        this.lines.set(this.buildLines(data.invoices || [], data.sales || [], data.payments || [], data.clients || [], data.staff || [], data.branches || []));
+        this.lines.set(this.buildLines(data.invoices || [], data.sales || [], data.payments || [], data.clients || [], data.staff || [], data.branches || [], data.products || []));
         this.loading.set(false);
       },
       error: (error) => {
@@ -624,7 +698,7 @@ export class InvoiceReportsComponent implements OnInit {
       const dateMatch = this.inDateRange(line.date);
       const clientMatch = !this.clientFilter || String(line.clientId || '') === String(this.clientFilter);
       const staffMatch = !this.staffFilter || String(line.staffId || line.staffName || '') === String(this.staffFilter) || String(line.staffName || '') === String(this.staffFilter);
-      const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.paymentModes} ${line.couponCode} ${line.addedBy}`.toLowerCase();
+      const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.productSku} ${line.productBarcode} ${line.productCategory} ${line.paymentModes} ${line.couponCode} ${line.addedBy}`.toLowerCase();
       return statusMatch && dateMatch && clientMatch && staffMatch && (!query || text.includes(query));
     });
     return lines;
@@ -672,6 +746,34 @@ export class InvoiceReportsComponent implements OnInit {
     };
   }
 
+  productSalesSummary(): ProductSalesSummary {
+    const rows = this.productSalesRows();
+    return {
+      totalProduct: rows.length,
+      productsSale: this.sum(rows, 'totalPrice'),
+      taxOnProducts: this.sum(rows, 'taxOnProducts'),
+      taxableAmount: this.sum(rows, 'taxableAmount'),
+      discount: this.sum(rows, 'discount'),
+      productsSaleAfterDiscount: this.sum(rows, 'totalPriceAfterDiscount'),
+      grossMargin: this.sum(rows, 'grossMargin'),
+      lowStockItems: rows.filter((row) => String(row['stockSignal'] || '').toLowerCase().includes('low')).length
+    };
+  }
+
+  productSalesControlCards(): ApiRecord[] {
+    const rows = this.productSalesRows();
+    const topProduct = this.topBy(rows, 'product', 'totalPriceAfterDiscount');
+    const topStaff = this.topBy(rows, 'staff', 'totalPriceAfterDiscount');
+    const topCategory = this.topBy(rows, 'category', 'totalPriceAfterDiscount');
+    const margin = this.productSalesSummary().grossMargin;
+    return [
+      { label: 'Top product', value: topProduct.label || '-', detail: topProduct.value ? this.formatMoney(topProduct.value) : 'No retail sale' },
+      { label: 'Top staff', value: topStaff.label || '-', detail: topStaff.value ? this.formatMoney(topStaff.value) : 'No staff attribution' },
+      { label: 'Top category', value: topCategory.label || '-', detail: topCategory.value ? this.formatMoney(topCategory.value) : 'Category from product master' },
+      { label: 'Margin health', value: margin > 0 ? 'Positive' : margin < 0 ? 'Negative' : 'Unknown', detail: `${this.formatMoney(margin)} estimated gross margin` }
+    ];
+  }
+
   activeDefinition(): ReportDefinition {
     return this.reportDefinitions.find((report) => report.id === this.activeReport()) || this.reportDefinitions[0];
   }
@@ -686,7 +788,7 @@ export class InvoiceReportsComponent implements OnInit {
     if (report === 'overview') return this.overviewRows();
     if (report === 'staff-services') return this.staffServiceRows();
     if (report === 'staff-discounts') return this.staffDiscountRows();
-    if (report === 'products') return this.itemRows('product');
+    if (report === 'products') return this.productSalesRows();
     if (report === 'memberships') return this.membershipRows();
     if (report === 'gst') return this.gstRows();
     if (report === 'payments') return this.paymentRows();
@@ -733,9 +835,9 @@ export class InvoiceReportsComponent implements OnInit {
   }
 
   searchPlaceholder(): string {
-    return this.activeReport() === 'sale-summary'
-      ? 'Invoice, name or phone'
-      : 'Invoice, client, staff, service, product, payment mode';
+    if (this.activeReport() === 'sale-summary') return 'Invoice, name or phone';
+    if (this.activeReport() === 'products') return 'Product, customer, barcode or invoice';
+    return 'Invoice, client, staff, service, product, payment mode';
   }
 
   branchLabel(): string {
@@ -876,6 +978,38 @@ export class InvoiceReportsComponent implements OnInit {
         invoices: new Set(items.map((item) => item.invoiceId)).size
       }))
       .sort((a, b) => Number(b['final']) - Number(a['final']));
+  }
+
+  private productSalesRows(): ApiRecord[] {
+    return this.filteredLines()
+      .filter((line) => line.itemType === 'product')
+      .map((line) => {
+        const cost = this.money(line.productUnitCost * line.quantity);
+        const margin = this.money(line.taxable - cost);
+        const marginPercent = line.taxable > 0 && cost > 0 ? this.money((margin / line.taxable) * 100) : 0;
+        return {
+          product: line.itemName,
+          name: line.clientName,
+          contact: line.clientPhone,
+          invoiceNo: line.invoiceNumber,
+          qty: line.quantity,
+          price: line.rate,
+          totalPrice: line.gross,
+          taxPercent: line.gstRate,
+          taxOnProducts: line.gst,
+          taxableAmount: line.taxable,
+          discount: line.discount,
+          totalPriceAfterDiscount: line.final,
+          staff: line.staffName,
+          date: this.dateKey(line.date),
+          skuBarcode: [line.productSku, line.productBarcode].filter(Boolean).join(' / ') || '-',
+          category: line.productCategory || 'Retail',
+          stockSignal: this.productStockSignal(line),
+          grossMargin: margin,
+          marginPercent
+        };
+      })
+      .sort((a, b) => this.dateMs(String(b['date'])) - this.dateMs(String(a['date'])) || Number(b['totalPriceAfterDiscount']) - Number(a['totalPriceAfterDiscount']));
   }
 
   private membershipRows(): ApiRecord[] {
@@ -1322,11 +1456,20 @@ export class InvoiceReportsComponent implements OnInit {
     return rows.slice(0, 500);
   }
 
-  private buildLines(invoices: ApiRecord[], sales: ApiRecord[], payments: ApiRecord[], clients: ApiRecord[], staff: ApiRecord[], branches: ApiRecord[]): InvoiceLine[] {
+  private buildLines(invoices: ApiRecord[], sales: ApiRecord[], payments: ApiRecord[], clients: ApiRecord[], staff: ApiRecord[], branches: ApiRecord[], products: ApiRecord[]): InvoiceLine[] {
     const saleMap = new Map(sales.map((sale) => [String(sale.id), sale]));
     const clientMap = new Map(clients.map((client) => [String(client.id), client]));
     const staffMap = new Map(staff.map((person) => [String(person.id), person]));
     const branchMap = new Map(branches.map((branch) => [String(branch.id), branch]));
+    const productById = new Map<string, ApiRecord>();
+    const productByKey = new Map<string, ApiRecord>();
+    for (const product of products) {
+      for (const id of [product['id'], product['productId'], product['product_id'], product['sku'], product['barcode'], product['code'], product['productCode']]) {
+        if (id !== undefined && id !== null && id !== '') productById.set(String(id), product);
+      }
+      const key = this.productLookupKey(String(product['name'] || product['productName'] || ''));
+      if (key) productByKey.set(key, product);
+    }
     return invoices.flatMap((invoice) => {
       const sale = saleMap.get(String(invoice.saleId || invoice.sale_id || '')) || {};
       const clientId = String(invoice.clientId || invoice.client_id || sale.clientId || sale.client_id || '');
@@ -1353,6 +1496,9 @@ export class InvoiceReportsComponent implements OnInit {
       return items.map((item) => {
         const itemStaffId = String(item.staffId || item.staff_id || item.assignedStaffId || item.assigned_staff_id || staffId || '');
         const itemStaff = staffMap.get(itemStaffId) || staffPerson;
+        const itemName = String(item.name || item.serviceName || item.productName || item.itemName || item.title || 'Invoice item');
+        const itemProductId = String(item.productId || item.product_id || item.productCode || item.product_code || item.sku || item.barcode || '');
+        const product = productById.get(itemProductId) || productByKey.get(this.productLookupKey(itemName)) || {};
         const gross = this.lineGross(item);
         const discount = this.lineDiscount(item, gross, grossTotal, invoiceDiscount);
         const taxable = this.money(Math.max(0, gross - discount));
@@ -1370,7 +1516,13 @@ export class InvoiceReportsComponent implements OnInit {
           clientPhone: String(client.phone || client.mobile || client.whatsapp || invoice.clientPhone || sale.clientPhone || ''),
           staffId: itemStaffId,
           staffName: String(item.staffName || item.staff_name || item.assignedStaffName || item.assigned_staff_name || itemStaff.name || staffPerson.name || 'Unassigned'),
-          itemName: String(item.name || item.serviceName || item.productName || item.itemName || item.title || 'Invoice item'),
+          productId: String(product['id'] || itemProductId || ''),
+          productSku: String(item.sku || item.SKU || product['sku'] || product['code'] || product['productCode'] || ''),
+          productBarcode: String(item.barcode || item.barCode || product['barcode'] || product['barCode'] || ''),
+          productCategory: String(item.category || product['category'] || product['brand'] || ''),
+          productStock: Number(product['stock'] || product['currentStock'] || product['availableStock'] || 0),
+          productUnitCost: this.money(Number(item.unitCost || item.costPrice || item.purchasePrice || product['unitCost'] || product['costPrice'] || product['purchasePrice'] || 0)),
+          itemName,
           itemType: this.normalizedItemType(item),
           quantity: this.money(Number(item.quantity || item.qty || 1)),
           rate: this.lineRate(item),
@@ -1545,6 +1697,33 @@ export class InvoiceReportsComponent implements OnInit {
 
   private sum<T extends ApiRecord | InvoiceLine>(items: T[], key: string): number {
     return this.money(items.reduce((sum, item) => sum + Number((item as ApiRecord)[key] || 0), 0));
+  }
+
+  private topBy(rows: ApiRecord[], labelKey: string, valueKey: string): { label: string; value: number } {
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      const label = String(row[labelKey] || '').trim();
+      if (!label) continue;
+      map.set(label, (map.get(label) || 0) + Number(row[valueKey] || 0));
+    }
+    return [...map.entries()]
+      .map(([label, value]) => ({ label, value: this.money(value) }))
+      .sort((a, b) => b.value - a.value)[0] || { label: '', value: 0 };
+  }
+
+  private formatMoney(value: number): string {
+    return `₹${this.money(value).toLocaleString('en-IN')}`;
+  }
+
+  private productLookupKey(value: string): string {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  private productStockSignal(line: InvoiceLine): string {
+    if (!line.productId && !line.productSku && !line.productBarcode) return 'Unmapped';
+    if (line.productStock <= 0) return 'Stockout risk';
+    if (line.productStock <= Math.max(2, line.quantity)) return 'Low stock';
+    return 'Healthy';
   }
 
   private lineRate(item: ApiRecord): number {
