@@ -1982,6 +1982,350 @@ export class MembershipEnterpriseService {
     return { low: 1, medium: 2, high: 3, critical: 4 }[level] || 0;
   }
 
+  rewardsLedger(query = {}, access) {
+    const filters = this.rewardReportFilters(query);
+    if (filters.branchId) tenantService.assertBranchAccess(access, filters.branchId);
+    const rows = db.prepare(
+      `SELECT *
+       FROM loyalty_transactions
+       WHERE tenant_id = @tenantId
+         AND (@clientId = '' OR customer_id = @clientId)
+         AND (@fromDate = '' OR date(created_at) >= date(@fromDate))
+         AND (@toDate = '' OR date(created_at) <= date(@toDate))
+       ORDER BY created_at DESC, id DESC
+       LIMIT @limit`
+    ).all({
+      tenantId: access.tenantId,
+      clientId: filters.clientId,
+      fromDate: filters.fromDate,
+      toDate: filters.toDate,
+      limit: Math.min(Number(query.limit || 500), 2000)
+    });
+    const clients = repositories.clients.list({ limit: 10000 }, scope(access));
+    const invoices = repositories.invoices.list({ limit: 10000 }, scope(access, filters.branchId));
+    const clientById = new Map(clients.map((client) => [client.id, client]));
+    const invoiceById = new Map(invoices.flatMap((invoice) => [
+      [invoice.id, invoice],
+      [invoice.invoiceId, invoice],
+      [invoice.invoiceNumber, invoice],
+      [invoice.number, invoice]
+    ].filter(([key]) => key)));
+    return rows
+      .map((row) => this.rewardLedgerRow(row, clientById, invoiceById))
+      .filter((row) => this.rewardRowMatches(row, filters));
+  }
+
+  rewardRoiReport(query = {}, access) {
+    const filters = this.rewardReportFilters(query);
+    if (filters.branchId) tenantService.assertBranchAccess(access, filters.branchId);
+    const ledger = this.rewardsLedger({ ...query, limit: 2000 }, access);
+    const rewardClientIds = new Set(ledger.map((row) => row.clientId).filter(Boolean));
+    const invoices = repositories.invoices.list({ limit: 10000 }, scope(access, filters.branchId))
+      .filter((invoice) => this.rewardInvoiceMatches(invoice, filters));
+    const byClient = new Map();
+    for (const row of ledger) {
+      const current = byClient.get(row.clientId) || {
+        clientId: row.clientId,
+        clientName: row.clientName,
+        clientPhone: row.clientPhone,
+        visits: 0,
+        totalSale: 0,
+        rewardEarned: 0,
+        rewardRedeemed: 0,
+        pendingRewardBalance: Number(row.balanceAfter || 0),
+        repeatRevenue: 0
+      };
+      current.rewardEarned += Number(row.earnedPoints || 0);
+      current.rewardRedeemed += Number(row.redeemedPoints || 0);
+      if (row.balanceAfter !== undefined) current.pendingRewardBalance = Number(row.balanceAfter || 0);
+      byClient.set(row.clientId, current);
+    }
+    let rewardRevenue = 0;
+    let nonRewardRevenue = 0;
+    let rewardInvoiceCount = 0;
+    for (const invoice of invoices) {
+      const clientId = String(invoice.clientId || invoice.customerId || "");
+      const amount = this.rewardInvoiceAmount(invoice);
+      if (rewardClientIds.has(clientId)) {
+        rewardRevenue += amount;
+        rewardInvoiceCount += 1;
+        const row = byClient.get(clientId) || { clientId, clientName: invoice.clientName || clientId, visits: 0, totalSale: 0, rewardEarned: 0, rewardRedeemed: 0, pendingRewardBalance: 0, repeatRevenue: 0 };
+        row.visits += 1;
+        row.totalSale += amount;
+        if (row.visits > 1) row.repeatRevenue += amount;
+        byClient.set(clientId, row);
+      } else {
+        nonRewardRevenue += amount;
+      }
+    }
+    const rows = [...byClient.values()]
+      .map((row) => ({
+        ...row,
+        totalSale: money(row.totalSale),
+        repeatRevenue: money(row.repeatRevenue),
+        suggestedAction: row.pendingRewardBalance > 0 ? "Send redeem reminder" : row.rewardRedeemed > row.rewardEarned ? "Review leakage" : "Keep in loyalty nurture"
+      }))
+      .sort((a, b) => Number(b.totalSale || 0) - Number(a.totalSale || 0))
+      .slice(0, 250);
+    const totalEarned = ledger.reduce((sum, row) => sum + Number(row.earnedPoints || 0), 0);
+    const totalRedeemed = ledger.reduce((sum, row) => sum + Number(row.redeemedPoints || 0), 0);
+    const repeatClients = rows.filter((row) => Number(row.visits || 0) > 1).length;
+    return {
+      generatedAt: now(),
+      filters,
+      metrics: {
+        totalRewardClients: rewardClientIds.size,
+        totalPointsEarned: totalEarned,
+        totalPointsRedeemed: totalRedeemed,
+        redemptionValue: money(totalRedeemed),
+        revenueFromRewardUsers: money(rewardRevenue),
+        repeatRevenueFromRewardUsers: money(rows.reduce((sum, row) => sum + Number(row.repeatRevenue || 0), 0)),
+        rewardUsersRevenue: money(rewardRevenue),
+        nonRewardUsersRevenue: money(nonRewardRevenue),
+        discountLeakageFromRewards: money(Math.max(totalRedeemed - totalEarned, 0)),
+        averageBillOfRewardUsers: money(rewardInvoiceCount ? rewardRevenue / rewardInvoiceCount : 0),
+        repeatVisitRate: rows.length ? Math.round((repeatClients / rows.length) * 1000) / 10 : 0
+      },
+      rows
+    };
+  }
+
+  expiringRewards(query = {}, access) {
+    const filters = this.rewardReportFilters(query);
+    if (filters.branchId) tenantService.assertBranchAccess(access, filters.branchId);
+    const ledger = this.rewardsLedger({ ...query, limit: 2000 }, access);
+    const latestByClient = new Map();
+    const earnedByClient = new Map();
+    for (const row of ledger.slice().reverse()) {
+      if (row.transactionType === "earned") earnedByClient.set(row.clientId, row.createdAt);
+      latestByClient.set(row.clientId, row);
+    }
+    const invoices = repositories.invoices.list({ limit: 10000 }, scope(access, filters.branchId));
+    const lastVisitByClient = new Map();
+    for (const invoice of invoices) {
+      const clientId = String(invoice.clientId || invoice.customerId || "");
+      const visitDate = dateOnly(invoice.createdAt || invoice.invoiceDate || invoice.date || "");
+      if (clientId && (!lastVisitByClient.has(clientId) || visitDate > lastVisitByClient.get(clientId))) lastVisitByClient.set(clientId, visitDate);
+    }
+    return [...latestByClient.values()]
+      .filter((row) => Number(row.balanceAfter || 0) > 0)
+      .map((row) => {
+        const expiryDate = addDays(earnedByClient.get(row.clientId) || row.createdAt || today(), Number(query.expiryDays || 90));
+        const daysLeft = Math.ceil((dateMs(expiryDate) - dateMs(today())) / 86400000);
+        return {
+          clientId: row.clientId,
+          clientName: row.clientName,
+          phone: row.clientPhone,
+          pointsExpiring: Number(row.balanceAfter || 0),
+          expiryDate,
+          daysLeft,
+          estimatedValue: money(row.balanceAfter || 0),
+          lastVisitDate: lastVisitByClient.get(row.clientId) || "",
+          reminderStatus: this.latestRewardReminderStatus(row.clientId, access)
+        };
+      })
+      .filter((row) => row.daysLeft >= 0 && row.daysLeft <= Number(query.windowDays || 30))
+      .sort((a, b) => a.daysLeft - b.daysLeft || b.pointsExpiring - a.pointsExpiring);
+  }
+
+  rewardAbuseAlerts(query = {}, access) {
+    const filters = this.rewardReportFilters(query);
+    const ledger = this.rewardsLedger({ ...query, limit: 2000 }, access);
+    const invoices = repositories.invoices.list({ limit: 10000 }, scope(access, filters.branchId));
+    const invoiceById = new Map(invoices.flatMap((invoice) => [
+      [invoice.id, invoice],
+      [invoice.invoiceId, invoice],
+      [invoice.invoiceNumber, invoice],
+      [invoice.number, invoice]
+    ].filter(([key]) => key)));
+    const alerts = [];
+    const byClient = new Map();
+    for (const row of ledger) {
+      const list = byClient.get(row.clientId) || [];
+      list.push(row);
+      byClient.set(row.clientId, list);
+      const invoice = invoiceById.get(row.invoiceId);
+      const invoiceStatus = this.rewardInvoiceStatus(invoice);
+      if (row.transactionType === "earned" && ["cancelled", "canceled", "deleted", "void", "voided"].includes(invoiceStatus)) {
+        const reversed = ledger.some((item) => item.clientId === row.clientId && item.invoiceId === row.invoiceId && item.transactionType === "reversed");
+        if (!reversed) alerts.push(this.rewardAlert("Cancelled bill reward not reversed", row, "high", "Reverse reward points or review invoice audit."));
+      }
+      if (row.transactionType === "redeemed" && row.invoiceId && !invoice) {
+        alerts.push(this.rewardAlert("Reward redemption without matching invoice", row, "critical", "Match redemption to invoice or reverse manually."));
+      }
+      if (Number(row.balanceAfter || 0) < 0) {
+        alerts.push(this.rewardAlert("Negative reward balance", row, "critical", "Freeze loyalty redemption and correct ledger."));
+      }
+    }
+    for (const rows of byClient.values()) {
+      const redeemed = rows.reduce((sum, row) => sum + Number(row.redeemedPoints || 0), 0);
+      const earned = rows.reduce((sum, row) => sum + Number(row.earnedPoints || 0), 0);
+      const adjustments = rows.filter((row) => row.transactionType === "adjusted");
+      if (redeemed >= 1000 || (earned > 0 && redeemed > earned * 0.8)) {
+        alerts.push(this.rewardAlert("High redemption client", rows[0], redeemed >= 2000 ? "high" : "medium", "Check redemption pattern before next reward approval.", redeemed));
+      }
+      if (adjustments.length >= 2) {
+        alerts.push(this.rewardAlert("Same client repeated reward adjustment", adjustments[0], "medium", "Review manual adjustment reasons.", adjustments.length));
+      }
+    }
+    return alerts
+      .filter((alert) => !filters.riskLevel || filters.riskLevel === "all" || alert.riskLevel === filters.riskLevel)
+      .sort((a, b) => this.riskRank(b.riskLevel) - this.riskRank(a.riskLevel))
+      .slice(0, 250);
+  }
+
+  sendRewardExpiryReminder(clientId, payload = {}, access) {
+    if (!clientId) throw badRequest("clientId is required");
+    const client = repositories.clients.getById(clientId, scope(access));
+    if (!client) throw notFound("Client not found");
+    const expiring = this.expiringRewards({ clientId, windowDays: 365 }, access)[0];
+    const points = Number(payload.points || expiring?.pointsExpiring || 0);
+    if (points <= 0) throw badRequest("No active expiring reward balance for this client");
+    const expiryDate = payload.expiryDate || expiring?.expiryDate || addDays(today(), 30);
+    const salonName = payload.salonName || "Aura Salon";
+    const branchId = client.branchId || access.branchId || "";
+    const message = payload.message || `Hi ${client.name || "there"}, your ${points} reward points expire on ${expiryDate}. Visit us soon to redeem them. - ${salonName}`;
+    const row = {
+      id: makeId("mwa"),
+      tenant_id: access.tenantId,
+      branch_id: branchId,
+      client_id: clientId,
+      membership_id: makeId(`reward_${clientId}`),
+      plan_id: "",
+      reminder_type: "reward_expiry",
+      due_on: today(),
+      days_before: Number(expiring?.daysLeft || 0),
+      status: "queued",
+      message,
+      payload_json: stringify({ phone: client.phone || "", points, expiryDate, channel: payload.channel || "whatsapp", source: "rewards_ledger" }, {}),
+      approved_by: "",
+      sent_at: "",
+      created_at: now(),
+      updated_at: now()
+    };
+    db.prepare(
+      `INSERT INTO membership_whatsapp_reminders
+       (id, tenant_id, branch_id, client_id, membership_id, plan_id, reminder_type, due_on, days_before, status, message,
+        payload_json, approved_by, sent_at, created_at, updated_at)
+       VALUES
+       (@id, @tenant_id, @branch_id, @client_id, @membership_id, @plan_id, @reminder_type, @due_on, @days_before, @status, @message,
+        @payload_json, @approved_by, @sent_at, @created_at, @updated_at)`
+    ).run(row);
+    const reminder = rowToReminder(row);
+    this.audit("membership.rewards.expiry_reminder_queued", "loyalty_reward", clientId, {}, reminder, access, branchId);
+    return reminder;
+  }
+
+  rewardReportFilters(query = {}) {
+    return {
+      fromDate: text(query.fromDate || query.startDate || ""),
+      toDate: text(query.toDate || query.endDate || ""),
+      clientId: text(query.clientId || ""),
+      staffId: text(query.staffId || query.createdBy || ""),
+      branchId: text(query.branchId || ""),
+      transactionType: text(query.transactionType || ""),
+      riskLevel: text(query.riskLevel || "all"),
+      rewardStatus: text(query.rewardStatus || "")
+    };
+  }
+
+  rewardLedgerRow(row, clientById, invoiceById) {
+    const client = clientById.get(row.customer_id) || {};
+    const invoice = invoiceById.get(row.invoice_id) || {};
+    const transactionType = this.rewardTransactionType(row.type, row.points);
+    const createdAt = row.created_at || now();
+    const points = Math.abs(Number(row.points || 0));
+    return {
+      id: row.id,
+      date: dateOnly(createdAt),
+      time: String(createdAt).slice(11, 16) || "",
+      createdAt,
+      clientId: row.customer_id || "",
+      clientName: client.name || client.fullName || invoice.clientName || row.customer_id || "Client",
+      clientPhone: client.phone || client.contact || invoice.clientPhone || "",
+      invoiceId: row.invoice_id || "",
+      invoiceNumber: invoice.invoiceNumber || invoice.number || invoice.invoiceNo || row.invoice_id || "",
+      appointmentId: invoice.appointmentId || "",
+      transactionType,
+      earnedPoints: transactionType === "earned" ? points : 0,
+      redeemedPoints: transactionType === "redeemed" ? points : 0,
+      expiredPoints: transactionType === "expired" ? points : 0,
+      balanceAfter: Number(row.balance_after || 0),
+      reason: row.description || row.type || "",
+      createdBy: invoice.createdBy || invoice.addedBy || invoice.staffId || "system",
+      staffId: invoice.staffId || invoice.createdBy || invoice.addedBy || "",
+      branchId: invoice.branchId || client.branchId || "",
+      branch: invoice.branchName || invoice.branchId || client.branchId || "",
+      invoiceStatus: this.rewardInvoiceStatus(invoice),
+      reversalStatus: transactionType === "reversed" ? "reversed" : "",
+      openClientPath: `/clients/${row.customer_id || ""}`,
+      openInvoicePath: row.invoice_id ? `/pos/invoices?invoice=${encodeURIComponent(row.invoice_id)}` : ""
+    };
+  }
+
+  rewardRowMatches(row, filters) {
+    if (filters.branchId && row.branchId !== filters.branchId) return false;
+    if (filters.staffId && row.staffId !== filters.staffId && row.createdBy !== filters.staffId) return false;
+    if (filters.transactionType && row.transactionType !== filters.transactionType) return false;
+    if (filters.rewardStatus === "active" && Number(row.balanceAfter || 0) <= 0) return false;
+    if (filters.rewardStatus === "redeemed" && row.transactionType !== "redeemed") return false;
+    if (filters.rewardStatus === "expired" && row.transactionType !== "expired") return false;
+    if (filters.rewardStatus === "reversed" && row.transactionType !== "reversed") return false;
+    return true;
+  }
+
+  rewardTransactionType(type = "", points = 0) {
+    const value = String(type || "").toLowerCase();
+    if (value.includes("redeem")) return "redeemed";
+    if (value.includes("expire")) return "expired";
+    if (value.includes("reverse") || value.includes("void") || value.includes("cancel")) return "reversed";
+    if (value.includes("adjust")) return "adjusted";
+    if (Number(points || 0) < 0) return "redeemed";
+    return "earned";
+  }
+
+  rewardInvoiceMatches(invoice = {}, filters = {}) {
+    const createdAt = dateOnly(invoice.createdAt || invoice.invoiceDate || invoice.date || "");
+    if (filters.fromDate && createdAt < filters.fromDate) return false;
+    if (filters.toDate && createdAt > filters.toDate) return false;
+    if (filters.clientId && String(invoice.clientId || invoice.customerId || "") !== filters.clientId) return false;
+    return true;
+  }
+
+  rewardInvoiceAmount(invoice = {}) {
+    return money(invoice.totalAmount || invoice.total || invoice.grandTotal || invoice.finalAmount || invoice.netAmount || invoice.paidAmount || 0);
+  }
+
+  rewardInvoiceStatus(invoice = {}) {
+    return String(invoice.status || invoice.invoiceStatus || "").toLowerCase();
+  }
+
+  rewardAlert(alertType, row, riskLevel, suggestedAction, overridePoints = null) {
+    return {
+      id: stableId("reward-alert", alertType, row.clientId, row.invoiceId, row.createdAt),
+      alertType,
+      clientId: row.clientId,
+      client: row.clientName,
+      invoiceReference: row.invoiceNumber || row.invoiceId || "-",
+      amount: money(overridePoints ?? row.redeemedPoints ?? row.earnedPoints ?? row.balanceAfter ?? 0),
+      points: Number(overridePoints ?? row.redeemedPoints ?? row.earnedPoints ?? row.balanceAfter ?? 0),
+      staffUser: row.createdBy || "system",
+      riskLevel,
+      suggestedAction,
+      createdAt: row.createdAt
+    };
+  }
+
+  latestRewardReminderStatus(clientId, access) {
+    const row = db.prepare(
+      `SELECT * FROM membership_whatsapp_reminders
+       WHERE tenant_id = @tenantId AND client_id = @clientId AND reminder_type = 'reward_expiry'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).get({ tenantId: access.tenantId, clientId });
+    return row ? rowToReminder(row) : { status: "not_sent" };
+  }
+
   membershipEnterpriseReports(query = {}, access) {
     const branchId = query.branchId || "";
     if (branchId) tenantService.assertBranchAccess(access, branchId);

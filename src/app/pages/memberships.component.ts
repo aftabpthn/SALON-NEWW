@@ -46,9 +46,17 @@ type MembershipEnterpriseReport = {
   exportRows?: ApiRecord[];
 };
 
-type MembershipDeskTab = 'overview' | 'plans' | 'active' | 'audit' | 'commission' | 'risk' | 'reports' | 'reminders' | 'autoRenew';
+type RewardReport = {
+  ledger?: ApiRecord[];
+  roi?: ApiRecord;
+  expiring?: ApiRecord[];
+  abuseAlerts?: ApiRecord[];
+};
+
+type MembershipDeskTab = 'overview' | 'plans' | 'active' | 'audit' | 'commission' | 'risk' | 'reports' | 'rewards' | 'reminders' | 'autoRenew';
 type PlanWorkspaceView = 'plans' | 'packages' | 'giftcards';
 type MembershipReportTab = 'actionQueue' | 'activeMembers' | 'expiringSoon' | 'renewalRevenue' | 'cancelledMemberships' | 'staffWiseSales' | 'planWiseProfitability' | 'creditLiability' | 'autoRenewFailedPayments' | 'upgradeDowngrade' | 'discountLeakage';
+type RewardDeskTab = 'ledger' | 'roi' | 'expiring' | 'abuse';
 type LifecycleAction = 'renew' | 'upgrade' | 'downgrade' | 'cancel';
 type PlanLifecycleDialog = {
   action: Exclude<LifecycleAction, 'renew'>;
@@ -95,6 +103,9 @@ type PlanLifecycleDialog = {
         </button>
         <button type="button" [class.active]="activeTab() === 'reports'" (click)="setTab('reports')">
           Reports <span>{{ enterpriseReport().exportRows?.length || 0 }}</span>
+        </button>
+        <button type="button" [class.active]="activeTab() === 'rewards'" (click)="setTab('rewards')">
+          Rewards <span>{{ rewardLedgerRows().length }}</span>
         </button>
         <button type="button" [class.active]="activeTab() === 'reminders'" (click)="setTab('reminders')">
           Reminders <span>{{ reminders().length }}</span>
@@ -1086,6 +1097,148 @@ type PlanLifecycleDialog = {
             <ng-template #noDiscountReport><div class="empty-panel compact-empty"><strong>No discount leakage.</strong></div></ng-template>
           </section>
         </div>
+      </section>
+
+      <section class="panel rewards-panel" *ngIf="activeTab() === 'rewards'">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">Loyalty command center</span>
+            <h2>Rewards Ledger + ROI</h2>
+          </div>
+          <div class="inline-actions">
+            <button class="ghost-button mini" type="button" (click)="loadRewards()" [disabled]="saving()">Apply filters</button>
+            <button class="ghost-button mini" type="button" (click)="exportRewardsLedgerCsv()">Ledger CSV</button>
+            <button class="ghost-button mini" type="button" (click)="exportRewardsRoiPdf()">ROI PDF</button>
+            <button class="ghost-button mini" type="button" (click)="exportRewardAbusePdf()">Audit PDF</button>
+          </div>
+        </div>
+
+        <section class="report-filter-grid reward-filter-grid">
+          <label class="field"><span>From date</span><input type="date" [(ngModel)]="rewardFilters.fromDate" /></label>
+          <label class="field"><span>To date</span><input type="date" [(ngModel)]="rewardFilters.toDate" /></label>
+          <label class="field">
+            <span>Client</span>
+            <select [(ngModel)]="rewardFilters.clientId">
+              <option value="">All clients</option>
+              <option *ngFor="let client of clients()" [value]="client.id">{{ client.name || client['fullName'] || client.id }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Transaction type</span>
+            <select [(ngModel)]="rewardFilters.transactionType">
+              <option value="">All types</option>
+              <option value="earned">Earned</option>
+              <option value="redeemed">Redeemed</option>
+              <option value="expired">Expired</option>
+              <option value="reversed">Reversed</option>
+              <option value="adjusted">Adjusted</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Staff / user</span>
+            <select [(ngModel)]="rewardFilters.staffId">
+              <option value="">All staff</option>
+              <option *ngFor="let staff of staffMembers()" [value]="staff.id || staff['staffId']">{{ staffOption(staff) }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Branch</span>
+            <select [(ngModel)]="rewardFilters.branchId">
+              <option value="">All branches</option>
+              <option *ngFor="let branch of branchOptions()" [value]="branch">{{ branch }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Risk level</span>
+            <select [(ngModel)]="rewardFilters.riskLevel">
+              <option value="all">All risks</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Reward status</span>
+            <select [(ngModel)]="rewardFilters.rewardStatus">
+              <option value="">All statuses</option>
+              <option value="active">Active balance</option>
+              <option value="redeemed">Redeemed</option>
+              <option value="expired">Expired</option>
+              <option value="reversed">Reversed</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="member-count-strip compact-count-strip rewards-kpis">
+          <article><span>Reward clients</span><strong>{{ rewardMetric('totalRewardClients') }}</strong><small>Clients with ledger</small></article>
+          <article><span>Points earned</span><strong>{{ rewardMetric('totalPointsEarned') }}</strong><small>Gross loyalty issued</small></article>
+          <article><span>Points redeemed</span><strong>{{ rewardMetric('totalPointsRedeemed') }}</strong><small>Used by clients</small></article>
+          <article><span>Reward revenue</span><strong>{{ rewardMetric('revenueFromRewardUsers') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Sales from reward users</small></article>
+          <article><span>Repeat rate</span><strong>{{ rewardMetric('repeatVisitRate') }}%</strong><small>Repeat reward clients</small></article>
+          <article><span>Abuse alerts</span><strong>{{ rewardAbuseRows().length }}</strong><small>Needs audit</small></article>
+        </section>
+
+        <nav class="report-section-tabs" aria-label="Reward report sections">
+          <button type="button" [class.active]="activeRewardTab() === 'ledger'" (click)="setRewardTab('ledger')">Rewards Ledger <span>{{ rewardLedgerRows().length }}</span></button>
+          <button type="button" [class.active]="activeRewardTab() === 'roi'" (click)="setRewardTab('roi')">Reward ROI <span>{{ rewardRoiRows().length }}</span></button>
+          <button type="button" [class.active]="activeRewardTab() === 'expiring'" (click)="setRewardTab('expiring')">Expiring Rewards <span>{{ expiringRewardRows().length }}</span></button>
+          <button type="button" [class.active]="activeRewardTab() === 'abuse'" (click)="setRewardTab('abuse')">Abuse Alerts <span>{{ rewardAbuseRows().length }}</span></button>
+        </nav>
+
+        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'ledger'">
+          <h3>Reward Ledger</h3>
+          <div class="table-wrap compact-table reward-ledger-table" *ngIf="rewardLedgerRows().length; else noRewardLedger">
+            <table>
+              <thead><tr><th>Date</th><th>Time</th><th>Client</th><th>Phone</th><th>Invoice / appointment</th><th>Type</th><th>Earned</th><th>Redeemed</th><th>Expired</th><th>Balance</th><th>Reason</th><th>Created by</th><th>Branch</th><th>Action</th></tr></thead>
+              <tbody><tr *ngFor="let row of rewardLedgerRows().slice(0, 120)">
+                <td>{{ row['date'] }}</td><td>{{ row['time'] || '-' }}</td>
+                <td>{{ row['clientName'] }}</td><td>{{ row['clientPhone'] || '-' }}</td>
+                <td><strong>{{ row['invoiceNumber'] || row['invoiceId'] || '-' }}</strong><small>{{ row['appointmentId'] || row['invoiceStatus'] || '' }}</small></td>
+                <td><span class="badge" [class.danger]="row['transactionType'] === 'reversed'">{{ row['transactionType'] }}</span></td>
+                <td>{{ row['earnedPoints'] || 0 }}</td><td>{{ row['redeemedPoints'] || 0 }}</td><td>{{ row['expiredPoints'] || 0 }}</td><td>{{ row['balanceAfter'] || 0 }}</td>
+                <td>{{ row['reason'] || '-' }}</td><td>{{ row['createdBy'] || 'system' }}</td><td>{{ row['branch'] || row['branchId'] || '-' }}</td>
+                <td><a class="ghost-button mini" [routerLink]="['/clients', row['clientId']]">Client</a><a class="ghost-button mini" *ngIf="row['invoiceId']" routerLink="/pos/invoices">Invoice</a></td>
+              </tr></tbody>
+            </table>
+          </div>
+          <ng-template #noRewardLedger><div class="empty-panel compact-empty"><strong>No reward ledger rows.</strong><span>Earn, redeem, expiry, reversal and adjustment entries will appear here.</span></div></ng-template>
+        </section>
+
+        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'roi'">
+          <h3>Reward ROI</h3>
+          <div class="table-wrap compact-table" *ngIf="rewardRoiRows().length; else noRewardRoi">
+            <table><thead><tr><th>Client</th><th>Visits</th><th>Total sale</th><th>Earned</th><th>Redeemed</th><th>Balance</th><th>Repeat revenue</th><th>Suggested action</th></tr></thead>
+              <tbody><tr *ngFor="let row of rewardRoiRows().slice(0, 80)">
+                <td>{{ row['clientName'] || clientName(row['clientId']) }}<small>{{ row['clientPhone'] || '' }}</small></td>
+                <td>{{ row['visits'] || 0 }}</td><td>{{ row['totalSale'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['rewardEarned'] || 0 }}</td><td>{{ row['rewardRedeemed'] || 0 }}</td><td>{{ row['pendingRewardBalance'] || 0 }}</td><td>{{ row['repeatRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['suggestedAction'] }}</td>
+              </tr></tbody></table>
+          </div>
+          <ng-template #noRewardRoi><div class="empty-panel compact-empty"><strong>No reward ROI rows.</strong><span>Reward users vs non-reward revenue appears after loyalty activity starts.</span></div></ng-template>
+        </section>
+
+        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'expiring'">
+          <h3>Expiring Rewards</h3>
+          <div class="table-wrap compact-table" *ngIf="expiringRewardRows().length; else noExpiringRewards">
+            <table><thead><tr><th>Client</th><th>Phone</th><th>Points expiring</th><th>Expiry date</th><th>Days left</th><th>Value</th><th>Last visit</th><th>Reminder</th></tr></thead>
+              <tbody><tr *ngFor="let row of expiringRewardRows().slice(0, 80)">
+                <td>{{ row['clientName'] }}</td><td>{{ row['phone'] || '-' }}</td><td>{{ row['pointsExpiring'] || 0 }}</td><td>{{ row['expiryDate'] }}</td><td><span class="badge" [class.danger]="row['daysLeft'] <= 7">{{ row['daysLeft'] }}d</span></td><td>{{ row['estimatedValue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['lastVisitDate'] || '-' }}</td>
+                <td><button class="ghost-button mini" type="button" [disabled]="saving()" (click)="sendRewardExpiryReminder(row)">Send WhatsApp</button><small>{{ row['reminderStatus']?.['status'] || 'not_sent' }}</small></td>
+              </tr></tbody></table>
+          </div>
+          <ng-template #noExpiringRewards><div class="empty-panel compact-empty"><strong>No rewards expiring in this window.</strong><span>Clients with active points expiring in 30 days appear here.</span></div></ng-template>
+        </section>
+
+        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'abuse'">
+          <h3>Abuse Alerts</h3>
+          <div class="table-wrap compact-table" *ngIf="rewardAbuseRows().length; else noRewardAbuse">
+            <table><thead><tr><th>Alert type</th><th>Client</th><th>Invoice / ref</th><th>Points</th><th>Staff/user</th><th>Risk</th><th>Suggested action</th></tr></thead>
+              <tbody><tr *ngFor="let row of rewardAbuseRows().slice(0, 100)">
+                <td>{{ row['alertType'] }}</td><td>{{ row['client'] || clientName(row['clientId']) }}</td><td>{{ row['invoiceReference'] || '-' }}</td><td>{{ row['points'] || row['amount'] || 0 }}</td><td>{{ row['staffUser'] || 'system' }}</td><td><span class="badge" [ngClass]="riskBadgeClass(row['riskLevel'])">{{ row['riskLevel'] }}</span></td><td>{{ row['suggestedAction'] }}</td>
+              </tr></tbody></table>
+          </div>
+          <ng-template #noRewardAbuse><div class="empty-panel compact-empty"><strong>No reward abuse alerts.</strong><span>Cancelled invoice reward, unmatched redemption, high redemption and negative balance risks appear here.</span></div></ng-template>
+        </section>
       </section>
 
       <div class="modal-backdrop" *ngIf="renewalMembership() as renewal" (click)="closeRenewalDialog()">
@@ -2442,6 +2595,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   readonly commissionReport = signal<MembershipCommissionReport>({});
   readonly riskReport = signal<MembershipRiskReport>({});
   readonly enterpriseReport = signal<MembershipEnterpriseReport>({});
+  readonly rewardReport = signal<RewardReport>({});
   readonly selfServiceSummary = signal<ApiRecord | null>(null);
   readonly selfServiceRequests = signal<ApiRecord[]>([]);
   readonly eligibility = signal<ApiRecord | null>(null);
@@ -2453,6 +2607,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   readonly message = signal('');
   readonly activeTab = signal<MembershipDeskTab>('overview');
   readonly activeReportTab = signal<MembershipReportTab>('actionQueue');
+  readonly activeRewardTab = signal<RewardDeskTab>('ledger');
   readonly planWorkspaceView = signal<PlanWorkspaceView>('plans');
   readonly showPlanDrawer = signal(false);
   readonly planQuery = signal('');
@@ -2480,6 +2635,16 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     status: '',
     paymentMode: '',
     riskLevel: 'all'
+  };
+  rewardFilters = {
+    fromDate: '',
+    toDate: '',
+    clientId: '',
+    transactionType: '',
+    staffId: '',
+    branchId: '',
+    riskLevel: 'all',
+    rewardStatus: ''
   };
   private reportRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private enterpriseReportLoading = false;
@@ -2583,6 +2748,10 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     ].join(' ').toLowerCase().includes(term));
   });
   readonly visibleMembershipPlans = computed(() => this.filteredMembershipPlans().slice(0, Math.max(1, this.planShowLimit())));
+  readonly rewardLedgerRows = computed(() => this.rewardReport().ledger || []);
+  readonly rewardRoiRows = computed(() => ((this.rewardReport().roi as ApiRecord | undefined)?.['rows'] as ApiRecord[] | undefined) || []);
+  readonly expiringRewardRows = computed(() => this.rewardReport().expiring || []);
+  readonly rewardAbuseRows = computed(() => this.rewardReport().abuseAlerts || []);
 
   constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder, private readonly posSettings: PosSettingsService) {}
 
@@ -2611,8 +2780,12 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       report: this.safeList<MembershipReport>('membership-enterprise/reports/revenue'),
       commission: this.safeList<MembershipCommissionReport>('membership-enterprise/reports/commission'),
       risk: this.safeList<MembershipRiskReport>('membership-enterprise/reports/risk'),
-      enterpriseReport: this.safeList<MembershipEnterpriseReport>('membership-enterprise/reports/enterprise', this.reportFilterParams())
-    }).subscribe(({ plans, packages, memberships, clients, staff, giftCards, ledger, reminders, autoRenew, report, commission, risk, enterpriseReport }) => {
+      enterpriseReport: this.safeList<MembershipEnterpriseReport>('membership-enterprise/reports/enterprise', this.reportFilterParams()),
+      rewardsLedger: this.safeList<ApiRecord[]>('membership-enterprise/rewards/ledger', this.rewardFilterParams()),
+      rewardsRoi: this.safeList<ApiRecord>('membership-enterprise/rewards/roi', this.rewardFilterParams()),
+      rewardsExpiring: this.safeList<ApiRecord[]>('membership-enterprise/rewards/expiring', this.rewardFilterParams()),
+      rewardsAbuse: this.safeList<ApiRecord[]>('membership-enterprise/rewards/abuse-alerts', this.rewardFilterParams())
+    }).subscribe(({ plans, packages, memberships, clients, staff, giftCards, ledger, reminders, autoRenew, report, commission, risk, enterpriseReport, rewardsLedger, rewardsRoi, rewardsExpiring, rewardsAbuse }) => {
       const livePlans = (plans || []).map((plan) => this.normalizePlan(plan));
       if (livePlans.length) {
         this.membershipPlans.set(livePlans);
@@ -2633,6 +2806,12 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       this.commissionReport.set(commission || {});
       this.riskReport.set(risk || {});
       this.enterpriseReport.set(enterpriseReport || {});
+      this.rewardReport.set({
+        ledger: rewardsLedger || [],
+        roi: rewardsRoi || {},
+        expiring: rewardsExpiring || [],
+        abuseAlerts: rewardsAbuse || []
+      });
       this.loading.set(false);
     });
   }
@@ -2642,6 +2821,9 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     if (tab === 'reports') {
       this.loadEnterpriseReports({ silent: true });
       this.startReportLiveRefresh();
+    } else if (tab === 'rewards') {
+      this.loadRewards({ silent: true });
+      this.stopReportLiveRefresh();
     } else {
       this.stopReportLiveRefresh();
     }
@@ -2656,6 +2838,11 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   setReportTab(tab: MembershipReportTab): void {
     this.activeReportTab.set(tab);
     if (this.activeTab() === 'reports') this.loadEnterpriseReports({ silent: true });
+  }
+
+  setRewardTab(tab: RewardDeskTab): void {
+    this.activeRewardTab.set(tab);
+    if (this.activeTab() === 'rewards') this.loadRewards({ silent: true });
   }
 
   openPlanDrawer(): void {
@@ -3476,6 +3663,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       ...this.memberships().map((membership) => membership.branchId),
       ...this.ledger().map((row) => row.branchId),
       ...this.autoRenewQueue().map((row) => row.branchId),
+      ...this.rewardLedgerRows().map((row) => row['branchId']),
       ...this.membershipPlans().map((plan) => (plan as ApiRecord)['branchId'])
     ].filter(Boolean).map(String);
     return [...new Set(branchIds)].sort((a, b) => a.localeCompare(b));
@@ -3489,6 +3677,10 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     return this.enterpriseReport().reports?.[key] || [];
   }
 
+  rewardMetric(key: string): number {
+    return Number(((this.rewardReport().roi as ApiRecord | undefined)?.['metrics'] as ApiRecord | undefined)?.[key] || 0);
+  }
+
   reportFilterParams(): ApiRecord {
     return {
       fromDate: this.reportFilters.fromDate || '',
@@ -3500,6 +3692,19 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       status: this.reportFilters.status || '',
       paymentMode: this.reportFilters.paymentMode || '',
       riskLevel: this.reportFilters.riskLevel === 'all' ? '' : this.reportFilters.riskLevel
+    };
+  }
+
+  rewardFilterParams(): ApiRecord {
+    return {
+      fromDate: this.rewardFilters.fromDate || '',
+      toDate: this.rewardFilters.toDate || '',
+      clientId: this.rewardFilters.clientId || '',
+      transactionType: this.rewardFilters.transactionType || '',
+      staffId: this.rewardFilters.staffId || '',
+      branchId: this.rewardFilters.branchId || '',
+      riskLevel: this.rewardFilters.riskLevel === 'all' ? '' : this.rewardFilters.riskLevel,
+      rewardStatus: this.rewardFilters.rewardStatus || ''
     };
   }
 
@@ -3545,6 +3750,47 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadRewards(options: { silent?: boolean } = {}): void {
+    if (!options.silent) this.saving.set(true);
+    this.error.set('');
+    forkJoin({
+      ledger: this.safeList<ApiRecord[]>('membership-enterprise/rewards/ledger', this.rewardFilterParams()),
+      roi: this.safeList<ApiRecord>('membership-enterprise/rewards/roi', this.rewardFilterParams()),
+      expiring: this.safeList<ApiRecord[]>('membership-enterprise/rewards/expiring', this.rewardFilterParams()),
+      abuseAlerts: this.safeList<ApiRecord[]>('membership-enterprise/rewards/abuse-alerts', this.rewardFilterParams())
+    }).subscribe({
+      next: (report) => {
+        this.rewardReport.set(report);
+        this.saving.set(false);
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || error?.message || 'Unable to load rewards report');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  sendRewardExpiryReminder(row: ApiRecord): void {
+    const clientId = String(row['clientId'] || '');
+    if (!clientId) return;
+    this.saving.set(true);
+    this.api.post<ApiRecord>(`membership-enterprise/rewards/${clientId}/send-expiry-reminder`, {
+      points: row['pointsExpiring'] || 0,
+      expiryDate: row['expiryDate'] || '',
+      channel: 'whatsapp'
+    }).subscribe({
+      next: () => {
+        this.message.set('Reward expiry WhatsApp reminder queued.');
+        this.saving.set(false);
+        this.loadRewards({ silent: true });
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to queue reward reminder');
+        this.saving.set(false);
+      }
+    });
+  }
+
   exportMembershipReportsCsv(): void {
     const rows = this.membershipReportRowsForExport();
     const headers = Object.keys(rows[0] || { report: '', note: '' });
@@ -3575,6 +3821,43 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       ...rows.map((row) => `${row['report']}: ${row['primary'] || row['clientName'] || row['planName'] || row['staffName'] || ''} ${row['amount'] || row['value'] || ''}`)
     ];
     this.downloadFile(`membership-enterprise-reports-${this.exportDateKey()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportRewardsLedgerCsv(): void {
+    const rows = this.rewardLedgerRows();
+    const headers = rows.length ? Object.keys(rows[0]) : ['date', 'clientName', 'transactionType', 'balanceAfter'];
+    const bodyRows = rows.length ? rows : [{ date: '', clientName: 'No reward rows', transactionType: '', balanceAfter: 0 }];
+    const csv = [
+      headers.join(','),
+      ...bodyRows.map((row) => headers.map((header) => this.csvCell(row[header])).join(','))
+    ].join('\n');
+    this.downloadFile(`rewards-ledger-${this.exportDateKey()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  exportRewardsRoiPdf(): void {
+    const metrics = ((this.rewardReport().roi as ApiRecord | undefined)?.['metrics'] as ApiRecord | undefined) || {};
+    const lines = [
+      'AuraShine Rewards ROI',
+      `Generated: ${new Date().toISOString()}`,
+      `Reward clients: ${metrics['totalRewardClients'] || 0}`,
+      `Points earned: ${metrics['totalPointsEarned'] || 0}`,
+      `Points redeemed: ${metrics['totalPointsRedeemed'] || 0}`,
+      `Reward revenue: Rs ${metrics['revenueFromRewardUsers'] || 0}`,
+      `Repeat revenue: Rs ${metrics['repeatRevenueFromRewardUsers'] || 0}`,
+      `Repeat visit rate: ${metrics['repeatVisitRate'] || 0}%`,
+      ...this.rewardRoiRows().slice(0, 45).map((row) => `${row['clientName'] || row['clientId']}: sale Rs ${row['totalSale'] || 0}, balance ${row['pendingRewardBalance'] || 0}`)
+    ];
+    this.downloadFile(`rewards-roi-${this.exportDateKey()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportRewardAbusePdf(): void {
+    const lines = [
+      'AuraShine Reward Abuse Audit',
+      `Generated: ${new Date().toISOString()}`,
+      `Alerts: ${this.rewardAbuseRows().length}`,
+      ...this.rewardAbuseRows().slice(0, 60).map((row) => `${row['riskLevel']}: ${row['alertType']} - ${row['client'] || row['clientId']} ${row['invoiceReference'] || ''}`)
+    ];
+    this.downloadFile(`rewards-abuse-audit-${this.exportDateKey()}.pdf`, this.simplePdf(lines), 'application/pdf');
   }
 
   commissionMetric(key: string): number {

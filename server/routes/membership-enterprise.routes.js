@@ -334,6 +334,46 @@ membershipEnterpriseRouter.get(
 );
 
 membershipEnterpriseRouter.get(
+  "/membership-enterprise/rewards/ledger",
+  requirePermission("read", () => "memberships"),
+  asyncHandler((req, res) => {
+    res.json(membershipEnterpriseService.rewardsLedger(req.query, req.access));
+  })
+);
+
+membershipEnterpriseRouter.get(
+  "/membership-enterprise/rewards/roi",
+  requirePermission("read", () => "memberships"),
+  asyncHandler((req, res) => {
+    res.json(membershipEnterpriseService.rewardRoiReport(req.query, req.access));
+  })
+);
+
+membershipEnterpriseRouter.get(
+  "/membership-enterprise/rewards/expiring",
+  requirePermission("read", () => "memberships"),
+  asyncHandler((req, res) => {
+    res.json(membershipEnterpriseService.expiringRewards(req.query, req.access));
+  })
+);
+
+membershipEnterpriseRouter.get(
+  "/membership-enterprise/rewards/abuse-alerts",
+  requirePermission("read", () => "memberships"),
+  asyncHandler((req, res) => {
+    res.json(membershipEnterpriseService.rewardAbuseAlerts(req.query, req.access));
+  })
+);
+
+membershipEnterpriseRouter.post(
+  "/membership-enterprise/rewards/:clientId/send-expiry-reminder",
+  requirePermission("write", () => "memberships"),
+  asyncHandler((req, res) => {
+    res.status(201).json(membershipEnterpriseService.sendRewardExpiryReminder(req.params.clientId, req.body, req.access));
+  })
+);
+
+membershipEnterpriseRouter.get(
   "/membership-enterprise/reports/enterprise",
   requirePermission("read", () => "memberships"),
   asyncHandler((req, res) => {
