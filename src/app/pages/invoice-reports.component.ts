@@ -1,7 +1,7 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -9,6 +9,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 type ReportColumn = { key: string; label: string; type?: 'currency' | 'number' | 'percent' | 'date' | 'badge' };
 type ReportDefinition = { id: string; title: string; description: string; badge: string };
 type DueRecoveryReport = { summary: ApiRecord; rows: ApiRecord[] };
+type ServiceTrendsReport = { summary: ApiRecord; rows: ApiRecord[] };
 type InvoiceActivityReport = { summary?: ApiRecord; exportRows?: ApiRecord[]; deletedInvoiceReport?: ApiRecord[]; generatedAt?: string };
 type SaleSummary = {
   totalBill: number;
@@ -252,6 +253,78 @@ type InvoiceLine = {
         </label>
       </section>
 
+      <section class="panel product-advanced-filter-panel service-trends-filter-panel" *ngIf="activeReport() === 'service-trends'">
+        <label class="field">
+          <span>Service group</span>
+          <select [(ngModel)]="serviceGroupFilter">
+            <option value="">All groups</option>
+            <option *ngFor="let group of serviceGroupOptions()" [value]="group.id">{{ group.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Service</span>
+          <select [(ngModel)]="serviceTrendFilter">
+            <option value="">All services</option>
+            <option *ngFor="let service of serviceTrendOptions()" [value]="service.id">{{ service.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>GST rate</span>
+          <select [(ngModel)]="serviceGstRateFilter">
+            <option value="">All GST rates</option>
+            <option *ngFor="let gst of serviceGstRateOptions()" [value]="gst.id">{{ gst.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Revenue bucket</span>
+          <select [(ngModel)]="serviceRevenueBucketFilter">
+            <option value="">All revenue</option>
+            <option value="10000+">₹10,000+</option>
+            <option value="5000-9999">₹5,000 - ₹9,999</option>
+            <option value="1000-4999">₹1,000 - ₹4,999</option>
+            <option value="0-999">Below ₹1,000</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Margin bucket</span>
+          <select [(ngModel)]="serviceMarginBucketFilter">
+            <option value="">All margins</option>
+            <option value="healthy">Healthy</option>
+            <option value="low">Low margin</option>
+            <option value="negative">Negative margin</option>
+            <option value="missing">Cost missing</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Quantity bucket</span>
+          <select [(ngModel)]="serviceQuantityBucketFilter">
+            <option value="">All quantities</option>
+            <option value="50+">50+</option>
+            <option value="20-49">20 - 49</option>
+            <option value="5-19">5 - 19</option>
+            <option value="1-4">1 - 4</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Time bucket</span>
+          <select [(ngModel)]="serviceTimeBucketFilter">
+            <option value="">All time</option>
+            <option value="morning">Morning</option>
+            <option value="afternoon">Afternoon</option>
+            <option value="evening">Evening</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Sort</span>
+          <select [(ngModel)]="serviceSort">
+            <option value="revenue_desc">Revenue high-low</option>
+            <option value="quantity_desc">Quantity high-low</option>
+            <option value="margin_desc">Margin high-low</option>
+            <option value="latest_sold">Latest sold</option>
+          </select>
+        </label>
+      </section>
+
       <section class="panel product-advanced-filter-panel discount-advanced-filter-panel" *ngIf="activeReport() === 'sales-discount-intelligence'">
         <label class="field">
           <span>Discount type</span>
@@ -316,6 +389,22 @@ type InvoiceLine = {
           <article class="metric-card"><span>Total Tax</span><strong>{{ saleSummary().totalTax | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST collected</small></article>
         </div>
         <ng-template #defaultInvoiceKpis>
+          <div class="metrics-grid invoice-report-kpis service-trends-kpis" *ngIf="activeReport() === 'service-trends'; else productInvoiceKpis">
+            <article class="metric-card"><span>Total services sold</span><strong>{{ serviceTrendsSummary()['totalServicesSold'] || 0 }}</strong><small>Service rows</small></article>
+            <article class="metric-card"><span>Total service revenue</span><strong>{{ (serviceTrendsSummary()['totalServiceRevenue'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net service sale</small></article>
+            <article class="metric-card"><span>Total quantity sold</span><strong>{{ serviceTrendsSummary()['totalQuantitySold'] || 0 }}</strong><small>Service quantity</small></article>
+            <article class="metric-card"><span>Average service price</span><strong>{{ (serviceTrendsSummary()['averageServicePrice'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net / quantity</small></article>
+            <article class="metric-card"><span>Top service</span><strong>{{ serviceTrendsSummary()['topService'] || '-' }}</strong><small>By revenue</small></article>
+            <article class="metric-card"><span>Top service group</span><strong>{{ serviceTrendsSummary()['topServiceGroup'] || '-' }}</strong><small>Best category</small></article>
+            <article class="metric-card"><span>Lowest selling service</span><strong>{{ serviceTrendsSummary()['lowestSellingService'] || '-' }}</strong><small>Quantity watch</small></article>
+            <article class="metric-card"><span>Highest margin service</span><strong>{{ serviceTrendsSummary()['highestMarginService'] || '-' }}</strong><small>COGS linked</small></article>
+            <article class="metric-card"><span>Lowest margin service</span><strong>{{ serviceTrendsSummary()['lowestMarginService'] || '-' }}</strong><small>COGS linked</small></article>
+            <article class="metric-card"><span>Peak selling hour</span><strong>{{ serviceTrendsSummary()['peakSellingHour'] || '-' }}</strong><small>Demand timing</small></article>
+            <article class="metric-card"><span>Discount leakage</span><strong>{{ (serviceTrendsSummary()['discountLeakage'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Service discounts</small></article>
+            <article class="metric-card"><span>Service GST collected</span><strong>{{ (serviceTrendsSummary()['serviceGstCollected'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tax on services</small></article>
+          </div>
+        </ng-template>
+        <ng-template #productInvoiceKpis>
           <div class="metrics-grid invoice-report-kpis product-sales-kpis" *ngIf="activeReport() === 'products'; else deletedInvoiceKpis">
             <article class="metric-card"><span>Total Product</span><strong>{{ productSalesSummary().totalProduct }}</strong><small>Retail line count</small></article>
             <article class="metric-card"><span>Products Sale</span><strong>{{ productSalesSummary().productsSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Gross product sale</small></article>
@@ -477,6 +566,13 @@ type InvoiceLine = {
               <tbody>
                 <tr *ngFor="let row of activeRows()">
                   <td *ngFor="let column of activeColumns()" [class.right]="isRight(column)">
+                    <ng-container *ngIf="activeReport() === 'service-trends' && column.key === 'actions'; else dueRecoveryActionCell">
+                      <div class="due-recovery-actions">
+                        <a class="ghost-button mini" [routerLink]="['/reports/invoices']" [queryParams]="{ report: 'line-audit', q: row['serviceName'] }">View invoices</a>
+                        <a class="ghost-button mini" [routerLink]="['/services']" [queryParams]="{ q: row['serviceName'] }">Service master</a>
+                      </div>
+                    </ng-container>
+                    <ng-template #dueRecoveryActionCell>
                     <ng-container *ngIf="activeReport() === 'due-recovery' && column.key === 'actions'; else normalReportCell">
                       <div class="due-recovery-actions">
                         <a class="ghost-button mini" [routerLink]="['/pos/invoices']" [queryParams]="{ invoice: row['invoiceId'] }">Open invoice</a>
@@ -493,6 +589,7 @@ type InvoiceLine = {
                         <small *ngIf="dueReminderDisabledReason(row)">{{ dueReminderDisabledReason(row) }}</small>
                       </div>
                     </ng-container>
+                    </ng-template>
                     <ng-template #normalReportCell>
                       <span [class.badge]="column.type === 'badge'">{{ formatCell(row, column) }}</span>
                     </ng-template>
@@ -783,6 +880,8 @@ export class InvoiceReportsComponent implements OnInit {
   readonly invoiceActivityReport = signal<InvoiceActivityReport>({});
   readonly dueRecoverySummary = signal<ApiRecord>({});
   readonly dueRecoveryReportRows = signal<ApiRecord[]>([]);
+  readonly serviceTrendsSummary = signal<ApiRecord>({});
+  readonly serviceTrendsReportRows = signal<ApiRecord[]>([]);
   readonly actionLoading = signal('');
   readonly notice = signal('');
   readonly activeReport = signal('sale-summary');
@@ -837,6 +936,9 @@ export class InvoiceReportsComponent implements OnInit {
     }
     return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
   });
+  readonly serviceGroupOptions = computed(() => this.uniqueServiceTrendOption('serviceGroup'));
+  readonly serviceTrendOptions = computed(() => this.uniqueServiceTrendOption('serviceName'));
+  readonly serviceGstRateOptions = computed(() => this.uniqueServiceTrendOption('gstRate', (value) => `${this.money(Number(value || 0))}%`));
 
   from = this.monthStart();
   to = this.today();
@@ -860,9 +962,18 @@ export class InvoiceReportsComponent implements OnInit {
   serviceProductFilter = '';
   discountBucketFilter = '';
   discountRiskFilter = '';
+  serviceGroupFilter = '';
+  serviceTrendFilter = '';
+  serviceGstRateFilter = '';
+  serviceRevenueBucketFilter = '';
+  serviceMarginBucketFilter = '';
+  serviceQuantityBucketFilter = '';
+  serviceTimeBucketFilter = '';
+  serviceSort = 'revenue_desc';
 
   readonly reportDefinitions: ReportDefinition[] = [
     { id: 'sale-summary', title: 'Sale Summary', badge: '00', description: 'Sale list with bill, client, payment, prepaid, coupon, loyalty and GST details.' },
+    { id: 'service-trends', title: 'Service Trends', badge: '00B', description: 'Service performance, quantity, GST, discount, COGS, margin, staff and repeat client intelligence.' },
     { id: 'sales-discount-intelligence', title: 'Sales Discount Intelligence', badge: '00A', description: 'Sales discount register, source breakdown, profit impact, approval risk and leakage intelligence.' },
     { id: 'overview', title: 'Invoice Summary', badge: '01', description: 'Gross, discount, GST, paid, due and invoice count.' },
     { id: 'staff-services', title: 'Staff Service Sales', badge: '02', description: 'Staff ne kaunsi service ki aur kitna revenue banaya.' },
@@ -893,6 +1004,9 @@ export class InvoiceReportsComponent implements OnInit {
     ],
     'sales-discount-intelligence': [
       { key: 'invoiceNumber', label: 'Invoice no' }, { key: 'invoiceDate', label: 'Invoice date' }, { key: 'invoiceTime', label: 'Invoice time' }, { key: 'clientName', label: 'Client' }, { key: 'clientPhone', label: 'Phone' }, { key: 'staffName', label: 'Staff' }, { key: 'serviceProductNames', label: 'Service/product names' }, { key: 'actualPrice', label: 'Actual price', type: 'currency' }, { key: 'manualDiscount', label: 'Manual discount', type: 'currency' }, { key: 'couponDiscount', label: 'Coupon discount', type: 'currency' }, { key: 'membershipLoyaltyDiscount', label: 'Membership/loyalty', type: 'currency' }, { key: 'finalPrice', label: 'Final price', type: 'currency' }, { key: 'paymentMode', label: 'Payment mode' }, { key: 'status', label: 'Status', type: 'badge' }, { key: 'discountRate', label: 'Discount %', type: 'percent' }, { key: 'discountGivenBy', label: 'Discount given by' }, { key: 'userRole', label: 'Role' }, { key: 'discountReason', label: 'Reason' }, { key: 'approvalStatus', label: 'Approval', type: 'badge' }, { key: 'invoiceEditedAfterDiscount', label: 'Edited after discount', type: 'badge' }, { key: 'suspiciousDiscountAlert', label: 'Suspicious alert', type: 'badge' }, { key: 'cogs', label: 'COGS', type: 'currency' }, { key: 'staffCommissionImpact', label: 'Staff commission impact', type: 'currency' }, { key: 'grossMargin', label: 'Gross margin', type: 'currency' }, { key: 'marginPercent', label: 'Margin %', type: 'percent' }, { key: 'lowMarginAlert', label: 'Low margin alert', type: 'badge' }, { key: 'lossMakingInvoiceAlert', label: 'Loss-making alert', type: 'badge' }
+    ],
+    'service-trends': [
+      { key: 'serviceGroup', label: 'Service group/category' }, { key: 'serviceName', label: 'Service name' }, { key: 'quantitySold', label: 'Quantity sold', type: 'number' }, { key: 'grossSale', label: 'Gross sale', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'netSale', label: 'Net sale', type: 'currency' }, { key: 'gst', label: 'GST', type: 'currency' }, { key: 'productCost', label: 'Product cost / COGS', type: 'currency' }, { key: 'grossMargin', label: 'Gross margin', type: 'currency' }, { key: 'marginPercent', label: 'Margin %', type: 'percent' }, { key: 'costStatus', label: 'Cost status', type: 'badge' }, { key: 'staffName', label: 'Staff name' }, { key: 'clientCount', label: 'Client count', type: 'number' }, { key: 'repeatClientCount', label: 'Repeat client count', type: 'number' }, { key: 'invoiceCount', label: 'Invoice count', type: 'number' }, { key: 'lastSoldDate', label: 'Last sold date' }, { key: 'lastSoldTime', label: 'Last sold time' }, { key: 'peakSellingHour', label: 'Peak hour', type: 'badge' }, { key: 'actions', label: 'Action' }
     ],
     overview: [
       { key: 'metric', label: 'Metric' }, { key: 'value', label: 'Value', type: 'currency' }, { key: 'count', label: 'Count', type: 'number' }, { key: 'note', label: 'Note' }
@@ -959,9 +1073,15 @@ export class InvoiceReportsComponent implements OnInit {
     ]
   };
 
-  constructor(private readonly api: ApiService) {}
+  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute) {}
 
   ngOnInit(): void {
+    const requestedReport = String(this.route.snapshot.queryParamMap.get('report') || '');
+    if (requestedReport && this.reportDefinitions.some((report) => report.id === requestedReport)) {
+      this.activeReport.set(requestedReport);
+    }
+    const requestedQuery = String(this.route.snapshot.queryParamMap.get('q') || '');
+    if (requestedQuery) this.query = requestedQuery;
     this.load();
   }
 
@@ -980,7 +1100,8 @@ export class InvoiceReportsComponent implements OnInit {
       walletTransactions: this.safeList('walletTransactions', { limit: 5000 }),
       auditLogs: this.safeList('auditLogs', { limit: 5000 }),
       invoiceActivityReport: this.loadInvoiceActivityReport(),
-      dueRecovery: this.loadDueRecoveryReport()
+      dueRecovery: this.loadDueRecoveryReport(),
+      serviceTrends: this.loadServiceTrendsReport()
     }).subscribe({
       next: (data) => {
         this.invoices.set(data.invoices || []);
@@ -993,6 +1114,8 @@ export class InvoiceReportsComponent implements OnInit {
         this.invoiceActivityReport.set(data.invoiceActivityReport || {});
         this.dueRecoverySummary.set(data.dueRecovery?.summary || {});
         this.dueRecoveryReportRows.set(data.dueRecovery?.rows || []);
+        this.serviceTrendsSummary.set(data.serviceTrends?.summary || {});
+        this.serviceTrendsReportRows.set(data.serviceTrends?.rows || []);
         this.lines.set(this.buildLines(data.invoices || [], data.sales || [], data.payments || [], data.clients || [], data.staff || [], data.branches || [], data.products || []));
         this.loading.set(false);
       },
@@ -1203,6 +1326,7 @@ export class InvoiceReportsComponent implements OnInit {
   activeRows(): ApiRecord[] {
     const report = this.activeReport();
     if (report === 'sale-summary') return this.saleSummaryRows();
+    if (report === 'service-trends') return this.serviceTrendsRows();
     if (report === 'sales-discount-intelligence') return this.salesDiscountRows();
     if (report === 'overview') return this.overviewRows();
     if (report === 'staff-services') return this.staffServiceRows();
@@ -1256,6 +1380,7 @@ export class InvoiceReportsComponent implements OnInit {
 
   searchPlaceholder(): string {
     if (this.activeReport() === 'sale-summary') return 'Invoice, name or phone';
+    if (this.activeReport() === 'service-trends') return 'Service, group, staff, client or invoice';
     if (this.activeReport() === 'sales-discount-intelligence') return 'Invoice, client, staff, service, coupon or reason';
     if (this.activeReport() === 'deleted-invoice-approvals') return 'Name, phone, invoice, deleted by or approval reason';
     if (this.activeReport() === 'products') return 'Product, brand, category, SKU, barcode, customer or invoice';
@@ -2466,6 +2591,26 @@ export class InvoiceReportsComponent implements OnInit {
     }).pipe(catchError(() => of({ summary: {}, rows: [] } as DueRecoveryReport)));
   }
 
+  private loadServiceTrendsReport() {
+    return this.api.list<ServiceTrendsReport>('reports/invoices/service-trends', {
+      from: this.from,
+      to: this.to,
+      branchId: this.branchFilter,
+      clientId: this.clientFilter,
+      staffId: this.staffFilter,
+      serviceGroup: this.serviceGroupFilter,
+      serviceId: this.serviceTrendFilter,
+      gstRate: this.serviceGstRateFilter,
+      revenueBucket: this.serviceRevenueBucketFilter,
+      marginBucket: this.serviceMarginBucketFilter,
+      quantityBucket: this.serviceQuantityBucketFilter,
+      timeBucket: this.serviceTimeBucketFilter,
+      sort: this.serviceSort,
+      q: this.query,
+      limit: 10000
+    }).pipe(catchError(() => of({ summary: {}, rows: [] } as ServiceTrendsReport)));
+  }
+
   private refreshDueRecoveryReport(): void {
     this.loadDueRecoveryReport().subscribe((report) => {
       this.dueRecoverySummary.set(report.summary || {});
@@ -2481,6 +2626,22 @@ export class InvoiceReportsComponent implements OnInit {
       const query = this.query.trim().toLowerCase();
       const haystack = `${row['invoiceNumber']} ${row['clientName']} ${row['clientPhone']} ${row['staffName']} ${row['serviceNames']}`.toLowerCase();
       return statusMatch && bucketMatch && clientMatch && (!query || haystack.includes(query));
+    });
+  }
+
+  private serviceTrendsRows(): ApiRecord[] {
+    const query = this.query.trim().toLowerCase();
+    return this.serviceTrendsReportRows().filter((row) => {
+      const groupMatch = !this.serviceGroupFilter || String(row['serviceGroup'] || '') === String(this.serviceGroupFilter);
+      const serviceMatch = !this.serviceTrendFilter || [row['serviceId'], row['serviceName']].map(String).includes(String(this.serviceTrendFilter));
+      const staffMatch = !this.staffFilter || String(row['staffId'] || row['staffName'] || '') === String(this.staffFilter);
+      const gstMatch = !this.serviceGstRateFilter || String(row['gstRate']) === String(this.serviceGstRateFilter);
+      const revenueMatch = !this.serviceRevenueBucketFilter || this.serviceRevenueBucket(Number(row['netSale'] || 0)) === this.serviceRevenueBucketFilter;
+      const marginMatch = !this.serviceMarginBucketFilter || String(row['marginBucket'] || '') === this.serviceMarginBucketFilter;
+      const quantityMatch = !this.serviceQuantityBucketFilter || this.serviceQuantityBucket(Number(row['quantitySold'] || 0)) === this.serviceQuantityBucketFilter;
+      const timeMatch = !this.serviceTimeBucketFilter || String(row['timeBucket'] || '') === this.serviceTimeBucketFilter;
+      const text = `${row['serviceGroup']} ${row['serviceName']} ${row['staffName']} ${row['clientNames']} ${row['invoiceIds']}`.toLowerCase();
+      return groupMatch && serviceMatch && staffMatch && gstMatch && revenueMatch && marginMatch && quantityMatch && timeMatch && (!query || text.includes(query));
     });
   }
 
@@ -2642,6 +2803,16 @@ export class InvoiceReportsComponent implements OnInit {
     return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
   }
 
+  private uniqueServiceTrendOption(key: string, labelFn?: (value: unknown) => string): { id: string; label: string }[] {
+    const map = new Map<string, string>();
+    for (const row of this.serviceTrendsReportRows()) {
+      const value = row[key];
+      const id = String(value ?? '').trim();
+      if (id) map.set(id, labelFn ? labelFn(value) : id);
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
   private uniqueAnyLineOption(key: keyof InvoiceLine, labelFn?: (value: unknown) => string): { id: string; label: string }[] {
     const map = new Map<string, string>();
     for (const line of this.lines()) {
@@ -2656,6 +2827,20 @@ export class InvoiceReportsComponent implements OnInit {
     const expected = this.modeLabel(mode).toLowerCase();
     const text = String(paymentModes || '').toLowerCase();
     return text.includes(String(mode || '').toLowerCase()) || text.includes(expected);
+  }
+
+  private serviceRevenueBucket(value: number): string {
+    if (value >= 10000) return '10000+';
+    if (value >= 5000) return '5000-9999';
+    if (value >= 1000) return '1000-4999';
+    return '0-999';
+  }
+
+  private serviceQuantityBucket(value: number): string {
+    if (value >= 50) return '50+';
+    if (value >= 20) return '20-49';
+    if (value >= 5) return '5-19';
+    return '1-4';
   }
 
   private matchesMarginFilter(line: InvoiceLine): boolean {
