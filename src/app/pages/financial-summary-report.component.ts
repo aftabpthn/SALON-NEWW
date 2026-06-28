@@ -8,7 +8,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
 type MatrixCell = { key: string; label: string; tone?: 'section' | 'primary' | 'normal' };
 type MatrixColumn = { key: string; label: string; from?: string; to?: string };
-type ReportTab = 'summary' | 'payments';
+type ReportTab = 'summary' | 'payments' | 'daily-sheet';
 type PaymentDistributionRow = {
   date: string;
   invoiceDateValue: string;
@@ -23,6 +23,20 @@ type PaymentDistributionRow = {
   paymentDate: string;
   paymentDateValue: string;
   notes: string;
+};
+type DailySheetSummary = {
+  totalBills: number;
+  billAverage: number;
+  grossSale: number;
+  netSale: number;
+  totalReceived: number;
+  pendingUnpaid: number;
+  discount: number;
+  couponDiscount: number;
+  membershipDiscount: number;
+  gstTax: number;
+  expenses: number;
+  staffTips: number;
 };
 
 @Component({
@@ -47,8 +61,9 @@ type PaymentDistributionRow = {
       </div>
 
       <div class="report-tabs" role="tablist" aria-label="Financial report views">
-        <button type="button" [class.active]="activeTab === 'summary'" (click)="activeTab = 'summary'">Financial Summary</button>
-        <button type="button" [class.active]="activeTab === 'payments'" (click)="activeTab = 'payments'">Payment Distributions</button>
+        <button type="button" [class.active]="activeTab === 'summary'" (click)="setActiveTab('summary')">Financial Summary</button>
+        <button type="button" [class.active]="activeTab === 'payments'" (click)="setActiveTab('payments')">Payment Distributions</button>
+        <button type="button" [class.active]="activeTab === 'daily-sheet'" (click)="setActiveTab('daily-sheet')">Daily Sheet</button>
       </div>
 
       <section class="panel filter-panel">
@@ -72,6 +87,10 @@ type PaymentDistributionRow = {
             <option value="payment">By Payment Date</option>
             <option value="invoice">By Invoice Date</option>
           </select>
+        </label>
+        <label class="field" *ngIf="activeTab === 'daily-sheet'">
+          <span>Sheet date</span>
+          <input type="date" [(ngModel)]="dailySheetDate" (ngModelChange)="setDailySheetDate($event)" />
         </label>
         <label class="field">
           <span>From</span>
@@ -251,6 +270,104 @@ type PaymentDistributionRow = {
               </table>
             </div>
           </section>
+        </section>
+      </ng-container>
+
+      <ng-container *ngIf="!loading() && !error() && activeTab === 'daily-sheet'">
+        <section class="daily-sheet-stack">
+          <div class="section-title daily-sheet-title">
+            <div>
+              <span class="eyebrow">Daily closing control</span>
+              <h2>Daily Sheet / EOD Financial Control</h2>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ branchLabel() }}</p>
+            </div>
+            <div class="hero-actions">
+              <span class="badge">{{ dailySheetSummary().totalBills }} bill(s)</span>
+              <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!dailySheetSummary().totalBills">Export CSV</button>
+              <button class="ghost-button" type="button" (click)="exportDailySheetPdf()" [disabled]="!dailySheetSummary().totalBills">Owner PDF</button>
+            </div>
+          </div>
+
+          <div class="daily-sheet-kpis">
+            <article><span>Total bills</span><strong>{{ dailySheetSummary().totalBills }}</strong><small>Invoice count</small></article>
+            <article><span>Bill average</span><strong>{{ dailySheetSummary().billAverage | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net sale / bills</small></article>
+            <article><span>Gross sale</span><strong>{{ dailySheetSummary().grossSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discounts</small></article>
+            <article><span>Net sale</span><strong>{{ dailySheetSummary().netSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Final billed</small></article>
+            <article><span>Total received</span><strong>{{ dailySheetSummary().totalReceived | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Payment collections</small></article>
+            <article><span>Pending / unpaid</span><strong>{{ dailySheetSummary().pendingUnpaid | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Balance open</small></article>
+            <article><span>Discount</span><strong>{{ dailySheetSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Manual + line discount</small></article>
+            <article><span>Coupon discount</span><strong>{{ dailySheetSummary().couponDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Coupon leakage</small></article>
+            <article><span>Membership discount</span><strong>{{ dailySheetSummary().membershipDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Membership benefits</small></article>
+            <article><span>GST / tax</span><strong>{{ dailySheetSummary().gstTax | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tax collected</small></article>
+            <article><span>Expenses</span><strong>{{ dailySheetSummary().expenses | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Finance expense rows</small></article>
+            <article><span>Staff tips</span><strong>{{ dailySheetSummary().staffTips | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tips on invoices</small></article>
+          </div>
+
+          <div class="daily-sheet-grid">
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>Item details</span><strong>Sale type breakup</strong></div>
+              <table>
+                <thead><tr><th>Item name</th><th class="right">Item count</th><th class="right">Received</th><th class="right">Total</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of dailySheetItemRows()">
+                    <td>{{ row['label'] }}</td>
+                    <td class="right">{{ row['count'] }}</td>
+                    <td class="right">{{ row['received'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['total'] | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>Payment mode truth</span><strong>Total received</strong></div>
+              <table>
+                <thead><tr><th>Mode</th><th class="right">Count</th><th class="right">Amount</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of dailySheetPaymentRows()">
+                    <td>{{ row['label'] }}</td>
+                    <td class="right">{{ row['count'] }}</td>
+                    <td class="right">{{ row['amount'] | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>Reconciliation</span><strong>Cash + audit control</strong></div>
+              <table>
+                <thead><tr><th>Check</th><th class="right">Value</th><th>Note</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of dailySheetReconciliationRows()">
+                    <td>{{ row['label'] }}</td>
+                    <td class="right">{{ row['value'] | number:'1.2-2' }}</td>
+                    <td>{{ row['note'] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>Staff-wise daily sheet</span><strong>Accountability</strong></div>
+              <table>
+                <thead><tr><th>Staff</th><th class="right">Service sale</th><th class="right">Product sale</th><th class="right">Discount</th><th class="right">Tips</th><th class="right">Unpaid</th><th class="right">Commission base</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of dailySheetStaffRows()">
+                    <td>{{ row['staffName'] }}</td>
+                    <td class="right">{{ row['serviceSale'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['productSale'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['discountGiven'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['tips'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['unpaidAmount'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['commissionBase'] | number:'1.2-2' }}</td>
+                  </tr>
+                  <tr *ngIf="!dailySheetStaffRows().length">
+                    <td colspan="7" class="empty-cell">No staff attribution found for selected day.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+          </div>
         </section>
       </ng-container>
     </section>
@@ -573,6 +690,87 @@ type PaymentDistributionRow = {
       color: var(--muted) !important;
     }
 
+    .daily-sheet-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .daily-sheet-title {
+      align-items: center;
+    }
+
+    .daily-sheet-kpis {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .daily-sheet-kpis article {
+      min-height: 104px;
+      display: grid;
+      gap: 6px;
+      align-content: center;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--teal);
+      border-radius: var(--radius-md);
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .daily-sheet-kpis span,
+    .mini-section-title span {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .daily-sheet-kpis strong {
+      font-size: 1.08rem;
+      line-height: 1.05;
+    }
+
+    .daily-sheet-kpis small {
+      color: var(--muted);
+    }
+
+    .daily-sheet-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .daily-sheet-card {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .daily-sheet-card table {
+      min-width: 760px;
+      table-layout: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .daily-sheet-card th,
+    .daily-sheet-card td {
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      overflow-wrap: anywhere;
+    }
+
+    .mini-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
     .sr-only {
       position: absolute;
       width: 1px;
@@ -589,7 +787,9 @@ type PaymentDistributionRow = {
       .filter-panel,
       .summary-strip,
       .insight-grid,
-      .payment-card-strip {
+      .payment-card-strip,
+      .daily-sheet-kpis,
+      .daily-sheet-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -598,7 +798,9 @@ type PaymentDistributionRow = {
       .filter-panel,
       .summary-strip,
       .insight-grid,
-      .payment-card-strip {
+      .payment-card-strip,
+      .daily-sheet-kpis,
+      .daily-sheet-grid {
         grid-template-columns: 1fr;
       }
 
@@ -620,6 +822,10 @@ export class FinancialSummaryReportComponent implements OnInit {
   readonly sales = signal<ApiRecord[]>([]);
   readonly branches = signal<ApiRecord[]>([]);
   readonly walletTransactions = signal<ApiRecord[]>([]);
+  readonly financeExpenses = signal<ApiRecord[]>([]);
+  readonly auditLogs = signal<ApiRecord[]>([]);
+  readonly cashDrawerReports = signal<ApiRecord[]>([]);
+  readonly cashDrawerSessions = signal<ApiRecord[]>([]);
   readonly financeSummary = signal<ApiRecord>({});
 
   activeTab: ReportTab = 'summary';
@@ -629,6 +835,7 @@ export class FinancialSummaryReportComponent implements OnInit {
   paymentSearch = '';
   from = this.defaultFrom();
   to = this.today();
+  dailySheetDate = this.today();
 
   readonly baseRows: MatrixCell[] = [
     { key: 'sales', label: 'SALES', tone: 'section' },
@@ -651,6 +858,11 @@ export class FinancialSummaryReportComponent implements OnInit {
     this.load();
   }
 
+  setActiveTab(tab: ReportTab): void {
+    this.activeTab = tab;
+    if (tab === 'daily-sheet') this.setDailySheetDate(this.dailySheetDate);
+  }
+
   load(): void {
     this.loading.set(true);
     this.error.set('');
@@ -660,6 +872,10 @@ export class FinancialSummaryReportComponent implements OnInit {
       sales: this.safeList('sales', { limit: 10000 }),
       branches: this.safeList('branches', { limit: 1000 }),
       walletTransactions: this.safeList('walletTransactions', { limit: 10000 }),
+      financeExpenses: this.safeList('financeExpenses', { limit: 10000 }),
+      auditLogs: this.safeList('auditLogs', { limit: 10000 }),
+      cashDrawerReports: this.safeList('cashDrawerEodReports', { limit: 1000 }),
+      cashDrawerSessions: this.safeList('cashDrawerSessions', { limit: 1000 }),
       financeSummary: this.api.list<ApiRecord>('finance/summary').pipe(catchError(() => of({} as ApiRecord)))
     }).subscribe({
       next: (data) => {
@@ -668,6 +884,10 @@ export class FinancialSummaryReportComponent implements OnInit {
         this.sales.set(data.sales || []);
         this.branches.set(data.branches || []);
         this.walletTransactions.set(data.walletTransactions || []);
+        this.financeExpenses.set(data.financeExpenses || []);
+        this.auditLogs.set(data.auditLogs || []);
+        this.cashDrawerReports.set(data.cashDrawerReports || []);
+        this.cashDrawerSessions.set(data.cashDrawerSessions || []);
         this.financeSummary.set(data.financeSummary || {});
         this.loading.set(false);
       },
@@ -817,6 +1037,10 @@ export class FinancialSummaryReportComponent implements OnInit {
   }
 
   exportCsv(): void {
+    if (this.activeTab === 'daily-sheet') {
+      this.exportDailySheetCsv();
+      return;
+    }
     if (this.activeTab === 'payments') {
       this.exportPaymentDistributionCsv();
       return;
@@ -837,6 +1061,162 @@ export class FinancialSummaryReportComponent implements OnInit {
     window.print();
   }
 
+  setDailySheetDate(value: string): void {
+    if (!value) return;
+    this.from = value;
+    this.to = value;
+  }
+
+  dailySheetSummary(): DailySheetSummary {
+    const invoices = this.dailyInvoices();
+    const lines = this.linesForInvoices(invoices);
+    const grossSale = this.money(lines.reduce((sum, line) => sum + this.lineGross(line), 0) || invoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice) + this.invoiceDiscount(invoice), 0));
+    const netSale = this.money(invoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice), 0));
+    const totalBills = invoices.length;
+    return {
+      totalBills,
+      billAverage: totalBills ? this.money(netSale / totalBills) : 0,
+      grossSale,
+      netSale,
+      totalReceived: this.dailyPayments().reduce((sum, payment) => sum + this.paymentAmount(payment), 0),
+      pendingUnpaid: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceBalance(invoice), 0)),
+      discount: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceDiscount(invoice), 0)),
+      couponDiscount: this.money(invoices.reduce((sum, invoice) => sum + this.couponDiscount(invoice), 0)),
+      membershipDiscount: this.money(invoices.reduce((sum, invoice) => sum + this.membershipDiscount(invoice), 0)),
+      gstTax: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceTax(invoice), 0)),
+      expenses: this.dailyExpensesTotal(),
+      staffTips: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceTips(invoice), 0))
+    };
+  }
+
+  dailySheetItemRows(): ApiRecord[] {
+    const invoices = this.dailyInvoices();
+    const lines = this.linesForInvoices(invoices);
+    const rowFor = (label: string, predicate: (line: ApiRecord) => boolean, receivedFromTotal = false) => {
+      const matched = lines.filter(predicate);
+      const total = this.money(matched.reduce((sum, line) => sum + this.lineAmount(line), 0));
+      return { label, count: matched.length, received: receivedFromTotal ? this.dailySheetSummary().totalReceived : total, total };
+    };
+    const prepaidPayments = this.dailyPayments().filter((payment) => ['prepaid', 'wallet', 'reward', 'giftcard'].includes(this.modeKey(this.paymentMode(payment))));
+    return [
+      rowFor('Services', (line) => this.normalizedItemType(line) === 'service'),
+      { label: 'Services By Prepaid, giftcard and Rewards', count: prepaidPayments.length, received: this.money(prepaidPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)), total: this.money(prepaidPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)) },
+      rowFor('Products', (line) => this.normalizedItemType(line) === 'product'),
+      rowFor('Packages', (line) => this.normalizedItemType(line) === 'package'),
+      rowFor('Memberships', (line) => this.normalizedItemType(line) === 'membership'),
+      rowFor('Gift Cards', (line) => this.normalizedItemType(line) === 'gift_card'),
+      { label: 'Appointments Advance', count: this.dailyPayments().filter((payment) => this.isAdvancePayment(payment)).length, received: this.money(this.dailyPayments().filter((payment) => this.isAdvancePayment(payment)).reduce((sum, payment) => sum + this.paymentAmount(payment), 0)), total: this.money(this.dailyPayments().filter((payment) => this.isAdvancePayment(payment)).reduce((sum, payment) => sum + this.paymentAmount(payment), 0)) },
+      { label: 'Prepaid/Wallet/Reward Payments', count: prepaidPayments.length, received: this.money(prepaidPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)), total: this.money(prepaidPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)) },
+      { label: 'Pending Payments', count: invoices.filter((invoice) => this.invoiceBalance(invoice) > 0).length, received: this.dailySheetSummary().pendingUnpaid, total: this.dailySheetSummary().pendingUnpaid },
+      { label: 'Staff Tips', count: invoices.filter((invoice) => this.invoiceTips(invoice) > 0).length, received: this.dailySheetSummary().staffTips, total: this.dailySheetSummary().staffTips },
+      { label: 'Discount', count: invoices.filter((invoice) => this.invoiceDiscount(invoice) > 0).length, received: -this.dailySheetSummary().discount, total: -this.dailySheetSummary().discount },
+      { label: 'Coupon Discount', count: invoices.filter((invoice) => this.couponDiscount(invoice) > 0).length, received: -this.dailySheetSummary().couponDiscount, total: -this.dailySheetSummary().couponDiscount },
+      { label: 'Membership Discount', count: invoices.filter((invoice) => this.membershipDiscount(invoice) > 0).length, received: -this.dailySheetSummary().membershipDiscount, total: -this.dailySheetSummary().membershipDiscount },
+      { label: 'Taxes', count: invoices.filter((invoice) => this.invoiceTax(invoice) > 0).length, received: this.dailySheetSummary().gstTax, total: this.dailySheetSummary().gstTax },
+      { label: 'Ex Charges', count: invoices.filter((invoice) => this.extraCharges(invoice) > 0).length, received: this.money(invoices.reduce((sum, invoice) => sum + this.extraCharges(invoice), 0)), total: this.money(invoices.reduce((sum, invoice) => sum + this.extraCharges(invoice), 0)) }
+    ];
+  }
+
+  dailySheetPaymentRows(): ApiRecord[] {
+    const rows = this.dailyPayments();
+    const expected = ['cash', 'upi', 'card', 'wallet', 'online', 'payment_link', 'prepaid', 'reward', 'giftcard'];
+    const labels: Record<string, string> = { online: 'Online/payment link', payment_link: 'Online/payment link' };
+    const map = new Map<string, ApiRecord>();
+    for (const key of expected) map.set(key, { key, label: labels[key] || this.modeLabel(key), count: 0, amount: 0 });
+    for (const payment of rows) {
+      const key = this.dailyPaymentModeKey(payment);
+      const current = map.get(key) || { key, label: this.modeLabel(key), count: 0, amount: 0 };
+      current['count'] = Number(current['count'] || 0) + 1;
+      current['amount'] = this.money(Number(current['amount'] || 0) + this.paymentAmount(payment));
+      map.set(key, current);
+    }
+    const dueReceived = rows.filter((payment) => this.isDueReceivedPayment(payment));
+    return [
+      ...[...map.values()].filter((row) => Number(row['amount'] || 0) > 0 || ['cash', 'upi', 'card', 'wallet', 'online'].includes(String(row['key']))),
+      { key: 'due_received', label: 'Due received today', count: dueReceived.length, amount: this.money(dueReceived.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)) },
+      { key: 'total_received', label: 'Total received', count: rows.length, amount: this.dailySheetSummary().totalReceived }
+    ];
+  }
+
+  dailySheetReconciliationRows(): ApiRecord[] {
+    const cashAmount = Number(this.dailySheetPaymentRows().find((row) => row['key'] === 'cash')?.['amount'] || 0);
+    const expenses = this.dailySheetSummary().expenses;
+    const drawer = this.dailyCashDrawerRecord();
+    const expectedCash = this.money(this.cashDrawerValue(drawer, ['expectedCashPaise', 'expected_cash_paise'], ['expectedCash', 'expected_cash']) || cashAmount - expenses);
+    const actualCash = this.money(this.cashDrawerValue(drawer, ['countedCashPaise', 'counted_cash_paise'], ['countedCash', 'actualCash', 'actual_cash']));
+    const cashDifference = actualCash ? this.money(actualCash - expectedCash) : this.money(this.cashDrawerValue(drawer, ['variancePaise', 'variance_paise'], ['variance', 'cashDifference', 'cash_difference']));
+    const audit = this.dailyAuditRows();
+    return [
+      { label: 'Expected cash', value: expectedCash, note: drawer ? 'Cash drawer expected cash' : 'Cash received less expenses fallback' },
+      { label: 'Actual cash', value: actualCash, note: actualCash ? 'Cash counted in drawer' : 'Actual cash not captured' },
+      { label: 'Cash difference', value: cashDifference, note: cashDifference ? 'Short/excess needs review' : 'No variance linked' },
+      { label: 'Refund / return', value: this.dailyRefundAmount(), note: 'Negative/refund payment and return invoice signals' },
+      { label: 'Deleted / void invoices', value: this.dailyDeletedVoidCount(), note: 'Audit + invoice status count' },
+      { label: 'Edited invoices', value: audit.filter((log) => this.auditText(log).includes('edit')).length, note: 'Invoice edit audit signals' },
+      { label: 'High discount alerts', value: this.dailyHighDiscountInvoices().length, note: 'Discount above 20% or >= INR 5,000' }
+    ];
+  }
+
+  dailySheetStaffRows(): ApiRecord[] {
+    const invoices = this.dailyInvoices();
+    const linesByStaff = new Map<string, ApiRecord>();
+    for (const invoice of invoices) {
+      const invoiceLines = this.linesForInvoices([invoice]);
+      const invoiceTotal = this.invoiceTotal(invoice);
+      const invoiceBalance = this.invoiceBalance(invoice);
+      for (const line of invoiceLines.length ? invoiceLines : [{ name: 'Invoice', type: 'service', total: invoiceTotal, staffName: invoice['staffName'] || invoice['staff_name'] }]) {
+        const staffName = this.staffNameForLine(line, invoice);
+        const current = linesByStaff.get(staffName) || { staffName, serviceSale: 0, productSale: 0, discountGiven: 0, tips: 0, unpaidAmount: 0, commissionBase: 0 };
+        const amount = this.lineAmount(line);
+        const type = this.normalizedItemType(line);
+        if (type === 'product') current['productSale'] = this.money(Number(current['productSale'] || 0) + amount);
+        if (type === 'service') current['serviceSale'] = this.money(Number(current['serviceSale'] || 0) + amount);
+        current['discountGiven'] = this.money(Number(current['discountGiven'] || 0) + this.lineDiscountAmount(line));
+        current['commissionBase'] = this.money(Number(current['commissionBase'] || 0) + Math.max(0, amount - this.lineDiscountAmount(line)));
+        if (invoiceTotal > 0) current['unpaidAmount'] = this.money(Number(current['unpaidAmount'] || 0) + (amount / invoiceTotal) * invoiceBalance);
+        linesByStaff.set(staffName, current);
+      }
+      const invoiceStaff = String(invoice['staffName'] || invoice['staff_name'] || 'Unassigned');
+      const staffRow = linesByStaff.get(invoiceStaff) || { staffName: invoiceStaff, serviceSale: 0, productSale: 0, discountGiven: 0, tips: 0, unpaidAmount: 0, commissionBase: 0 };
+      staffRow['tips'] = this.money(Number(staffRow['tips'] || 0) + this.invoiceTips(invoice));
+      linesByStaff.set(invoiceStaff, staffRow);
+    }
+    return [...linesByStaff.values()].sort((a, b) => Number(b['commissionBase']) - Number(a['commissionBase']));
+  }
+
+  exportDailySheetPdf(): void {
+    const summary = this.dailySheetSummary();
+    const lines = [
+      'Daily Sheet / EOD Financial Control',
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      '',
+      `Total bills: ${summary.totalBills}`,
+      `Bill average: ${this.formatMoney(summary.billAverage)}`,
+      `Gross sale: ${this.formatMoney(summary.grossSale)}`,
+      `Net sale: ${this.formatMoney(summary.netSale)}`,
+      `Total received: ${this.formatMoney(summary.totalReceived)}`,
+      `Pending/unpaid: ${this.formatMoney(summary.pendingUnpaid)}`,
+      `Discount: ${this.formatMoney(summary.discount)}`,
+      `Coupon discount: ${this.formatMoney(summary.couponDiscount)}`,
+      `Membership discount: ${this.formatMoney(summary.membershipDiscount)}`,
+      `GST/tax: ${this.formatMoney(summary.gstTax)}`,
+      `Expenses: ${this.formatMoney(summary.expenses)}`,
+      `Staff tips: ${this.formatMoney(summary.staffTips)}`,
+      '',
+      'Payment modes',
+      ...this.dailySheetPaymentRows().map((row) => `${row['label']}: ${row['count']} row(s), ${this.formatMoney(Number(row['amount'] || 0))}`),
+      '',
+      'Reconciliation',
+      ...this.dailySheetReconciliationRows().map((row) => `${row['label']}: ${this.formatMoney(Number(row['value'] || 0))} - ${row['note']}`),
+      '',
+      'Top staff',
+      ...this.dailySheetStaffRows().slice(0, 12).map((row, index) => `${index + 1}. ${row['staffName']} | service ${this.formatMoney(Number(row['serviceSale'] || 0))} | product ${this.formatMoney(Number(row['productSale'] || 0))} | unpaid ${this.formatMoney(Number(row['unpaidAmount'] || 0))}`)
+    ];
+    this.downloadFile(`daily-sheet-eod-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
   private exportPaymentDistributionCsv(): void {
     const headers = ['Date', 'Name', 'Contact', 'Invoice No', 'Price', 'Payment Modes', 'Transaction ID', 'Payment Date', 'Notes'];
     const csv = [
@@ -854,6 +1234,158 @@ export class FinancialSummaryReportComponent implements OnInit {
       ].map((cell) => this.csvCell(cell)).join(','))
     ].join('\n');
     this.downloadFile(`payment-distributions-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  private exportDailySheetCsv(): void {
+    const summary = this.dailySheetSummary();
+    const sections = [
+      ['Daily Sheet / EOD Financial Control'],
+      ['Date range', `${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`],
+      ['Branch', this.branchLabel()],
+      [],
+      ['Summary', 'Value'],
+      ['Total bills', summary.totalBills],
+      ['Bill average', summary.billAverage],
+      ['Gross sale', summary.grossSale],
+      ['Net sale', summary.netSale],
+      ['Total received', summary.totalReceived],
+      ['Pending/unpaid', summary.pendingUnpaid],
+      ['Discount', summary.discount],
+      ['Coupon discount', summary.couponDiscount],
+      ['Membership discount', summary.membershipDiscount],
+      ['GST/tax', summary.gstTax],
+      ['Expenses', summary.expenses],
+      ['Staff tips', summary.staffTips],
+      [],
+      ['Item details', 'Count', 'Received', 'Total'],
+      ...this.dailySheetItemRows().map((row) => [row['label'], row['count'], row['received'], row['total']]),
+      [],
+      ['Payment modes', 'Count', 'Amount'],
+      ...this.dailySheetPaymentRows().map((row) => [row['label'], row['count'], row['amount']]),
+      [],
+      ['Reconciliation', 'Value', 'Note'],
+      ...this.dailySheetReconciliationRows().map((row) => [row['label'], row['value'], row['note']]),
+      [],
+      ['Staff', 'Service sale', 'Product sale', 'Discount', 'Tips', 'Unpaid', 'Commission base'],
+      ...this.dailySheetStaffRows().map((row) => [row['staffName'], row['serviceSale'], row['productSale'], row['discountGiven'], row['tips'], row['unpaidAmount'], row['commissionBase']])
+    ];
+    const csv = sections.map((row) => row.map((cell) => this.csvCell(cell)).join(',')).join('\n');
+    this.downloadFile(`daily-sheet-eod-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  private dailyInvoices(): ApiRecord[] {
+    return this.filteredInvoices();
+  }
+
+  private dailyPayments(): ApiRecord[] {
+    return this.payments().filter((payment) => this.inDateRange(this.paymentDate(payment)));
+  }
+
+  private dailyExpensesTotal(): number {
+    const direct = this.financeExpenses()
+      .filter((row) => this.inDateRange(this.expenseDate(row)))
+      .reduce((sum, row) => sum + Number(row['amount'] || row['total'] || row['paidAmount'] || row['paid_amount'] || 0), 0);
+    const summary = [
+      ...this.arrayValue(this.financeSummary()['expenses']),
+      ...this.arrayValue(this.financeSummary()['refunds'])
+    ].filter((row) => this.inDateRange(this.expenseDate(row)))
+      .reduce((sum, row) => sum + Number(row['amount'] || row['total'] || 0), 0);
+    return this.money(direct || summary);
+  }
+
+  private dailyCashDrawerRecord(): ApiRecord | undefined {
+    const rows = [...this.cashDrawerReports(), ...this.cashDrawerSessions()];
+    return rows
+      .filter((row) => this.inDateRange(String(row['businessDate'] || row['business_date'] || row['closedAt'] || row['closed_at'] || row['createdAt'] || row['created_at'] || '')))
+      .sort((a, b) => this.dateMs(b['closedAt'] || b['closed_at'] || b['updatedAt'] || b['updated_at'] || b['createdAt'] || b['created_at']) - this.dateMs(a['closedAt'] || a['closed_at'] || a['updatedAt'] || a['updated_at'] || a['createdAt'] || a['created_at']))[0];
+  }
+
+  private cashDrawerValue(row: ApiRecord | undefined, paiseKeys: string[], amountKeys: string[]): number {
+    if (!row) return 0;
+    for (const key of paiseKeys) {
+      const value = row[key];
+      if (value !== undefined && value !== null && value !== '') return this.money(Number(value) / 100);
+    }
+    for (const key of amountKeys) {
+      const value = row[key];
+      if (value !== undefined && value !== null && value !== '') return this.money(Number(value));
+    }
+    return 0;
+  }
+
+  private dailyAuditRows(): ApiRecord[] {
+    return this.auditLogs().filter((log) => this.inDateRange(String(log['createdAt'] || log['created_at'] || log['timestamp'] || log['date'] || '')));
+  }
+
+  private dailyDeletedVoidCount(): number {
+    const invoiceCount = this.dailyInvoices().filter((invoice) => ['deleted', 'void', 'cancel'].some((token) => String(invoice['status'] || invoice['payment_status'] || '').toLowerCase().includes(token))).length;
+    const auditCount = this.dailyAuditRows().filter((log) => ['delete', 'deleted', 'void', 'cancel'].some((token) => this.auditText(log).includes(token))).length;
+    return invoiceCount + auditCount;
+  }
+
+  private dailyHighDiscountInvoices(): ApiRecord[] {
+    return this.dailyInvoices().filter((invoice) => {
+      const discount = this.invoiceDiscount(invoice) + this.couponDiscount(invoice) + this.membershipDiscount(invoice);
+      const total = this.invoiceTotal(invoice) + discount;
+      const rate = total > 0 ? (discount / total) * 100 : 0;
+      return rate >= 20 || discount >= 5000;
+    });
+  }
+
+  private dailyRefundAmount(): number {
+    const refundPayments = this.dailyPayments().filter((payment) => this.paymentAmount(payment) < 0 || ['refund', 'return'].some((token) => `${this.paymentMode(payment)} ${payment['reference'] || ''} ${payment['note'] || ''} ${payment['notes'] || ''}`.toLowerCase().includes(token)));
+    const returnInvoices = this.dailyInvoices().filter((invoice) => ['refund', 'return'].some((token) => String(invoice['status'] || '').toLowerCase().includes(token)));
+    return this.money(Math.abs(refundPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)) + returnInvoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice), 0));
+  }
+
+  private dailyPaymentModeKey(payment: ApiRecord): string {
+    const text = `${this.paymentMode(payment)} ${payment['reference'] || ''} ${payment['referenceNo'] || ''} ${payment['paymentReference'] || ''} ${payment['note'] || ''}`.toLowerCase();
+    if (text.includes('payment link') || text.includes('razorpay') || text.includes('online')) return 'online';
+    return this.modeKey(this.paymentMode(payment));
+  }
+
+  private isDueReceivedPayment(payment: ApiRecord): boolean {
+    const text = `${payment['reference'] || ''} ${payment['referenceNo'] || ''} ${payment['paymentReference'] || ''} ${payment['note'] || ''} ${payment['notes'] || ''} ${payment['remarks'] || ''}`.toLowerCase();
+    return text.includes('receive due') || text.includes('received due') || text.includes('old unpaid') || text.includes('pos unpaid receive');
+  }
+
+  private expenseDate(row: ApiRecord): string {
+    return String(row['paidAt'] || row['paid_at'] || row['expenseDate'] || row['expense_date'] || row['createdAt'] || row['created_at'] || row['date'] || row['businessDate'] || row['business_date'] || this.to);
+  }
+
+  private normalizedItemType(line: ApiRecord): string {
+    const raw = this.itemType(line);
+    if (raw.includes('membership')) return 'membership';
+    if (raw.includes('package')) return 'package';
+    if (raw.includes('gift')) return 'gift_card';
+    if (raw.includes('product') || raw.includes('retail')) return 'product';
+    return 'service';
+  }
+
+  private staffNameForLine(line: ApiRecord, invoice: ApiRecord): string {
+    return String(line['staffName'] || line['staff_name'] || line['assignedStaffName'] || line['assigned_staff_name'] || invoice['staffName'] || invoice['staff_name'] || invoice['createdByName'] || invoice['created_by_name'] || 'Unassigned');
+  }
+
+  private lineGross(line: ApiRecord): number {
+    const explicit = line['gross'] ?? line['grossAmount'] ?? line['gross_amount'] ?? line['subtotal'] ?? line['lineSubtotal'] ?? line['line_subtotal'];
+    if (explicit !== undefined && explicit !== null && explicit !== '') return this.money(Number(explicit));
+    return this.money(Number(line['rate'] || line['price'] || line['unitPrice'] || line['unit_price'] || 0) * Number(line['quantity'] || line['qty'] || 1));
+  }
+
+  private lineDiscountAmount(line: ApiRecord): number {
+    return this.money(Number(line['discount'] || line['discountAmount'] || line['discount_amount'] || line['manualDiscount'] || line['manual_discount'] || 0));
+  }
+
+  private membershipDiscount(invoice: ApiRecord): number {
+    return this.money(Number(invoice['membershipDiscount'] || invoice['membership_discount'] || invoice['loyaltyDiscount'] || invoice['loyalty_discount'] || invoice['loyaltyPointsDiscount'] || invoice['loyalty_points_discount'] || 0));
+  }
+
+  private auditText(log: ApiRecord): string {
+    return `${log['action'] || ''} ${log['event'] || ''} ${log['type'] || ''} ${log['entityType'] || log['entity_type'] || ''} ${log['message'] || ''} ${log['note'] || ''} ${JSON.stringify(log['details'] || {})}`.toLowerCase();
+  }
+
+  private formatMoney(value: number): string {
+    return `₹${this.money(value).toLocaleString('en-IN')}`;
   }
 
   private safeList(resource: string, params: ApiRecord = {}) {
@@ -1077,7 +1609,7 @@ export class FinancialSummaryReportComponent implements OnInit {
   }
 
   private lineAmount(line: ApiRecord): number {
-    return this.money(Number(line['total'] || line['lineTotal'] || line['line_total'] || line['price'] || 0));
+    return this.money(Number(line['total'] || line['lineTotal'] || line['line_total'] || line['finalAmount'] || line['final_amount'] || line['amount'] || line['price'] || this.lineGross(line) || 0));
   }
 
   private modeKey(mode: string): string {
@@ -1191,6 +1723,32 @@ export class FinancialSummaryReportComponent implements OnInit {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  private simplePdf(lines: string[]): Blob {
+    const escaped = lines.flatMap((line) => {
+      const text = String(line || '').replace(/[()\\]/g, '\\$&');
+      return text.match(/.{1,96}/g) || [''];
+    });
+    const content = ['BT', '/F1 10 Tf', '40 790 Td', '14 TL', ...escaped.map((line) => `(${line}) Tj T*`), 'ET'].join('\n');
+    const objects = [
+      '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+      '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+      '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
+      '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+      `5 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj`
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    for (const object of objects) {
+      offsets.push(pdf.length);
+      pdf += `${object}\n`;
+    }
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i < offsets.length; i += 1) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf], { type: 'application/pdf' });
   }
 
   private today(): string {
