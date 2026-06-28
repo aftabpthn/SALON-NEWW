@@ -55,7 +55,7 @@ type RewardReport = {
 
 type MembershipDeskTab = 'overview' | 'plans' | 'active' | 'audit' | 'commission' | 'risk' | 'reports' | 'rewards' | 'reminders' | 'autoRenew';
 type PlanWorkspaceView = 'plans' | 'packages' | 'giftcards';
-type MembershipReportTab = 'actionQueue' | 'activeMembers' | 'expiringSoon' | 'renewalRevenue' | 'cancelledMemberships' | 'staffWiseSales' | 'planWiseProfitability' | 'creditLiability' | 'autoRenewFailedPayments' | 'upgradeDowngrade' | 'discountLeakage' | 'membershipRedeem';
+type MembershipReportTab = 'actionQueue' | 'activeMembers' | 'expiringSoon' | 'renewalRevenue' | 'cancelledMemberships' | 'staffWiseSales' | 'planWiseProfitability' | 'creditLiability' | 'autoRenewFailedPayments' | 'upgradeDowngrade' | 'discountLeakage' | 'membershipRedeem' | 'membershipSalesByCustomer';
 type RewardDeskTab = 'ledger' | 'roi' | 'expiring' | 'abuse';
 type LifecycleAction = 'renew' | 'upgrade' | 'downgrade' | 'cancel';
 type PlanLifecycleDialog = {
@@ -938,6 +938,14 @@ type PlanLifecycleDialog = {
             </select>
           </label>
           <label class="field">
+            <span>Sale type</span>
+            <select [(ngModel)]="reportFilters.saleType" (ngModelChange)="onReportFilterChanged()">
+              <option value="">New / renewal / all</option>
+              <option value="new">New Sale</option>
+              <option value="renewal">Renewal</option>
+            </select>
+          </label>
+          <label class="field">
             <span>Payment mode</span>
             <select [(ngModel)]="reportFilters.paymentMode" (ngModelChange)="onReportFilterChanged()">
               <option value="">All modes</option>
@@ -984,6 +992,7 @@ type PlanLifecycleDialog = {
           <article role="button" tabindex="0" (click)="setReportTab('creditLiability')" (keydown.enter)="setReportTab('creditLiability')"><span>Credit liability</span><strong>{{ reportMetric('creditLiability') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Unused credit value</small></article>
           <article role="button" tabindex="0" (click)="setReportTab('discountLeakage')" (keydown.enter)="setReportTab('discountLeakage')"><span>Discount leakage</span><strong>{{ reportMetric('discountLeakage') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Membership discount audit</small></article>
           <article role="button" tabindex="0" (click)="setReportTab('membershipRedeem')" (keydown.enter)="setReportTab('membershipRedeem')"><span>Membership redeem</span><strong>{{ reportMetric('totalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ reportMetric('redeemCount') }} redemptions</small></article>
+          <article role="button" tabindex="0" (click)="setReportTab('membershipSalesByCustomer')" (keydown.enter)="setReportTab('membershipSalesByCustomer')"><span>Customer sales</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ reportMetric('membershipSalesTotalCount') }} sale rows</small></article>
           <article role="button" tabindex="0" (click)="setReportTab('actionQueue')" (keydown.enter)="setReportTab('actionQueue')"><span>Action queue</span><strong>{{ reportMetric('actionQueue') }}</strong><small>Renewal, wallet and plan tasks</small></article>
         </section>
 
@@ -1000,6 +1009,7 @@ type PlanLifecycleDialog = {
           <button type="button" [class.active]="activeReportTab() === 'upgradeDowngrade'" (click)="setReportTab('upgradeDowngrade')">Upgrade / downgrade <span>{{ reportSet('upgradeDowngrade').length }}</span></button>
           <button type="button" [class.active]="activeReportTab() === 'discountLeakage'" (click)="setReportTab('discountLeakage')">Discount leakage <span>{{ reportSet('discountLeakage').length }}</span></button>
           <button type="button" [class.active]="activeReportTab() === 'membershipRedeem'" (click)="setReportTab('membershipRedeem')">Membership Redeem <span>{{ reportSet('membershipRedeem').length }}</span></button>
+          <button type="button" [class.active]="activeReportTab() === 'membershipSalesByCustomer'" (click)="setReportTab('membershipSalesByCustomer')">Membership Sales By Customer <span>{{ reportSet('membershipSalesByCustomer').length }}</span></button>
         </nav>
 
         <section class="form-panel report-card action-queue-card report-detail-card" *ngIf="activeReportTab() === 'actionQueue'">
@@ -1132,6 +1142,54 @@ type PlanLifecycleDialog = {
                 </tr></tbody></table>
             </div>
             <ng-template #noDiscountReport><div class="empty-panel compact-empty"><strong>No discount leakage.</strong></div></ng-template>
+          </section>
+
+          <section class="form-panel report-card report-detail-card wide-report-card" *ngIf="activeReportTab() === 'membershipSalesByCustomer'">
+            <div class="section-title compact-section-title">
+              <div>
+                <span class="eyebrow">Customer-wise membership sale</span>
+                <h3>Membership Sales By Customer</h3>
+              </div>
+              <span class="badge">{{ reportSet('membershipSalesByCustomer').length }} rows</span>
+            </div>
+            <section class="member-count-strip compact-count-strip">
+              <article><span>Total Count</span><strong>{{ reportMetric('membershipSalesTotalCount') }}</strong><small>Filtered sale rows</small></article>
+              <article><span>Total Offer Price</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Sale + renewal value</small></article>
+              <article><span>Total Ewallet</span><strong>{{ reportMetric('membershipSalesTotalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Issued wallet value</small></article>
+              <article><span>Pending Ewallet</span><strong>{{ reportMetric('membershipSalesPendingEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Current liability</small></article>
+              <article><span>Total Redeemed</span><strong>{{ reportMetric('membershipSalesTotalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Redeemed from ledger</small></article>
+              <article><span>Renewal Count</span><strong>{{ reportMetric('membershipSalesRenewalCount') }}</strong><small>Renewal rows</small></article>
+              <article><span>Active Memberships</span><strong>{{ reportMetric('membershipSalesActiveMemberships') }}</strong><small>Not expired</small></article>
+              <article><span>Expired Memberships</span><strong>{{ reportMetric('membershipSalesExpiredMemberships') }}</strong><small>Expired rows</small></article>
+            </section>
+            <div class="table-wrap compact-table" *ngIf="reportSet('membershipSalesByCustomer').length; else noMembershipSalesByCustomer">
+              <table><thead><tr><th>Name</th><th>Contact</th><th>Membership / Plan</th><th>Plan Type</th><th>Sale Type</th><th>Offer Price</th><th>Paid</th><th>Due</th><th>Total Ewallet</th><th>Pending Ewallet</th><th>Redeemed</th><th>Staff</th><th>Invoice No</th><th>Branch</th><th>Expiry</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+                <tbody><tr *ngFor="let row of reportSet('membershipSalesByCustomer').slice(0, 30)">
+                  <td>{{ row['clientName'] }}</td>
+                  <td>{{ row['phone'] || '-' }}</td>
+                  <td>{{ row['planName'] }}<small>{{ row['businessLabel'] || '' }}</small></td>
+                  <td>{{ row['planType'] || '-' }}</td>
+                  <td><span class="badge">{{ row['saleType'] || 'New Sale' }}</span></td>
+                  <td>{{ row['offerPrice'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['paidAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['dueAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['totalEwallet'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['pendingEwallet'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['redeemedAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['staffName'] || 'System' }}</td>
+                  <td>{{ row['invoiceNumber'] || row['invoiceId'] || '-' }}</td>
+                  <td>{{ row['branchId'] || '-' }}</td>
+                  <td>{{ row['expiryDate'] || '-' }}</td>
+                  <td><span class="badge" [class.danger]="row['status'] === 'expired' || row['status'] === 'cancelled'">{{ row['status'] || '-' }}</span></td>
+                  <td>{{ row['date'] || '-' }}</td>
+                  <td class="inline-actions">
+                    <a class="ghost-button mini" *ngIf="row['clientId']" [routerLink]="['/clients', row['clientId']]">Client 360</a>
+                    <a class="ghost-button mini" *ngIf="row['membershipId']" [routerLink]="['/memberships', row['membershipId']]">Membership 360</a>
+                    <a class="ghost-button mini" *ngIf="row['invoiceId']" [routerLink]="['/pos/invoices']" [queryParams]="{ invoice: row['invoiceId'] }">Invoice</a>
+                  </td>
+                </tr></tbody></table>
+            </div>
+            <ng-template #noMembershipSalesByCustomer><div class="empty-panel compact-empty"><strong>No membership customer sales rows.</strong><span>Membership sales, renewals, wallet liability and invoice references will appear here.</span></div></ng-template>
           </section>
 
           <section class="form-panel report-card report-detail-card wide-report-card" *ngIf="activeReportTab() === 'membershipRedeem'">
@@ -2709,6 +2767,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     clientId: '',
     clientSearch: '',
     status: '',
+    saleType: '',
     redeemStatus: '',
     walletBalance: '',
     paymentMode: '',
@@ -2845,7 +2904,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const tab = params.get('tab') || '';
     const report = params.get('report') || '';
     const tabs: MembershipDeskTab[] = ['overview', 'plans', 'active', 'audit', 'commission', 'risk', 'reports', 'rewards', 'reminders', 'autoRenew'];
-    const reports: MembershipReportTab[] = ['actionQueue', 'activeMembers', 'expiringSoon', 'renewalRevenue', 'cancelledMemberships', 'staffWiseSales', 'planWiseProfitability', 'creditLiability', 'autoRenewFailedPayments', 'upgradeDowngrade', 'discountLeakage', 'membershipRedeem'];
+    const reports: MembershipReportTab[] = ['actionQueue', 'activeMembers', 'expiringSoon', 'renewalRevenue', 'cancelledMemberships', 'staffWiseSales', 'planWiseProfitability', 'creditLiability', 'autoRenewFailedPayments', 'upgradeDowngrade', 'discountLeakage', 'membershipRedeem', 'membershipSalesByCustomer'];
     if (tabs.includes(tab as MembershipDeskTab)) this.activeTab.set(tab as MembershipDeskTab);
     if (reports.includes(report as MembershipReportTab)) this.activeReportTab.set(report as MembershipReportTab);
   }
@@ -3782,6 +3841,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       clientId: this.reportFilters.clientId || '',
       clientSearch: this.reportFilters.clientSearch || '',
       status: this.reportFilters.status || '',
+      saleType: this.reportFilters.saleType || '',
       redeemStatus: this.reportFilters.redeemStatus || '',
       walletBalance: this.reportFilters.walletBalance || '',
       paymentMode: this.reportFilters.paymentMode || '',
@@ -3912,6 +3972,8 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       `Action queue: ${metrics['actionQueue'] || 0}`,
       `Upgrade/downgrade rows: ${metrics['upgradeDowngrade'] || 0}`,
       `Discount leakage: Rs ${metrics['discountLeakage'] || 0}`,
+      `Membership sales by customer: ${metrics['membershipSalesTotalCount'] || 0}`,
+      `Membership sales offer price: Rs ${metrics['membershipSalesOfferPrice'] || 0}`,
       ...rows.map((row) => `${row['report']}: ${row['primary'] || row['clientName'] || row['planName'] || row['staffName'] || ''} ${row['amount'] || row['value'] || ''}`)
     ];
     this.downloadFile(`membership-enterprise-reports-${this.exportDateKey()}.pdf`, this.simplePdf(lines), 'application/pdf');

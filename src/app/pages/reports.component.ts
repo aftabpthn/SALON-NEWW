@@ -588,6 +588,7 @@ export class ReportsComponent implements OnInit {
     { label: 'Service Clients', path: '/reports/invoices', queryParams: { report: 'service-clients' }, module: 'Service client detail' },
     { label: 'Invoice Reports', path: '/reports/invoices', module: 'Invoice intelligence' },
     { label: 'Membership Redeem', path: '/memberships', queryParams: { tab: 'reports', report: 'membershipRedeem' }, module: 'Membership reports' },
+    { label: 'Membership Sales By Customer', path: '/memberships', queryParams: { tab: 'reports', report: 'membershipSalesByCustomer' }, module: 'Membership reports' },
     { label: 'Staff Sales', path: '/reports/staff-sales', module: 'POS attribution' },
     { label: 'Commission Preview', path: '/reports/commission-preview', module: 'Payroll' },
     { label: 'Account Ledger', path: '/reports/account-ledger', module: 'Finance' },
