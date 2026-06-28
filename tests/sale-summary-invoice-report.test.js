@@ -9,7 +9,7 @@ test("invoice reports expose Sale Summary as the default bill-level report", () 
   assert.match(invoiceReports, /readonly activeReport = signal\('sale-summary'\)/);
   assert.match(invoiceReports, /title: 'Sale Summary'/);
   assert.match(invoiceReports, /badge: '00'/);
-  assert.match(invoiceReports, /20 connected reports/);
+  assert.match(invoiceReports, /21 connected reports/);
   assert.match(invoiceReports, /Sale list with bill, client, payment, prepaid, coupon, loyalty and GST details/);
 });
 

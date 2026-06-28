@@ -9,6 +9,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 type ReportColumn = { key: string; label: string; type?: 'currency' | 'number' | 'percent' | 'date' | 'badge' };
 type ReportDefinition = { id: string; title: string; description: string; badge: string };
 type DueRecoveryReport = { summary: ApiRecord; rows: ApiRecord[] };
+type InvoiceActivityReport = { summary?: ApiRecord; exportRows?: ApiRecord[]; deletedInvoiceReport?: ApiRecord[]; generatedAt?: string };
 type SaleSummary = {
   totalBill: number;
   billAverage: number;
@@ -315,7 +316,7 @@ type InvoiceLine = {
           <article class="metric-card"><span>Total Tax</span><strong>{{ saleSummary().totalTax | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST collected</small></article>
         </div>
         <ng-template #defaultInvoiceKpis>
-          <div class="metrics-grid invoice-report-kpis product-sales-kpis" *ngIf="activeReport() === 'products'; else regularInvoiceKpis">
+          <div class="metrics-grid invoice-report-kpis product-sales-kpis" *ngIf="activeReport() === 'products'; else deletedInvoiceKpis">
             <article class="metric-card"><span>Total Product</span><strong>{{ productSalesSummary().totalProduct }}</strong><small>Retail line count</small></article>
             <article class="metric-card"><span>Products Sale</span><strong>{{ productSalesSummary().productsSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Gross product sale</small></article>
             <article class="metric-card"><span>Tax On Products</span><strong>{{ productSalesSummary().taxOnProducts | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST on retail</small></article>
@@ -329,6 +330,16 @@ type InvoiceLine = {
             <article class="metric-card"><span>Low Margin Alerts</span><strong>{{ productSalesSummary().lowMarginItems }}</strong><small>Negative, low or cost missing</small></article>
             <article class="metric-card"><span>Repeat Buyers</span><strong>{{ productSalesSummary().repeatBuyerRows }}</strong><small>Rows from repeat product clients</small></article>
             <article class="metric-card"><span>Reorder Suggestions</span><strong>{{ productSalesSummary().reorderSuggestions }}</strong><small>Stock below threshold</small></article>
+          </div>
+        </ng-template>
+        <ng-template #deletedInvoiceKpis>
+          <div class="metrics-grid invoice-report-kpis deleted-invoice-kpis" *ngIf="activeReport() === 'deleted-invoice-approvals'; else regularInvoiceKpis">
+            <article class="metric-card"><span>Total deleted bills</span><strong>{{ deletedInvoiceApprovalSummary()['totalBill'] || 0 }}</strong><small>Soft-delete / deleted records</small></article>
+            <article class="metric-card"><span>Total sale</span><strong>{{ (deletedInvoiceApprovalSummary()['totalSale'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Deleted invoice value</small></article>
+            <article class="metric-card"><span>Received amount</span><strong>{{ (deletedInvoiceApprovalSummary()['receivedAmount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Collected before delete</small></article>
+            <article class="metric-card"><span>Pending amount</span><strong>{{ (deletedInvoiceApprovalSummary()['pendingAmount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Balance at delete time</small></article>
+            <article class="metric-card"><span>Approved deletes</span><strong>{{ deletedInvoiceApprovalSummary()['approvedDeletes'] || 0 }}</strong><small>Approval linked</small></article>
+            <article class="metric-card"><span>Approval gaps</span><strong>{{ deletedInvoiceApprovalSummary()['approvalGaps'] || 0 }}</strong><small>Needs audit review</small></article>
           </div>
         </ng-template>
         <ng-template #regularInvoiceKpis>
@@ -347,12 +358,12 @@ type InvoiceLine = {
         <section class="panel report-command-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">20 connected reports</span>
+              <span class="eyebrow">21 connected reports</span>
               <h2>{{ activeDefinition().title }}</h2>
               <p>{{ activeDefinition().description }}</p>
             </div>
             <div class="hero-actions">
-              <span class="badge">{{ filteredLines().length }} line(s)</span>
+              <span class="badge">{{ activeRows().length }} line(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()">Export CSV</button>
               <button class="ghost-button" type="button" (click)="exportPdf()">Export PDF</button>
               <button class="ghost-button" type="button" *ngIf="activeReport() === 'products'" (click)="exportProductOwnerPdf()">Owner summary PDF</button>
@@ -769,6 +780,7 @@ export class InvoiceReportsComponent implements OnInit {
   readonly branches = signal<ApiRecord[]>([]);
   readonly walletTransactions = signal<ApiRecord[]>([]);
   readonly auditLogs = signal<ApiRecord[]>([]);
+  readonly invoiceActivityReport = signal<InvoiceActivityReport>({});
   readonly dueRecoverySummary = signal<ApiRecord>({});
   readonly dueRecoveryReportRows = signal<ApiRecord[]>([]);
   readonly actionLoading = signal('');
@@ -864,6 +876,7 @@ export class InvoiceReportsComponent implements OnInit {
     { id: 'staff-unpaid', title: 'Staff Unpaid Services', badge: '8A', description: 'Staff/service wise unpaid, recovered and pending due accountability.' },
     { id: 'wallet', title: 'Wallet Ledger', badge: '09', description: 'Wallet used, wallet balance and liability.' },
     { id: 'audit', title: 'Refund / Void / Adjustment', badge: '10', description: 'Delete, edit, restore, refund and approval trail.' },
+    { id: 'deleted-invoice-approvals', title: 'Deleted Invoice Approvals', badge: '10A', description: 'Deleted bill register with approval, deleted date, deleted by, amount and reason audit.' },
     { id: 'branch-closing', title: 'Branch Day Closing', badge: '11', description: 'Date and branch wise closing with GST and due.' },
     { id: 'commission', title: 'Commission Preview', badge: '12', description: 'Estimated service and retail commission base.' },
     { id: 'discount-approval', title: 'Discount Audit', badge: '13', description: 'Discount rate, reason readiness and approval risk.' },
@@ -917,6 +930,9 @@ export class InvoiceReportsComponent implements OnInit {
     audit: [
       { key: 'date', label: 'Date', type: 'date' }, { key: 'action', label: 'Action', type: 'badge' }, { key: 'invoiceNumber', label: 'Invoice' }, { key: 'clientName', label: 'Client' }, { key: 'staffName', label: 'Staff' }, { key: 'amount', label: 'Amount', type: 'currency' }, { key: 'risk', label: 'Risk', type: 'badge' }, { key: 'note', label: 'Note' }
     ],
+    'deleted-invoice-approvals': [
+      { key: 'clientName', label: 'Name' }, { key: 'clientPhone', label: 'Contact' }, { key: 'invoiceNumber', label: 'Invoice No' }, { key: 'price', label: 'Price', type: 'currency' }, { key: 'paid', label: 'Paid', type: 'currency' }, { key: 'balance', label: 'Balance', type: 'currency' }, { key: 'invoiceDate', label: 'Date' }, { key: 'feedbackRating', label: 'Feedback & Rating' }, { key: 'deletedDate', label: 'Deleted Date' }, { key: 'deletedTime', label: 'Deleted Time' }, { key: 'deletedBy', label: 'Deleted By' }, { key: 'approvedBy', label: 'Approved By' }, { key: 'approvalStatus', label: 'Approval Status', type: 'badge' }, { key: 'deleteReason', label: 'Reason' }, { key: 'action', label: 'Action' }
+    ],
     'branch-closing': [
       { key: 'date', label: 'Date' }, { key: 'branchName', label: 'Branch' }, { key: 'gross', label: 'Gross', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'gst', label: 'GST', type: 'currency' }, { key: 'collected', label: 'Collected', type: 'currency' }, { key: 'due', label: 'Due', type: 'currency' }, { key: 'invoices', label: 'Invoices', type: 'number' }
     ],
@@ -963,6 +979,7 @@ export class InvoiceReportsComponent implements OnInit {
       branches: this.safeList('branches', { limit: 1000 }),
       walletTransactions: this.safeList('walletTransactions', { limit: 5000 }),
       auditLogs: this.safeList('auditLogs', { limit: 5000 }),
+      invoiceActivityReport: this.loadInvoiceActivityReport(),
       dueRecovery: this.loadDueRecoveryReport()
     }).subscribe({
       next: (data) => {
@@ -973,6 +990,7 @@ export class InvoiceReportsComponent implements OnInit {
         this.branches.set(data.branches || []);
         this.walletTransactions.set(data.walletTransactions || []);
         this.auditLogs.set(data.auditLogs || []);
+        this.invoiceActivityReport.set(data.invoiceActivityReport || {});
         this.dueRecoverySummary.set(data.dueRecovery?.summary || {});
         this.dueRecoveryReportRows.set(data.dueRecovery?.rows || []);
         this.lines.set(this.buildLines(data.invoices || [], data.sales || [], data.payments || [], data.clients || [], data.staff || [], data.branches || [], data.products || []));
@@ -1198,6 +1216,7 @@ export class InvoiceReportsComponent implements OnInit {
     if (report === 'staff-unpaid') return this.staffUnpaidRows();
     if (report === 'wallet') return this.walletRows();
     if (report === 'audit') return this.auditRows();
+    if (report === 'deleted-invoice-approvals') return this.deletedInvoiceApprovalRows();
     if (report === 'branch-closing') return this.branchClosingRows();
     if (report === 'commission') return this.commissionRows();
     if (report === 'discount-approval') return this.discountApprovalRows();
@@ -1238,6 +1257,7 @@ export class InvoiceReportsComponent implements OnInit {
   searchPlaceholder(): string {
     if (this.activeReport() === 'sale-summary') return 'Invoice, name or phone';
     if (this.activeReport() === 'sales-discount-intelligence') return 'Invoice, client, staff, service, coupon or reason';
+    if (this.activeReport() === 'deleted-invoice-approvals') return 'Name, phone, invoice, deleted by or approval reason';
     if (this.activeReport() === 'products') return 'Product, brand, category, SKU, barcode, customer or invoice';
     return 'Invoice, client, staff, service, product, payment mode';
   }
@@ -1269,7 +1289,9 @@ export class InvoiceReportsComponent implements OnInit {
     const rows = this.activeRows();
     const summaryLines = this.activeReport() === 'sales-discount-intelligence'
       ? this.salesDiscountExportSummaryLines()
-      : this.unpaidExportSummaryLines();
+      : this.activeReport() === 'deleted-invoice-approvals'
+        ? this.deletedInvoiceExportSummaryLines()
+        : this.unpaidExportSummaryLines();
     const body = [
       `${report.title}`,
       `Generated: ${new Date().toLocaleString('en-IN')}`,
@@ -1947,6 +1969,198 @@ export class InvoiceReportsComponent implements OnInit {
     ];
   }
 
+  deletedInvoiceApprovalSummary(): ApiRecord {
+    const rows = this.deletedInvoiceApprovalRows();
+    const approved = rows.filter((row) => String(row['approvalStatus'] || '').toLowerCase().includes('approved')).length;
+    return {
+      totalBill: rows.length,
+      totalSale: this.sum(rows, 'price'),
+      receivedAmount: this.sum(rows, 'paid'),
+      pendingAmount: this.sum(rows, 'balance'),
+      approvedDeletes: approved,
+      approvalGaps: rows.length - approved
+    };
+  }
+
+  private deletedInvoiceApprovalRows(): ApiRecord[] {
+    const rows = [
+      ...this.deletedRowsFromInvoiceActivityReport(),
+      ...this.deletedRowsFromAuditLogs(),
+      ...this.deletedRowsFromInvoices()
+    ];
+    const deduped = new Map<string, ApiRecord>();
+    for (const row of rows) {
+      const key = `${String(row['invoiceNumber'] || row['invoiceId'] || '').toLowerCase()}|${String(row['deletedDate'] || '').toLowerCase()}|${String(row['approvalStatus'] || '').toLowerCase()}`;
+      const current = deduped.get(key);
+      if (!current || this.deletedRowCompleteness(row) > this.deletedRowCompleteness(current)) deduped.set(key, row);
+    }
+    return [...deduped.values()]
+      .filter((row) => this.matchesDeletedInvoiceFilters(row))
+      .sort((a, b) => this.dateMs(b['deletedAt'] || b['deletedDate']) - this.dateMs(a['deletedAt'] || a['deletedDate']) || String(b['invoiceNumber']).localeCompare(String(a['invoiceNumber'])));
+  }
+
+  private deletedRowsFromInvoiceActivityReport(): ApiRecord[] {
+    const exportRows = this.invoiceActivityReport().exportRows || [];
+    const compactRows = this.invoiceActivityReport().deletedInvoiceReport || [];
+    const mappedExportRows = exportRows
+      .filter((row) => String(row['actionType'] || '').toLowerCase() === 'deleted')
+      .map((row) => this.deletedReportRow(row, 'invoice-activity-report'));
+    const mappedCompactRows = compactRows.map((row) => this.deletedReportRow(row, 'invoice-activity-deleted-report'));
+    return [...mappedExportRows, ...mappedCompactRows];
+  }
+
+  private deletedRowsFromAuditLogs(): ApiRecord[] {
+    return this.auditLogs()
+      .map((log) => ({ log, details: this.auditDetails(log) }))
+      .filter(({ log, details }) => this.isDeletedInvoiceAudit(log, details))
+      .map(({ log, details }) => this.deletedReportRow({
+        id: log['id'],
+        invoiceId: details['invoiceId'] || details['id'] || log['entityId'] || log['entity_id'],
+        invoiceNumber: details['invoiceNumber'] || details['invoice_no'] || log['entityId'] || log['entity_id'],
+        clientName: details['clientName'] || details['customerName'],
+        clientPhone: details['clientPhone'] || details['phone'] || details['mobile'],
+        staffName: details['staffName'],
+        branchId: details['branchId'] || log['branchId'] || log['branch_id'],
+        branchName: details['branchName'],
+        date: details['invoiceCreatedAt'] || details['createdAt'] || details['created_at'],
+        deletedAt: details['approvalTime'] || details['approvedAt'] || details['deletedAt'] || log['createdAt'] || log['created_at'],
+        amount: details['total'] || details['amount'],
+        paid: details['paid'],
+        due: details['balance'] || details['due'],
+        balance: details['balance'] || details['due'],
+        paymentModes: this.deletedPaymentModes(details),
+        actionByUser: details['deletedBy'] || details['actionByUser'] || details['requestedBy'] || log['actorUserId'] || log['actor_user_id'],
+        approvalStatus: details['approvalStatus'],
+        approvedBy: details['approvedBy'],
+        reason: details['deleteReason'] || details['approvalReason'] || details['reason'] || log['note'],
+        feedbackRating: details['feedbackRating'] || details['rating']
+      }, 'audit-log'));
+  }
+
+  private deletedRowsFromInvoices(): ApiRecord[] {
+    return this.uniqueInvoiceRows()
+      .filter((line) => ['deleted', 'soft_deleted'].some((status) => String(line.status || '').toLowerCase().includes(status)))
+      .map((line) => this.deletedReportRow({
+        invoiceId: line.invoiceId,
+        invoiceNumber: line.invoiceNumber,
+        clientName: line.clientName,
+        clientPhone: line.clientPhone,
+        staffName: line.staffName,
+        branchId: line.branchId,
+        branchName: line.branchName,
+        date: line.date,
+        deletedAt: line.date,
+        amount: line.final,
+        paid: line.paid,
+        due: line.due,
+        balance: line.due,
+        paymentModes: line.paymentModes,
+        actionByUser: line.addedBy,
+        approvalStatus: 'Approval not linked',
+        reason: 'Deleted invoice status'
+      }, 'invoice-status'));
+  }
+
+  private deletedReportRow(source: ApiRecord, sourceName: string): ApiRecord {
+    const invoiceNumber = String(source['invoiceNumber'] || source['invoiceNo'] || source['invoice_id'] || source['invoiceId'] || '-');
+    const invoiceId = String(source['invoiceId'] || source['id'] || source['entityId'] || '');
+    const invoiceMatch = this.findInvoiceLine(invoiceId, invoiceNumber);
+    const deletedAt = String(source['deletedAt'] || source['actionTime'] || source['time'] || source['createdAt'] || source['created_at'] || source['date'] || '');
+    const invoiceDateValue = String(source['invoiceCreatedAt'] || source['invoiceDate'] || source['date'] || invoiceMatch?.date || deletedAt || '');
+    const price = this.money(Number(source['price'] || source['amount'] || source['total'] || invoiceMatch?.final || 0));
+    const paid = this.money(Number(source['paid'] || source['receivedAmount'] || invoiceMatch?.paid || 0));
+    const balance = this.money(Number(source['balance'] ?? source['due'] ?? invoiceMatch?.due ?? Math.max(0, price - paid)));
+    const approvalStatus = this.deletedApprovalStatus(source);
+    return {
+      source: sourceName,
+      invoiceId,
+      invoiceNumber,
+      clientName: String(source['clientName'] || source['name'] || invoiceMatch?.clientName || 'Walk-in client'),
+      clientPhone: String(source['clientPhone'] || source['contact'] || invoiceMatch?.clientPhone || ''),
+      staffName: String(source['staffName'] || invoiceMatch?.staffName || 'Unassigned'),
+      branchId: String(source['branchId'] || invoiceMatch?.branchId || ''),
+      branchName: String(source['branchName'] || invoiceMatch?.branchName || ''),
+      price,
+      paid,
+      balance,
+      invoiceDate: this.dateKey(invoiceDateValue),
+      invoiceDateTime: invoiceDateValue,
+      feedbackRating: String(source['feedbackRating'] || source['feedback'] || source['rating'] || '-'),
+      deletedAt,
+      deletedDate: this.dateKey(deletedAt),
+      deletedTime: this.timeLabel(deletedAt),
+      deletedBy: String(source['deletedBy'] || source['actionByUser'] || source['requestedBy'] || 'Audit not linked'),
+      approvedBy: String(source['approvedBy'] || (approvalStatus.includes('Approved') ? source['actionByUser'] || '' : '') || 'Approval not linked'),
+      approvalStatus,
+      deleteReason: String(source['deleteReason'] || source['reason'] || source['approvalReason'] || source['riskReason'] || 'Reason missing'),
+      paymentModes: String(source['paymentModes'] || invoiceMatch?.paymentModes || ''),
+      status: String(source['status'] || 'deleted'),
+      action: sourceName === 'invoice-status' ? 'Open invoice from POS register' : 'Review in invoice activity'
+    };
+  }
+
+  private deletedApprovalStatus(source: ApiRecord): string {
+    const status = String(source['approvalStatus'] || source['status'] || '').toLowerCase();
+    const approvedBy = String(source['approvedBy'] || '').trim();
+    if (status.includes('approved') || approvedBy) return 'Approved';
+    if (status.includes('pending')) return 'Pending approval';
+    if (status.includes('reject')) return 'Rejected';
+    if (String(source['actionType'] || '').toLowerCase() === 'deleted') return 'Deleted / approval not linked';
+    return 'Approval not linked';
+  }
+
+  private deletedInvoiceExportSummaryLines(): string[] {
+    const summary = this.deletedInvoiceApprovalSummary();
+    const topDeletedBy = this.topBy(this.deletedInvoiceApprovalRows(), 'deletedBy', 'price');
+    const topStaff = this.topBy(this.deletedInvoiceApprovalRows(), 'staffName', 'price');
+    return [
+      `Deleted bills: ${summary['totalBill'] || 0}`,
+      `Deleted sale value: ${this.formatMoney(Number(summary['totalSale'] || 0))}`,
+      `Received before delete: ${this.formatMoney(Number(summary['receivedAmount'] || 0))}`,
+      `Pending at delete: ${this.formatMoney(Number(summary['pendingAmount'] || 0))}`,
+      `Approved deletes: ${summary['approvedDeletes'] || 0}`,
+      `Approval gaps: ${summary['approvalGaps'] || 0}`,
+      `Top deleted by: ${topDeletedBy.label || 'No user'} ${topDeletedBy.value ? this.formatMoney(topDeletedBy.value) : ''}`,
+      `Top staff impact: ${topStaff.label || 'No staff'} ${topStaff.value ? this.formatMoney(topStaff.value) : ''}`
+    ];
+  }
+
+  private matchesDeletedInvoiceFilters(row: ApiRecord): boolean {
+    const query = this.query.trim().toLowerCase();
+    const deletedDate = String(row['deletedAt'] || row['deletedDate'] || row['invoiceDateTime'] || '');
+    const dateMatch = this.inDateRange(deletedDate);
+    const clientMatch = !this.clientFilter || String(row['clientId'] || '') === String(this.clientFilter) || String(row['clientName'] || '') === String(this.clientFilter);
+    const staffMatch = !this.staffFilter || String(row['staffId'] || '') === String(this.staffFilter) || String(row['staffName'] || '') === String(this.staffFilter);
+    const branchMatch = !this.branchFilter || String(row['branchId'] || '') === String(this.branchFilter);
+    const modeMatch = !this.paymentModeFilter || this.modeMatches(String(row['paymentModes'] || ''), this.paymentModeFilter);
+    const statusMatch = !this.status
+      || (this.status === 'unpaid' ? Number(row['balance'] || 0) > 0 : String(row['status'] || '').toLowerCase().includes(this.status));
+    const haystack = `${row['invoiceNumber']} ${row['clientName']} ${row['clientPhone']} ${row['staffName']} ${row['deletedBy']} ${row['approvedBy']} ${row['approvalStatus']} ${row['deleteReason']}`.toLowerCase();
+    return dateMatch && clientMatch && staffMatch && branchMatch && modeMatch && statusMatch && (!query || haystack.includes(query));
+  }
+
+  private isDeletedInvoiceAudit(log: ApiRecord, details: ApiRecord): boolean {
+    const text = `${log['action'] || ''} ${log['entityType'] || log['entity_type'] || ''} ${details['actionType'] || ''} ${details['approvalStatus'] || ''} ${details['status'] || ''} ${details['deleteReason'] || ''}`.toLowerCase();
+    const invoiceText = `${log['entityType'] || log['entity_type'] || ''} ${details['invoiceNumber'] || ''} ${details['invoiceId'] || ''}`.toLowerCase();
+    return invoiceText.includes('invoice') || Boolean(details['invoiceNumber'] || details['invoiceId'])
+      ? text.includes('delete') || text.includes('deleted') || text.includes('soft_deleted')
+      : false;
+  }
+
+  private deletedPaymentModes(details: ApiRecord): string {
+    const payments = this.readArray(details['payments']);
+    if (payments.length) return payments.map((payment) => this.modeLabel(String(payment['mode'] || payment['paymentMode'] || ''))).filter(Boolean).join(', ');
+    return String(details['paymentModes'] || details['paymentMode'] || '');
+  }
+
+  private deletedRowCompleteness(row: ApiRecord): number {
+    return ['clientName', 'clientPhone', 'staffName', 'price', 'paid', 'deletedBy', 'approvedBy', 'deleteReason'].reduce((score, key) => score + (row[key] ? 1 : 0), 0);
+  }
+
+  private findInvoiceLine(invoiceId: string, invoiceNumber: string): InvoiceLine | undefined {
+    return this.lines().find((line) => String(line.invoiceId || '') === String(invoiceId || '') || String(line.invoiceNumber || '') === String(invoiceNumber || ''));
+  }
+
   private walletRows(): ApiRecord[] {
     const linesByClient = this.group(this.filteredLines(), (line) => line.clientId || line.clientName);
     return linesByClient.map((lines) => {
@@ -2229,6 +2443,14 @@ export class InvoiceReportsComponent implements OnInit {
         };
       });
     });
+  }
+
+  private loadInvoiceActivityReport() {
+    return this.api.list<InvoiceActivityReport>('pos/invoice-activity/reports', {
+      from: this.from,
+      to: this.to,
+      limit: 5000
+    }).pipe(catchError(() => of({} as InvoiceActivityReport)));
   }
 
   private loadDueRecoveryReport() {
@@ -2635,6 +2857,26 @@ export class InvoiceReportsComponent implements OnInit {
     } catch {
       return [];
     }
+  }
+
+  private readObject(value: unknown): ApiRecord {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value as ApiRecord;
+    if (!value) return {};
+    try {
+      const parsed = JSON.parse(String(value));
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as ApiRecord : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private auditDetails(log: ApiRecord): ApiRecord {
+    return {
+      ...this.readObject(log['oldValue'] || log['old_value']),
+      ...this.readObject(log['details']),
+      ...this.readObject(log['newValue'] || log['new_value']),
+      ...this.readObject(log['metadata'] || log['metadataJson'] || log['metadata_json'])
+    };
   }
 
   private csvCell(value: unknown): string {
