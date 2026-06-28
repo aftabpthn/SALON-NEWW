@@ -8,7 +8,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
 type MatrixCell = { key: string; label: string; tone?: 'section' | 'primary' | 'normal' };
 type MatrixColumn = { key: string; label: string; from?: string; to?: string };
-type ReportTab = 'summary' | 'payments' | 'daily-sheet';
+type ReportTab = 'summary' | 'payments' | 'daily-sheet' | 'daily-revenue';
 type PaymentDistributionRow = {
   date: string;
   invoiceDateValue: string;
@@ -38,6 +38,28 @@ type DailySheetSummary = {
   expenses: number;
   staffTips: number;
 };
+type DailyRevenueRow = {
+  dateKey: string;
+  dateLabel: string;
+  totalBillCount: number;
+  serviceSale: number;
+  productSale: number;
+  packageSale: number;
+  membershipSale: number;
+  giftCardSale: number;
+  walletPrepaidUsed: number;
+  grossSale: number;
+  discount: number;
+  couponDiscount: number;
+  membershipDiscount: number;
+  netSale: number;
+  gst: number;
+  receivedAmount: number;
+  pendingDueAmount: number;
+  expenses: number;
+  refundReturn: number;
+  finalCashInValue: number;
+};
 
 @Component({
   selector: 'app-financial-summary-report',
@@ -55,7 +77,7 @@ type DailySheetSummary = {
           <a class="ghost-button" routerLink="/reports">Reports</a>
           <a class="ghost-button" routerLink="/reports/invoices">Invoice reports</a>
           <a class="ghost-button" routerLink="/finance">Finance</a>
-          <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="activeTab === 'summary' ? !matrixColumns().length : !paymentDistributionRows().length">Export</button>
+          <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="exportDisabled()">Export</button>
           <button class="ghost-button icon-action" type="button" (click)="printReport()" title="Print financial summary">Print</button>
         </div>
       </div>
@@ -64,6 +86,7 @@ type DailySheetSummary = {
         <button type="button" [class.active]="activeTab === 'summary'" (click)="setActiveTab('summary')">Financial Summary</button>
         <button type="button" [class.active]="activeTab === 'payments'" (click)="setActiveTab('payments')">Payment Distributions</button>
         <button type="button" [class.active]="activeTab === 'daily-sheet'" (click)="setActiveTab('daily-sheet')">Daily Sheet</button>
+        <button type="button" [class.active]="activeTab === 'daily-revenue'" (click)="setActiveTab('daily-revenue')">Daily Revenue</button>
       </div>
 
       <section class="panel filter-panel">
@@ -368,6 +391,206 @@ type DailySheetSummary = {
               </table>
             </section>
           </div>
+        </section>
+      </ng-container>
+
+      <ng-container *ngIf="!loading() && !error() && activeTab === 'daily-revenue'">
+        <section class="daily-revenue-stack">
+          <div class="section-title daily-sheet-title">
+            <div>
+              <span class="eyebrow">Date-wise revenue intelligence</span>
+              <h2>Daily Revenue 10x Report</h2>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · revenue, collection, due, discounts and owner alerts.</p>
+            </div>
+            <div class="hero-actions">
+              <span class="badge">{{ dailyRevenueRows().length }} day(s)</span>
+              <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!dailyRevenueRows().length">CSV detailed export</button>
+              <button class="ghost-button" type="button" (click)="exportDailyRevenueOwnerPdf()" [disabled]="!dailyRevenueRows().length">Owner PDF</button>
+              <button class="ghost-button" type="button" (click)="exportDailyRevenueAccountantPdf()" [disabled]="!dailyRevenueRows().length">Accountant PDF</button>
+            </div>
+          </div>
+
+          <div class="daily-sheet-kpis">
+            <article><span>Best revenue day</span><strong>{{ dailyRevenueKpis()['bestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['bestRevenueValue'] | currency: 'INR':'symbol':'1.0-0' }}</small></article>
+            <article><span>Lowest revenue day</span><strong>{{ dailyRevenueKpis()['lowestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['lowestRevenueValue'] | currency: 'INR':'symbol':'1.0-0' }}</small></article>
+            <article><span>Average daily sale</span><strong>{{ dailyRevenueKpis()['averageDailySale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net sale / active day</small></article>
+            <article><span>Growth vs previous period</span><strong>{{ dailyRevenueKpis()['growthRate'] | number:'1.1-1' }}%</strong><small>{{ dailyRevenueKpis()['growthLabel'] }}</small></article>
+            <article><span>Pending due trend</span><strong>{{ dailyRevenueKpis()['pendingDueTrend'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ dailyRevenueKpis()['pendingDueLabel'] }}</small></article>
+            <article><span>Discount leakage %</span><strong>{{ dailyRevenueKpis()['discountLeakageRate'] | number:'1.1-1' }}%</strong><small>Discount / gross sale</small></article>
+            <article><span>Collection rate %</span><strong>{{ dailyRevenueKpis()['collectionRate'] | number:'1.1-1' }}%</strong><small>Received / net sale</small></article>
+          </div>
+
+          <div class="daily-revenue-charts">
+            <section class="panel daily-revenue-chart">
+              <div class="mini-section-title"><span>Daily revenue line chart</span><strong>Net sale trend</strong></div>
+              <div class="sparkline-bars" aria-label="Daily revenue line chart">
+                <span *ngFor="let point of dailyRevenueChart()" [style.height.%]="point['height']" [title]="point['label'] + ': ' + formatMoney(+point['value'])"></span>
+              </div>
+            </section>
+
+            <section class="panel daily-revenue-chart">
+              <div class="mini-section-title"><span>Service vs product revenue stacked chart</span><strong>Mix control</strong></div>
+              <div class="stacked-chart">
+                <div *ngFor="let point of serviceProductChart()">
+                  <label>{{ point['label'] }}</label>
+                  <span class="stack-track">
+                    <i class="service-stack" [style.width.%]="point['serviceWidth']"></i>
+                    <i class="product-stack" [style.width.%]="point['productWidth']"></i>
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel daily-revenue-chart">
+              <div class="mini-section-title"><span>Payment mode trend</span><strong>Cash / UPI / Card</strong></div>
+              <div class="stacked-chart">
+                <div *ngFor="let point of paymentModeTrendChart()">
+                  <label>{{ point['label'] }}</label>
+                  <span class="stack-track">
+                    <i class="cash-stack" [style.width.%]="point['cashWidth']"></i>
+                    <i class="upi-stack" [style.width.%]="point['upiWidth']"></i>
+                    <i class="card-stack" [style.width.%]="point['cardWidth']"></i>
+                    <i class="wallet-stack" [style.width.%]="point['walletWidth']"></i>
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel daily-revenue-chart">
+              <div class="mini-section-title"><span>Discount vs net sale chart</span><strong>Leakage watch</strong></div>
+              <div class="stacked-chart">
+                <div *ngFor="let point of discountVsNetChart()">
+                  <label>{{ point['label'] }}</label>
+                  <span class="stack-track">
+                    <i class="net-stack" [style.width.%]="point['netWidth']"></i>
+                    <i class="discount-stack" [style.width.%]="point['discountWidth']"></i>
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel daily-revenue-chart">
+              <div class="mini-section-title"><span>Pending due aging trend</span><strong>Open balance risk</strong></div>
+              <div class="aging-chart">
+                <article *ngFor="let bucket of pendingDueAgingChart()">
+                  <span>{{ bucket['label'] }}</span>
+                  <strong>{{ bucket['amount'] | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <small>{{ bucket['count'] }} invoice(s)</small>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel daily-revenue-alerts">
+            <div class="mini-section-title"><span>Owner alerts</span><strong>Revenue control signals</strong></div>
+            <div class="alert-grid">
+              <article *ngFor="let alert of dailyRevenueAlerts()" [class.warn]="alert['tone'] === 'warn'" [class.danger]="alert['tone'] === 'danger'">
+                <span>{{ alert['label'] }}</span>
+                <strong>{{ alert['value'] }}</strong>
+                <small>{{ alert['detail'] }}</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel daily-revenue-table-card">
+            <div class="mini-section-title"><span>Daily Revenue Table</span><strong>Click any date for drilldown</strong></div>
+            <div class="financial-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th class="right">Total bill count</th>
+                    <th class="right">Service sale</th>
+                    <th class="right">Product sale</th>
+                    <th class="right">Package sale</th>
+                    <th class="right">Membership sale</th>
+                    <th class="right">Gift card sale</th>
+                    <th class="right">Wallet / prepaid used</th>
+                    <th class="right">Gross sale</th>
+                    <th class="right">Discount</th>
+                    <th class="right">Coupon discount</th>
+                    <th class="right">Membership discount</th>
+                    <th class="right">Net sale</th>
+                    <th class="right">GST</th>
+                    <th class="right">Received amount</th>
+                    <th class="right">Pending / due amount</th>
+                    <th class="right">Expenses</th>
+                    <th class="right">Refund / return</th>
+                    <th class="right">Final cash-in value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <ng-container *ngFor="let row of dailyRevenueRows()">
+                    <tr class="clickable-row" (click)="toggleDailyRevenueDate(row.dateKey)" [class.active-row]="expandedDailyRevenueDate === row.dateKey">
+                      <td><strong>{{ row.dateLabel }}</strong></td>
+                      <td class="right">{{ row.totalBillCount }}</td>
+                      <td class="right">{{ row.serviceSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.productSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.packageSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.membershipSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.giftCardSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.walletPrepaidUsed | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.grossSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.discount | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.couponDiscount | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.membershipDiscount | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.netSale | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.gst | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.receivedAmount | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.pendingDueAmount | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.expenses | number:'1.2-2' }}</td>
+                      <td class="right">{{ row.refundReturn | number:'1.2-2' }}</td>
+                      <td class="right"><strong>{{ row.finalCashInValue | number:'1.2-2' }}</strong></td>
+                    </tr>
+                    <tr *ngIf="expandedDailyRevenueDate === row.dateKey" class="drilldown-row">
+                      <td colspan="19">
+                        <div class="daily-revenue-drilldown">
+                          <article>
+                            <span>Us din ke invoices</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['invoiceCount'] }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['invoiceNumbers'] || 'No invoice' }}</small>
+                          </article>
+                          <article>
+                            <span>Staff-wise sale</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['topStaff'] || 'Unassigned' }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['staffSummary'] || 'No staff rows' }}</small>
+                          </article>
+                          <article>
+                            <span>Service-wise sale</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['topService'] || 'No service' }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['serviceSummary'] || 'No service rows' }}</small>
+                          </article>
+                          <article>
+                            <span>Payment mode breakup</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['topMode'] || 'No payment' }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['paymentModeSummary'] || 'No payments' }}</small>
+                          </article>
+                          <article>
+                            <span>Due/recovered invoices</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['dueSummary'] }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['recoveredSummary'] }}</small>
+                          </article>
+                          <article>
+                            <span>High discount bills</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['highDiscountCount'] }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['highDiscountInvoices'] || 'No high discount bill' }}</small>
+                          </article>
+                          <article>
+                            <span>Deleted/edited invoices</span>
+                            <strong>{{ dailyRevenueDrilldown(row.dateKey)['auditCount'] }}</strong>
+                            <small>{{ dailyRevenueDrilldown(row.dateKey)['auditSummary'] || 'No edit/delete signal' }}</small>
+                          </article>
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-container>
+                  <tr *ngIf="!dailyRevenueRows().length">
+                    <td colspan="19" class="empty-cell">No daily revenue rows found for selected date range.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </ng-container>
     </section>
@@ -771,6 +994,170 @@ type DailySheetSummary = {
       flex-wrap: wrap;
     }
 
+    .daily-revenue-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .daily-revenue-charts {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(210px, 1fr));
+      gap: 12px;
+    }
+
+    .daily-revenue-chart,
+    .daily-revenue-alerts,
+    .daily-revenue-table-card {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .sparkline-bars {
+      height: 150px;
+      display: flex;
+      align-items: flex-end;
+      gap: 5px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: linear-gradient(180deg, #f8fbff, #fff);
+    }
+
+    .sparkline-bars span {
+      flex: 1;
+      min-width: 8px;
+      border-radius: 6px 6px 0 0;
+      background: #0f766e;
+      box-shadow: 0 8px 18px rgba(15, 118, 110, .14);
+    }
+
+    .stacked-chart {
+      display: grid;
+      gap: 8px;
+    }
+
+    .stacked-chart div {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .stacked-chart label {
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stack-track {
+      height: 16px;
+      display: flex;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #eef2f7;
+    }
+
+    .stack-track i {
+      display: block;
+      min-width: 2px;
+    }
+
+    .service-stack,
+    .net-stack {
+      background: #0f766e;
+    }
+
+    .product-stack,
+    .discount-stack {
+      background: #c2410c;
+    }
+
+    .cash-stack {
+      background: #0f766e;
+    }
+
+    .upi-stack {
+      background: #2563eb;
+    }
+
+    .card-stack {
+      background: #7c3aed;
+    }
+
+    .wallet-stack {
+      background: #c2410c;
+    }
+
+    .aging-chart,
+    .alert-grid,
+    .daily-revenue-drilldown {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .aging-chart article,
+    .alert-grid article,
+    .daily-revenue-drilldown article {
+      display: grid;
+      gap: 6px;
+      min-height: 88px;
+      align-content: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fff;
+    }
+
+    .alert-grid article.warn {
+      border-color: rgba(194, 65, 12, .28);
+      background: #fff7ed;
+    }
+
+    .alert-grid article.danger {
+      border-color: rgba(185, 28, 28, .28);
+      background: #fef2f2;
+    }
+
+    .aging-chart span,
+    .alert-grid span,
+    .daily-revenue-drilldown span {
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .aging-chart small,
+    .alert-grid small,
+    .daily-revenue-drilldown small {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .daily-revenue-table-card table {
+      min-width: 2200px;
+      table-layout: auto;
+    }
+
+    .clickable-row {
+      cursor: pointer;
+    }
+
+    .clickable-row.active-row td {
+      background: #ecfdf5;
+    }
+
+    .drilldown-row td {
+      position: static;
+      background: #f8fafc !important;
+    }
+
     .sr-only {
       position: absolute;
       width: 1px;
@@ -789,7 +1176,11 @@ type DailySheetSummary = {
       .insight-grid,
       .payment-card-strip,
       .daily-sheet-kpis,
-      .daily-sheet-grid {
+      .daily-sheet-grid,
+      .daily-revenue-charts,
+      .aging-chart,
+      .alert-grid,
+      .daily-revenue-drilldown {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -800,7 +1191,11 @@ type DailySheetSummary = {
       .insight-grid,
       .payment-card-strip,
       .daily-sheet-kpis,
-      .daily-sheet-grid {
+      .daily-sheet-grid,
+      .daily-revenue-charts,
+      .aging-chart,
+      .alert-grid,
+      .daily-revenue-drilldown {
         grid-template-columns: 1fr;
       }
 
@@ -836,6 +1231,7 @@ export class FinancialSummaryReportComponent implements OnInit {
   from = this.defaultFrom();
   to = this.today();
   dailySheetDate = this.today();
+  expandedDailyRevenueDate = '';
 
   readonly baseRows: MatrixCell[] = [
     { key: 'sales', label: 'SALES', tone: 'section' },
@@ -1015,6 +1411,13 @@ export class FinancialSummaryReportComponent implements OnInit {
     return 'Low';
   }
 
+  exportDisabled(): boolean {
+    if (this.activeTab === 'summary') return !this.matrixColumns().length;
+    if (this.activeTab === 'payments') return !this.paymentDistributionRows().length;
+    if (this.activeTab === 'daily-sheet') return !this.dailySheetSummary().totalBills;
+    return !this.dailyRevenueRows().length;
+  }
+
   periodModeLabel(): string {
     return this.periodMode === 'quarter' ? 'Quarter view' : 'Month view';
   }
@@ -1036,9 +1439,17 @@ export class FinancialSummaryReportComponent implements OnInit {
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
   }
 
+  toggleDailyRevenueDate(dateKey: string): void {
+    this.expandedDailyRevenueDate = this.expandedDailyRevenueDate === dateKey ? '' : dateKey;
+  }
+
   exportCsv(): void {
     if (this.activeTab === 'daily-sheet') {
       this.exportDailySheetCsv();
+      return;
+    }
+    if (this.activeTab === 'daily-revenue') {
+      this.exportDailyRevenueCsv();
       return;
     }
     if (this.activeTab === 'payments') {
@@ -1184,6 +1595,183 @@ export class FinancialSummaryReportComponent implements OnInit {
     return [...linesByStaff.values()].sort((a, b) => Number(b['commissionBase']) - Number(a['commissionBase']));
   }
 
+  dailyRevenueRows(): DailyRevenueRow[] {
+    return this.dailyRevenueRowsForRange(this.from, this.to);
+  }
+
+  dailyRevenueKpis(): ApiRecord {
+    const rows = this.dailyRevenueRows();
+    const totals = this.dailyRevenueTotals(rows);
+    const previous = this.previousRevenueRange();
+    const previousTotals = this.dailyRevenueTotals(this.dailyRevenueRowsForRange(previous.from, previous.to));
+    const sortedBySale = [...rows].sort((a, b) => b.netSale - a.netSale);
+    const activeRows = rows.filter((row) => row.totalBillCount || row.netSale || row.receivedAmount || row.expenses);
+    const best = sortedBySale[0];
+    const lowest = [...activeRows].sort((a, b) => a.netSale - b.netSale)[0];
+    const growthRate = previousTotals.netSale ? ((totals.netSale - previousTotals.netSale) / previousTotals.netSale) * 100 : (totals.netSale ? 100 : 0);
+    const pendingDueTrend = this.money(totals.pendingDueAmount - previousTotals.pendingDueAmount);
+    return {
+      bestRevenueDay: best?.dateLabel || '-',
+      bestRevenueValue: best?.netSale || 0,
+      lowestRevenueDay: lowest?.dateLabel || '-',
+      lowestRevenueValue: lowest?.netSale || 0,
+      averageDailySale: activeRows.length ? this.money(totals.netSale / activeRows.length) : 0,
+      growthRate: this.money(growthRate),
+      growthLabel: previousTotals.netSale ? 'Compared with previous period' : 'No previous period baseline',
+      pendingDueTrend,
+      pendingDueLabel: pendingDueTrend > 0 ? 'Due increased vs previous period' : pendingDueTrend < 0 ? 'Due reduced vs previous period' : 'Due stable',
+      discountLeakageRate: totals.grossSale ? this.money(((totals.discount + totals.couponDiscount + totals.membershipDiscount) / totals.grossSale) * 100) : 0,
+      collectionRate: totals.netSale ? this.money((totals.receivedAmount / totals.netSale) * 100) : 0
+    };
+  }
+
+  dailyRevenueChart(): ApiRecord[] {
+    const rows = [...this.dailyRevenueRows()].reverse();
+    const max = Math.max(1, ...rows.map((row) => row.netSale));
+    return rows.map((row) => ({
+      label: row.dateLabel,
+      value: row.netSale,
+      height: Math.max(6, this.money((row.netSale / max) * 100))
+    }));
+  }
+
+  serviceProductChart(): ApiRecord[] {
+    return [...this.dailyRevenueRows()].reverse().map((row) => {
+      const total = Math.max(1, row.serviceSale + row.productSale);
+      return {
+        label: row.dateLabel,
+        serviceWidth: this.money((row.serviceSale / total) * 100),
+        productWidth: this.money((row.productSale / total) * 100)
+      };
+    });
+  }
+
+  paymentModeTrendChart(): ApiRecord[] {
+    return [...this.dailyRevenueRows()].reverse().map((row) => {
+      const payments = this.paymentsForDateKey(row.dateKey);
+      const amountFor = (mode: string) => payments
+        .filter((payment) => this.dailyPaymentModeKey(payment) === mode)
+        .reduce((sum, payment) => sum + this.paymentAmount(payment), 0);
+      const cash = amountFor('cash');
+      const upi = amountFor('upi');
+      const card = amountFor('card');
+      const wallet = payments
+        .filter((payment) => ['wallet', 'prepaid', 'reward', 'giftcard', 'online'].includes(this.dailyPaymentModeKey(payment)))
+        .reduce((sum, payment) => sum + this.paymentAmount(payment), 0);
+      const total = Math.max(1, cash + upi + card + wallet);
+      return {
+        label: row.dateLabel,
+        cashWidth: this.money((cash / total) * 100),
+        upiWidth: this.money((upi / total) * 100),
+        cardWidth: this.money((card / total) * 100),
+        walletWidth: this.money((wallet / total) * 100)
+      };
+    });
+  }
+
+  discountVsNetChart(): ApiRecord[] {
+    return [...this.dailyRevenueRows()].reverse().map((row) => {
+      const discount = row.discount + row.couponDiscount + row.membershipDiscount;
+      const total = Math.max(1, row.netSale + discount);
+      return {
+        label: row.dateLabel,
+        netWidth: this.money((row.netSale / total) * 100),
+        discountWidth: this.money((discount / total) * 100)
+      };
+    });
+  }
+
+  pendingDueAgingChart(): ApiRecord[] {
+    const buckets = new Map<string, ApiRecord>([
+      ['0-7 days', { label: '0-7 days', count: 0, amount: 0 }],
+      ['8-15 days', { label: '8-15 days', count: 0, amount: 0 }],
+      ['16-30 days', { label: '16-30 days', count: 0, amount: 0 }],
+      ['30+ days', { label: '30+ days', count: 0, amount: 0 }]
+    ]);
+    const now = this.dateMs(this.to || this.today()) || Date.now();
+    for (const invoice of this.filteredInvoices().filter((row) => this.invoiceBalance(row) > 0)) {
+      const age = Math.max(0, Math.floor((now - this.dateMs(this.invoiceDate(invoice))) / 86400000));
+      const label = age <= 7 ? '0-7 days' : age <= 15 ? '8-15 days' : age <= 30 ? '16-30 days' : '30+ days';
+      const bucket = buckets.get(label);
+      if (!bucket) continue;
+      bucket['count'] = Number(bucket['count'] || 0) + 1;
+      bucket['amount'] = this.money(Number(bucket['amount'] || 0) + this.invoiceBalance(invoice));
+    }
+    return [...buckets.values()];
+  }
+
+  dailyRevenueAlerts(): ApiRecord[] {
+    const rows = this.dailyRevenueRows();
+    const totals = this.dailyRevenueTotals(rows);
+    const highDiscount = [...rows].sort((a, b) => this.dailyDiscountRate(b) - this.dailyDiscountRate(a))[0];
+    const lowCollection = [...rows].filter((row) => row.netSale > 0).sort((a, b) => this.dailyCollectionRate(a) - this.dailyCollectionRate(b))[0];
+    const highExpense = [...rows].sort((a, b) => b.expenses - a.expenses)[0];
+    const highDue = [...rows].sort((a, b) => b.pendingDueAmount - a.pendingDueAmount)[0];
+    const lowProduct = rows.filter((row) => row.netSale > 0 && row.productSale <= 0)[0];
+    const cashMismatch = this.dailyRevenueCashMismatch();
+    const gstRisk = rows.filter((row) => row.netSale > 0 && row.gst <= 0);
+    return [
+      { label: 'High discount day', value: highDiscount ? `${this.dailyDiscountRate(highDiscount).toFixed(1)}%` : '0%', detail: highDiscount ? highDiscount.dateLabel : 'No discount risk', tone: highDiscount && this.dailyDiscountRate(highDiscount) >= 20 ? 'danger' : 'normal' },
+      { label: 'Low collection day', value: lowCollection ? `${this.dailyCollectionRate(lowCollection).toFixed(1)}%` : '100%', detail: lowCollection ? lowCollection.dateLabel : 'No low collection day', tone: lowCollection && this.dailyCollectionRate(lowCollection) < 80 ? 'warn' : 'normal' },
+      { label: 'Expenses high day', value: highExpense ? this.formatMoney(highExpense.expenses) : '₹0', detail: highExpense ? highExpense.dateLabel : 'No expenses', tone: highExpense && totals.netSale && highExpense.expenses / totals.netSale > 0.12 ? 'warn' : 'normal' },
+      { label: 'Due unusually high', value: highDue ? this.formatMoney(highDue.pendingDueAmount) : '₹0', detail: highDue ? highDue.dateLabel : 'No due risk', tone: highDue && highDue.pendingDueAmount > highDue.receivedAmount * 0.2 ? 'danger' : 'normal' },
+      { label: 'Product sale low', value: lowProduct ? 'No product sale' : this.formatMoney(totals.productSale), detail: lowProduct ? lowProduct.dateLabel : 'Product revenue present', tone: lowProduct ? 'warn' : 'normal' },
+      { label: 'Cash mismatch with drawer', value: this.formatMoney(cashMismatch), detail: cashMismatch ? 'Drawer variance linked' : 'No cash mismatch signal', tone: cashMismatch ? 'danger' : 'normal' },
+      { label: 'GST mismatch risk', value: String(gstRisk.length), detail: gstRisk.length ? 'Revenue days without GST signal' : 'GST signal present', tone: gstRisk.length ? 'warn' : 'normal' }
+    ];
+  }
+
+  dailyRevenueDrilldown(dateKey: string): ApiRecord {
+    const invoices = this.invoicesForDateKey(dateKey);
+    const payments = this.paymentsForDateKey(dateKey);
+    const lines = this.linesForInvoices(invoices);
+    const staffMap = new Map<string, number>();
+    const serviceMap = new Map<string, number>();
+    const modeMap = new Map<string, number>();
+    for (const invoice of invoices) {
+      const invoiceLines = this.linesForInvoices([invoice]);
+      for (const line of invoiceLines.length ? invoiceLines : [{ name: 'Invoice', type: 'service', total: this.invoiceTotal(invoice), staffName: invoice['staffName'] || invoice['staff_name'] }]) {
+        const staff = this.staffNameForLine(line, invoice);
+        staffMap.set(staff, this.money((staffMap.get(staff) || 0) + this.lineAmount(line)));
+      }
+    }
+    for (const line of lines.filter((line) => this.normalizedItemType(line) === 'service')) {
+      const name = String(line['name'] || line['serviceName'] || line['service_name'] || line['itemName'] || 'Service');
+      serviceMap.set(name, this.money((serviceMap.get(name) || 0) + this.lineAmount(line)));
+    }
+    for (const payment of payments) {
+      const mode = this.modeLabel(this.dailyPaymentModeKey(payment));
+      modeMap.set(mode, this.money((modeMap.get(mode) || 0) + this.paymentAmount(payment)));
+    }
+    const dueInvoices = invoices.filter((invoice) => this.invoiceBalance(invoice) > 0);
+    const recovered = payments.filter((payment) => this.isDueReceivedPayment(payment));
+    const highDiscounts = invoices.filter((invoice) => {
+      const discount = this.invoiceDiscount(invoice) + this.couponDiscount(invoice) + this.membershipDiscount(invoice);
+      const gross = this.invoiceTotal(invoice) + discount;
+      return gross > 0 && (discount / gross) * 100 >= 20;
+    });
+    const audit = this.auditLogsForDateKey(dateKey).filter((log) => ['edit', 'delete', 'deleted', 'void', 'cancel'].some((token) => this.auditText(log).includes(token)));
+    const topStaff = this.topMapEntry(staffMap);
+    const topService = this.topMapEntry(serviceMap);
+    const topMode = this.topMapEntry(modeMap);
+    return {
+      invoiceCount: invoices.length,
+      invoiceNumbers: invoices.slice(0, 8).map((invoice) => invoice['invoiceNumber'] || invoice['invoice_number'] || invoice['number'] || invoice['id']).filter(Boolean).join(', '),
+      topStaff: topStaff?.[0] || '',
+      staffSummary: this.mapSummary(staffMap),
+      topService: topService?.[0] || '',
+      serviceSummary: this.mapSummary(serviceMap),
+      topMode: topMode?.[0] || '',
+      paymentModeSummary: this.mapSummary(modeMap),
+      dueSummary: `${dueInvoices.length} pending · ${this.formatMoney(dueInvoices.reduce((sum, invoice) => sum + this.invoiceBalance(invoice), 0))}`,
+      recoveredSummary: `${recovered.length} recovered payment(s) · ${this.formatMoney(recovered.reduce((sum, payment) => sum + this.paymentAmount(payment), 0))}`,
+      highDiscountCount: highDiscounts.length,
+      highDiscountInvoices: highDiscounts.slice(0, 8).map((invoice) => invoice['invoiceNumber'] || invoice['invoice_number'] || invoice['number'] || invoice['id']).filter(Boolean).join(', '),
+      auditCount: audit.length,
+      auditSummary: audit.slice(0, 4).map((log) => String(log['action'] || log['event'] || log['type'] || 'audit')).join(', ')
+    };
+  }
+
   exportDailySheetPdf(): void {
     const summary = this.dailySheetSummary();
     const lines = [
@@ -1215,6 +1803,71 @@ export class FinancialSummaryReportComponent implements OnInit {
       ...this.dailySheetStaffRows().slice(0, 12).map((row, index) => `${index + 1}. ${row['staffName']} | service ${this.formatMoney(Number(row['serviceSale'] || 0))} | product ${this.formatMoney(Number(row['productSale'] || 0))} | unpaid ${this.formatMoney(Number(row['unpaidAmount'] || 0))}`)
     ];
     this.downloadFile(`daily-sheet-eod-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportDailyRevenueOwnerPdf(): void {
+    const kpis = this.dailyRevenueKpis();
+    const totals = this.dailyRevenueTotals(this.dailyRevenueRows());
+    const lines = [
+      'Daily Revenue 10x Owner Summary',
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      '',
+      `Best revenue day: ${kpis['bestRevenueDay']} (${this.formatMoney(Number(kpis['bestRevenueValue'] || 0))})`,
+      `Lowest revenue day: ${kpis['lowestRevenueDay']} (${this.formatMoney(Number(kpis['lowestRevenueValue'] || 0))})`,
+      `Average daily sale: ${this.formatMoney(Number(kpis['averageDailySale'] || 0))}`,
+      `Growth vs previous period: ${Number(kpis['growthRate'] || 0).toFixed(1)}%`,
+      `Pending due trend: ${this.formatMoney(Number(kpis['pendingDueTrend'] || 0))}`,
+      `Discount leakage: ${Number(kpis['discountLeakageRate'] || 0).toFixed(1)}%`,
+      `Collection rate: ${Number(kpis['collectionRate'] || 0).toFixed(1)}%`,
+      '',
+      `Gross sale: ${this.formatMoney(totals.grossSale)}`,
+      `Net sale: ${this.formatMoney(totals.netSale)}`,
+      `Received amount: ${this.formatMoney(totals.receivedAmount)}`,
+      `Pending/due amount: ${this.formatMoney(totals.pendingDueAmount)}`,
+      `Expenses: ${this.formatMoney(totals.expenses)}`,
+      `Final cash-in value: ${this.formatMoney(totals.finalCashInValue)}`,
+      '',
+      'Owner alerts',
+      ...this.dailyRevenueAlerts().map((alert) => `${alert['label']}: ${alert['value']} - ${alert['detail']}`),
+      '',
+      'Top days',
+      ...this.dailyRevenueRows().slice(0, 12).map((row) => `${row.dateLabel}: bills ${row.totalBillCount}, net ${this.formatMoney(row.netSale)}, received ${this.formatMoney(row.receivedAmount)}, due ${this.formatMoney(row.pendingDueAmount)}`)
+    ];
+    this.downloadFile(`daily-revenue-owner-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportDailyRevenueAccountantPdf(): void {
+    const totals = this.dailyRevenueTotals(this.dailyRevenueRows());
+    const paymentTotals = new Map<string, number>();
+    for (const payment of this.payments().filter((row) => this.inDateRange(this.paymentDate(row)))) {
+      const label = this.modeLabel(this.dailyPaymentModeKey(payment));
+      paymentTotals.set(label, this.money((paymentTotals.get(label) || 0) + this.paymentAmount(payment)));
+    }
+    const lines = [
+      'Daily Revenue Accountant GST Payment Breakup',
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      '',
+      `Gross sale: ${this.formatMoney(totals.grossSale)}`,
+      `Discount: ${this.formatMoney(totals.discount)}`,
+      `Coupon discount: ${this.formatMoney(totals.couponDiscount)}`,
+      `Membership discount: ${this.formatMoney(totals.membershipDiscount)}`,
+      `Net sale: ${this.formatMoney(totals.netSale)}`,
+      `GST: ${this.formatMoney(totals.gst)}`,
+      `Received amount: ${this.formatMoney(totals.receivedAmount)}`,
+      `Pending/due amount: ${this.formatMoney(totals.pendingDueAmount)}`,
+      `Refund/return: ${this.formatMoney(totals.refundReturn)}`,
+      '',
+      'Payment mode breakup',
+      ...[...paymentTotals.entries()].sort((a, b) => b[1] - a[1]).map(([mode, amount]) => `${mode}: ${this.formatMoney(amount)}`),
+      '',
+      'Date-wise GST rows',
+      ...this.dailyRevenueRows().map((row) => `${row.dateLabel}: net ${this.formatMoney(row.netSale)}, GST ${this.formatMoney(row.gst)}, received ${this.formatMoney(row.receivedAmount)}`)
+    ];
+    this.downloadFile(`daily-revenue-accountant-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
   }
 
   private exportPaymentDistributionCsv(): void {
@@ -1271,6 +1924,218 @@ export class FinancialSummaryReportComponent implements OnInit {
     ];
     const csv = sections.map((row) => row.map((cell) => this.csvCell(cell)).join(',')).join('\n');
     this.downloadFile(`daily-sheet-eod-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  private exportDailyRevenueCsv(): void {
+    const headers = [
+      'Date',
+      'Total bill count',
+      'Service sale',
+      'Product sale',
+      'Package sale',
+      'Membership sale',
+      'Gift card sale',
+      'Wallet / prepaid used',
+      'Gross sale',
+      'Discount',
+      'Coupon discount',
+      'Membership discount',
+      'Net sale',
+      'GST',
+      'Received amount',
+      'Pending / due amount',
+      'Expenses',
+      'Refund / return',
+      'Final cash-in value'
+    ];
+    const rows = this.dailyRevenueRows().map((row) => [
+      row.dateLabel,
+      row.totalBillCount,
+      row.serviceSale,
+      row.productSale,
+      row.packageSale,
+      row.membershipSale,
+      row.giftCardSale,
+      row.walletPrepaidUsed,
+      row.grossSale,
+      row.discount,
+      row.couponDiscount,
+      row.membershipDiscount,
+      row.netSale,
+      row.gst,
+      row.receivedAmount,
+      row.pendingDueAmount,
+      row.expenses,
+      row.refundReturn,
+      row.finalCashInValue
+    ]);
+    const csv = [
+      headers.map((cell) => this.csvCell(cell)).join(','),
+      ...rows.map((row) => row.map((cell) => this.csvCell(cell)).join(','))
+    ].join('\n');
+    this.downloadFile(`daily-revenue-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  private dailyRevenueRowsForRange(from: string, to: string): DailyRevenueRow[] {
+    const dateKeys = new Set<string>();
+    const inRange = (value: string) => this.inDateWindow(value, from, to);
+    for (const invoice of this.invoices().filter((row) => inRange(this.invoiceDate(row)))) dateKeys.add(this.businessDateKey(this.invoiceDate(invoice)));
+    for (const payment of this.payments().filter((row) => inRange(this.paymentDate(row)))) dateKeys.add(this.businessDateKey(this.paymentDate(payment)));
+    for (const expense of this.financeExpenses().filter((row) => inRange(this.expenseDate(row)))) dateKeys.add(this.businessDateKey(this.expenseDate(expense)));
+    for (const key of dateKeys) if (!key) dateKeys.delete(key);
+    return [...dateKeys]
+      .sort((a, b) => b.localeCompare(a))
+      .map((dateKey) => this.dailyRevenueRowForDate(dateKey));
+  }
+
+  private dailyRevenueRowForDate(dateKey: string): DailyRevenueRow {
+    const invoices = this.invoicesForDateKey(dateKey);
+    const payments = this.paymentsForDateKey(dateKey);
+    const lines = this.linesForInvoices(invoices);
+    const lineSale = (type: string) => this.money(lines.filter((line) => this.normalizedItemType(line) === type).reduce((sum, line) => sum + this.lineAmount(line), 0));
+    const discount = this.money(invoices.reduce((sum, invoice) => sum + this.invoiceDiscount(invoice), 0));
+    const couponDiscount = this.money(invoices.reduce((sum, invoice) => sum + this.couponDiscount(invoice), 0));
+    const membershipDiscount = this.money(invoices.reduce((sum, invoice) => sum + this.membershipDiscount(invoice), 0));
+    const grossSale = this.money(lines.reduce((sum, line) => sum + this.lineGross(line), 0) || invoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice) + this.invoiceDiscount(invoice) + this.couponDiscount(invoice) + this.membershipDiscount(invoice), 0));
+    const refundReturn = this.refundAmountForDateKey(dateKey);
+    const expenses = this.expensesForDateKey(dateKey);
+    const receivedAmount = this.money(payments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0));
+    return {
+      dateKey,
+      dateLabel: this.compactDateLabel(dateKey),
+      totalBillCount: invoices.length,
+      serviceSale: lines.length ? lineSale('service') : this.money(invoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice), 0)),
+      productSale: lineSale('product'),
+      packageSale: lineSale('package'),
+      membershipSale: lineSale('membership'),
+      giftCardSale: lineSale('gift_card'),
+      walletPrepaidUsed: this.money(payments.filter((payment) => ['wallet', 'prepaid', 'reward', 'giftcard'].includes(this.dailyPaymentModeKey(payment))).reduce((sum, payment) => sum + this.paymentAmount(payment), 0)),
+      grossSale,
+      discount,
+      couponDiscount,
+      membershipDiscount,
+      netSale: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice), 0)),
+      gst: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceTax(invoice), 0)),
+      receivedAmount,
+      pendingDueAmount: this.money(invoices.reduce((sum, invoice) => sum + this.invoiceBalance(invoice), 0)),
+      expenses,
+      refundReturn,
+      finalCashInValue: this.money(receivedAmount - expenses - refundReturn)
+    };
+  }
+
+  private dailyRevenueTotals(rows: DailyRevenueRow[]): DailyRevenueRow {
+    return rows.reduce((total, row) => ({
+      dateKey: 'total',
+      dateLabel: 'Total',
+      totalBillCount: total.totalBillCount + row.totalBillCount,
+      serviceSale: this.money(total.serviceSale + row.serviceSale),
+      productSale: this.money(total.productSale + row.productSale),
+      packageSale: this.money(total.packageSale + row.packageSale),
+      membershipSale: this.money(total.membershipSale + row.membershipSale),
+      giftCardSale: this.money(total.giftCardSale + row.giftCardSale),
+      walletPrepaidUsed: this.money(total.walletPrepaidUsed + row.walletPrepaidUsed),
+      grossSale: this.money(total.grossSale + row.grossSale),
+      discount: this.money(total.discount + row.discount),
+      couponDiscount: this.money(total.couponDiscount + row.couponDiscount),
+      membershipDiscount: this.money(total.membershipDiscount + row.membershipDiscount),
+      netSale: this.money(total.netSale + row.netSale),
+      gst: this.money(total.gst + row.gst),
+      receivedAmount: this.money(total.receivedAmount + row.receivedAmount),
+      pendingDueAmount: this.money(total.pendingDueAmount + row.pendingDueAmount),
+      expenses: this.money(total.expenses + row.expenses),
+      refundReturn: this.money(total.refundReturn + row.refundReturn),
+      finalCashInValue: this.money(total.finalCashInValue + row.finalCashInValue)
+    }), {
+      dateKey: 'total',
+      dateLabel: 'Total',
+      totalBillCount: 0,
+      serviceSale: 0,
+      productSale: 0,
+      packageSale: 0,
+      membershipSale: 0,
+      giftCardSale: 0,
+      walletPrepaidUsed: 0,
+      grossSale: 0,
+      discount: 0,
+      couponDiscount: 0,
+      membershipDiscount: 0,
+      netSale: 0,
+      gst: 0,
+      receivedAmount: 0,
+      pendingDueAmount: 0,
+      expenses: 0,
+      refundReturn: 0,
+      finalCashInValue: 0
+    });
+  }
+
+  private previousRevenueRange(): { from: string; to: string } {
+    const from = new Date(this.from || this.defaultFrom());
+    const to = new Date(this.to || this.today());
+    const days = Math.max(1, Math.round((this.dateMs(to) - this.dateMs(from)) / 86400000) + 1);
+    const previousTo = new Date(from);
+    previousTo.setDate(previousTo.getDate() - 1);
+    const previousFrom = new Date(previousTo);
+    previousFrom.setDate(previousFrom.getDate() - days + 1);
+    return { from: this.inputDate(previousFrom), to: this.inputDate(previousTo) };
+  }
+
+  private dailyDiscountRate(row: DailyRevenueRow): number {
+    const discount = row.discount + row.couponDiscount + row.membershipDiscount;
+    return row.grossSale ? this.money((discount / row.grossSale) * 100) : 0;
+  }
+
+  private dailyCollectionRate(row: DailyRevenueRow): number {
+    return row.netSale ? this.money((row.receivedAmount / row.netSale) * 100) : 100;
+  }
+
+  private dailyRevenueCashMismatch(): number {
+    return this.money([...this.cashDrawerReports(), ...this.cashDrawerSessions()]
+      .filter((row) => this.inDateRange(String(row['businessDate'] || row['business_date'] || row['closedAt'] || row['closed_at'] || row['createdAt'] || row['created_at'] || '')))
+      .reduce((sum, row) => sum + this.cashDrawerValue(row, ['variancePaise', 'variance_paise'], ['variance', 'cashDifference', 'cash_difference']), 0));
+  }
+
+  private invoicesForDateKey(dateKey: string): ApiRecord[] {
+    return this.invoices().filter((invoice) => this.businessDateKey(this.invoiceDate(invoice)) === dateKey);
+  }
+
+  private paymentsForDateKey(dateKey: string): ApiRecord[] {
+    return this.payments().filter((payment) => this.businessDateKey(this.paymentDate(payment)) === dateKey);
+  }
+
+  private auditLogsForDateKey(dateKey: string): ApiRecord[] {
+    return this.auditLogs().filter((log) => this.businessDateKey(String(log['createdAt'] || log['created_at'] || log['timestamp'] || log['date'] || '')) === dateKey);
+  }
+
+  private expensesForDateKey(dateKey: string): number {
+    const direct = this.financeExpenses()
+      .filter((row) => this.businessDateKey(this.expenseDate(row)) === dateKey)
+      .reduce((sum, row) => sum + Number(row['amount'] || row['total'] || row['paidAmount'] || row['paid_amount'] || 0), 0);
+    const summary = [
+      ...this.arrayValue(this.financeSummary()['expenses']),
+      ...this.arrayValue(this.financeSummary()['refunds'])
+    ].filter((row) => this.businessDateKey(this.expenseDate(row)) === dateKey)
+      .reduce((sum, row) => sum + Number(row['amount'] || row['total'] || 0), 0);
+    return this.money(direct || summary);
+  }
+
+  private refundAmountForDateKey(dateKey: string): number {
+    const refundPayments = this.paymentsForDateKey(dateKey).filter((payment) => this.paymentAmount(payment) < 0 || ['refund', 'return'].some((token) => `${this.paymentMode(payment)} ${payment['reference'] || ''} ${payment['note'] || ''} ${payment['notes'] || ''}`.toLowerCase().includes(token)));
+    const returnInvoices = this.invoicesForDateKey(dateKey).filter((invoice) => ['refund', 'return'].some((token) => String(invoice['status'] || '').toLowerCase().includes(token)));
+    return this.money(Math.abs(refundPayments.reduce((sum, payment) => sum + this.paymentAmount(payment), 0)) + returnInvoices.reduce((sum, invoice) => sum + this.invoiceTotal(invoice), 0));
+  }
+
+  private topMapEntry(map: Map<string, number>): [string, number] | undefined {
+    return [...map.entries()].sort((a, b) => b[1] - a[1])[0];
+  }
+
+  private mapSummary(map: Map<string, number>): string {
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([label, amount]) => `${label}: ${this.formatMoney(amount)}`)
+      .join(' | ');
   }
 
   private dailyInvoices(): ApiRecord[] {
@@ -1384,7 +2249,7 @@ export class FinancialSummaryReportComponent implements OnInit {
     return `${log['action'] || ''} ${log['event'] || ''} ${log['type'] || ''} ${log['entityType'] || log['entity_type'] || ''} ${log['message'] || ''} ${log['note'] || ''} ${JSON.stringify(log['details'] || {})}`.toLowerCase();
   }
 
-  private formatMoney(value: number): string {
+  formatMoney(value: number): string {
     return `₹${this.money(value).toLocaleString('en-IN')}`;
   }
 
@@ -1683,6 +2548,14 @@ export class FinancialSummaryReportComponent implements OnInit {
     return (!from || time >= from) && (!to || time <= to);
   }
 
+  private inDateWindow(value: string, fromValue: string, toValue: string): boolean {
+    const time = this.dateMs(value);
+    if (!time) return false;
+    const from = this.dateMs(fromValue);
+    const to = this.dateMs(toValue) + 24 * 60 * 60 * 1000 - 1;
+    return (!from || time >= from) && (!to || time <= to);
+  }
+
   private inPeriod(value: string, column: MatrixColumn): boolean {
     const time = this.dateMs(value);
     const from = this.dateMs(column.from);
@@ -1705,6 +2578,24 @@ export class FinancialSummaryReportComponent implements OnInit {
     if (!value) return 0;
     const date = new Date(String(value));
     return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+
+  private businessDateKey(value: unknown): string {
+    if (!value) return '';
+    const date = new Date(String(value));
+    if (Number.isNaN(date.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date);
+    const part = (type: string) => parts.find((item) => item.type === type)?.value || '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  }
+
+  private inputDate(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   private money(value: number): number {
