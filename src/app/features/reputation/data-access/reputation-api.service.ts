@@ -167,6 +167,26 @@ export class ReputationApiService {
     return this.api.post<ApiRecord>(`reputation/requests/send/${appointmentId}`, payload);
   }
 
+  customerFeedbackReport(params: ApiRecord = {}): Observable<ApiRecord> {
+    return this.api.list<ApiRecord>('reports/customer-feedback', params);
+  }
+
+  customerFeedbackStaffScore(params: ApiRecord = {}): Observable<ApiRecord> {
+    return this.api.list<ApiRecord>('reports/customer-feedback/staff-score', params);
+  }
+
+  customerFeedbackServiceScore(params: ApiRecord = {}): Observable<ApiRecord> {
+    return this.api.list<ApiRecord>('reports/customer-feedback/service-score', params);
+  }
+
+  sendFeedbackRecoveryMessage(id: string, payload: ApiRecord = {}): Observable<ApiRecord> {
+    return this.api.post<ApiRecord>(`reports/customer-feedback/${encodeURIComponent(id)}/send-recovery-message`, payload);
+  }
+
+  markFeedbackReviewed(id: string, payload: ApiRecord = {}): Observable<ApiRecord> {
+    return this.api.post<ApiRecord>(`reports/customer-feedback/${encodeURIComponent(id)}/mark-reviewed`, payload);
+  }
+
   selectedBranchId(): string {
     return this.api.selectedBranchId();
   }

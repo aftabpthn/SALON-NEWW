@@ -5,6 +5,7 @@ import test from "node:test";
 const app = readFileSync("server/app.js", "utf8");
 const routes = readFileSync("server/routes/reputation.routes.js", "utf8");
 const reputationService = readFileSync("server/services/reputation/reputation.service.js", "utf8");
+const feedbackIntelligenceService = readFileSync("server/services/reputation/feedback-intelligence.service.js", "utf8");
 const requester = readFileSync("server/services/reputation/review-requester.service.js", "utf8");
 const providerSync = readFileSync("server/services/reputation/provider-sync.service.js", "utf8");
 const billingController = readFileSync("server/controllers/billing.controller.js", "utf8");
@@ -14,6 +15,7 @@ const reputationApi = readFileSync("src/app/features/reputation/data-access/repu
 const commandCenterPage = readFileSync("src/app/features/reputation/pages/reputation-command-center.page.ts", "utf8");
 const reputationModels = readFileSync("src/app/features/reputation/domain/reputation.models.ts", "utf8");
 const publicPage = readFileSync("src/app/features/reputation/pages/public-feedback.page.ts", "utf8");
+const reportsPage = readFileSync("src/app/pages/reports.component.ts", "utf8");
 
 test("public review request APIs are mounted before authenticated reputation routes", () => {
   assert.match(routes, /export const reputationPublicRouter = Router\(\)/, "public reputation router should exist");
@@ -104,4 +106,28 @@ test("Reputation command center exposes live feed, negative alerts and approval-
   assert.match(reputationService, /buildReplyDrafts\(review,\s*payload\)/, "backend should create local rule-based reply drafts");
   assert.match(reputationService, /providerStatus:\s*"local_rule_draft"/, "backend should report deterministic local draft status");
   assert.match(reputationService, /pendingReplyCount\(query,\s*access\)/, "dashboard should include pending approval state");
+});
+
+test("Customer feedback intelligence report reuses reputation stack with recovery actions", () => {
+  assert.match(routes, /feedbackIntelligenceService/, "reputation routes should import feedback intelligence service");
+  assert.match(routes, /\/reports\/customer-feedback"/, "customer feedback report endpoint should exist");
+  assert.match(routes, /\/reports\/customer-feedback\/staff-score/, "staff score endpoint should exist");
+  assert.match(routes, /\/reports\/customer-feedback\/service-score/, "service score endpoint should exist");
+  assert.match(routes, /send-recovery-message/, "manual recovery message endpoint should exist");
+  assert.match(routes, /mark-reviewed/, "manual reviewed endpoint should exist");
+  assert.match(feedbackIntelligenceService, /reputationService\.reviews/, "report should reuse reputation reviews as source of truth");
+  assert.match(feedbackIntelligenceService, /RATING_BUCKETS/, "report should calculate rating buckets");
+  assert.match(feedbackIntelligenceService, /buildStaffScore/, "report should calculate staff feedback score");
+  assert.match(feedbackIntelligenceService, /buildServiceScore/, "report should calculate service feedback score");
+  assert.match(feedbackIntelligenceService, /reputationService\.createReply/, "recovery message should reuse reply workflow");
+  assert.match(feedbackIntelligenceService, /reputationService\.resolveReview/, "mark reviewed should reuse resolve workflow");
+  assert.match(reputationApi, /customerFeedbackReport/, "Angular reputation API should fetch customer feedback report");
+  assert.match(reputationApi, /sendFeedbackRecoveryMessage/, "Angular reputation API should expose recovery action");
+  assert.match(commandCenterPage, /Feedback Report/, "command center should include feedback tab");
+  assert.match(commandCenterPage, /Rating Intelligence/, "command center should include rating intelligence tab");
+  assert.match(commandCenterPage, /Negative Review Recovery/, "command center should include negative recovery tab");
+  assert.match(commandCenterPage, /Staff Feedback Score/, "command center should include staff score tab");
+  assert.match(commandCenterPage, /feedbackNumber\('veryPoor'\)/, "UI should show very poor bucket");
+  assert.match(reportsPage, /Customer Feedback/, "reports command center should link customer feedback");
+  assert.match(reportsPage, /queryParams: \{ tab: 'feedback' \}/, "reports link should open feedback tab");
 });

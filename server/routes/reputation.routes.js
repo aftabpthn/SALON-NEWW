@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requirePermission } from "../middleware/rbac.js";
+import { feedbackIntelligenceService } from "../services/reputation/feedback-intelligence.service.js";
 import { reputationService } from "../services/reputation/reputation.service.js";
 import { validateBody } from "../validators/request-validator.js";
 
@@ -198,5 +199,61 @@ reputationRouter.post(
   requirePermission("write", () => "reputation"),
   asyncHandler((req, res) => {
     res.json(reputationService.resolveAlert(req.params.id, req.body, req.access));
+  })
+);
+
+reputationRouter.get(
+  "/reports/customer-feedback",
+  requirePermission("read", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.json(feedbackIntelligenceService.report(req.query, req.access));
+  })
+);
+
+reputationRouter.get(
+  "/reports/customer-feedback/staff-score",
+  requirePermission("read", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.json(feedbackIntelligenceService.staffScore(req.query, req.access));
+  })
+);
+
+reputationRouter.get(
+  "/reports/customer-feedback/service-score",
+  requirePermission("read", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.json(feedbackIntelligenceService.serviceScore(req.query, req.access));
+  })
+);
+
+reputationRouter.post(
+  "/reports/customer-feedback/:id/send-recovery-message",
+  requirePermission("write", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.status(201).json(feedbackIntelligenceService.sendRecoveryMessage(req.params.id, req.body, req.access));
+  })
+);
+
+reputationRouter.post(
+  "/reports/customer-feedback/:id/mark-reviewed",
+  requirePermission("write", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.json(feedbackIntelligenceService.markReviewed(req.params.id, req.body, req.access));
+  })
+);
+
+reputationRouter.get(
+  "/reports/customer-feedback/export.csv",
+  requirePermission("read", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.type("text/csv").send(feedbackIntelligenceService.csv(req.query, req.access));
+  })
+);
+
+reputationRouter.get(
+  "/reports/customer-feedback/owner.pdf",
+  requirePermission("read", () => "reputation"),
+  asyncHandler((req, res) => {
+    res.json(feedbackIntelligenceService.ownerPdf(req.query, req.access));
   })
 );

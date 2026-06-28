@@ -1,11 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import { ApiRecord } from '../../../core/api.service';
 import { StateComponent } from '../../../shared/ui/state/state.component';
 import { ReputationApiService } from '../data-access/reputation-api.service';
 import { PlatformSummary, ReputationAlert, ReputationDashboard, ReputationReview, ReviewPlatform, SupportedPlatform } from '../domain/reputation.models';
+
+type ReputationTab = 'overview' | 'feedback' | 'rating' | 'recovery' | 'staff';
 
 interface PlatformCard {
   code: string;
@@ -54,6 +57,150 @@ interface StaffPreview {
       <app-state [loading]="loading" [error]="error"></app-state>
 
       <ng-container *ngIf="!loading && !error && dashboard as data">
+        <nav class="rep-tabs" aria-label="Reputation report tabs">
+          <button type="button" [class.active]="activeTab === 'overview'" (click)="setTab('overview')">Overview</button>
+          <button type="button" [class.active]="activeTab === 'feedback'" (click)="setTab('feedback')">Feedback Report</button>
+          <button type="button" [class.active]="activeTab === 'rating'" (click)="setTab('rating')">Rating Intelligence</button>
+          <button type="button" [class.active]="activeTab === 'recovery'" (click)="setTab('recovery')">Negative Review Recovery</button>
+          <button type="button" [class.active]="activeTab === 'staff'" (click)="setTab('staff')">Staff Feedback Score</button>
+        </nav>
+
+        <section class="feedback-intelligence-panel" *ngIf="activeTab !== 'overview'">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">Customer feedback intelligence</span>
+              <h3>{{ tabTitle }}</h3>
+            </div>
+            <div class="heading-actions">
+              <button class="ghost-button slim" type="button" (click)="loadFeedbackReport()" [disabled]="feedbackLoading">Refresh report</button>
+              <a class="ghost-button slim" [href]="feedbackCsvUrl" target="_blank" rel="noopener">CSV</a>
+              <a class="ghost-button slim" [href]="feedbackPdfUrl" target="_blank" rel="noopener">Owner PDF</a>
+            </div>
+          </div>
+
+          <p class="notice" *ngIf="feedbackNotice">{{ feedbackNotice }}</p>
+          <app-state [loading]="feedbackLoading" [error]="feedbackError"></app-state>
+
+          <div class="feedback-filters">
+            <label class="field">
+              <span>From</span>
+              <input type="date" [(ngModel)]="feedbackFilters.from" />
+            </label>
+            <label class="field">
+              <span>To</span>
+              <input type="date" [(ngModel)]="feedbackFilters.to" />
+            </label>
+            <label class="field">
+              <span>Rating bucket</span>
+              <select [(ngModel)]="feedbackFilters.ratingBucket">
+                <option value="all">All ratings</option>
+                <option value="veryPoor">Very Poor</option>
+                <option value="poor">Poor</option>
+                <option value="average">Average</option>
+                <option value="good">Good</option>
+                <option value="awesome">Awesome</option>
+              </select>
+            </label>
+            <label class="toggle-field">
+              <input type="checkbox" [(ngModel)]="feedbackFilters.negativeOnly" />
+              <span>Negative only</span>
+            </label>
+            <button class="primary-link button-like slim" type="button" (click)="loadFeedbackReport()">Apply filters</button>
+          </div>
+
+          <div class="feedback-kpis" *ngIf="feedbackReport">
+            <article><span>No. of Feedback</span><strong>{{ feedbackNumber('totalFeedback') }}</strong><small>Captured reviews</small></article>
+            <article><span>Overall Rating</span><strong>{{ feedbackNumber('overallRating') | number:'1.1-1' }}</strong><small>Out of 5</small></article>
+            <article><span>Very Poor</span><strong>{{ feedbackNumber('veryPoor') }}</strong><small>1 star</small></article>
+            <article><span>Poor</span><strong>{{ feedbackNumber('poor') }}</strong><small>2 star</small></article>
+            <article><span>Average</span><strong>{{ feedbackNumber('average') }}</strong><small>3 star</small></article>
+            <article><span>Good</span><strong>{{ feedbackNumber('good') }}</strong><small>4 star</small></article>
+            <article><span>Awesome</span><strong>{{ feedbackNumber('awesome') }}</strong><small>5 star</small></article>
+            <article class="danger"><span>Recovery Pending</span><strong>{{ feedbackNumber('recoveryPending') }}</strong><small>{{ feedbackNumber('negativeFeedback') }} negative</small></article>
+            <article><span>Review Conversion</span><strong>{{ feedbackNumber('reviewConversionRate') }}%</strong><small>Submitted / sent</small></article>
+          </div>
+
+          <div class="table-wrap" *ngIf="activeTab === 'feedback'">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date / time</th><th>Client</th><th>Invoice / appointment</th><th>Services</th><th>Staff</th><th>Rating</th><th>Feedback</th><th>Status</th><th>Source</th><th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of feedbackRows" [class.negative-row]="truthy(row['isNegative'])">
+                  <td><strong>{{ row['date'] || '-' }}</strong><small>{{ row['time'] || '' }}</small></td>
+                  <td><strong>{{ row['clientName'] || 'Walk-in' }}</strong><small>{{ row['clientPhone'] || 'Phone missing' }}</small></td>
+                  <td><strong>{{ row['invoiceNumber'] || '-' }}</strong><small>{{ row['appointmentId'] || '' }}</small></td>
+                  <td>{{ row['serviceNames'] || '-' }}</td>
+                  <td>{{ row['staffName'] || 'Unassigned' }}</td>
+                  <td><span [class]="'rating-pill ' + row['ratingBucket']">{{ row['rating'] || 0 }}/5</span></td>
+                  <td>{{ row['feedback'] || 'No feedback text' }}</td>
+                  <td>{{ row['status'] || 'new' }}</td>
+                  <td>{{ row['source'] || 'Internal' }}</td>
+                  <td><button class="ghost-button slim" type="button" (click)="setTab('recovery')" *ngIf="truthy(row['isNegative'])">Recover</button></td>
+                </tr>
+                <tr *ngIf="!feedbackRows.length"><td colspan="10">Feedback data not found. Send review links to start collecting customer feedback.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap" *ngIf="activeTab === 'rating'">
+            <table>
+              <thead><tr><th>Rating bucket</th><th>Count</th><th>Average</th><th>Negative</th><th>Recovery pending</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of ratingRows">
+                  <td>{{ row['bucket'] }}</td>
+                  <td>{{ row['count'] }}</td>
+                  <td>{{ row['averageRating'] | number:'1.1-1' }}</td>
+                  <td>{{ row['negativeCount'] }}</td>
+                  <td>{{ row['recoveryPending'] }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap" *ngIf="activeTab === 'recovery'">
+            <table>
+              <thead><tr><th>Client</th><th>Phone</th><th>Rating</th><th>Feedback</th><th>Staff</th><th>Recovery status</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of recoveryRows" class="negative-row">
+                  <td>{{ row['clientName'] || 'Walk-in' }}</td>
+                  <td>{{ row['clientPhone'] || 'Missing' }}</td>
+                  <td><span [class]="'rating-pill ' + row['ratingBucket']">{{ row['rating'] || 0 }}/5</span></td>
+                  <td>{{ row['feedback'] || 'No feedback text' }}</td>
+                  <td>{{ row['staffName'] || 'Unassigned' }}</td>
+                  <td>{{ row['recoveryStatus'] || 'pending' }}</td>
+                  <td class="action-cell">
+                    <button class="ghost-button slim" type="button" (click)="sendRecovery(row)" [disabled]="feedbackActionBusy === row['id']">Send recovery</button>
+                    <button class="ghost-button slim" type="button" (click)="markReviewed(row)" [disabled]="feedbackActionBusy === row['id']">Mark reviewed</button>
+                  </td>
+                </tr>
+                <tr *ngIf="!recoveryRows.length"><td colspan="7">No negative recovery rows for selected filters.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrap" *ngIf="activeTab === 'staff'">
+            <table>
+              <thead><tr><th>Staff</th><th>Feedback</th><th>Average rating</th><th>Negative</th><th>Recovery pending</th><th>Resolved</th><th>Signal</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let row of staffScoreRows">
+                  <td>{{ row['staffName'] || 'Unassigned' }}</td>
+                  <td>{{ row['feedbackCount'] }}</td>
+                  <td>{{ row['averageRating'] | number:'1.1-1' }}</td>
+                  <td>{{ row['negativeCount'] }}</td>
+                  <td>{{ row['recoveryPending'] }}</td>
+                  <td>{{ row['resolvedCount'] }}</td>
+                  <td>{{ row['repeatIssueSignal'] }}</td>
+                </tr>
+                <tr *ngIf="!staffScoreRows.length"><td colspan="7">No staff feedback score yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <ng-container *ngIf="activeTab === 'overview'">
         <section class="kpi-grid" aria-label="Reputation KPIs">
           <article class="kpi-card">
             <span>Average rating</span>
@@ -351,6 +498,7 @@ interface StaffPreview {
             </section>
           </aside>
         </section>
+        </ng-container>
       </ng-container>
     </section>
   `,
@@ -367,6 +515,155 @@ interface StaffPreview {
     .page-heading p { margin: 0; color: #53657d; max-width: 760px; line-height: 1.55; }
     .heading-actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .primary-link { display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #0f8f79; color: #fff; padding: 12px 16px; text-decoration: none; font-weight: 800; }
+    .rep-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      border: 1px solid #dbe4e8;
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+    }
+    .rep-tabs button {
+      min-height: 42px;
+      border: 1px solid #dbe4e8;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #334155;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .rep-tabs button.active {
+      border-color: #0f8f79;
+      background: #0f8f79;
+      color: #fff;
+      box-shadow: 0 10px 18px rgba(15, 143, 121, 0.18);
+    }
+    .feedback-intelligence-panel {
+      display: grid;
+      gap: 14px;
+      border: 1px solid #dbe4e8;
+      border-radius: 8px;
+      background: #fff;
+      padding: 18px;
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+    }
+    .notice {
+      margin: 0;
+      border: 1px solid #c7e8df;
+      border-radius: 8px;
+      background: #f4fbf8;
+      color: #0f766e;
+      padding: 10px 12px;
+      font-weight: 800;
+    }
+    .feedback-filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(150px, auto) auto;
+      gap: 10px;
+      align-items: end;
+      border: 1px solid #e5edf1;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 12px;
+    }
+    .toggle-field {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #334155;
+      font-weight: 900;
+    }
+    .feedback-kpis {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .feedback-kpis article {
+      min-height: 98px;
+      display: grid;
+      align-content: space-between;
+      border: 1px solid #dbe4e8;
+      border-top: 4px solid #0f8f79;
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+    .feedback-kpis article.danger {
+      border-top-color: #e11d48;
+    }
+    .feedback-kpis span,
+    .feedback-kpis small {
+      color: #53657d;
+      font-weight: 800;
+    }
+    .feedback-kpis strong {
+      color: #0f172a;
+      font-size: 26px;
+      line-height: 1;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid #dbe4e8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+    }
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5edf1;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: #53657d;
+      background: #f8fafc;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    td strong,
+    td small {
+      display: block;
+    }
+    td small {
+      color: #53657d;
+    }
+    .negative-row {
+      background: #fff7f7;
+    }
+    .rating-pill {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: #eef2f7;
+      color: #334155;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .rating-pill.veryPoor,
+    .rating-pill.poor {
+      background: #fff1f2;
+      color: #be123c;
+    }
+    .rating-pill.good,
+    .rating-pill.awesome {
+      background: #e8f7f1;
+      color: #047857;
+    }
+    .action-cell {
+      min-width: 210px;
+    }
+    .action-cell .ghost-button {
+      margin: 0 6px 6px 0;
+    }
     .kpi-grid, .platform-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
     .kpi-card { min-height: 128px; padding: 18px; display: grid; align-content: space-between; border-top: 4px solid #0f8f79; }
     .kpi-card.danger { border-top-color: #e11d48; }
@@ -439,19 +736,22 @@ interface StaffPreview {
     .empty-box { border: 1px dashed #cfdbe3; border-radius: 8px; padding: 20px; display: grid; gap: 6px; text-align: center; color: #0f172a; }
     .empty-box.compact { text-align: left; }
     @media (max-width: 1180px) {
-      .kpi-grid, .platform-grid, .score-grid, .ops-grid, .request-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .kpi-grid, .platform-grid, .score-grid, .ops-grid, .request-panel, .feedback-kpis, .feedback-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .rep-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .score-panel { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .page-heading, .heading-actions, .alert-row, .feed-row { align-items: stretch; flex-direction: column; }
-      .kpi-grid, .platform-grid, .score-grid, .ops-grid, .request-panel { grid-template-columns: 1fr; }
+      .kpi-grid, .platform-grid, .score-grid, .ops-grid, .request-panel, .rep-tabs, .feedback-kpis, .feedback-filters { grid-template-columns: 1fr; }
       .page-heading h2 { font-size: 28px; }
       .sentiment { margin-left: 0; width: fit-content; }
     }
   `]
 })
 export class ReputationCommandCenterPage implements OnInit {
+  activeTab: ReputationTab = 'overview';
   dashboard: ReputationDashboard | null = null;
+  feedbackReport: ApiRecord | null = null;
   platforms: ReviewPlatform[] = [];
   supported: SupportedPlatform[] = [];
   platformCards: PlatformCard[] = [];
@@ -483,10 +783,25 @@ export class ReputationCommandCenterPage implements OnInit {
   replyDraftBusy = false;
   replyDraftMessage = '';
   replyDrafts: string[] = [];
+  feedbackLoading = false;
+  feedbackError = '';
+  feedbackNotice = '';
+  feedbackActionBusy = '';
+  feedbackFilters = {
+    from: '',
+    to: '',
+    ratingBucket: 'all',
+    negativeOnly: false
+  };
 
-  constructor(private readonly reputationApi: ReputationApiService) {}
+  constructor(
+    private readonly reputationApi: ReputationApiService,
+    private readonly route: ActivatedRoute
+  ) {}
 
   ngOnInit(): void {
+    const requestedTab = this.route.snapshot.queryParamMap.get('tab');
+    if (this.isTab(requestedTab)) this.activeTab = requestedTab;
     this.load();
   }
 
@@ -497,6 +812,7 @@ export class ReputationCommandCenterPage implements OnInit {
   load(): void {
     this.loading = true;
     this.error = '';
+    this.loadFeedbackReport();
     forkJoin({
       dashboard: this.reputationApi.dashboard(),
       platforms: this.reputationApi.platforms()
@@ -513,6 +829,139 @@ export class ReputationCommandCenterPage implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  setTab(tab: ReputationTab): void {
+    this.activeTab = tab;
+    if (tab !== 'overview' && !this.feedbackReport && !this.feedbackLoading) this.loadFeedbackReport();
+  }
+
+  get tabTitle(): string {
+    const titles: Record<ReputationTab, string> = {
+      overview: 'Overview',
+      feedback: 'Feedback Report',
+      rating: 'Rating Intelligence',
+      recovery: 'Negative Review Recovery',
+      staff: 'Staff Feedback Score'
+    };
+    return titles[this.activeTab];
+  }
+
+  get feedbackRows(): ApiRecord[] {
+    return this.arrayFrom(this.feedbackReport?.['rows']);
+  }
+
+  get ratingRows(): ApiRecord[] {
+    return this.arrayFrom(this.feedbackReport?.['ratingIntelligence']);
+  }
+
+  get recoveryRows(): ApiRecord[] {
+    return this.arrayFrom(this.feedbackReport?.['negativeRecovery']);
+  }
+
+  get staffScoreRows(): ApiRecord[] {
+    return this.arrayFrom(this.feedbackReport?.['staffScore']);
+  }
+
+  get feedbackCsvUrl(): string {
+    return `/api/reports/customer-feedback/export.csv?${this.feedbackQueryString()}`;
+  }
+
+  get feedbackPdfUrl(): string {
+    return `/api/reports/customer-feedback/owner.pdf?${this.feedbackQueryString()}`;
+  }
+
+  feedbackNumber(key: string): number {
+    const summary = this.recordFrom(this.feedbackReport?.['summary']);
+    const value = Number(summary[key] || 0);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  loadFeedbackReport(): void {
+    this.feedbackLoading = true;
+    this.feedbackError = '';
+    this.reputationApi.customerFeedbackReport(this.feedbackQueryParams()).subscribe({
+      next: (report) => {
+        this.feedbackReport = report;
+        this.feedbackLoading = false;
+      },
+      error: (error) => {
+        this.feedbackError = error?.error?.error || error?.message || 'Unable to load customer feedback report';
+        this.feedbackLoading = false;
+      }
+    });
+  }
+
+  sendRecovery(row: ApiRecord): void {
+    const id = String(row['id'] || '');
+    if (!id || this.feedbackActionBusy) return;
+    this.feedbackActionBusy = id;
+    this.feedbackNotice = '';
+    this.reputationApi.sendFeedbackRecoveryMessage(id, { channel: 'whatsapp' }).subscribe({
+      next: (result) => {
+        this.feedbackNotice = result['status'] === 'phone_missing'
+          ? 'Recovery note saved, but client phone missing hai.'
+          : 'Recovery WhatsApp/message queued and reply saved for approval.';
+        this.feedbackActionBusy = '';
+        this.loadFeedbackReport();
+      },
+      error: (error) => {
+        this.feedbackNotice = error?.error?.error || error?.message || 'Unable to queue recovery message.';
+        this.feedbackActionBusy = '';
+      }
+    });
+  }
+
+  markReviewed(row: ApiRecord): void {
+    const id = String(row['id'] || '');
+    if (!id || this.feedbackActionBusy) return;
+    this.feedbackActionBusy = id;
+    this.feedbackNotice = '';
+    this.reputationApi.markFeedbackReviewed(id, { recoveryOutcome: 'manager_reviewed' }).subscribe({
+      next: () => {
+        this.feedbackNotice = 'Feedback marked reviewed and recovery status updated.';
+        this.feedbackActionBusy = '';
+        this.loadFeedbackReport();
+      },
+      error: (error) => {
+        this.feedbackNotice = error?.error?.error || error?.message || 'Unable to mark feedback reviewed.';
+        this.feedbackActionBusy = '';
+      }
+    });
+  }
+
+  truthy(value: unknown): boolean {
+    return value === true || value === 1 || value === '1' || value === 'true';
+  }
+
+  private feedbackQueryParams(): ApiRecord {
+    return {
+      branchId: this.selectedBranchId,
+      from: this.feedbackFilters.from,
+      to: this.feedbackFilters.to,
+      ratingBucket: this.feedbackFilters.ratingBucket,
+      negativeOnly: this.feedbackFilters.negativeOnly ? 'true' : ''
+    };
+  }
+
+  private feedbackQueryString(): string {
+    const params = new URLSearchParams();
+    Object.entries(this.feedbackQueryParams()).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    });
+    return params.toString();
+  }
+
+  private isTab(value: unknown): value is ReputationTab {
+    return ['overview', 'feedback', 'rating', 'recovery', 'staff'].includes(String(value || ''));
+  }
+
+  private arrayFrom(value: unknown): ApiRecord[] {
+    return Array.isArray(value) ? value.filter((item): item is ApiRecord => Boolean(item) && typeof item === 'object' && !Array.isArray(item)) : [];
+  }
+
+  private recordFrom(value: unknown): ApiRecord {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as ApiRecord : {};
   }
 
   runPlatformAction(platform: PlatformCard): void {

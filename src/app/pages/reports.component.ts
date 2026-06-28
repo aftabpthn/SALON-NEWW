@@ -139,7 +139,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             <small>{{ branchLabel() }} · {{ report.filters?.from || 'start' }} to {{ report.filters?.to || 'today' }}</small>
           </div>
           <div class="report-link-grid">
-            <a class="report-link-card" *ngFor="let link of quickLinks()" [routerLink]="link.path">
+            <a class="report-link-card" *ngFor="let link of quickLinks()" [routerLink]="link.path" [queryParams]="link.queryParams || null">
               <span>{{ link.module }}</span>
               <strong>{{ link.label }}</strong>
               <small>Open</small>
@@ -590,6 +590,7 @@ export class ReportsComponent implements OnInit {
     { label: 'Account Ledger', path: '/reports/account-ledger', module: 'Finance' },
     { label: 'Inventory Reports', path: '/inventory/reports', module: 'Inventory' },
     { label: 'Appointment Activity', path: '/appointment-activity', module: 'Bookings' },
+    { label: 'Customer Feedback', path: '/reputation', queryParams: { tab: 'feedback' }, module: 'Reputation' },
     { label: 'Client CRM', path: '/clients', module: 'Clients' }
   ];
 
