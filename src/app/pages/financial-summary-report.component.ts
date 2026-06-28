@@ -677,9 +677,12 @@ type MemberSalesRow = {
               </table>
             </section>
 
-            <section class="panel daily-sheet-card">
-              <div class="mini-section-title"><span>Conversion Opportunity</span><strong>Non-member growth list</strong></div>
-              <table>
+          </div>
+
+          <section class="panel member-wide-card">
+            <div class="mini-section-title"><span>Conversion Opportunity</span><strong>Non-member growth list</strong></div>
+            <div class="member-table-wrap">
+              <table class="member-conversion-table">
                 <thead><tr><th>Client</th><th class="right">Sale</th><th class="right">Visits</th><th>Suggested plan</th><th>Action</th></tr></thead>
                 <tbody>
                   <tr *ngFor="let row of memberConversionOpportunities()">
@@ -694,12 +697,14 @@ type MemberSalesRow = {
                   </tr>
                 </tbody>
               </table>
-            </section>
+            </div>
+          </section>
 
-            <section class="panel daily-sheet-card">
-              <div class="mini-section-title"><span>Staff-Wise Impact</span><strong>Conversion accountability</strong></div>
-              <table>
-                <thead><tr><th>Staff name</th><th class="right">Member sales</th><th class="right">Non-member sales</th><th class="right">Member conversion count</th><th class="right">Repeat member visits</th><th class="right">Member pending</th><th class="right">Non-member pending</th></tr></thead>
+          <section class="panel member-wide-card">
+            <div class="mini-section-title"><span>Staff-Wise Impact</span><strong>Conversion accountability</strong></div>
+            <div class="member-table-wrap">
+              <table class="member-staff-table">
+                <thead><tr><th>Staff</th><th class="right">Member sale</th><th class="right">Non-member sale</th><th class="right" title="Member conversion count">Conversions</th><th class="right" title="Repeat member visits">Repeat visits</th><th class="right">Member due</th><th class="right">Non-member due</th></tr></thead>
                 <tbody>
                   <tr *ngFor="let row of memberStaffImpactRows()">
                     <td>{{ row['staffName'] }}</td>
@@ -715,8 +720,8 @@ type MemberSalesRow = {
                   </tr>
                 </tbody>
               </table>
-            </section>
-          </div>
+            </div>
+          </section>
 
           <section class="panel daily-revenue-alerts">
             <div class="mini-section-title"><span>Owner Alerts</span><strong>Membership revenue control</strong></div>
@@ -1182,6 +1187,82 @@ type MemberSalesRow = {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
+      align-items: start;
+    }
+
+    .member-sales-grid .daily-sheet-card,
+    .member-wide-card {
+      align-self: start;
+    }
+
+    .member-wide-card {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .member-table-wrap {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fff;
+    }
+
+    .member-table-wrap table {
+      width: 100%;
+      min-width: 920px;
+      table-layout: auto;
+      border-collapse: collapse;
+    }
+
+    .member-table-wrap th,
+    .member-table-wrap td {
+      padding: 10px 12px;
+      font-size: .82rem;
+      line-height: 1.28;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+
+    .member-table-wrap th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .member-table-wrap td:first-child,
+    .member-table-wrap th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #fff;
+      min-width: 220px;
+    }
+
+    .member-table-wrap th:first-child {
+      z-index: 3;
+      background: #f8fafc;
+    }
+
+    .member-conversion-table {
+      min-width: 860px;
+    }
+
+    .member-staff-table {
+      min-width: 1080px;
+    }
+
+    .member-staff-table th,
+    .member-staff-table td {
+      white-space: nowrap;
     }
 
     .daily-revenue-charts {
