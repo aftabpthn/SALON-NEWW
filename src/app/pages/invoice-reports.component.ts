@@ -28,8 +28,13 @@ type ProductSalesSummary = {
   taxableAmount: number;
   discount: number;
   productsSaleAfterDiscount: number;
+  cogs: number;
   grossMargin: number;
+  averageMarginPercent: number;
   lowStockItems: number;
+  lowMarginItems: number;
+  repeatBuyerRows: number;
+  reorderSuggestions: number;
 };
 
 type InvoiceLine = {
@@ -47,8 +52,12 @@ type InvoiceLine = {
   productSku: string;
   productBarcode: string;
   productCategory: string;
+  productBrand: string;
   productStock: number;
+  productLowStockThreshold: number;
   productUnitCost: number;
+  productBatchNumber: string;
+  productExpiryDate: string;
   itemName: string;
   itemType: string;
   quantity: number;
@@ -117,6 +126,13 @@ type InvoiceLine = {
           </select>
         </label>
         <label class="field">
+          <span>Branch</span>
+          <select [(ngModel)]="branchFilter">
+            <option value="">Header branch / all</option>
+            <option *ngFor="let branch of branchFilterOptions()" [value]="branch.id">{{ branch.label }}</option>
+          </select>
+        </label>
+        <label class="field">
           <span>Staff</span>
           <select [(ngModel)]="staffFilter">
             <option value="">All staff</option>
@@ -171,6 +187,56 @@ type InvoiceLine = {
         <button class="primary-button" type="button" (click)="load()">Apply</button>
       </section>
 
+      <section class="panel product-advanced-filter-panel" *ngIf="activeReport() === 'products'">
+        <label class="field">
+          <span>Product</span>
+          <select [(ngModel)]="productFilter">
+            <option value="">All products</option>
+            <option *ngFor="let product of productFilterOptions()" [value]="product.id">{{ product.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Brand</span>
+          <select [(ngModel)]="productBrandFilter">
+            <option value="">All brands</option>
+            <option *ngFor="let brand of productBrandOptions()" [value]="brand.id">{{ brand.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Category</span>
+          <select [(ngModel)]="productCategoryFilter">
+            <option value="">All categories</option>
+            <option *ngFor="let category of productCategoryOptions()" [value]="category.id">{{ category.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>GST rate</span>
+          <select [(ngModel)]="gstRateFilter">
+            <option value="">All GST rates</option>
+            <option *ngFor="let gst of gstRateOptions()" [value]="gst.id">{{ gst.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Margin health</span>
+          <select [(ngModel)]="marginHealthFilter">
+            <option value="">All margins</option>
+            <option value="low">Low / negative margin</option>
+            <option value="healthy">Healthy margin</option>
+            <option value="unknown">Cost missing</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Inventory signal</span>
+          <select [(ngModel)]="inventorySignalFilter">
+            <option value="">All stock signals</option>
+            <option value="Stockout risk">Stockout risk</option>
+            <option value="Low stock">Low stock</option>
+            <option value="Healthy">Healthy</option>
+            <option value="Unmapped">Unmapped</option>
+          </select>
+        </label>
+      </section>
+
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="notice()">{{ notice() }}</div>
 
@@ -194,8 +260,13 @@ type InvoiceLine = {
             <article class="metric-card"><span>Taxable Amount</span><strong>{{ productSalesSummary().taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>After discount before GST</small></article>
             <article class="metric-card"><span>Discount</span><strong>{{ productSalesSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Retail discount</small></article>
             <article class="metric-card"><span>Products Sale After Discount</span><strong>{{ productSalesSummary().productsSaleAfterDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net retail billed</small></article>
+            <article class="metric-card"><span>COGS</span><strong>{{ productSalesSummary().cogs | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Retail product cost</small></article>
             <article class="metric-card"><span>Gross Margin</span><strong>{{ productSalesSummary().grossMargin | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Approx. after COGS</small></article>
+            <article class="metric-card"><span>Avg Margin %</span><strong>{{ productSalesSummary().averageMarginPercent }}%</strong><small>Weighted retail margin</small></article>
             <article class="metric-card"><span>Low Stock Items</span><strong>{{ productSalesSummary().lowStockItems }}</strong><small>Sold products needing reorder watch</small></article>
+            <article class="metric-card"><span>Low Margin Alerts</span><strong>{{ productSalesSummary().lowMarginItems }}</strong><small>Negative, low or cost missing</small></article>
+            <article class="metric-card"><span>Repeat Buyers</span><strong>{{ productSalesSummary().repeatBuyerRows }}</strong><small>Rows from repeat product clients</small></article>
+            <article class="metric-card"><span>Reorder Suggestions</span><strong>{{ productSalesSummary().reorderSuggestions }}</strong><small>Stock below threshold</small></article>
           </div>
         </ng-template>
         <ng-template #regularInvoiceKpis>
@@ -222,6 +293,8 @@ type InvoiceLine = {
               <span class="badge">{{ filteredLines().length }} line(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()">Export CSV</button>
               <button class="ghost-button" type="button" (click)="exportPdf()">Export PDF</button>
+              <button class="ghost-button" type="button" *ngIf="activeReport() === 'products'" (click)="exportProductOwnerPdf()">Owner summary PDF</button>
+              <button class="ghost-button" type="button" *ngIf="activeReport() === 'products'" (click)="exportProductAccountingCsv()">Accounting export</button>
             </div>
           </div>
 
@@ -319,6 +392,13 @@ type InvoiceLine = {
     .report-filter-panel {
       display: grid;
       grid-template-columns: repeat(4, minmax(140px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .product-advanced-filter-panel {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
       gap: 12px;
       align-items: end;
     }
@@ -450,7 +530,7 @@ type InvoiceLine = {
     }
 
     .enterprise-report-table table {
-      min-width: 1320px;
+      min-width: 2200px;
     }
 
     .enterprise-report-table th {
@@ -485,6 +565,7 @@ type InvoiceLine = {
 
     @media (max-width: 1280px) {
       .report-filter-panel,
+      .product-advanced-filter-panel,
       .invoice-report-kpis,
       .report-tab-grid,
       .insight-strip,
@@ -495,6 +576,7 @@ type InvoiceLine = {
 
     @media (max-width: 760px) {
       .report-filter-panel,
+      .product-advanced-filter-panel,
       .invoice-report-kpis,
       .report-tab-grid,
       .insight-strip,
@@ -535,6 +617,28 @@ export class InvoiceReportsComponent implements OnInit {
     }
     return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
   });
+  readonly branchFilterOptions = computed(() => {
+    const map = new Map<string, string>();
+    for (const line of this.lines()) {
+      if (line.branchId) map.set(line.branchId, line.branchName || line.branchId);
+    }
+    for (const branch of this.branches()) {
+      const id = String(branch.id || '');
+      if (id) map.set(id, String(branch.name || id));
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  });
+  readonly productFilterOptions = computed(() => {
+    const map = new Map<string, string>();
+    for (const line of this.lines().filter((item) => item.itemType === 'product')) {
+      const id = line.productId || line.productSku || line.productBarcode || line.itemName;
+      if (id) map.set(id, `${line.itemName}${line.productSku ? ` · ${line.productSku}` : ''}`);
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  });
+  readonly productBrandOptions = computed(() => this.uniqueLineOption('productBrand'));
+  readonly productCategoryOptions = computed(() => this.uniqueLineOption('productCategory'));
+  readonly gstRateOptions = computed(() => this.uniqueLineOption('gstRate', (value) => `${this.money(Number(value || 0))}%`));
   readonly paymentModeOptions = computed(() => {
     const modes = new Set(this.payments().map((payment) => this.paymentMode(payment)).filter(Boolean));
     return [...modes].map((id) => ({ id, label: this.modeLabel(id) })).sort((a, b) => a.label.localeCompare(b.label));
@@ -553,11 +657,18 @@ export class InvoiceReportsComponent implements OnInit {
   status = '';
   query = '';
   clientFilter = '';
+  branchFilter = '';
   staffFilter = '';
   recoveryStatus = 'all';
   agingBucket = '';
   paymentModeFilter = '';
   receivedByFilter = '';
+  productFilter = '';
+  productBrandFilter = '';
+  productCategoryFilter = '';
+  gstRateFilter = '';
+  marginHealthFilter = '';
+  inventorySignalFilter = '';
 
   readonly reportDefinitions: ReportDefinition[] = [
     { id: 'sale-summary', title: 'Sale Summary', badge: '00', description: 'Sale list with bill, client, payment, prepaid, coupon, loyalty and GST details.' },
@@ -597,7 +708,7 @@ export class InvoiceReportsComponent implements OnInit {
       { key: 'staffName', label: 'Staff' }, { key: 'withoutDiscount', label: 'Without discount', type: 'currency' }, { key: 'withDiscount', label: 'With discount', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'discountRate', label: 'Discount %', type: 'percent' }, { key: 'serviceRevenue', label: 'Services', type: 'currency' }, { key: 'productRevenue', label: 'Products', type: 'currency' }, { key: 'membershipRevenue', label: 'Memberships', type: 'currency' }, { key: 'risk', label: 'Risk', type: 'badge' }
     ],
     products: [
-      { key: 'product', label: 'Product' }, { key: 'name', label: 'Name' }, { key: 'contact', label: 'Contact' }, { key: 'invoiceNo', label: 'Invoice No' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'price', label: 'Price', type: 'currency' }, { key: 'totalPrice', label: 'Total Price', type: 'currency' }, { key: 'taxPercent', label: 'Tax in %', type: 'percent' }, { key: 'taxOnProducts', label: 'Tax On Products', type: 'currency' }, { key: 'taxableAmount', label: 'Taxable Amount', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'totalPriceAfterDiscount', label: 'Total Price After Discount', type: 'currency' }, { key: 'staff', label: 'Staff' }, { key: 'date', label: 'Date' }, { key: 'skuBarcode', label: 'SKU / Barcode' }, { key: 'stockSignal', label: 'Stock Signal', type: 'badge' }, { key: 'grossMargin', label: 'Gross Margin', type: 'currency' }, { key: 'marginPercent', label: 'Margin %', type: 'percent' }
+      { key: 'product', label: 'Product' }, { key: 'brand', label: 'Brand' }, { key: 'category', label: 'Category' }, { key: 'name', label: 'Name' }, { key: 'contact', label: 'Contact' }, { key: 'invoiceNo', label: 'Invoice No' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'price', label: 'Sale Price', type: 'currency' }, { key: 'costPrice', label: 'Cost Price', type: 'currency' }, { key: 'cogs', label: 'COGS', type: 'currency' }, { key: 'totalPrice', label: 'Total Price', type: 'currency' }, { key: 'taxPercent', label: 'Tax in %', type: 'percent' }, { key: 'taxOnProducts', label: 'Tax On Products', type: 'currency' }, { key: 'taxableAmount', label: 'Taxable Amount', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'totalPriceAfterDiscount', label: 'Total Price After Discount', type: 'currency' }, { key: 'staff', label: 'Staff' }, { key: 'date', label: 'Date' }, { key: 'paymentModes', label: 'Payment Mode' }, { key: 'skuBarcode', label: 'SKU / Barcode' }, { key: 'soldVsStock', label: 'Sold vs Stock' }, { key: 'stockSignal', label: 'Stock Signal', type: 'badge' }, { key: 'stockDeductionTrail', label: 'Stock Deduction Trail' }, { key: 'fifoSource', label: 'Batch / FIFO Source' }, { key: 'expiryDate', label: 'Expiry' }, { key: 'reorderSuggestion', label: 'Reorder Suggestion' }, { key: 'grossMargin', label: 'Gross Margin', type: 'currency' }, { key: 'marginPercent', label: 'Margin %', type: 'percent' }, { key: 'lowMarginAlert', label: 'Low Margin Alert', type: 'badge' }, { key: 'commissionBase', label: 'Commission Base', type: 'currency' }, { key: 'retailTargetAchievement', label: 'Retail Target' }, { key: 'repeatBuyer', label: 'Repeat Buyer', type: 'badge' }, { key: 'aftercareOpportunity', label: 'Recommendation / Aftercare' }
     ],
     memberships: [
       { key: 'itemName', label: 'Membership / package' }, { key: 'staffName', label: 'Sold by' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'gross', label: 'Gross', type: 'currency' }, { key: 'discount', label: 'Discount', type: 'currency' }, { key: 'final', label: 'Final', type: 'currency' }, { key: 'liability', label: 'Future liability', type: 'currency' }, { key: 'invoices', label: 'Invoices', type: 'number' }
@@ -693,13 +804,22 @@ export class InvoiceReportsComponent implements OnInit {
 
   filteredLines(): InvoiceLine[] {
     const query = this.query.trim().toLowerCase();
+    const applyProductFilters = this.activeReport() === 'products';
     const lines = this.lines().filter((line) => {
       const statusMatch = !this.status || (this.status === 'unpaid' ? line.due > 0 : String(line.status).toLowerCase().includes(this.status));
       const dateMatch = this.inDateRange(line.date);
       const clientMatch = !this.clientFilter || String(line.clientId || '') === String(this.clientFilter);
+      const branchMatch = !this.branchFilter || String(line.branchId || '') === String(this.branchFilter);
       const staffMatch = !this.staffFilter || String(line.staffId || line.staffName || '') === String(this.staffFilter) || String(line.staffName || '') === String(this.staffFilter);
-      const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.productSku} ${line.productBarcode} ${line.productCategory} ${line.paymentModes} ${line.couponCode} ${line.addedBy}`.toLowerCase();
-      return statusMatch && dateMatch && clientMatch && staffMatch && (!query || text.includes(query));
+      const modeMatch = !this.paymentModeFilter || this.modeMatches(line.paymentModes, this.paymentModeFilter);
+      const productMatch = !applyProductFilters || !this.productFilter || [line.productId, line.productSku, line.productBarcode, line.itemName].some((value) => String(value || '') === String(this.productFilter));
+      const brandMatch = !applyProductFilters || !this.productBrandFilter || String(line.productBrand || '') === String(this.productBrandFilter);
+      const categoryMatch = !applyProductFilters || !this.productCategoryFilter || String(line.productCategory || '') === String(this.productCategoryFilter);
+      const gstMatch = !applyProductFilters || !this.gstRateFilter || String(line.gstRate) === String(this.gstRateFilter);
+      const marginMatch = !applyProductFilters || this.matchesMarginFilter(line);
+      const stockMatch = !applyProductFilters || !this.inventorySignalFilter || this.productStockSignal(line) === this.inventorySignalFilter;
+      const text = `${line.invoiceNumber} ${line.clientName} ${line.clientPhone} ${line.staffName} ${line.itemName} ${line.itemType} ${line.productSku} ${line.productBarcode} ${line.productBrand} ${line.productCategory} ${line.branchName} ${line.paymentModes} ${line.couponCode} ${line.addedBy}`.toLowerCase();
+      return statusMatch && dateMatch && clientMatch && branchMatch && staffMatch && modeMatch && productMatch && brandMatch && categoryMatch && gstMatch && marginMatch && stockMatch && (!query || text.includes(query));
     });
     return lines;
   }
@@ -755,8 +875,13 @@ export class InvoiceReportsComponent implements OnInit {
       taxableAmount: this.sum(rows, 'taxableAmount'),
       discount: this.sum(rows, 'discount'),
       productsSaleAfterDiscount: this.sum(rows, 'totalPriceAfterDiscount'),
+      cogs: this.sum(rows, 'cogs'),
       grossMargin: this.sum(rows, 'grossMargin'),
-      lowStockItems: rows.filter((row) => String(row['stockSignal'] || '').toLowerCase().includes('low')).length
+      averageMarginPercent: this.weightedMarginPercent(rows),
+      lowStockItems: rows.filter((row) => String(row['stockSignal'] || '').toLowerCase().includes('low') || String(row['stockSignal'] || '').toLowerCase().includes('stockout')).length,
+      lowMarginItems: rows.filter((row) => String(row['lowMarginAlert'] || '').toLowerCase() !== 'healthy').length,
+      repeatBuyerRows: rows.filter((row) => String(row['repeatBuyer'] || '').toLowerCase().includes('repeat')).length,
+      reorderSuggestions: rows.filter((row) => String(row['reorderSuggestion'] || '').toLowerCase().includes('reorder')).length
     };
   }
 
@@ -765,12 +890,17 @@ export class InvoiceReportsComponent implements OnInit {
     const topProduct = this.topBy(rows, 'product', 'totalPriceAfterDiscount');
     const topStaff = this.topBy(rows, 'staff', 'totalPriceAfterDiscount');
     const topCategory = this.topBy(rows, 'category', 'totalPriceAfterDiscount');
-    const margin = this.productSalesSummary().grossMargin;
+    const topClient = this.topBy(rows, 'name', 'totalPriceAfterDiscount');
+    const marginSummary = this.productSalesSummary();
     return [
       { label: 'Top product', value: topProduct.label || '-', detail: topProduct.value ? this.formatMoney(topProduct.value) : 'No retail sale' },
       { label: 'Top staff', value: topStaff.label || '-', detail: topStaff.value ? this.formatMoney(topStaff.value) : 'No staff attribution' },
       { label: 'Top category', value: topCategory.label || '-', detail: topCategory.value ? this.formatMoney(topCategory.value) : 'Category from product master' },
-      { label: 'Margin health', value: margin > 0 ? 'Positive' : margin < 0 ? 'Negative' : 'Unknown', detail: `${this.formatMoney(margin)} estimated gross margin` }
+      { label: 'Top retail client', value: topClient.label || '-', detail: topClient.value ? this.formatMoney(topClient.value) : 'No client retail history' },
+      { label: 'Margin health', value: marginSummary.grossMargin > 0 ? 'Positive' : marginSummary.grossMargin < 0 ? 'Negative' : 'Unknown', detail: `${this.formatMoney(marginSummary.grossMargin)} / ${marginSummary.averageMarginPercent}%` },
+      { label: 'Reorder queue', value: marginSummary.reorderSuggestions, detail: 'Sold products below threshold' },
+      { label: 'Aftercare opportunity', value: rows.filter((row) => String(row['aftercareOpportunity'] || '').includes('Recommend')).length, detail: 'Client/product follow-up prompts' },
+      { label: 'Accounting readiness', value: rows.filter((row) => Number(row['cogs'] || 0) > 0).length, detail: 'Rows with COGS available' }
     ];
   }
 
@@ -836,7 +966,7 @@ export class InvoiceReportsComponent implements OnInit {
 
   searchPlaceholder(): string {
     if (this.activeReport() === 'sale-summary') return 'Invoice, name or phone';
-    if (this.activeReport() === 'products') return 'Product, customer, barcode or invoice';
+    if (this.activeReport() === 'products') return 'Product, brand, category, SKU, barcode, customer or invoice';
     return 'Invoice, client, staff, service, product, payment mode';
   }
 
@@ -878,6 +1008,46 @@ export class InvoiceReportsComponent implements OnInit {
       })
     ];
     this.downloadFile(`invoice-report-${this.activeReport()}-${Date.now()}.pdf`, this.simplePdf(body), 'application/pdf');
+  }
+
+  exportProductOwnerPdf(): void {
+    const summary = this.productSalesSummary();
+    const cards = this.productSalesControlCards();
+    const rows = this.productSalesRows();
+    const body = [
+      'Product Sales Owner Summary',
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.from || 'All'} to ${this.to || 'All'}`,
+      `Branch: ${this.branchFilter ? this.branchFilterOptions().find((branch) => branch.id === this.branchFilter)?.label || this.branchFilter : this.branchLabel()}`,
+      '',
+      `Products sold: ${summary.totalProduct}`,
+      `Net retail sale: ${this.formatMoney(summary.productsSaleAfterDiscount)}`,
+      `COGS: ${this.formatMoney(summary.cogs)}`,
+      `Gross margin: ${this.formatMoney(summary.grossMargin)} (${summary.averageMarginPercent}%)`,
+      `Low margin alerts: ${summary.lowMarginItems}`,
+      `Low stock / stockout: ${summary.lowStockItems}`,
+      `Reorder suggestions: ${summary.reorderSuggestions}`,
+      `Repeat buyer rows: ${summary.repeatBuyerRows}`,
+      '',
+      ...cards.map((card) => `${card['label']}: ${card['value']} - ${card['detail']}`),
+      '',
+      'Top product rows',
+      ...rows.slice(0, 30).map((row, index) => `${index + 1}. ${row['product']} | ${row['name']} | ${this.formatMoney(Number(row['totalPriceAfterDiscount'] || 0))} | ${row['stockSignal']} | ${row['lowMarginAlert']}`)
+    ];
+    this.downloadFile(`product-sales-owner-summary-${Date.now()}.pdf`, this.simplePdf(body), 'application/pdf');
+  }
+
+  exportProductAccountingCsv(): void {
+    const columns = [
+      'Invoice Date', 'Invoice No', 'Client', 'Product', 'SKU / Barcode', 'GST %', 'Taxable', 'GST',
+      'Gross Sale', 'Discount', 'Net Sale', 'COGS', 'Gross Margin', 'Payment Mode', 'Accounting Code'
+    ];
+    const rows = this.productSalesRows().map((row) => [
+      row['date'], row['invoiceNo'], row['name'], row['product'], row['skuBarcode'], row['taxPercent'], row['taxableAmount'], row['taxOnProducts'],
+      row['totalPrice'], row['discount'], row['totalPriceAfterDiscount'], row['cogs'], row['grossMargin'], row['paymentModes'], row['accountingCode']
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map((cell) => this.csvCell(cell)).join(',')).join('\n');
+    this.downloadFile(`product-sales-accounting-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
   }
 
   private overviewRows(): ApiRecord[] {
@@ -987,13 +1157,21 @@ export class InvoiceReportsComponent implements OnInit {
         const cost = this.money(line.productUnitCost * line.quantity);
         const margin = this.money(line.taxable - cost);
         const marginPercent = line.taxable > 0 && cost > 0 ? this.money((margin / line.taxable) * 100) : 0;
+        const stockAfterSale = this.money(line.productStock);
+        const stockBeforeSale = this.money(stockAfterSale + line.quantity);
+        const reorderLevel = Math.max(line.productLowStockThreshold || 0, line.quantity * 2, 2);
+        const repeatCount = this.clientProductPurchaseCount(line.clientId, line.itemName);
         return {
           product: line.itemName,
+          brand: line.productBrand || '-',
+          category: line.productCategory || 'Retail',
           name: line.clientName,
           contact: line.clientPhone,
           invoiceNo: line.invoiceNumber,
           qty: line.quantity,
           price: line.rate,
+          costPrice: line.productUnitCost,
+          cogs: cost,
           totalPrice: line.gross,
           taxPercent: line.gstRate,
           taxOnProducts: line.gst,
@@ -1002,11 +1180,23 @@ export class InvoiceReportsComponent implements OnInit {
           totalPriceAfterDiscount: line.final,
           staff: line.staffName,
           date: this.dateKey(line.date),
+          paymentModes: line.paymentModes,
           skuBarcode: [line.productSku, line.productBarcode].filter(Boolean).join(' / ') || '-',
-          category: line.productCategory || 'Retail',
+          soldVsStock: `${line.quantity} sold / ${stockAfterSale} in stock`,
           stockSignal: this.productStockSignal(line),
+          stockDeductionTrail: line.productId ? `Invoice ${line.invoiceNumber} -> stock ${stockBeforeSale} to ${stockAfterSale}` : 'Product not mapped',
+          fifoSource: this.productFifoSource(line),
+          expiryDate: line.productExpiryDate || '-',
+          reorderSuggestion: this.productReorderSuggestion(line, reorderLevel),
           grossMargin: margin,
-          marginPercent
+          marginPercent,
+          lowMarginAlert: this.marginAlert(line, marginPercent),
+          commissionBase: Math.max(0, line.taxable),
+          retailTargetAchievement: this.staffRetailTargetAchievement(line.staffName),
+          repeatBuyer: repeatCount > 1 ? `Repeat buyer x${repeatCount}` : 'First retail buy',
+          aftercareOpportunity: this.aftercareOpportunity(line, repeatCount),
+          accountingCode: this.productAccountingCode(line),
+          branch: line.branchName
         };
       })
       .sort((a, b) => this.dateMs(String(b['date'])) - this.dateMs(String(a['date'])) || Number(b['totalPriceAfterDiscount']) - Number(a['totalPriceAfterDiscount']));
@@ -1520,8 +1710,12 @@ export class InvoiceReportsComponent implements OnInit {
           productSku: String(item.sku || item.SKU || product['sku'] || product['code'] || product['productCode'] || ''),
           productBarcode: String(item.barcode || item.barCode || product['barcode'] || product['barCode'] || ''),
           productCategory: String(item.category || product['category'] || product['brand'] || ''),
+          productBrand: String(item.brand || item.productBrand || product['brand'] || product['manufacturer'] || product['supplierName'] || ''),
           productStock: Number(product['stock'] || product['currentStock'] || product['availableStock'] || 0),
+          productLowStockThreshold: Number(product['lowStockThreshold'] || product['reorderLevel'] || product['minStock'] || product['minimumStock'] || 0),
           productUnitCost: this.money(Number(item.unitCost || item.costPrice || item.purchasePrice || product['unitCost'] || product['costPrice'] || product['purchasePrice'] || 0)),
+          productBatchNumber: String(item.batchNumber || item.batch_number || product['batchNumber'] || product['batch_number'] || ''),
+          productExpiryDate: String(item.expiryDate || item.expiry_date || product['expiryDate'] || product['expiry_date'] || ''),
           itemName,
           itemType: this.normalizedItemType(item),
           quantity: this.money(Number(item.quantity || item.qty || 1)),
@@ -1722,8 +1916,92 @@ export class InvoiceReportsComponent implements OnInit {
   private productStockSignal(line: InvoiceLine): string {
     if (!line.productId && !line.productSku && !line.productBarcode) return 'Unmapped';
     if (line.productStock <= 0) return 'Stockout risk';
-    if (line.productStock <= Math.max(2, line.quantity)) return 'Low stock';
+    if (line.productStock <= Math.max(2, line.quantity, line.productLowStockThreshold)) return 'Low stock';
     return 'Healthy';
+  }
+
+  private uniqueLineOption(key: keyof InvoiceLine, labelFn?: (value: unknown) => string): { id: string; label: string }[] {
+    const map = new Map<string, string>();
+    for (const line of this.lines().filter((item) => item.itemType === 'product')) {
+      const value = line[key];
+      const id = String(value ?? '').trim();
+      if (id) map.set(id, labelFn ? labelFn(value) : id);
+    }
+    return [...map.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  private modeMatches(paymentModes: string, mode: string): boolean {
+    const expected = this.modeLabel(mode).toLowerCase();
+    const text = String(paymentModes || '').toLowerCase();
+    return text.includes(String(mode || '').toLowerCase()) || text.includes(expected);
+  }
+
+  private matchesMarginFilter(line: InvoiceLine): boolean {
+    if (!this.marginHealthFilter) return true;
+    const cost = this.money(line.productUnitCost * line.quantity);
+    const margin = this.money(line.taxable - cost);
+    const marginPercent = line.taxable > 0 && cost > 0 ? this.money((margin / line.taxable) * 100) : 0;
+    const alert = this.marginAlert(line, marginPercent).toLowerCase();
+    if (this.marginHealthFilter === 'unknown') return alert.includes('cost missing');
+    if (this.marginHealthFilter === 'low') return alert !== 'healthy';
+    if (this.marginHealthFilter === 'healthy') return alert === 'healthy';
+    return true;
+  }
+
+  private weightedMarginPercent(rows: ApiRecord[]): number {
+    const taxable = this.sum(rows, 'taxableAmount');
+    const margin = this.sum(rows, 'grossMargin');
+    return taxable > 0 ? this.money((margin / taxable) * 100) : 0;
+  }
+
+  private marginAlert(line: InvoiceLine, marginPercent: number): string {
+    if (line.productUnitCost <= 0) return 'Cost missing';
+    if (marginPercent < 0) return 'Negative margin';
+    if (marginPercent < 20) return 'Low margin';
+    return 'Healthy';
+  }
+
+  private productFifoSource(line: InvoiceLine): string {
+    if (line.productBatchNumber && line.productExpiryDate) return `${line.productBatchNumber} / ${line.productExpiryDate}`;
+    if (line.productBatchNumber) return line.productBatchNumber;
+    if (line.productExpiryDate) return `Expiry ${line.productExpiryDate}`;
+    return line.productId ? 'FIFO/batch not linked in invoice row' : 'Product not mapped';
+  }
+
+  private productReorderSuggestion(line: InvoiceLine, reorderLevel: number): string {
+    if (!line.productId && !line.productSku && !line.productBarcode) return 'Map product first';
+    if (line.productStock <= 0) return `Reorder now (${Math.max(reorderLevel * 2, line.quantity)} units)`;
+    if (line.productStock <= reorderLevel) return `Reorder soon (${Math.max(reorderLevel, line.quantity)} units)`;
+    return 'No reorder needed';
+  }
+
+  private clientProductPurchaseCount(clientId: string, productName: string): number {
+    const key = this.productLookupKey(productName);
+    return this.lines()
+      .filter((line) => line.itemType === 'product')
+      .filter((line) => String(line.clientId || '') === String(clientId || ''))
+      .filter((line) => this.productLookupKey(line.itemName) === key)
+      .length;
+  }
+
+  private aftercareOpportunity(line: InvoiceLine, repeatCount: number): string {
+    const name = line.itemName || 'product';
+    if (repeatCount > 1) return `Recommend refill / bundle for ${name}`;
+    if (line.productCategory) return `Aftercare message for ${line.productCategory}`;
+    return `Ask feedback and usage tips for ${name}`;
+  }
+
+  private staffRetailTargetAchievement(staffName: string): string {
+    const staffRows = this.filteredLines().filter((line) => line.itemType === 'product' && line.staffName === staffName);
+    const retailSale = this.sum(staffRows, 'final');
+    const target = Math.max(10000, staffRows.length * 1000);
+    return `${Math.min(100, this.money((retailSale / target) * 100))}% of ${this.formatMoney(target)}`;
+  }
+
+  private productAccountingCode(line: InvoiceLine): string {
+    const gst = `${this.money(line.gstRate)}GST`;
+    const category = this.productLookupKey(line.productCategory || 'retail').replace(/\s+/g, '_') || 'retail';
+    return `RETAIL_${category.toUpperCase()}_${gst}`;
   }
 
   private lineRate(item: ApiRecord): number {

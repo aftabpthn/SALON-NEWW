@@ -12,7 +12,12 @@ test("invoice reports Product Sales tab has Salonist-style KPI cards", () => {
     "Taxable Amount",
     "Discount",
     "Products Sale After Discount",
+    "COGS",
     "Gross Margin",
+    "Avg Margin %",
+    "Low Margin Alerts",
+    "Repeat Buyers",
+    "Reorder Suggestions",
     "Low Stock Items"
   ]) {
     assert.match(invoiceReports, new RegExp(label), `missing Product Sales KPI: ${label}`);
@@ -30,19 +35,30 @@ test("invoice reports Product Sales table includes detailed retail columns", () 
     "Invoice No",
     "Qty",
     "Price",
+    "Cost Price",
+    "COGS",
     "Total Price",
     "Tax in %",
     "Tax On Products",
     "Total Price After Discount",
     "SKU / Barcode",
+    "Sold vs Stock",
     "Stock Signal",
+    "Stock Deduction Trail",
+    "Batch / FIFO Source",
+    "Reorder Suggestion",
+    "Low Margin Alert",
+    "Commission Base",
+    "Retail Target",
+    "Repeat Buyer",
+    "Recommendation / Aftercare",
     "Margin %"
   ]) {
     assert.match(invoiceReports, new RegExp(label.replace(/[/%]/g, "\\$&")), `missing Product Sales column: ${label}`);
   }
 
   assert.match(invoiceReports, /productSalesRows\(\): ApiRecord\[\]/);
-  assert.match(invoiceReports, /Product, customer, barcode or invoice/);
+  assert.match(invoiceReports, /Product, brand, category, SKU, barcode, customer or invoice/);
 });
 
 test("invoice reports enrich product sales with product master data", () => {
@@ -51,4 +67,37 @@ test("invoice reports enrich product sales with product master data", () => {
   assert.match(invoiceReports, /productLookupKey/);
   assert.match(invoiceReports, /productStockSignal/);
   assert.match(invoiceReports, /productSalesControlCards\(\)/);
+});
+
+test("invoice reports Product Sales adds advanced filters and exports", () => {
+  for (const label of [
+    "Product",
+    "Brand",
+    "Category",
+    "GST rate",
+    "Margin health",
+    "Inventory signal",
+    "Owner summary PDF",
+    "Accounting export"
+  ]) {
+    assert.match(invoiceReports, new RegExp(label), `missing advanced product control: ${label}`);
+  }
+
+  for (const token of [
+    "productFilterOptions",
+    "productBrandOptions",
+    "productCategoryOptions",
+    "gstRateOptions",
+    "paymentModeFilter",
+    "branchFilter",
+    "exportProductOwnerPdf",
+    "exportProductAccountingCsv",
+    "marginAlert",
+    "productReorderSuggestion",
+    "clientProductPurchaseCount",
+    "aftercareOpportunity",
+    "staffRetailTargetAchievement"
+  ]) {
+    assert.match(invoiceReports, new RegExp(token), `missing advanced product implementation token: ${token}`);
+  }
 });
