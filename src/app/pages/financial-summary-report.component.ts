@@ -805,7 +805,7 @@ type SalesTaxRow = {
 
       <ng-container *ngIf="!loading() && !error() && activeTab === 'sales-tax'">
         <section class="sales-tax-stack">
-          <div class="section-title daily-sheet-title">
+          <div class="section-title daily-sheet-title sales-tax-title">
             <div>
               <span class="eyebrow">GST filing intelligence</span>
               <h2>Sales Tax / GST 10x Report</h2>
@@ -819,7 +819,7 @@ type SalesTaxRow = {
             </div>
           </div>
 
-          <div class="daily-sheet-kpis">
+          <div class="daily-sheet-kpis sales-tax-kpis">
             <article><span>Total bills</span><strong>{{ salesTaxSummary()['totalBills'] }}</strong><small>Deleted/void excluded</small></article>
             <article><span>Gross sale</span><strong>{{ salesTaxSummary()['grossSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discounts</small></article>
             <article><span>Net sale</span><strong>{{ salesTaxSummary()['netSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Invoice total</small></article>
@@ -835,7 +835,7 @@ type SalesTaxRow = {
           </div>
 
           <div class="sales-tax-grid">
-            <section class="panel daily-sheet-card">
+            <section class="panel daily-sheet-card sales-tax-card">
               <div class="mini-section-title"><span>GST rate breakup</span><strong>0%, 5%, 12%, 18%, 28%</strong></div>
               <table>
                 <thead><tr><th>GST rate</th><th class="right">Bills</th><th class="right">Taxable</th><th class="right">GST</th><th class="right">Total</th></tr></thead>
@@ -851,7 +851,7 @@ type SalesTaxRow = {
               </table>
             </section>
 
-            <section class="panel daily-sheet-card">
+            <section class="panel daily-sheet-card sales-tax-card">
               <div class="mini-section-title"><span>Service/product tax split</span><strong>Tax by item type</strong></div>
               <table>
                 <thead><tr><th>Type</th><th class="right">Bills</th><th class="right">Taxable</th><th class="right">GST</th><th class="right">Total</th></tr></thead>
@@ -867,7 +867,7 @@ type SalesTaxRow = {
               </table>
             </section>
 
-            <section class="panel daily-sheet-card">
+            <section class="panel daily-sheet-card sales-tax-card sales-tax-checks-card">
               <div class="mini-section-title"><span>Accounting checks</span><strong>Mismatch, missing GST, refund tax</strong></div>
               <table>
                 <thead><tr><th>Check</th><th class="right">Count</th><th class="right">Amount</th><th>Action</th></tr></thead>
@@ -883,8 +883,8 @@ type SalesTaxRow = {
             </section>
           </div>
 
-          <section class="panel daily-revenue-table-card">
-            <div class="mini-section-title"><span>Invoice-wise tax register</span><strong>GSTIN, staff/cashier, payment mode and tax status</strong></div>
+          <section class="panel daily-revenue-table-card sales-tax-register-card">
+            <div class="mini-section-title"><span>Invoice-wise tax register</span><strong>Scroll horizontally for full GST audit columns</strong></div>
             <div class="financial-table-wrap sales-tax-table-wrap">
               <table>
                 <thead>
@@ -1359,6 +1359,30 @@ type SalesTaxRow = {
       gap: 14px;
     }
 
+    .sales-tax-title {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sales-tax-kpis {
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+    }
+
+    .sales-tax-kpis article {
+      min-height: 88px;
+      padding: 12px;
+      border-top-width: 3px;
+    }
+
+    .sales-tax-kpis strong {
+      font-size: 1rem;
+      overflow-wrap: anywhere;
+    }
+
     .member-sales-grid,
     .sales-tax-grid {
       display: grid;
@@ -1368,7 +1392,33 @@ type SalesTaxRow = {
     }
 
     .sales-tax-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sales-tax-card table {
+      min-width: 0;
+      width: 100%;
+      table-layout: auto;
+    }
+
+    .sales-tax-card th,
+    .sales-tax-card td {
+      padding: 10px 12px;
+      white-space: normal;
+    }
+
+    .sales-tax-card td:first-child,
+    .sales-tax-card th:first-child {
+      width: auto;
+      min-width: 140px;
+    }
+
+    .sales-tax-checks-card {
+      grid-column: 1 / -1;
+    }
+
+    .sales-tax-checks-card table {
+      min-width: 860px;
     }
 
     .member-sales-grid .daily-sheet-card,
@@ -1593,8 +1643,47 @@ type SalesTaxRow = {
     }
 
     .sales-tax-table-wrap table {
-      min-width: 2600px;
+      min-width: 2450px;
       table-layout: auto;
+    }
+
+    .sales-tax-register-card {
+      overflow: hidden;
+    }
+
+    .sales-tax-table-wrap {
+      max-height: min(620px, calc(100vh - 280px));
+    }
+
+    .sales-tax-table-wrap th,
+    .sales-tax-table-wrap td {
+      padding: 10px 12px;
+      font-size: .8rem;
+      line-height: 1.28;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+    .sales-tax-table-wrap th:first-child,
+    .sales-tax-table-wrap td:first-child {
+      width: 116px;
+      min-width: 116px;
+      max-width: 116px;
+    }
+
+    .sales-tax-table-wrap th:nth-child(2),
+    .sales-tax-table-wrap td:nth-child(2) {
+      min-width: 150px;
+    }
+
+    .sales-tax-table-wrap th:nth-child(3),
+    .sales-tax-table-wrap td:nth-child(3) {
+      min-width: 220px;
+    }
+
+    .sales-tax-table-wrap th:nth-child(6),
+    .sales-tax-table-wrap td:nth-child(6) {
+      min-width: 160px;
     }
 
     .clickable-row {
