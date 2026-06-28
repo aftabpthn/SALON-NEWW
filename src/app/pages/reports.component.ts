@@ -585,6 +585,7 @@ export class ReportsComponent implements OnInit {
     { label: 'Inward Revenue', path: '/reports/inward-revenue', module: 'FlexiSalon import' },
     { label: 'Sale Summary', path: '/reports/invoices', module: 'Sale list with bill' },
     { label: 'Service Trends', path: '/reports/invoices', queryParams: { report: 'service-trends' }, module: 'Service performance' },
+    { label: 'Service Clients', path: '/reports/invoices', queryParams: { report: 'service-clients' }, module: 'Service client detail' },
     { label: 'Invoice Reports', path: '/reports/invoices', module: 'Invoice intelligence' },
     { label: 'Membership Redeem', path: '/memberships', queryParams: { tab: 'reports', report: 'membershipRedeem' }, module: 'Membership reports' },
     { label: 'Staff Sales', path: '/reports/staff-sales', module: 'POS attribution' },

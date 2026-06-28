@@ -228,6 +228,114 @@ class ServiceTrendsReportService {
     return { summary: this.summary(rows), rows };
   }
 
+  serviceClients(query = {}, access = {}) {
+    const tenantId = access.tenantId || DEFAULT_TENANT_ID;
+    const branchId = String(query.branchId || access.branchId || "");
+    if (branchId) tenantService.assertBranchAccess(access, branchId);
+
+    const invoices = listRows("invoices", { tenantId, branchId, limit: Number(query.limit || 10000) || 10000 });
+    const sales = listRows("sales", { tenantId, branchId, limit: 10000 });
+    const clients = listRows("clients", { tenantId, branchId: "", limit: 10000 });
+    const staff = listRows("staff", { tenantId, branchId: "", limit: 10000 });
+    const services = listRows("services", { tenantId, branchId: "", limit: 20000 });
+
+    const salesById = new Map(sales.map((sale) => [String(sale.id || ""), sale]));
+    const clientsById = new Map(clients.map((client) => [String(client.id || ""), client]));
+    const staffById = new Map(staff.map((person) => [String(person.id || ""), person]));
+    const servicesById = new Map();
+    const servicesByName = new Map();
+    for (const service of services) {
+      for (const id of [service.id, service.serviceId, service.service_id, service.code, service.sku]) {
+        if (id !== undefined && id !== null && id !== "") servicesById.set(String(id), service);
+      }
+      const key = serviceLookupKey(service.name || service.serviceName || service.title || "");
+      if (key) servicesByName.set(key, service);
+    }
+
+    const rows = [];
+    for (const invoice of invoices) {
+      const status = String(invoice.status || invoice.payment_status || "").toLowerCase();
+      if (excludedStatuses.has(status)) continue;
+      const sale = salesById.get(String(invoice.saleId || invoice.sale_id || "")) || {};
+      const createdAt = String(invoice.createdAt || invoice.created_at || invoice.date || sale.createdAt || sale.created_at || "");
+      const invoiceDate = dateKey(createdAt);
+      if (query.from && invoiceDate && invoiceDate < String(query.from)) continue;
+      if (query.to && invoiceDate && invoiceDate > String(query.to)) continue;
+
+      const items = readArray(invoice.lineItems?.length ? invoice.lineItems : invoice.line_items?.length ? invoice.line_items : sale.items);
+      const grossTotal = money(items.reduce((sum, item) => sum + lineGross(item), 0));
+      const invoiceDiscount = money(invoice.discount ?? invoice.discount_total ?? sale.discount ?? 0);
+      const clientId = String(invoice.clientId || invoice.client_id || sale.clientId || sale.client_id || "");
+      const client = clientsById.get(clientId) || {};
+      const invoiceStaffId = String(invoice.staffId || invoice.staff_id || sale.staffId || sale.staff_id || "");
+      const invoiceStaff = staffById.get(invoiceStaffId) || {};
+      const invoiceId = String(invoice.id || invoice.invoiceId || invoice.invoice_id || "");
+      const appointmentId = String(invoice.appointmentId || invoice.appointment_id || sale.appointmentId || sale.appointment_id || "");
+      const saleType = appointmentId ? "Appointment" : "Quick Sale";
+
+      for (const item of items) {
+        const type = normalizedType(item);
+        if (!serviceTypes.has(type)) continue;
+        const serviceId = itemServiceId(item);
+        const name = itemName(item);
+        const service = servicesById.get(serviceId) || servicesByName.get(serviceLookupKey(name)) || {};
+        const staffId = String(item.staffId || item.staff_id || item.assignedStaffId || item.assigned_staff_id || invoiceStaffId || "");
+        const staffPerson = staffById.get(staffId) || invoiceStaff;
+        const gross = lineGross(item);
+        const discount = lineDiscount(item, gross, grossTotal, invoiceDiscount);
+        const taxable = money(Math.max(0, gross - discount));
+        const row = {
+          date: invoiceDate,
+          time: timeLabel(createdAt),
+          soldAt: createdAt,
+          serviceGroup: serviceCategory(item, service),
+          serviceId,
+          serviceName: name,
+          clientId,
+          clientName: String(client.name || invoice.clientName || invoice.client_name || sale.clientName || "Walk-in"),
+          clientPhone: String(client.phone || client.mobile || client.contact || invoice.clientPhone || invoice.client_phone || sale.clientPhone || sale.client_phone || ""),
+          servicePrice: taxable,
+          saleType,
+          staffId,
+          staffName: String(item.staffName || item.staff_name || item.assignedStaffName || item.assigned_staff_name || staffPerson.name || "Unassigned"),
+          invoiceId,
+          invoiceNumber: String(invoice.invoiceNumber || invoice.invoice_number || invoice.invoice_no || invoiceId),
+          branchId: branchOf(invoice, sale)
+        };
+        if (this.serviceClientMatches(row, query)) rows.push(row);
+      }
+    }
+
+    rows.sort((a, b) => dateMs(b.soldAt) - dateMs(a.soldAt));
+    return { summary: this.serviceClientsSummary(rows), rows };
+  }
+
+  serviceClientMatches(row = {}, query = {}) {
+    if (query.serviceGroup && String(row.serviceGroup || "") !== String(query.serviceGroup)) return false;
+    if (query.serviceId && ![row.serviceId, row.serviceName].map(String).includes(String(query.serviceId))) return false;
+    if (query.clientId && ![row.clientId, row.clientName].map(String).includes(String(query.clientId))) return false;
+    if (query.staffId && ![row.staffId, row.staffName].map(String).includes(String(query.staffId))) return false;
+    if (query.branchId && String(row.branchId || "") !== String(query.branchId)) return false;
+    if (query.saleType && String(row.saleType || "") !== String(query.saleType)) return false;
+    const q = String(query.q || query.query || "").trim().toLowerCase();
+    if (q) {
+      const text = `${row.date} ${row.time} ${row.serviceGroup} ${row.serviceName} ${row.clientName} ${row.clientPhone} ${row.staffName} ${row.invoiceNumber} ${row.branchId} ${row.saleType}`.toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    return true;
+  }
+
+  serviceClientsSummary(rows = []) {
+    const clients = new Set(rows.map((row) => row.clientId || row.clientName).filter(Boolean));
+    return {
+      totalClients: clients.size,
+      totalServiceRevenue: money(rows.reduce((sum, row) => sum + Number(row.servicePrice || 0), 0)),
+      totalServiceRows: rows.length,
+      appointmentRows: rows.filter((row) => row.saleType === "Appointment").length,
+      quickSaleRows: rows.filter((row) => row.saleType === "Quick Sale").length
+    };
+  }
+
   aggregate(lines = []) {
     const grouped = new Map();
     for (const line of lines) {
