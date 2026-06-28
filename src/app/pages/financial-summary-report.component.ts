@@ -8,7 +8,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
 type MatrixCell = { key: string; label: string; tone?: 'section' | 'primary' | 'normal' };
 type MatrixColumn = { key: string; label: string; from?: string; to?: string };
-type ReportTab = 'summary' | 'payments' | 'daily-sheet' | 'daily-revenue' | 'member-sales';
+type ReportTab = 'summary' | 'payments' | 'daily-sheet' | 'daily-revenue' | 'member-sales' | 'sales-tax';
 type PaymentDistributionRow = {
   date: string;
   invoiceDateValue: string;
@@ -76,6 +76,31 @@ type MemberSalesRow = {
   isMember: boolean;
   isExpiredMember: boolean;
 };
+type SalesTaxRow = {
+  date: string;
+  dateValue: string;
+  invoiceNo: string;
+  clientName: string;
+  phone: string;
+  gstin: string;
+  staffCashier: string;
+  actualPrice: number;
+  discount: number;
+  couponDiscount: number;
+  membershipDiscount: number;
+  taxableAmount: number;
+  gstRate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  totalGst: number;
+  invoiceTotal: number;
+  paid: number;
+  due: number;
+  paymentMode: string;
+  taxStatus: string;
+  itemType: string;
+};
 
 @Component({
   selector: 'app-financial-summary-report',
@@ -104,6 +129,7 @@ type MemberSalesRow = {
         <button type="button" [class.active]="activeTab === 'daily-sheet'" (click)="setActiveTab('daily-sheet')">Daily Sheet</button>
         <button type="button" [class.active]="activeTab === 'daily-revenue'" (click)="setActiveTab('daily-revenue')">Daily Revenue</button>
         <button type="button" [class.active]="activeTab === 'member-sales'" (click)="setActiveTab('member-sales')">Member vs Non-Member Sales</button>
+        <button type="button" [class.active]="activeTab === 'sales-tax'" (click)="setActiveTab('sales-tax')">Sales Tax / GST</button>
       </div>
 
       <section class="panel filter-panel">
@@ -776,6 +802,149 @@ type MemberSalesRow = {
           </section>
         </section>
       </ng-container>
+
+      <ng-container *ngIf="!loading() && !error() && activeTab === 'sales-tax'">
+        <section class="sales-tax-stack">
+          <div class="section-title daily-sheet-title">
+            <div>
+              <span class="eyebrow">GST filing intelligence</span>
+              <h2>Sales Tax / GST 10x Report</h2>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · invoice tax register, rate breakup, service/product split and accounting checks.</p>
+            </div>
+            <div class="hero-actions">
+              <span class="badge">{{ salesTaxRows().length }} bill(s)</span>
+              <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!salesTaxRows().length">CSV export</button>
+              <button class="ghost-button" type="button" (click)="exportSalesTaxOwnerPdf()" [disabled]="!salesTaxRows().length">Owner PDF</button>
+              <button class="ghost-button" type="button" (click)="exportSalesTaxAccountantPdf()" [disabled]="!salesTaxRows().length">Accountant PDF</button>
+            </div>
+          </div>
+
+          <div class="daily-sheet-kpis">
+            <article><span>Total bills</span><strong>{{ salesTaxSummary()['totalBills'] }}</strong><small>Deleted/void excluded</small></article>
+            <article><span>Gross sale</span><strong>{{ salesTaxSummary()['grossSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discounts</small></article>
+            <article><span>Net sale</span><strong>{{ salesTaxSummary()['netSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Invoice total</small></article>
+            <article><span>Taxable amount</span><strong>{{ salesTaxSummary()['taxableAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST base</small></article>
+            <article><span>Total GST</span><strong>{{ salesTaxSummary()['totalGst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>CGST + SGST + IGST</small></article>
+            <article><span>CGST</span><strong>{{ salesTaxSummary()['cgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Central tax</small></article>
+            <article><span>SGST</span><strong>{{ salesTaxSummary()['sgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>State tax</small></article>
+            <article><span>IGST</span><strong>{{ salesTaxSummary()['igst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Interstate tax</small></article>
+            <article><span>Coupon discount</span><strong>{{ salesTaxSummary()['couponDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Coupon leakage</small></article>
+            <article><span>Membership discount</span><strong>{{ salesTaxSummary()['membershipDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Loyalty benefit</small></article>
+            <article><span>Tax-exempt sale</span><strong>{{ salesTaxSummary()['taxExemptSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Zero GST taxable rows</small></article>
+            <article><span>GST mismatch count</span><strong>{{ salesTaxSummary()['gstMismatchCount'] }}</strong><small>Needs accountant review</small></article>
+          </div>
+
+          <div class="sales-tax-grid">
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>GST rate breakup</span><strong>0%, 5%, 12%, 18%, 28%</strong></div>
+              <table>
+                <thead><tr><th>GST rate</th><th class="right">Bills</th><th class="right">Taxable</th><th class="right">GST</th><th class="right">Total</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of gstRateBreakupRows()">
+                    <td>{{ row['rateLabel'] }}</td>
+                    <td class="right">{{ row['count'] }}</td>
+                    <td class="right">{{ row['taxable'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['gst'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['total'] | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>Service/product tax split</span><strong>Tax by item type</strong></div>
+              <table>
+                <thead><tr><th>Type</th><th class="right">Bills</th><th class="right">Taxable</th><th class="right">GST</th><th class="right">Total</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of salesTaxTypeSplitRows()">
+                    <td>{{ row['typeLabel'] }}</td>
+                    <td class="right">{{ row['count'] }}</td>
+                    <td class="right">{{ row['taxable'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['gst'] | number:'1.2-2' }}</td>
+                    <td class="right">{{ row['total'] | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="panel daily-sheet-card">
+              <div class="mini-section-title"><span>Accounting checks</span><strong>Mismatch, missing GST, refund tax</strong></div>
+              <table>
+                <thead><tr><th>Check</th><th class="right">Count</th><th class="right">Amount</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let row of salesTaxAccountingChecks()">
+                    <td>{{ row['label'] }}</td>
+                    <td class="right">{{ row['count'] }}</td>
+                    <td class="right">{{ row['amount'] | number:'1.2-2' }}</td>
+                    <td>{{ row['action'] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+          </div>
+
+          <section class="panel daily-revenue-table-card">
+            <div class="mini-section-title"><span>Invoice-wise tax register</span><strong>GSTIN, staff/cashier, payment mode and tax status</strong></div>
+            <div class="financial-table-wrap sales-tax-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Invoice no</th>
+                    <th>Client</th>
+                    <th>Phone</th>
+                    <th>GSTIN</th>
+                    <th>Staff / cashier</th>
+                    <th class="right">Actual price</th>
+                    <th class="right">Discount</th>
+                    <th class="right">Coupon discount</th>
+                    <th class="right">Membership discount</th>
+                    <th class="right">Taxable amount</th>
+                    <th class="right">GST %</th>
+                    <th class="right">CGST</th>
+                    <th class="right">SGST</th>
+                    <th class="right">IGST</th>
+                    <th class="right">Total GST</th>
+                    <th class="right">Invoice total</th>
+                    <th class="right">Paid</th>
+                    <th class="right">Due</th>
+                    <th>Payment mode</th>
+                    <th>Tax status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of salesTaxRows()">
+                    <td>{{ row.date }}</td>
+                    <td>{{ row.invoiceNo }}</td>
+                    <td>{{ row.clientName }}</td>
+                    <td>{{ row.phone }}</td>
+                    <td>{{ row.gstin || '-' }}</td>
+                    <td>{{ row.staffCashier }}</td>
+                    <td class="right">{{ row.actualPrice | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.discount | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.couponDiscount | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.membershipDiscount | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.taxableAmount | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.gstRate | number:'1.0-2' }}%</td>
+                    <td class="right">{{ row.cgst | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.sgst | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.igst | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.totalGst | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.invoiceTotal | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.paid | number:'1.2-2' }}</td>
+                    <td class="right">{{ row.due | number:'1.2-2' }}</td>
+                    <td><span class="mode-pill">{{ row.paymentMode }}</span></td>
+                    <td><span class="mode-pill" [class.warn-pill]="row.taxStatus !== 'Valid'">{{ row.taxStatus }}</span></td>
+                  </tr>
+                  <tr *ngIf="!salesTaxRows().length">
+                    <td colspan="21" class="empty-cell">No Sales Tax / GST rows found for selected date range.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </ng-container>
     </section>
   `,
   styles: [`
@@ -1090,6 +1259,12 @@ type MemberSalesRow = {
       white-space: nowrap;
     }
 
+    .warn-pill {
+      border-color: rgba(194, 65, 12, .26);
+      color: #9a3412;
+      background: #fff7ed;
+    }
+
     .empty-cell {
       height: 160px;
       text-align: center !important;
@@ -1178,16 +1353,22 @@ type MemberSalesRow = {
     }
 
     .daily-revenue-stack,
-    .member-sales-stack {
+    .member-sales-stack,
+    .sales-tax-stack {
       display: grid;
       gap: 14px;
     }
 
-    .member-sales-grid {
+    .member-sales-grid,
+    .sales-tax-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
       align-items: start;
+    }
+
+    .sales-tax-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .member-sales-grid .daily-sheet-card,
@@ -1411,6 +1592,11 @@ type MemberSalesRow = {
       table-layout: auto;
     }
 
+    .sales-tax-table-wrap table {
+      min-width: 2600px;
+      table-layout: auto;
+    }
+
     .clickable-row {
       cursor: pointer;
     }
@@ -1445,6 +1631,7 @@ type MemberSalesRow = {
       .daily-sheet-grid,
       .daily-revenue-charts,
       .member-sales-grid,
+      .sales-tax-grid,
       .aging-chart,
       .alert-grid,
       .daily-revenue-drilldown {
@@ -1461,6 +1648,7 @@ type MemberSalesRow = {
       .daily-sheet-grid,
       .daily-revenue-charts,
       .member-sales-grid,
+      .sales-tax-grid,
       .aging-chart,
       .alert-grid,
       .daily-revenue-drilldown {
@@ -1515,6 +1703,9 @@ export class FinancialSummaryReportComponent implements OnInit {
   private pendingDueAgingChartCache: { key: string; value: ApiRecord[] } = { key: '', value: [] };
   private dailyRevenueAlertsCache: { key: string; value: ApiRecord[] } = { key: '', value: [] };
   private dailyRevenueDrilldownCache = new Map<string, ApiRecord>();
+  private salesTaxRowsCache: { key: string; rows: SalesTaxRow[] } = { key: '', rows: [] };
+  private salesTaxSummaryCache: { key: string; value: ApiRecord } = { key: '', value: {} };
+  private salesTaxClientDataLoaded = false;
   private financialControlDataLoaded = false;
   private memberSalesDataLoaded = false;
 
@@ -1545,6 +1736,7 @@ export class FinancialSummaryReportComponent implements OnInit {
     if (tab !== 'daily-revenue') this.expandedDailyRevenueDate = '';
     if (this.needsFinancialControlData()) this.ensureFinancialControlDataLoaded();
     if (tab === 'member-sales') this.ensureMemberSalesDataLoaded();
+    if (tab === 'sales-tax') this.ensureSalesTaxClientDataLoaded();
   }
 
   load(): void {
@@ -1574,6 +1766,10 @@ export class FinancialSummaryReportComponent implements OnInit {
         if (this.activeTab === 'member-sales') {
           this.memberSalesDataLoaded = false;
           this.ensureMemberSalesDataLoaded();
+        }
+        if (this.activeTab === 'sales-tax') {
+          this.salesTaxClientDataLoaded = false;
+          this.ensureSalesTaxClientDataLoaded();
         }
       },
       error: (error) => {
@@ -1705,6 +1901,7 @@ export class FinancialSummaryReportComponent implements OnInit {
     if (this.activeTab === 'payments') return !this.paymentDistributionRows().length;
     if (this.activeTab === 'daily-sheet') return !this.dailySheetSummary().totalBills;
     if (this.activeTab === 'daily-revenue') return !this.dailyRevenueRows().length;
+    if (this.activeTab === 'sales-tax') return !this.salesTaxRows().length;
     return !this.visibleMemberSalesRows().length;
   }
 
@@ -1744,6 +1941,10 @@ export class FinancialSummaryReportComponent implements OnInit {
     }
     if (this.activeTab === 'member-sales') {
       this.exportMemberSalesCsv();
+      return;
+    }
+    if (this.activeTab === 'sales-tax') {
+      this.exportSalesTaxCsv();
       return;
     }
     if (this.activeTab === 'payments') {
@@ -2270,6 +2471,146 @@ export class FinancialSummaryReportComponent implements OnInit {
     ];
   }
 
+  salesTaxRows(): SalesTaxRow[] {
+    const key = this.salesTaxCacheKey();
+    if (this.salesTaxRowsCache.key !== key) {
+      this.salesTaxRowsCache = { key, rows: this.salesTaxRowsForRange() };
+    }
+    return this.salesTaxRowsCache.rows;
+  }
+
+  salesTaxSummary(): ApiRecord {
+    const key = this.salesTaxCacheKey();
+    if (this.salesTaxSummaryCache.key === key) return this.salesTaxSummaryCache.value;
+    const rows = this.salesTaxRows();
+    const summary = {
+      totalBills: rows.length,
+      grossSale: this.money(rows.reduce((sum, row) => sum + row.actualPrice, 0)),
+      netSale: this.money(rows.reduce((sum, row) => sum + row.invoiceTotal, 0)),
+      taxableAmount: this.money(rows.reduce((sum, row) => sum + row.taxableAmount, 0)),
+      totalGst: this.money(rows.reduce((sum, row) => sum + row.totalGst, 0)),
+      cgst: this.money(rows.reduce((sum, row) => sum + row.cgst, 0)),
+      sgst: this.money(rows.reduce((sum, row) => sum + row.sgst, 0)),
+      igst: this.money(rows.reduce((sum, row) => sum + row.igst, 0)),
+      couponDiscount: this.money(rows.reduce((sum, row) => sum + row.couponDiscount, 0)),
+      membershipDiscount: this.money(rows.reduce((sum, row) => sum + row.membershipDiscount, 0)),
+      taxExemptSale: this.money(rows.filter((row) => row.taxStatus === 'Tax exempt').reduce((sum, row) => sum + row.taxableAmount, 0)),
+      gstMismatchCount: rows.filter((row) => row.taxStatus === 'Mismatch' || row.taxStatus === 'Missing GST').length
+    };
+    this.salesTaxSummaryCache = { key, value: summary };
+    return summary;
+  }
+
+  gstRateBreakupRows(): ApiRecord[] {
+    const buckets = new Map([0, 5, 12, 18, 28].map((rate) => [rate, { rate, rateLabel: `${rate}%`, count: 0, taxable: 0, gst: 0, total: 0 }]));
+    for (const row of this.salesTaxRows()) {
+      const rate = this.nearestGstRate(row.gstRate);
+      const current = buckets.get(rate) || { rate, rateLabel: `${rate}%`, count: 0, taxable: 0, gst: 0, total: 0 };
+      current.count += 1;
+      current.taxable = this.money(current.taxable + row.taxableAmount);
+      current.gst = this.money(current.gst + row.totalGst);
+      current.total = this.money(current.total + row.invoiceTotal);
+      buckets.set(rate, current);
+    }
+    return [...buckets.values()];
+  }
+
+  salesTaxTypeSplitRows(): ApiRecord[] {
+    const map = new Map<string, ApiRecord>();
+    for (const invoice of this.taxReportInvoices()) {
+      const row = this.salesTaxRowForInvoice(invoice);
+      const lines = this.linesForInvoices([invoice]);
+      const basis = this.money(lines.reduce((sum, line) => sum + Math.max(0, this.lineAmount(line)), 0));
+      const lineRows = lines.length ? lines : [{ type: row.itemType, amount: row.taxableAmount }];
+      const countedTypes = new Set<string>();
+      for (const line of lineRows) {
+        const type = this.normalizedItemType(line);
+        const typeLabel = this.itemTypeLabel(type);
+        const amount = lines.length && basis > 0 ? this.lineAmount(line) : row.taxableAmount;
+        const ratio = lines.length && basis > 0 ? Math.max(0, amount) / basis : 1;
+        const current = map.get(type) || { type, typeLabel, count: 0, taxable: 0, gst: 0, total: 0 };
+        current['taxable'] = this.money(Number(current['taxable'] || 0) + row.taxableAmount * ratio);
+        current['gst'] = this.money(Number(current['gst'] || 0) + row.totalGst * ratio);
+        current['total'] = this.money(Number(current['total'] || 0) + row.invoiceTotal * ratio);
+        if (!countedTypes.has(type)) {
+          current['count'] = Number(current['count'] || 0) + 1;
+          countedTypes.add(type);
+        }
+        map.set(type, current);
+      }
+    }
+    return [...map.values()].sort((a, b) => Number(b['total'] || 0) - Number(a['total'] || 0));
+  }
+
+  salesTaxAccountingChecks(): ApiRecord[] {
+    const rows = this.salesTaxRows();
+    const mismatch = rows.filter((row) => row.taxStatus === 'Mismatch');
+    const missing = rows.filter((row) => row.taxStatus === 'Missing GST');
+    const refunds = rows.filter((row) => row.taxStatus === 'Refund tax' || row.invoiceTotal < 0 || row.totalGst < 0);
+    const excluded = this.filteredInvoices().filter((invoice) => this.isDeletedVoidInvoice(invoice));
+    const exempt = rows.filter((row) => row.taxStatus === 'Tax exempt');
+    return [
+      { label: 'GST mismatch', count: mismatch.length, amount: this.money(mismatch.reduce((sum, row) => sum + Math.abs(row.invoiceTotal - row.taxableAmount - row.totalGst), 0)), action: mismatch.length ? 'Review taxable + GST vs invoice total' : 'Clear' },
+      { label: 'Missing GST', count: missing.length, amount: this.money(missing.reduce((sum, row) => sum + row.taxableAmount, 0)), action: missing.length ? 'Add tax rate or mark exempt' : 'Clear' },
+      { label: 'Refund tax', count: refunds.length, amount: this.money(refunds.reduce((sum, row) => sum + Math.abs(row.totalGst), 0)), action: refunds.length ? 'Verify credit note / refund GST' : 'Clear' },
+      { label: 'Deleted/void excluded', count: excluded.length, amount: this.money(excluded.reduce((sum, invoice) => sum + this.invoiceTotal(invoice), 0)), action: excluded.length ? 'Excluded from GST filing rows' : 'Clear' },
+      { label: 'Tax-exempt sale', count: exempt.length, amount: this.money(exempt.reduce((sum, row) => sum + row.taxableAmount, 0)), action: exempt.length ? 'Keep exemption reason ready' : 'Clear' }
+    ];
+  }
+
+  exportSalesTaxOwnerPdf(): void {
+    const summary = this.salesTaxSummary();
+    const lines = [
+      'Sales Tax / GST Owner Summary',
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      '',
+      `Total bills: ${summary['totalBills']}`,
+      `Gross sale: ${this.formatMoney(Number(summary['grossSale'] || 0))}`,
+      `Net sale: ${this.formatMoney(Number(summary['netSale'] || 0))}`,
+      `Taxable amount: ${this.formatMoney(Number(summary['taxableAmount'] || 0))}`,
+      `Total GST: ${this.formatMoney(Number(summary['totalGst'] || 0))}`,
+      `Coupon discount: ${this.formatMoney(Number(summary['couponDiscount'] || 0))}`,
+      `Membership discount: ${this.formatMoney(Number(summary['membershipDiscount'] || 0))}`,
+      `Tax-exempt sale: ${this.formatMoney(Number(summary['taxExemptSale'] || 0))}`,
+      `GST mismatch count: ${summary['gstMismatchCount']}`,
+      '',
+      'Accounting checks',
+      ...this.salesTaxAccountingChecks().map((row) => `${row['label']}: ${row['count']} row(s), ${this.formatMoney(Number(row['amount'] || 0))} - ${row['action']}`),
+      '',
+      'Top GST rows',
+      ...this.salesTaxRows().slice(0, 12).map((row) => `${row.date} | ${row.invoiceNo} | ${row.clientName} | GST ${this.formatMoney(row.totalGst)} | ${row.taxStatus}`)
+    ];
+    this.downloadFile(`sales-tax-gst-owner-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
+  exportSalesTaxAccountantPdf(): void {
+    const summary = this.salesTaxSummary();
+    const lines = [
+      'Sales Tax / GST Filing Summary',
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      `Date range: ${this.dateLabel(this.from)} to ${this.dateLabel(this.to)}`,
+      `Branch: ${this.branchLabel()}`,
+      '',
+      `Taxable amount: ${this.formatMoney(Number(summary['taxableAmount'] || 0))}`,
+      `CGST: ${this.formatMoney(Number(summary['cgst'] || 0))}`,
+      `SGST: ${this.formatMoney(Number(summary['sgst'] || 0))}`,
+      `IGST: ${this.formatMoney(Number(summary['igst'] || 0))}`,
+      `Total GST: ${this.formatMoney(Number(summary['totalGst'] || 0))}`,
+      '',
+      'GST rate breakup',
+      ...this.gstRateBreakupRows().map((row) => `${row['rateLabel']}: taxable ${this.formatMoney(Number(row['taxable'] || 0))}, GST ${this.formatMoney(Number(row['gst'] || 0))}, bills ${row['count']}`),
+      '',
+      'Service/product tax split',
+      ...this.salesTaxTypeSplitRows().map((row) => `${row['typeLabel']}: taxable ${this.formatMoney(Number(row['taxable'] || 0))}, GST ${this.formatMoney(Number(row['gst'] || 0))}`),
+      '',
+      'Review rows',
+      ...this.salesTaxRows().filter((row) => row.taxStatus !== 'Valid').slice(0, 20).map((row) => `${row.invoiceNo}: ${row.taxStatus}, taxable ${this.formatMoney(row.taxableAmount)}, GST ${this.formatMoney(row.totalGst)}`)
+    ];
+    this.downloadFile(`sales-tax-gst-accountant-${Date.now()}.pdf`, this.simplePdf(lines), 'application/pdf');
+  }
+
   exportDailySheetPdf(): void {
     const summary = this.dailySheetSummary();
     const lines = [
@@ -2534,6 +2875,243 @@ export class FinancialSummaryReportComponent implements OnInit {
     this.downloadFile(`member-vs-non-member-sales-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
   }
 
+  private exportSalesTaxCsv(): void {
+    const headers = [
+      'Date',
+      'Invoice no',
+      'Client',
+      'Phone',
+      'GSTIN',
+      'Staff / cashier',
+      'Actual price',
+      'Discount',
+      'Coupon discount',
+      'Membership discount',
+      'Taxable amount',
+      'GST %',
+      'CGST',
+      'SGST',
+      'IGST',
+      'Total GST',
+      'Invoice total',
+      'Paid',
+      'Due',
+      'Payment mode',
+      'Tax status'
+    ];
+    const csv = [
+      headers.map((cell) => this.csvCell(cell)).join(','),
+      ...this.salesTaxRows().map((row) => [
+        row.date,
+        row.invoiceNo,
+        row.clientName,
+        row.phone,
+        row.gstin,
+        row.staffCashier,
+        row.actualPrice,
+        row.discount,
+        row.couponDiscount,
+        row.membershipDiscount,
+        row.taxableAmount,
+        row.gstRate,
+        row.cgst,
+        row.sgst,
+        row.igst,
+        row.totalGst,
+        row.invoiceTotal,
+        row.paid,
+        row.due,
+        row.paymentMode,
+        row.taxStatus
+      ].map((cell) => this.csvCell(cell)).join(','))
+    ].join('\n');
+    this.downloadFile(`sales-tax-gst-${Date.now()}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  private salesTaxRowsForRange(): SalesTaxRow[] {
+    return this.taxReportInvoices()
+      .map((invoice) => this.salesTaxRowForInvoice(invoice))
+      .sort((a, b) => this.dateMs(b.dateValue) - this.dateMs(a.dateValue));
+  }
+
+  private taxReportInvoices(): ApiRecord[] {
+    return this.filteredInvoices().filter((invoice) => !this.isDeletedVoidInvoice(invoice));
+  }
+
+  private salesTaxRowForInvoice(invoice: ApiRecord): SalesTaxRow {
+    const client = this.clientForInvoice(invoice);
+    const dateValue = this.invoiceDate(invoice);
+    const invoiceTotal = this.invoiceTotal(invoice);
+    const totalGst = this.invoiceTax(invoice);
+    const taxableAmount = this.invoiceTaxableAmount(invoice, invoiceTotal, totalGst);
+    const gstRate = this.invoiceGstRate(invoice, taxableAmount, totalGst);
+    const split = this.invoiceTaxSplit(invoice, totalGst);
+    const discount = this.invoiceDiscount(invoice);
+    const coupon = this.couponDiscount(invoice);
+    const membership = this.membershipDiscount(invoice);
+    const row: SalesTaxRow = {
+      date: this.compactDateLabel(dateValue),
+      dateValue,
+      invoiceNo: this.invoiceNumber(invoice),
+      clientName: this.invoiceClientName(invoice, client),
+      phone: this.invoiceClientPhone(invoice, client),
+      gstin: this.invoiceGstin(invoice, client),
+      staffCashier: this.invoiceStaffCashier(invoice),
+      actualPrice: this.invoiceActualPrice(invoice, invoiceTotal, discount + coupon + membership),
+      discount,
+      couponDiscount: coupon,
+      membershipDiscount: membership,
+      taxableAmount,
+      gstRate,
+      cgst: split.cgst,
+      sgst: split.sgst,
+      igst: split.igst,
+      totalGst,
+      invoiceTotal,
+      paid: this.invoicePaid(invoice),
+      due: this.invoiceBalance(invoice),
+      paymentMode: this.invoicePaymentModeLabel(invoice),
+      taxStatus: 'Valid',
+      itemType: this.invoiceItemTypeSummary(invoice)
+    };
+    row.taxStatus = this.invoiceTaxStatus(invoice, row);
+    return row;
+  }
+
+  private salesTaxCacheKey(): string {
+    return [
+      this.dataVersion,
+      this.from,
+      this.to,
+      this.invoices().length,
+      this.payments().length,
+      this.sales().length,
+      this.clients().length
+    ].join('|');
+  }
+
+  private invalidateSalesTaxCache(): void {
+    this.salesTaxRowsCache = { key: '', rows: [] };
+    this.salesTaxSummaryCache = { key: '', value: {} };
+  }
+
+  private invoiceNumber(invoice: ApiRecord): string {
+    return String(invoice['invoiceNumber'] || invoice['invoice_number'] || invoice['number'] || invoice['billNo'] || invoice['bill_no'] || invoice['id'] || '-');
+  }
+
+  private invoiceGstin(invoice: ApiRecord, client?: ApiRecord): string {
+    return String(invoice['gstin'] || invoice['gstIn'] || invoice['gstNumber'] || invoice['gst_number'] || invoice['taxId'] || invoice['tax_id'] || client?.['gstin'] || client?.['gstIn'] || client?.['gstNumber'] || client?.['gst_number'] || client?.['taxId'] || client?.['tax_id'] || '');
+  }
+
+  private invoiceStaffCashier(invoice: ApiRecord): string {
+    return String(invoice['staffName'] || invoice['staff_name'] || invoice['cashierName'] || invoice['cashier_name'] || invoice['createdByName'] || invoice['created_by_name'] || invoice['addedBy'] || invoice['added_by'] || 'Unassigned');
+  }
+
+  private invoiceActualPrice(invoice: ApiRecord, invoiceTotal: number, discountTotal: number): number {
+    const lines = this.linesForInvoices([invoice]);
+    const gross = this.money(lines.reduce((sum, line) => sum + this.lineGross(line), 0));
+    if (gross > 0) return gross;
+    const explicit = invoice['actualPrice'] ?? invoice['actual_price'] ?? invoice['grossTotal'] ?? invoice['gross_total'] ?? invoice['subtotal'];
+    if (explicit !== undefined && explicit !== null && explicit !== '') return this.money(Number(explicit));
+    return this.money(invoiceTotal + discountTotal);
+  }
+
+  private invoiceTaxableAmount(invoice: ApiRecord, invoiceTotal: number, totalGst: number): number {
+    const explicit = invoice['taxableAmount'] ?? invoice['taxable_amount'] ?? invoice['taxable'] ?? invoice['netTaxable'] ?? invoice['net_taxable'];
+    if (explicit !== undefined && explicit !== null && explicit !== '') return this.money(Number(explicit));
+    const lines = this.linesForInvoices([invoice]);
+    const lineTaxable = this.money(lines.reduce((sum, line) => sum + Number(line['taxableAmount'] || line['taxable_amount'] || 0), 0));
+    if (lineTaxable > 0) return lineTaxable;
+    return this.money(Math.max(0, invoiceTotal - totalGst));
+  }
+
+  private invoiceGstRate(invoice: ApiRecord, taxableAmount: number, totalGst: number): number {
+    const explicit = invoice['gstRate'] ?? invoice['gst_rate'] ?? invoice['taxRate'] ?? invoice['tax_rate'];
+    if (explicit !== undefined && explicit !== null && explicit !== '') return this.money(Number(explicit));
+    const lines = this.linesForInvoices([invoice]);
+    const lineRate = lines.find((line) => line['gstRate'] || line['gst_rate'] || line['taxRate'] || line['tax_rate']);
+    const rawLineRate = lineRate?.['gstRate'] ?? lineRate?.['gst_rate'] ?? lineRate?.['taxRate'] ?? lineRate?.['tax_rate'];
+    if (rawLineRate !== undefined && rawLineRate !== null && rawLineRate !== '') return this.money(Number(rawLineRate));
+    return taxableAmount > 0 ? this.money((totalGst / taxableAmount) * 100) : 0;
+  }
+
+  private invoiceTaxSplit(invoice: ApiRecord, totalGst: number): { cgst: number; sgst: number; igst: number } {
+    const cgst = this.firstMoney(invoice, ['cgst', 'cgstAmount', 'cgst_amount']);
+    const sgst = this.firstMoney(invoice, ['sgst', 'sgstAmount', 'sgst_amount']);
+    const igst = this.firstMoney(invoice, ['igst', 'igstAmount', 'igst_amount']);
+    if (cgst || sgst || igst) return { cgst, sgst, igst };
+    return { cgst: this.money(totalGst / 2), sgst: this.money(totalGst / 2), igst: 0 };
+  }
+
+  private invoiceTaxStatus(invoice: ApiRecord, row: SalesTaxRow): string {
+    const status = String(invoice['status'] || invoice['paymentStatus'] || invoice['payment_status'] || '').toLowerCase();
+    if (status.includes('refund') || status.includes('return') || row.invoiceTotal < 0 || row.totalGst < 0) return 'Refund tax';
+    const mismatch = Math.abs(this.money(row.taxableAmount + row.totalGst - row.invoiceTotal));
+    if (mismatch > 1) return 'Mismatch';
+    if (row.taxableAmount > 0 && row.totalGst <= 0) return this.hasExplicitZeroTax(invoice) ? 'Tax exempt' : 'Missing GST';
+    return 'Valid';
+  }
+
+  private invoiceItemTypeSummary(invoice: ApiRecord): string {
+    const types = new Set(this.linesForInvoices([invoice]).map((line) => this.itemTypeLabel(this.normalizedItemType(line))));
+    return types.size ? [...types].join(', ') : 'Service';
+  }
+
+  private invoicePaymentModeLabel(invoice: ApiRecord): string {
+    const ids = this.invoiceIdentifiers(invoice);
+    const modes = new Set(this.payments()
+      .filter((payment) => ids.has(String(payment['invoiceId'] || payment['invoice_id'] || payment['invoiceNumber'] || payment['invoice_number'] || '')))
+      .map((payment) => this.modeLabel(this.paymentMode(payment))));
+    const direct = String(invoice['paymentMode'] || invoice['payment_mode'] || invoice['mode'] || '');
+    if (direct) modes.add(this.modeLabel(direct));
+    return modes.size ? [...modes].join(', ') : '-';
+  }
+
+  private invoiceIdentifiers(invoice: ApiRecord): Set<string> {
+    return new Set([
+      invoice['id'],
+      invoice['invoiceId'],
+      invoice['invoice_id'],
+      invoice['invoiceNumber'],
+      invoice['invoice_number'],
+      invoice['number']
+    ].map((value) => String(value || '')).filter(Boolean));
+  }
+
+  private nearestGstRate(rate: number): number {
+    const normalized = Number(rate) || 0;
+    return [0, 5, 12, 18, 28].reduce((best, item) => Math.abs(item - normalized) < Math.abs(best - normalized) ? item : best, 0);
+  }
+
+  private itemTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      service: 'Services',
+      product: 'Products',
+      package: 'Packages',
+      membership: 'Memberships',
+      gift_card: 'Gift Cards'
+    };
+    return labels[type] || 'Services';
+  }
+
+  private firstMoney(row: ApiRecord, keys: string[]): number {
+    for (const key of keys) {
+      const value = row[key];
+      if (value !== undefined && value !== null && value !== '') return this.money(Number(value));
+    }
+    return 0;
+  }
+
+  private hasExplicitZeroTax(invoice: ApiRecord): boolean {
+    return ['gst', 'gstAmount', 'gst_amount', 'tax', 'taxAmount', 'tax_amount', 'gstRate', 'gst_rate', 'taxRate', 'tax_rate']
+      .some((key) => invoice[key] !== undefined && invoice[key] !== null && invoice[key] !== '');
+  }
+
+  private isDeletedVoidInvoice(invoice: ApiRecord): boolean {
+    const status = String(invoice['status'] || invoice['paymentStatus'] || invoice['payment_status'] || invoice['deletedAt'] || invoice['deleted_at'] || '').toLowerCase();
+    return ['deleted', 'void', 'cancel', 'cancelled'].some((token) => status.includes(token));
+  }
+
   private dailyRevenueRowsForRange(from: string, to: string): DailyRevenueRow[] {
     const dateKeys = new Set<string>();
     const inRange = (value: string) => this.inDateWindow(value, from, to);
@@ -2713,6 +3291,7 @@ export class FinancialSummaryReportComponent implements OnInit {
 
   private invalidateDailyRevenueCache(): void {
     this.dataVersion += 1;
+    this.invalidateSalesTaxCache();
     this.dailyRevenueRowsCache = { key: '', rows: [] };
     this.dailyRevenueKpisCache = { key: '', value: {} };
     this.dailyRevenueChartCache = { key: '', value: [] };
@@ -2887,6 +3466,25 @@ export class FinancialSummaryReportComponent implements OnInit {
       },
       error: () => {
         this.memberSalesDataLoaded = true;
+        this.auxiliaryLoading.set(false);
+      }
+    });
+  }
+
+  private ensureSalesTaxClientDataLoaded(): void {
+    if (this.salesTaxClientDataLoaded || this.clients().length || this.auxiliaryLoading()) return;
+    this.auxiliaryLoading.set(true);
+    forkJoin({
+      clients: this.safeList('clients', { limit: 10000, compact: true, includeAllBranches: true })
+    }).subscribe({
+      next: (data) => {
+        this.clients.set(data.clients || []);
+        this.salesTaxClientDataLoaded = true;
+        this.auxiliaryLoading.set(false);
+        this.invalidateSalesTaxCache();
+      },
+      error: () => {
+        this.salesTaxClientDataLoaded = true;
         this.auxiliaryLoading.set(false);
       }
     });
