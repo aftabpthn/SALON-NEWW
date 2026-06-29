@@ -199,8 +199,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <h2>Staff summary</h2>
             </div>
           </div>
-          <div class="table-wrap">
-            <table>
+          <div class="table-wrap fit-wrap">
+            <table class="leaderboard-table">
               <thead>
                 <tr>
                   <th>Action</th>
@@ -336,8 +336,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <small>{{ discountModeLabel() }}</small>
             </article>
           </div>
-          <div class="table-wrap">
-            <table>
+          <div class="table-wrap scroll-wrap">
+            <table class="services-table">
               <thead>
                 <tr>
                   <th>Action</th>
@@ -458,7 +458,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <h2>Products By Staff</h2>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap scroll-wrap">
             <table>
               <thead><tr><th>Staff</th><th>Product sales</th><th>Product count</th><th>Products</th><th>COGS signal</th><th>Staff 360</th></tr></thead>
               <tbody>
@@ -484,7 +484,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
             <button class="ghost-button mini" type="button" (click)="exportPayoutPdf()">Payout PDF</button>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap scroll-wrap">
             <table>
               <thead><tr><th>Staff</th><th>Service sales</th><th>Product sales</th><th>Membership/package</th><th>Tips</th><th>Estimated commission</th><th>Pending due</th><th>Score</th></tr></thead>
               <tbody>
@@ -511,7 +511,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <h2>Staff by item</h2>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap scroll-wrap">
             <table>
               <thead>
                 <tr>
@@ -551,6 +551,20 @@ import { StateComponent } from '../shared/ui/state/state.component';
     </section>
   `,
   styles: [`
+    :host {
+      display: block;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: hidden;
+    }
+    .page-stack,
+    .panel,
+    .filter-panel,
+    .metrics-grid,
+    .report-tabs {
+      max-width: 100%;
+      min-width: 0;
+    }
     .hero-actions {
       display: flex;
       flex-wrap: wrap;
@@ -566,8 +580,86 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .filter-panel .primary-button {
       min-height: 50px;
     }
+    .table-wrap {
+      max-width: 100%;
+      min-width: 0;
+      width: 100%;
+      overscroll-behavior-x: contain;
+    }
+    .scroll-wrap {
+      overflow-x: auto;
+    }
+    .fit-wrap {
+      overflow-x: hidden;
+    }
     .table-wrap table {
-      min-width: 1460px;
+      width: 100%;
+    }
+    .table-wrap th,
+    .table-wrap td {
+      font-size: 13px;
+      line-height: 1.25;
+      padding: 8px 10px;
+      vertical-align: middle;
+    }
+    .leaderboard-table {
+      table-layout: fixed;
+    }
+    .leaderboard-table th,
+    .leaderboard-table td {
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }
+    .leaderboard-table th:nth-child(1),
+    .leaderboard-table td:nth-child(1),
+    .leaderboard-table th:nth-child(10),
+    .leaderboard-table td:nth-child(10),
+    .leaderboard-table th:nth-child(11),
+    .leaderboard-table td:nth-child(11),
+    .leaderboard-table th:nth-child(15),
+    .leaderboard-table td:nth-child(15),
+    .leaderboard-table th:nth-child(17),
+    .leaderboard-table td:nth-child(17),
+    .leaderboard-table th:nth-child(18),
+    .leaderboard-table td:nth-child(18) {
+      width: 5.2%;
+    }
+    .leaderboard-table th:nth-child(2),
+    .leaderboard-table td:nth-child(2) {
+      width: 9%;
+    }
+    .leaderboard-table th:nth-child(3),
+    .leaderboard-table td:nth-child(3),
+    .leaderboard-table th:nth-child(4),
+    .leaderboard-table td:nth-child(4),
+    .leaderboard-table th:nth-child(7),
+    .leaderboard-table td:nth-child(7) {
+      width: 7.4%;
+    }
+    .leaderboard-table th:nth-child(5),
+    .leaderboard-table td:nth-child(5),
+    .leaderboard-table th:nth-child(6),
+    .leaderboard-table td:nth-child(6),
+    .leaderboard-table th:nth-child(8),
+    .leaderboard-table td:nth-child(8),
+    .leaderboard-table th:nth-child(9),
+    .leaderboard-table td:nth-child(9),
+    .leaderboard-table th:nth-child(12),
+    .leaderboard-table td:nth-child(12),
+    .leaderboard-table th:nth-child(13),
+    .leaderboard-table td:nth-child(13),
+    .leaderboard-table th:nth-child(14),
+    .leaderboard-table td:nth-child(14),
+    .leaderboard-table th:nth-child(16),
+    .leaderboard-table td:nth-child(16) {
+      width: 5.9%;
+    }
+    .scroll-wrap table {
+      min-width: 1180px;
+      width: max-content;
+    }
+    .scroll-wrap .services-table {
+      min-width: 1320px;
     }
     .report-tabs {
       background: #fff;
@@ -585,8 +677,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       color: var(--muted);
       cursor: pointer;
       font-weight: 800;
-      min-height: 42px;
-      padding: 9px 12px;
+      min-height: 38px;
+      padding: 8px 10px;
     }
     .report-tabs button.active {
       background: #ecfdf5;
@@ -610,7 +702,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
     .expanded-row > td {
       background: #f8fafc;
-      padding: 14px;
+      padding: 12px;
     }
     .detail-grid {
       display: grid;
@@ -622,25 +714,25 @@ import { StateComponent } from '../shared/ui/state/state.component';
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow: auto;
-      padding: 12px;
+      padding: 10px;
     }
     .detail-grid table {
-      min-width: 860px;
+      min-width: 780px;
     }
     .service-drilldown {
       background: #fff;
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow: auto;
-      padding: 12px;
+      padding: 10px;
     }
     .service-drilldown table {
-      min-width: 1680px;
+      min-width: 1480px;
     }
     .row-actions {
       display: flex;
       gap: 8px;
-      min-width: 160px;
+      min-width: 132px;
     }
     .mini-title {
       align-items: center;
@@ -679,7 +771,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       border-radius: 8px;
       border-top: 4px solid var(--primary);
       box-shadow: var(--shadow-sm);
-      padding: 18px;
+      padding: 12px 14px;
     }
     .metric-card span,
     .metric-card small {
@@ -688,8 +780,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
     .metric-card strong {
       display: block;
-      font-size: 30px;
-      margin: 8px 0 4px;
+      font-size: 24px;
+      margin: 6px 0 3px;
     }
     .badge.warning {
       background: #fff7ed;
