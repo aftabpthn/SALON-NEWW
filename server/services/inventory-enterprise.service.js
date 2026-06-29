@@ -14,12 +14,14 @@ const CONSUMABLE_TYPES = new Set(["consumable", "both"]);
 const OVERUSE_TOLERANCE_PCT = 15;
 const PRODUCT_CONSUME_WASTAGE_WARN_PCT = 10;
 const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
+const PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT = 3;
 const DEFAULT_USAGE_MODIFIERS = [
   { key: "short", label: "Short hair", multiplier: 1 },
   { key: "medium", label: "Medium hair", multiplier: 1.5 },
   { key: "long", label: "Long hair", multiplier: 2 }
 ];
 const DEFAULT_RECIPE_TEMPLATES = [
+  { key: "hair-spa", name: "Hair spa recipe", category: "Hair Spa", items: ["spa cream", "hair mask", "conditioner", "serum"] },
   { key: "hair-color", name: "Hair color recipe", category: "Hair Color", items: ["color tube", "developer", "gloves"] },
   { key: "keratin", name: "Keratin recipe", category: "Keratin", items: ["keratin cream", "clarifying shampoo", "mask"] },
   { key: "facial", name: "Facial recipe", category: "Facial", items: ["cleanser", "scrub", "mask", "serum"] },
@@ -36,21 +38,58 @@ function overuseNeedsReason(line = {}) {
   return (overMax || overExpected) && !reason;
 }
 
+function autoWastagePct(line = {}) {
+  const actualQty = number(line.actualQty ?? line.actual_qty ?? line.quantity, 0);
+  const maxQty = number(line.maxQty ?? line.max_qty, 0);
+  const enteredPct = number(line.wastagePct ?? line.wastage_pct, 0);
+  if (maxQty <= 0 || actualQty <= maxQty) return Math.max(0, enteredPct);
+  return money(Math.max(enteredPct, ((actualQty - maxQty) / maxQty) * 100));
+}
+
+function normalizeProductConsumeLine(line = {}) {
+  const actualQty = money(number(line.actualQty ?? line.actual_qty ?? line.quantity, 0));
+  const unitCost = number(line.unitCost ?? line.unit_cost, 0);
+  return {
+    productId: line.productId || line.product_id,
+    productName: line.productName || line.product_name || "",
+    unit: line.unit || "pcs",
+    expectedQty: money(number(line.expectedQty ?? line.expected_qty, 0)),
+    actualQty,
+    wastagePct: autoWastagePct({ ...line, actualQty }),
+    wastageApprovalPct: number(line.wastageApprovalPct ?? line.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT),
+    wastageHitLimit: Math.max(1, Math.round(number(line.wastageHitLimit ?? line.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT))),
+    minQty: number(line.minQty ?? line.min_qty, 0),
+    maxQty: number(line.maxQty ?? line.max_qty, 0),
+    substitutes: line.substitutes || "",
+    reason: line.reason || line.overuseReason || line.overuse_reason || "",
+    stockUnit: line.stockUnit || line.stock_unit || "",
+    packSize: packSizeFor(line),
+    packUnit: line.packUnit || line.pack_unit || "",
+    stockUnitCost: number(line.stockUnitCost ?? line.stock_unit_cost, 0),
+    unitCost,
+    expectedCost: money(number(line.expectedCost ?? line.expected_cost, 0)),
+    actualCost: money(actualQty * unitCost)
+  };
+}
+
 function productConsumeWastageGuard(lines = [], draft = {}, access = {}, payload = {}) {
   const flaggedLines = safeArray(lines)
     .map((line) => ({
       productId: line.productId || line.product_id || "",
       productName: line.productName || line.product_name || line.productId || line.product_id || "Product",
-      wastagePct: number(line.wastagePct ?? line.wastage_pct, 0),
+      wastagePct: autoWastagePct(line),
+      wastageApprovalPct: number(line.wastageApprovalPct ?? line.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT),
+      wastageHitLimit: Math.max(1, Math.round(number(line.wastageHitLimit ?? line.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT))),
       actualQty: number(line.actualQty ?? line.actual_qty ?? line.quantity, 0),
       expectedQty: number(line.expectedQty ?? line.expected_qty, 0),
+      maxQty: number(line.maxQty ?? line.max_qty, 0),
       reason: String(line.reason || line.overuseReason || line.overuse_reason || "").trim()
     }))
-    .filter((line) => line.wastagePct >= PRODUCT_CONSUME_WASTAGE_WARN_PCT || (line.expectedQty > 0 && line.actualQty > line.expectedQty * (1 + OVERUSE_TOLERANCE_PCT / 100)));
-  const approvalLines = flaggedLines.filter((line) => line.wastagePct > PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT);
+    .filter((line) => line.wastagePct >= PRODUCT_CONSUME_WASTAGE_WARN_PCT || (line.expectedQty > 0 && line.actualQty > line.expectedQty * (1 + OVERUSE_TOLERANCE_PCT / 100)) || (line.maxQty > 0 && line.actualQty > line.maxQty));
+  const approvalLines = flaggedLines.filter((line) => line.wastagePct > line.wastageApprovalPct);
   return {
     warnPct: PRODUCT_CONSUME_WASTAGE_WARN_PCT,
-    approvalPct: PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT,
+    approvalPct: approvalLines.length ? approvalLines.reduce((min, line) => Math.min(min, line.wastageApprovalPct), Infinity) : PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT,
     approvalRequired: approvalLines.length > 0,
     ownerApproved: Boolean(payload.ownerApproval || payload.owner_approval) && ownerRoles.has(access.role),
     maxWastagePct: flaggedLines.reduce((max, line) => Math.max(max, line.wastagePct), 0),
@@ -66,6 +105,21 @@ function productConsumeWastageGuard(lines = [], draft = {}, access = {}, payload
 
 let productConsumeDraftSchemaReady = false;
 let productUnitSchemaReady = false;
+let serviceRecipeLockSchemaReady = false;
+
+function ensureServiceRecipeLockSchema() {
+  if (serviceRecipeLockSchemaReady) return;
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='service_recipe_items'").get();
+  if (!table) return;
+  const columns = db.prepare("PRAGMA table_info(service_recipe_items)").all().map((column) => column.name);
+  if (!columns.includes("wastage_approval_pct")) {
+    db.prepare("ALTER TABLE service_recipe_items ADD COLUMN wastage_approval_pct REAL DEFAULT 25").run();
+  }
+  if (!columns.includes("wastage_hit_limit")) {
+    db.prepare("ALTER TABLE service_recipe_items ADD COLUMN wastage_hit_limit INTEGER DEFAULT 3").run();
+  }
+  serviceRecipeLockSchemaReady = true;
+}
 
 export function ensureProductUnitSchema() {
   if (productUnitSchemaReady) return;
@@ -982,6 +1036,7 @@ export class InventoryEnterpriseService {
   }
 
   listServiceRecipes(query = {}, access) {
+    ensureServiceRecipeLockSchema();
     const params = { tenant_id: access.tenantId, limit: number(query.limit, 500) };
     const where = ["tenant_id = @tenant_id"];
     const branchId = query.branchId || query.branch_id || "";
@@ -1004,6 +1059,7 @@ export class InventoryEnterpriseService {
   }
 
   saveServiceRecipe(payload = {}, access) {
+    ensureServiceRecipeLockSchema();
     requireManager(access);
     const serviceId = payload.serviceId || payload.service_id;
     if (!serviceId) throw badRequest("serviceId is required");
@@ -1101,6 +1157,8 @@ export class InventoryEnterpriseService {
           max_quantity_per_service: number(item.maxQuantityPerService ?? item.max_quantity_per_service, 0),
           unit_cost: number(item.unitCost ?? item.unit_cost ?? product.unitCost, 0),
           wastage_pct: number(item.wastagePct ?? item.wastage_pct, 0),
+          wastage_approval_pct: number(item.wastageApprovalPct ?? item.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT),
+          wastage_hit_limit: Math.max(1, Math.round(number(item.wastageHitLimit ?? item.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT))),
           required: item.required === false ? 0 : 1,
           sort_order: number(item.sortOrder ?? item.sort_order, index),
           allowed_substitutes_json: toJson(item.allowedSubstitutes || item.allowed_substitutes || []),
@@ -1119,6 +1177,8 @@ export class InventoryEnterpriseService {
           quantity: item.quantity_per_service,
           unit: item.unit,
           wastagePct: item.wastage_pct,
+          wastageApprovalPct: item.wastage_approval_pct,
+          wastageHitLimit: item.wastage_hit_limit,
           unitCost: item.unit_cost,
           productName: item.product_name
         }))
@@ -1362,9 +1422,10 @@ export class InventoryEnterpriseService {
   }
 
   ensureServiceRecipeTemplates(access) {
-    const existing = db.prepare("SELECT COUNT(*) AS count FROM service_recipe_templates WHERE tenant_id = ?").get(access.tenantId).count;
-    if (existing) return;
+    const existingRows = db.prepare("SELECT template_key FROM service_recipe_templates WHERE tenant_id = ?").all(access.tenantId);
+    const existing = new Set(existingRows.map((row) => row.template_key));
     for (const template of DEFAULT_RECIPE_TEMPLATES) {
+      if (existing.has(template.key)) continue;
       insertSnake("service_recipe_templates", {
         id: makeId("rectpl"),
         tenant_id: access.tenantId,
@@ -1485,6 +1546,7 @@ export class InventoryEnterpriseService {
 
   createProductConsumeDraftsForInvoice({ invoice = {}, sale = {}, client = {}, items = [] } = {}, access) {
     ensureProductConsumeDraftSchema();
+    ensureServiceRecipeLockSchema();
     const branchId = sale.branchId || sale.branch_id || invoice.branchId || invoice.branch_id || access.requestedBranchId || "";
     if (branchId) assertBranch(access, branchId);
     const serviceItems = safeArray(items.length ? items : invoice.lineItems || invoice.line_items || sale.items)
@@ -1517,6 +1579,8 @@ export class InventoryEnterpriseService {
       const lineItems = recipeItems.map((line) => {
         const expectedQty = money(number(line.quantity_per_service, 0) * serviceQuantity * (1 + number(line.wastage_pct, 0) / 100));
         const unitCost = number(line.unit_cost, 0);
+        const minQty = money(number(line.min_quantity_per_service, 0) * serviceQuantity);
+        const maxQty = money(number(line.max_quantity_per_service, 0) * serviceQuantity);
         return {
           productId: line.product_id,
           productName: line.product_name,
@@ -1524,6 +1588,10 @@ export class InventoryEnterpriseService {
           expectedQty,
           actualQty: expectedQty,
           wastagePct: number(line.wastage_pct, 0),
+          wastageApprovalPct: number(line.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT),
+          wastageHitLimit: Math.max(1, Math.round(number(line.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT))),
+          minQty,
+          maxQty,
           unitCost,
           expectedCost: money(expectedQty * unitCost),
           actualCost: money(expectedQty * unitCost)
@@ -1900,29 +1968,7 @@ export class InventoryEnterpriseService {
     requireManager(access);
     const existing = getSnake("product_consume_drafts", id, access);
     if (existing.status === "confirmed") throw conflict("Confirmed consume draft cannot be edited");
-    const lineItems = safeArray(payload.lineItems || payload.line_items || existing.line_items_json).map((line) => {
-      const actualQty = money(number(line.actualQty ?? line.actual_qty ?? line.quantity, 0));
-      const unitCost = number(line.unitCost ?? line.unit_cost, 0);
-      return {
-        productId: line.productId || line.product_id,
-        productName: line.productName || line.product_name || "",
-        unit: line.unit || "pcs",
-        expectedQty: money(number(line.expectedQty ?? line.expected_qty, 0)),
-        actualQty,
-        wastagePct: number(line.wastagePct ?? line.wastage_pct, 0),
-        minQty: number(line.minQty ?? line.min_qty, 0),
-        maxQty: number(line.maxQty ?? line.max_qty, 0),
-        substitutes: line.substitutes || "",
-        reason: line.reason || line.overuseReason || line.overuse_reason || "",
-        stockUnit: line.stockUnit || line.stock_unit || "",
-        packSize: packSizeFor(line),
-        packUnit: line.packUnit || line.pack_unit || "",
-        stockUnitCost: number(line.stockUnitCost ?? line.stock_unit_cost, 0),
-        unitCost,
-        expectedCost: money(number(line.expectedCost ?? line.expected_cost, 0)),
-        actualCost: money(actualQty * unitCost)
-      };
-    }).filter((line) => line.productId);
+    const lineItems = safeArray(payload.lineItems || payload.line_items || existing.line_items_json).map((line) => normalizeProductConsumeLine(line)).filter((line) => line.productId);
     const updated = updateSnake("product_consume_drafts", id, access, {
       line_items_json: toJson(lineItems),
       actual_cost: money(lineItems.reduce((sum, line) => sum + number(line.actualCost, 0), 0)),
@@ -1938,7 +1984,7 @@ export class InventoryEnterpriseService {
     requireManager(access);
     const draft = getSnake("product_consume_drafts", id, access);
     if (draft.status === "confirmed") return this.productConsumeDraftRow(draft);
-    const lines = safeArray(payload.lineItems || payload.line_items || draft.line_items_json);
+    const lines = safeArray(payload.lineItems || payload.line_items || draft.line_items_json).map((line) => normalizeProductConsumeLine(line)).filter((line) => line.productId);
     if (!lines.length) throw badRequest("At least one product line is required before confirm");
     const missingReason = lines.find((line) => overuseNeedsReason(line));
     if (missingReason) {
@@ -2043,6 +2089,7 @@ export class InventoryEnterpriseService {
   }
 
   consumeServiceRecipe(payload = {}, access) {
+    ensureServiceRecipeLockSchema();
     const serviceId = payload.serviceId || payload.service_id;
     const branchId = activeBranchId(payload, access);
     const quantity = Math.max(1, number(payload.quantity, 1));
@@ -2071,6 +2118,7 @@ export class InventoryEnterpriseService {
         const expected = money(number(item.quantity_per_service) * quantity * modifier.multiplier * (1 + number(item.wastage_pct) / 100));
         const actualOverride = actualItems.get(item.product_id);
         const actual = money(number(actualOverride?.actualQty ?? actualOverride?.actual_qty ?? actualOverride?.quantity, expected));
+        const maxQty = money(number(item.max_quantity_per_service, 0) * quantity * modifier.multiplier);
         const deduction = this.consumeProductFifo({
           productId: item.product_id,
           branchId,
@@ -2083,11 +2131,12 @@ export class InventoryEnterpriseService {
           referenceId: payload.referenceId || payload.reference_id || serviceId
         }, access);
         const variancePct = expected ? money(((actual - expected) / expected) * 100) : 0;
-        const overuse = variancePct > OVERUSE_TOLERANCE_PCT ? 1 : 0;
+        const overuse = variancePct > OVERUSE_TOLERANCE_PCT || (maxQty > 0 && actual > maxQty) ? 1 : 0;
         usageItems.push({
           item,
           expected,
           actual,
+          maxQty,
           expectedCost: money(expected * number(item.unit_cost, 0)),
           actualCost: money(actual * number(item.unit_cost, 0)),
           variancePct,

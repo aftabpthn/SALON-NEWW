@@ -12,6 +12,8 @@ interface ConsumeLine {
   expectedQty: number;
   actualQty: number;
   wastagePct: number;
+  wastageApprovalPct?: number;
+  wastageHitLimit?: number;
   minQty?: number;
   maxQty?: number;
   substitutes?: string;
@@ -818,6 +820,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
               <span class="range-fields">
                 <input type="number" min="0" step="0.01" placeholder="Min" [ngModel]="line.minQty || 0" (ngModelChange)="updateLine(i, { minQty: $event })" [disabled]="draft.status === 'confirmed'">
                 <input type="number" min="0" step="0.01" placeholder="Max" [ngModel]="line.maxQty || 0" (ngModelChange)="updateLine(i, { maxQty: $event })" [disabled]="draft.status === 'confirmed'">
+                <small *ngIf="autoWastePct(line) > 0">Auto waste {{ autoWastePct(line) }}%</small>
               </span>
               <span><input [class.reason-needed]="lineNeedsReason(line)" [ngModel]="line.reason || ''" (ngModelChange)="updateLine(i, { reason: $event })" placeholder="Required if overuse" [disabled]="draft.status === 'confirmed'"></span>
               <span><input [ngModel]="line.substitutes || ''" (ngModelChange)="updateLine(i, { substitutes: $event })" placeholder="Alternate product ids/name" [disabled]="draft.status === 'confirmed'"></span>
@@ -1030,6 +1033,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .line-ledger small { border: 1px solid #cfe1df; border-radius: 999px; padding: 4px 8px; background: #ecfdf5; color: #0f766e; font-weight: 800; text-transform: none; }
     .qty-unit, .range-fields { display: grid; grid-template-columns: 1fr 86px; gap: 8px; }
     .range-fields { grid-template-columns: 1fr 1fr; }
+    .range-fields small { grid-column: 1 / -1; color: #b45309; font-size: 11px; font-weight: 900; }
     .backbar-ledger { border: 1px solid #dcebea; border-radius: 16px; padding: 14px; display: grid; gap: 12px; background: #f8fbfa; }
     .owner-report, .owner-dashboard, .control-report, .staff-audit { border-radius: 0; padding: 14px 16px; display: grid; gap: 12px; }
     .owner-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
@@ -1252,6 +1256,7 @@ export class ProductConsumeComponent {
     this.patchSelected((draft) => {
       const lineItems = [...draft.lineItems];
       const line = { ...lineItems[index], actualQty: Number(value || 0) };
+      line.wastagePct = this.effectiveWastePct(line);
       line.actualCost = this.lineActualCost(line);
       lineItems[index] = line;
       return { ...draft, lineItems, actualCost: lineItems.reduce((sum, item) => sum + this.lineActualCost(item), 0) };
@@ -1294,9 +1299,9 @@ export class ProductConsumeComponent {
       const line = { ...lineItems[index], ...patch };
       if (patch.unit !== undefined) line.unitCost = this.consumeUnitCostForLine(line, String(line.unit || 'pcs'));
       line.actualQty = Number(line.actualQty || 0);
-      line.wastagePct = Math.max(0, Number(line.wastagePct || 0));
       line.minQty = Number(line.minQty || 0);
       line.maxQty = Number(line.maxQty || 0);
+      line.wastagePct = this.effectiveWastePct(line);
       line.actualCost = this.lineActualCost(line);
       lineItems[index] = line;
       return { ...draft, lineItems, actualCost: lineItems.reduce((sum, item) => sum + this.lineActualCost(item), 0) };
@@ -1559,7 +1564,18 @@ export class ProductConsumeComponent {
   }
 
   lineWastePct(line: ConsumeLine): number {
-    return Math.max(0, Math.round(Number(line.wastagePct || 0) * 100) / 100);
+    return this.effectiveWastePct(line);
+  }
+
+  autoWastePct(line: ConsumeLine): number {
+    const actualQty = Number(line.actualQty || 0);
+    const maxQty = Number(line.maxQty || 0);
+    if (!maxQty || actualQty <= maxQty) return 0;
+    return Math.round(((actualQty - maxQty) / maxQty) * 10000) / 100;
+  }
+
+  effectiveWastePct(line: ConsumeLine): number {
+    return Math.max(0, Math.round(Math.max(Number(line.wastagePct || 0), this.autoWastePct(line)) * 100) / 100);
   }
 
   lineWasteWarn(line: ConsumeLine): boolean {
@@ -1567,12 +1583,14 @@ export class ProductConsumeComponent {
   }
 
   lineWasteApprovalRequired(line: ConsumeLine): boolean {
-    return this.lineWastePct(line) > this.wasteApprovalLimit;
+    return this.lineWastePct(line) > Number(line.wastageApprovalPct || this.wasteApprovalLimit);
   }
 
   draftWastageGuard(draft: ConsumeDraft): { warn: boolean; approvalRequired: boolean; maxWastagePct: number; status: string; detail: string } {
     const maxWastagePct = Math.max(0, ...draft.lineItems.map((line) => this.lineWastePct(line)));
-    const approvalRequired = maxWastagePct > this.wasteApprovalLimit;
+    const approvalLimits = draft.lineItems.map((line) => Number(line.wastageApprovalPct || this.wasteApprovalLimit)).filter((value) => Number.isFinite(value) && value > 0);
+    const approvalLimit = approvalLimits.length ? Math.min(...approvalLimits) : this.wasteApprovalLimit;
+    const approvalRequired = draft.lineItems.some((line) => this.lineWasteApprovalRequired(line));
     const warn = maxWastagePct >= this.wasteWarnLimit;
     if (approvalRequired) {
       return {
@@ -1582,7 +1600,7 @@ export class ProductConsumeComponent {
         status: this.isOwnerApprover() ? 'Owner approval required' : 'Confirm locked',
         detail: this.isOwnerApprover()
           ? `Waste ${maxWastagePct}% hai. Owner approve & confirm se audit ke saath confirm hoga.`
-          : `Waste ${maxWastagePct}% owner approval limit ${this.wasteApprovalLimit}% se above hai.`
+          : `Waste ${maxWastagePct}% owner approval limit ${approvalLimit}% se above hai.`
       };
     }
     if (warn) {

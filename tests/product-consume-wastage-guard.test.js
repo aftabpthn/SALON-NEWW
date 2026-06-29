@@ -9,6 +9,7 @@ const page = readFileSync("src/app/pages/product-consume.component.ts", "utf8");
 test("product consume confirmation is locked by wastage owner approval", () => {
   assert.match(inventoryService, /PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25/);
   assert.match(inventoryService, /productConsumeWastageGuard/);
+  assert.match(inventoryService, /autoWastagePct/);
   assert.match(inventoryService, /ownerRoles\.has\(access\.role\)/);
   assert.match(inventoryService, /ownerApproval/);
   assert.match(inventoryService, /inventory:product_consume_wastage_approval_required/);
@@ -26,6 +27,7 @@ test("product consume owner report surfaces wastage approval and repeat staff ac
 test("product consume UI shows wastage lock and role-aware confirm", () => {
   assert.match(page, /wastage-guard/);
   assert.match(page, /draftWastageGuard/);
+  assert.match(page, /autoWastePct/);
   assert.match(page, /draftConfirmBlocked/);
   assert.match(page, /Owner approve & confirm/);
   assert.match(page, /ownerApproval: guard\.approvalRequired && this\.isOwnerApprover\(\)/);

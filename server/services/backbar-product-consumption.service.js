@@ -1002,7 +1002,7 @@ export class BackbarProductConsumptionService {
       });
       const updatedAt = draft.updated_at || draft.created_at || "";
       const maxWastagePct = lines.reduce((max, line) => Math.max(max, number(line.wastagePct ?? line.wastage_pct, 0)), 0);
-      const wastageApprovalLines = lines.filter((line) => number(line.wastagePct ?? line.wastage_pct, 0) > PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT);
+      const wastageApprovalLines = lines.filter((line) => number(line.wastagePct ?? line.wastage_pct, 0) > number(line.wastageApprovalPct ?? line.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT));
       return {
         draftId: draft.id,
         invoiceId: draft.invoice_id || "",
@@ -1020,7 +1020,9 @@ export class BackbarProductConsumptionService {
         wastageApprovalLines: wastageApprovalLines.map((line) => ({
           productId: line.productId || line.product_id || "",
           productName: line.productName || line.product_name || line.productId || line.product_id || "Product",
-          wastagePct: number(line.wastagePct ?? line.wastage_pct, 0)
+          wastagePct: number(line.wastagePct ?? line.wastage_pct, 0),
+          wastageApprovalPct: number(line.wastageApprovalPct ?? line.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT),
+          wastageHitLimit: Math.max(1, Math.round(number(line.wastageHitLimit ?? line.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT)))
         })),
         expectedCost: money(lines.reduce((sum, line) => sum + number(line.expectedCost ?? line.expected_cost, 0), 0)),
         actualCost: money(lines.reduce((sum, line) => sum + number(line.actualCost ?? line.actual_cost, 0), 0)),
@@ -1123,6 +1125,7 @@ export class BackbarProductConsumptionService {
           staffName: draft.staff_name || "Unassigned",
           repeatCount: 0,
           maxWastagePct: 0,
+          hitLimit: PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT,
           products: new Set(),
           invoices: new Set(),
           cost: 0,
@@ -1130,6 +1133,7 @@ export class BackbarProductConsumptionService {
         };
         row.repeatCount += 1;
         row.maxWastagePct = Math.max(row.maxWastagePct, wastagePct);
+        row.hitLimit = Math.min(row.hitLimit, Math.max(1, Math.round(number(line.wastageHitLimit ?? line.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT))));
         row.products.add(line.productName || line.product_name || lineProductId || "Product");
         row.invoices.add(draft.invoice_number || draft.invoice_id || "");
         row.cost = money(row.cost + number(line.actualCost ?? line.actual_cost, 0));
@@ -1142,7 +1146,7 @@ export class BackbarProductConsumptionService {
       products: [...row.products].slice(0, 5).join(", "),
       invoiceCount: row.invoices.size,
       invoices: [...row.invoices].filter(Boolean).slice(0, 5).join(", "),
-      riskLevel: row.maxWastagePct > PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT || row.repeatCount >= PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT ? "high" : "medium"
+      riskLevel: row.maxWastagePct > PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT || row.repeatCount >= row.hitLimit ? "high" : "medium"
     })).filter((row) => row.repeatCount >= 2 || row.maxWastagePct >= PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT)
       .sort((a, b) => Number(b.repeatCount || 0) - Number(a.repeatCount || 0) || Number(b.maxWastagePct || 0) - Number(a.maxWastagePct || 0))
       .slice(0, 80);
@@ -1724,7 +1728,7 @@ export class BackbarProductConsumptionService {
       ...staffWastageRepeatRows.filter((row) => row.riskLevel === "high").slice(0, 8).map((row) => ({
         actionType: "staff_wastage_repeat",
         title: `Review ${row.staffName || "Staff"} wastage`,
-        detail: `${row.repeatCount || 0} hits · max ${row.maxWastagePct || 0}% · ${row.products || "products"}`,
+        detail: `${row.repeatCount || 0}/${row.hitLimit || PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT} hits · max ${row.maxWastagePct || 0}% · ${row.products || "products"}`,
         riskLevel: "high",
         actionAt: row.lastUsedAt || ""
       })),
