@@ -30,6 +30,18 @@ type PageConfig = {
   variant?: 'zenoti';
 };
 
+type ServiceProductLockDraft = {
+  uid: string;
+  productId: string;
+  unit: string;
+  minQuantityPerService: number;
+  quantityPerService: number;
+  maxQuantityPerService: number;
+  wastagePct: number;
+  wastageApprovalPct: number;
+  wastageHitLimit: number;
+};
+
 @Component({
   selector: 'app-module-page',
   standalone: true,
@@ -66,7 +78,7 @@ type PageConfig = {
 
       <section class="form-panel" *ngIf="showForm">
         <form [formGroup]="form" (ngSubmit)="save()">
-          <label class="field" *ngFor="let field of config.fields">
+          <label class="field" *ngFor="let field of visibleFields()">
             <span>{{ field.label }}</span>
             <textarea *ngIf="field.type === 'json'; else scalar" [formControlName]="field.key"></textarea>
             <ng-template #scalar>
@@ -74,6 +86,45 @@ type PageConfig = {
             </ng-template>
             <small class="field-error" *ngIf="form.get(field.key)?.invalid && form.get(field.key)?.touched">Required</small>
           </label>
+          <section class="service-product-lock" *ngIf="isServicesPage()">
+            <div class="section-title compact">
+              <div>
+                <span class="eyebrow">Product consumption</span>
+                <h3>Wastage lock for this service</h3>
+              </div>
+              <button class="ghost-button mini" type="button" (click)="addServiceProductLock()">Add product line</button>
+            </div>
+            <div class="service-product-lock-grid">
+              <div class="service-product-lock-row head">
+                <span>Product</span>
+                <span>Unit</span>
+                <span>Min qty</span>
+                <span>Standard qty</span>
+                <span>Max qty</span>
+                <span>Waste %</span>
+                <span>Owner approval %</span>
+                <span>Hit limit</span>
+                <span></span>
+              </div>
+              <div class="service-product-lock-row" *ngFor="let item of serviceProductLocks; trackBy: trackServiceProductLock">
+                <select [ngModel]="item.productId" [ngModelOptions]="{standalone: true}" (ngModelChange)="setServiceProductLockProduct(item, $event)">
+                  <option value="">Select product</option>
+                  <option *ngFor="let product of serviceProductOptions()" [value]="product.id">{{ serviceProductLabel(product) }}</option>
+                </select>
+                <select [ngModel]="item.unit" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.unit = $event">
+                  <option *ngFor="let unit of serviceUnits" [value]="unit">{{ unit }}</option>
+                </select>
+                <input type="number" min="0" [ngModel]="item.minQuantityPerService" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.minQuantityPerService = numberValue($event)" />
+                <input type="number" min="0" [ngModel]="item.quantityPerService" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.quantityPerService = numberValue($event)" />
+                <input type="number" min="0" [ngModel]="item.maxQuantityPerService" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.maxQuantityPerService = numberValue($event)" />
+                <input type="number" min="0" [ngModel]="item.wastagePct" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.wastagePct = numberValue($event)" />
+                <input type="number" min="0" [ngModel]="item.wastageApprovalPct" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.wastageApprovalPct = numberValue($event)" />
+                <input type="number" min="1" [ngModel]="item.wastageHitLimit" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.wastageHitLimit = numberValue($event)" />
+                <button class="ghost-button mini danger" type="button" (click)="removeServiceProductLock(item.uid)" [disabled]="serviceProductLocks.length <= 1">Remove</button>
+              </div>
+            </div>
+            <p class="service-lock-note">Save ke baad ye lock service recipe me sync hoga. Product Consume me max qty ke upar actual use par auto waste aur owner approval guard chalega.</p>
+          </section>
           <div class="form-actions">
             <button class="ghost-button" type="button" (click)="toggleForm()">Cancel</button>
             <button class="primary-button" type="submit" [disabled]="form.invalid || saving">{{ saving ? 'Saving...' : 'Save' }}</button>
@@ -205,6 +256,59 @@ type PageConfig = {
       align-items: end;
       gap: 10px;
       margin-left: auto;
+    }
+
+    .service-product-lock {
+      grid-column: 1 / -1;
+      border: 1px solid #d9e3ec;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .service-product-lock-grid {
+      overflow-x: auto;
+      display: grid;
+      gap: 8px;
+    }
+
+    .service-product-lock-row {
+      min-width: 1120px;
+      display: grid;
+      grid-template-columns: minmax(260px, 1.6fr) 110px repeat(6, minmax(110px, 1fr)) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .service-product-lock-row.head {
+      color: #475569;
+      font-size: 0.76rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .service-product-lock-row select,
+    .service-product-lock-row input {
+      width: 100%;
+      border: 1px solid #cbd8e5;
+      border-radius: 8px;
+      padding: 10px 11px;
+      font: inherit;
+      background: #fff;
+      color: #0f172a;
+    }
+
+    .service-lock-note {
+      margin: 0;
+      color: #64748b;
+      font-size: 0.86rem;
+    }
+
+    .ghost-button.danger {
+      color: #b91c1c;
+      border-color: #fecaca;
     }
 
     .field.compact {
@@ -584,6 +688,7 @@ type PageConfig = {
 export class ModulePageComponent implements OnInit, OnDestroy {
   config!: PageConfig;
   rows: ApiRecord[] = [];
+  products: ApiRecord[] = [];
   query = '';
   loading = true;
   saving = false;
@@ -595,6 +700,8 @@ export class ModulePageComponent implements OnInit, OnDestroy {
   activeGstRate = '';
   bulkGstRate = 18;
   actionMessage = '';
+  serviceProductLocks: ServiceProductLockDraft[] = [];
+  readonly serviceUnits = ['ml', 'gm', 'g', 'kg', 'l', 'pcs', 'tube', 'pack', 'box', 'nos'];
   form: UntypedFormGroup = this.fb.group({});
   private readonly subscription = new Subscription();
 
@@ -625,6 +732,11 @@ export class ModulePageComponent implements OnInit, OnDestroy {
 
   isServicesPage(): boolean {
     return this.config?.entity === 'services';
+  }
+
+  visibleFields(): FieldConfig[] {
+    if (!this.isServicesPage()) return this.config.fields;
+    return this.config.fields.filter((field) => field.key !== 'requiredProducts');
   }
 
   isZenotiPage(): boolean {
@@ -914,6 +1026,7 @@ export class ModulePageComponent implements OnInit, OnDestroy {
   load(): void {
     this.loading = true;
     this.error = '';
+    if (this.isServicesPage()) this.loadServiceProducts();
     this.api.list<ApiRecord[]>(this.config.entity, { branchId: this.api.selectedBranchId() }).subscribe({
       next: (rows) => {
         this.rows = rows;
@@ -929,10 +1042,12 @@ export class ModulePageComponent implements OnInit, OnDestroy {
   buildForm(): void {
     const group: Record<string, FormControl> = {};
     for (const field of this.config.fields) {
+      if (this.isServicesPage() && field.key === 'requiredProducts') continue;
       const value = field.type === 'json' ? JSON.stringify(field.defaultValue ?? [], null, 2) : field.defaultValue ?? '';
       group[field.key] = new FormControl(value, field.required ? Validators.required : []);
     }
     this.form = this.fb.group(group);
+    if (this.isServicesPage()) this.resetServiceProductLocks();
   }
 
   toggleForm(): void {
@@ -949,6 +1064,7 @@ export class ModulePageComponent implements OnInit, OnDestroy {
     this.error = '';
     const payload: ApiRecord = {};
     for (const field of this.config.fields) {
+      if (this.isServicesPage() && field.key === 'requiredProducts') continue;
       const raw = this.form.value[field.key];
       try {
         payload[field.key] = field.type === 'json' ? JSON.parse(raw || 'null') : raw;
@@ -958,12 +1074,9 @@ export class ModulePageComponent implements OnInit, OnDestroy {
         return;
       }
     }
+    if (this.isServicesPage()) payload.requiredProducts = this.serviceProductLockPayload();
     this.api.create(this.config.entity, payload).subscribe({
-      next: () => {
-        this.saving = false;
-        this.showForm = false;
-        this.load();
-      },
+      next: (created) => this.afterServiceSave(created, payload),
       error: (error) => {
         this.error = error?.error?.error || 'Unable to save record';
         this.saving = false;
@@ -989,5 +1102,155 @@ export class ModulePageComponent implements OnInit, OnDestroy {
     if (Array.isArray(cell)) return cell.join(', ');
     if (cell && typeof cell === 'object') return JSON.stringify(cell);
     return String(cell ?? '');
+  }
+
+  private loadServiceProducts(): void {
+    this.api.list<ApiRecord[]>('products', { limit: 10000, branchId: this.api.selectedBranchId() }).subscribe({
+      next: (products) => {
+        this.products = products || [];
+      },
+      error: () => {
+        this.products = [];
+      }
+    });
+  }
+
+  serviceProductOptions(): ApiRecord[] {
+    const tagged = this.products.filter((product) => ['consumable', 'both'].includes(this.productType(product)));
+    return tagged.length ? tagged : this.products;
+  }
+
+  serviceProductLabel(product: ApiRecord): string {
+    const name = String(product.name || product.productName || product.sku || product.id || 'Product');
+    const sku = product.sku ? ` · ${product.sku}` : '';
+    const stock = product.stock !== undefined ? ` · stock ${product.stock}` : '';
+    return `${name}${sku}${stock}`;
+  }
+
+  addServiceProductLock(): void {
+    this.serviceProductLocks = [...this.serviceProductLocks, this.blankServiceProductLock()];
+  }
+
+  removeServiceProductLock(uid: string): void {
+    if (this.serviceProductLocks.length <= 1) return;
+    this.serviceProductLocks = this.serviceProductLocks.filter((item) => item.uid !== uid);
+  }
+
+  setServiceProductLockProduct(item: ServiceProductLockDraft, productId: string): void {
+    item.productId = productId;
+    const product = this.productById(productId);
+    if (product) item.unit = String(product.unit || product.packUnit || product.baseUnit || item.unit || 'ml');
+    this.serviceProductLocks = [...this.serviceProductLocks];
+  }
+
+  trackServiceProductLock(_: number, item: ServiceProductLockDraft): string {
+    return item.uid;
+  }
+
+  numberValue(value: unknown): number {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  private afterServiceSave(created: ApiRecord, payload: ApiRecord): void {
+    if (!this.isServicesPage()) {
+      this.finishSave();
+      return;
+    }
+    const items = this.serviceProductLockPayload().filter((item) => item.productId);
+    if (!items.length || !created?.id) {
+      this.finishSave();
+      return;
+    }
+    const serviceName = String(created.name || payload.name || 'Service');
+    this.api.post<ApiRecord>('inventory-intelligence/service-recipes', {
+      branchId: this.api.selectedBranchId(),
+      serviceId: created.id,
+      recipeName: `${serviceName} product lock`,
+      serviceCategory: payload.category || '',
+      servicePrice: Number(payload.price || 0),
+      approvalStatus: 'approved',
+      marginFloorPct: 35,
+      notes: 'Synced from Services product consumption lock.',
+      usageModifiers: [
+        { key: 'short', label: 'Short hair', multiplier: 1 },
+        { key: 'medium', label: 'Medium hair', multiplier: 1.5 },
+        { key: 'long', label: 'Long hair', multiplier: 2 }
+      ],
+      enforceConsumableFilter: this.serviceProductOptions().length !== this.products.length,
+      versionNote: 'Service form product lock synced',
+      items: items.map((item, index) => {
+        const product = this.productById(item.productId);
+        return {
+          ...item,
+          unitCost: Number(product?.unitCost || 0),
+          allowedSubstitutes: [],
+          sortOrder: index,
+          notes: 'Managed from Services add form'
+        };
+      })
+    }).subscribe({
+      next: () => this.finishSave('Service saved and product consumption lock synced.'),
+      error: (error) => {
+        this.error = `Service saved, but product lock sync failed: ${this.api.errorText(error, 'Unable to sync service recipe')}`;
+        this.saving = false;
+        this.showForm = false;
+        this.load();
+      }
+    });
+  }
+
+  private finishSave(message = ''): void {
+    this.saving = false;
+    this.showForm = false;
+    this.actionMessage = message;
+    this.load();
+  }
+
+  private resetServiceProductLocks(): void {
+    this.serviceProductLocks = [this.blankServiceProductLock()];
+  }
+
+  private blankServiceProductLock(): ServiceProductLockDraft {
+    return {
+      uid: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      productId: '',
+      unit: 'ml',
+      minQuantityPerService: 0,
+      quantityPerService: 1,
+      maxQuantityPerService: 0,
+      wastagePct: 0,
+      wastageApprovalPct: 25,
+      wastageHitLimit: 3
+    };
+  }
+
+  private serviceProductLockPayload(): ApiRecord[] {
+    return this.serviceProductLocks
+      .filter((item) => item.productId)
+      .map((item) => {
+        const product = this.productById(item.productId);
+        const quantity = Number(item.quantityPerService || 0);
+        return {
+          productId: item.productId,
+          productName: product?.name || product?.productName || '',
+          unit: item.unit || 'ml',
+          quantity,
+          quantityPerService: quantity,
+          minQuantityPerService: Number(item.minQuantityPerService || 0),
+          maxQuantityPerService: Number(item.maxQuantityPerService || 0),
+          wastagePct: Number(item.wastagePct || 0),
+          wastageApprovalPct: Number(item.wastageApprovalPct || 25),
+          wastageHitLimit: Math.max(1, Number(item.wastageHitLimit || 3))
+        };
+      });
+  }
+
+  private productById(productId: string): ApiRecord | undefined {
+    return this.products.find((product) => String(product.id) === String(productId));
+  }
+
+  private productType(product: ApiRecord): string {
+    return String(product.productType || product.type || product.usageType || product.category || '').toLowerCase();
   }
 }

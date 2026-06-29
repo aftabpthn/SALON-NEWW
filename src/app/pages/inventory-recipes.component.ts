@@ -181,7 +181,6 @@ const DEFAULT_MODIFIERS = [
             <label class="field"><span>Approval status</span><select formControlName="approvalStatus"><option value="approved">Approved</option><option value="pending_approval">Pending approval</option><option value="draft">Draft</option></select></label>
             <label class="field"><span>Margin floor %</span><input type="number" formControlName="marginFloorPct" /></label>
             <label class="field"><span>Template</span><select [ngModel]="selectedTemplateKey()" [ngModelOptions]="{standalone: true}" (ngModelChange)="selectedTemplateKey.set($event)"><option value="">AI template</option><option *ngFor="let template of templates()" [value]="template.templateKey">{{ template.templateName }}</option></select></label>
-            <button type="button" class="ghost-button preset-button" (click)="applyHairSpaPreset()">Hair spa 20/40/60 preset</button>
 
             <div class="template-hint full" *ngIf="selectedTemplate() as template">
               <span>Template guide</span>
@@ -191,7 +190,7 @@ const DEFAULT_MODIFIERS = [
 
             <div class="recipe-lines full">
               <div class="recipe-line head">
-                <span>Inventory product</span><span>Auto qty / unit</span><span>Waste lock %</span><span>Range min/max</span><span>Approval</span><span>Substitutes</span><span></span>
+                <span>Inventory product</span><span>Auto qty / unit</span><span>Waste %</span><span>Range min/max</span><span>Substitutes</span><span></span>
               </div>
               <div class="recipe-line" *ngFor="let item of recipeItems(); trackBy: trackRecipeItem">
                 <select [ngModel]="item.productId" [ngModelOptions]="{standalone: true}" (ngModelChange)="setLineProduct(item, $event)">
@@ -208,10 +207,6 @@ const DEFAULT_MODIFIERS = [
                 <div class="inline-fields">
                   <input type="number" min="0" [ngModel]="item.minQuantityPerService" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.minQuantityPerService = numberValue($event)" />
                   <input type="number" min="0" [ngModel]="item.maxQuantityPerService" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.maxQuantityPerService = numberValue($event)" />
-                </div>
-                <div class="inline-fields">
-                  <input type="number" min="0" [ngModel]="item.wastageApprovalPct" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.wastageApprovalPct = numberValue($event)" />
-                  <input type="number" min="1" [ngModel]="item.wastageHitLimit" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.wastageHitLimit = numberValue($event)" />
                 </div>
                 <input [ngModel]="item.allowedSubstitutesText" [ngModelOptions]="{standalone: true}" (ngModelChange)="item.allowedSubstitutesText = $event" placeholder="Alternate product ids/names" />
                 <button type="button" class="ghost-button mini danger" (click)="removeRecipeItem(item.uid)" [disabled]="recipeItems().length <= 1">Remove</button>
@@ -709,11 +704,6 @@ const DEFAULT_MODIFIERS = [
       grid-column: 1 / -1;
     }
 
-    .preset-button {
-      align-self: end;
-      min-height: 44px;
-    }
-
     .enterprise-form textarea {
       min-height: 92px;
       resize: vertical;
@@ -742,9 +732,9 @@ const DEFAULT_MODIFIERS = [
     }
 
     .recipe-line {
-      min-width: 1240px;
+      min-width: 1040px;
       display: grid;
-      grid-template-columns: 2fr 1.15fr .85fr 1.2fr 1.1fr 1.35fr auto;
+      grid-template-columns: 2fr 1.15fr .85fr 1.2fr 1.35fr auto;
       gap: 8px;
       align-items: center;
       padding: 10px;
@@ -1111,64 +1101,6 @@ export class InventoryRecipesComponent implements OnInit {
 
   addRecipeItem(): void {
     this.recipeItems.update((items) => [...items, this.blankLine()]);
-  }
-
-  applyHairSpaPreset(): void {
-    const service = this.services().find((row) => /hair\s*spa/i.test(String(row.name || row.serviceName || '')));
-    if (!service) {
-      this.saving.set(true);
-      this.error.set('');
-      this.api.create<ApiRecord>('services', {
-        name: 'Hair Spa',
-        category: 'Hair',
-        price: 2400,
-        durationMinutes: 60,
-        gstRate: 18,
-        status: 'active',
-        assignedStaff: [],
-        requiredProducts: [],
-        addOns: [],
-        packageServices: []
-      }).subscribe({
-        next: (created) => {
-          this.services.update((rows) => [created, ...rows]);
-          this.saving.set(false);
-          this.applyHairSpaPresetFor(created);
-          this.success.set('Hair Spa service created and lock preset applied.');
-        },
-        error: (error) => {
-          this.saving.set(false);
-          this.error.set(this.api.errorText(error, 'Unable to create Hair Spa service'));
-        }
-      });
-      return;
-    }
-    this.applyHairSpaPresetFor(service);
-  }
-
-  private applyHairSpaPresetFor(service: ApiRecord): void {
-    const product = this.recipeProducts().find((row) => /spa|mask|cream|conditioner|serum|shampoo/i.test(String(row.name || row.productName || '')));
-    this.selectedTemplateKey.set('hair-spa');
-    this.recipeForm.patchValue({
-      serviceId: service.id || this.recipeForm.value.serviceId || '',
-      recipeName: 'Hair spa product lock',
-      approvalStatus: 'approved',
-      marginFloorPct: Number(this.recipeForm.value.marginFloorPct || 35)
-    });
-    this.recipeItems.set([{
-      uid: this.uid(),
-      productId: product?.id || '',
-      quantityPerService: 40,
-      unit: 'ml',
-      wastagePct: 0,
-      wastageApprovalPct: 25,
-      wastageHitLimit: 3,
-      minQuantityPerService: 20,
-      maxQuantityPerService: 60,
-      allowedSubstitutesText: '',
-      notes: 'Hair spa lock: short 20 ml, medium 40 ml, long 60 ml.'
-    }]);
-    this.success.set('Hair spa lock preset applied.');
   }
 
   removeRecipeItem(uid: string): void {

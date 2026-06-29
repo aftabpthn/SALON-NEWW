@@ -94,7 +94,6 @@ export const routes: Routes = [
         { key: 'durationMinutes', label: 'Duration minutes', type: 'number', required: true },
         { key: 'gstRate', label: 'GST rate', type: 'number', defaultValue: 18 },
         { key: 'assignedStaff', label: 'Assigned staff IDs JSON', type: 'json', defaultValue: [] },
-        { key: 'requiredProducts', label: 'Required products JSON', type: 'json', defaultValue: [] },
         { key: 'addOns', label: 'Add-ons JSON', type: 'json', defaultValue: [] },
         { key: 'packageServices', label: 'Package service IDs JSON', type: 'json', defaultValue: [] }
       ]
