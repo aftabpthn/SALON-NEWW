@@ -63,7 +63,7 @@ import { DataMigrationStore } from './data-migration.store';
       </section>
 
       <section class="export-strip">
-        <button class="btn-secondary" (click)="store.exportFailedRows()">Export Failed Rows</button>
+        <button class="btn-secondary" (click)="store.exportFailedRows()">Export Error Excel</button>
       </section>
 
       <section class="message error" *ngIf="store.error()">{{ store.error() }}</section>

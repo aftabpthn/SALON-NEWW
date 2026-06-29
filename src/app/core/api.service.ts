@@ -51,6 +51,13 @@ export class ApiService {
     return this.withAuth((headers) => this.http.post<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, this.withBranchScope(path, payload), { headers: this.headersForMutation(path, headers) }), this.timeoutFor(path));
   }
 
+  postBlob(path: string, payload: ApiRecord = {}): Observable<Blob> {
+    return this.withAuth((headers) => this.http.post(`${environment.apiBaseUrl}/${path}`, this.withBranchScope(path, payload), {
+      headers: this.headersForMutation(path, headers),
+      responseType: 'blob'
+    }), this.timeoutFor(path));
+  }
+
   postWithHeaders<T = ApiRecord>(path: string, payload: ApiRecord = {}, extraHeaders: Record<string, string> = {}): Observable<T> {
     return this.withAuth((headers) => {
       let requestHeaders = this.headersForMutation(path, headers);

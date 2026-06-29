@@ -90,7 +90,7 @@ import { DataMigrationStore } from './data-migration.store';
       </section>
 
       <section class="export-strip">
-        <button class="btn-secondary" (click)="store.exportFailedRows()">Export Failed Rows</button>
+        <button class="btn-secondary" (click)="store.exportFailedRows()">Export Error Excel</button>
         <button class="btn-secondary" (click)="store.exportPreviewSummary()">Export Preview Summary</button>
       </section>
 

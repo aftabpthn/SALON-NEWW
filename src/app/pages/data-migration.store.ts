@@ -1117,9 +1117,22 @@ export class DataMigrationStore {
     ].join(' '));
   }
 
-  exportFailedRows(): void {
-    const rows = this.previewRows().filter((row) => row.status === 'error' || row.status === 'warning' || this.duplicateRows().includes(row));
-    this.downloadCsv('migration-failed-rows.csv', rows);
+  async exportFailedRows(): Promise<void> {
+    if (!this.fileBase64()) {
+      this.error.set('Select and analyze a source file before exporting the error Excel.');
+      return;
+    }
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const blob = await firstValueFrom(this.api.postBlob('migration/error-report.xlsx', this.migrationRequestPayload()));
+      this.downloadBlob(this.errorReportFileName(), blob);
+      this.message.set('Migration error Excel exported.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to export migration error Excel.'));
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   exportPreviewSummary(): void {
@@ -1134,6 +1147,20 @@ export class DataMigrationStore {
       { metric: 'readinessScore', value: this.readinessScore() }
     ];
     this.downloadCsv('migration-preview-summary.csv', rows);
+  }
+
+  private downloadBlob(fileName: string, blob: Blob): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private errorReportFileName(): string {
+    const base = (this.fileName() || 'migration').replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'migration';
+    return `migration-error-report-${base}.xlsx`;
   }
 
   private downloadCsv(fileName: string, rows: Record<string, unknown>[]): void {
@@ -1171,6 +1198,19 @@ export class DataMigrationStore {
     return `${row.sourceSheet || 'sheet'}:${row.sourceRowNumber || row.targetId || row.sourceExternalId || 'row'}`;
   }
 
+  private migrationRequestPayload(): Record<string, unknown> {
+    return {
+      sourceSoftware: this.sourceSoftware,
+      resource: this.resource,
+      migrationMode: true,
+      sandboxMode: this.sandboxMode(),
+      mapping: Object.fromEntries(this.mappingDraft().filter((row) => row.sourceColumn).map((row) => [row.sourceColumn, row.targetField])),
+      duplicateDecisions: this.duplicateDecisions(),
+      fileName: this.fileName(),
+      fileBase64: this.fileBase64()
+    };
+  }
+
   private async callMigration(path: string, successMessage: string): Promise<void> {
     if (!this.fileBase64()) {
       this.error.set('Select an Excel file first.');
@@ -1182,16 +1222,7 @@ export class DataMigrationStore {
       this.error.set('');
       this.message.set('');
       const response = await firstValueFrom(
-        this.api.post<any>(path, {
-          sourceSoftware: this.sourceSoftware,
-          resource: this.resource,
-          migrationMode: true,
-          sandboxMode: this.sandboxMode(),
-          mapping: Object.fromEntries(this.mappingDraft().filter((row) => row.sourceColumn).map((row) => [row.sourceColumn, row.targetField])),
-          duplicateDecisions: this.duplicateDecisions(),
-          fileName: this.fileName(),
-          fileBase64: this.fileBase64()
-        })
+        this.api.post<any>(path, this.migrationRequestPayload())
       );
       this.summary.set(response.summary || null);
       this.previewRows.set(response.rows || response.details?.rows || []);

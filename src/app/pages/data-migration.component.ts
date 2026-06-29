@@ -734,7 +734,7 @@ type MigrationRecoveryReport = {
           <div class="action-row">
             <button class="secondary-button" type="button" (click)="sandboxMode.set(!sandboxMode())">{{ sandboxMode() ? 'Switch to live mode' : 'Switch to sandbox mode' }}</button>
             <button class="secondary-button" type="button" (click)="maskPreviewPii.set(!maskPreviewPii())">{{ maskPreviewPii() ? 'Show PII preview' : 'Mask PII preview' }}</button>
-            <button class="ghost-button" type="button" [disabled]="!previewRows().length" (click)="exportFailedRows()">Export failed rows</button>
+            <button class="ghost-button" type="button" [disabled]="!hasSelectedSourcePayload() || loading()" (click)="exportFailedRows()">Export error Excel</button>
             <button class="ghost-button" type="button" [disabled]="!previewRows().length" (click)="exportPreviewSummary()">Export preview summary</button>
           </div>
           <div class="checklist">
@@ -3302,9 +3302,31 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     ].join(' '));
   }
 
-  exportFailedRows(): void {
-    const rows = this.previewRows().filter((row) => row.status === 'error' || row.status === 'warning' || this.duplicateRows().includes(row));
-    this.downloadCsv('migration-failed-rows.csv', rows);
+  async exportFailedRows(): Promise<void> {
+    if (!this.hasSelectedSourcePayload()) {
+      this.error.set('Select and analyze a source file before exporting the error Excel.');
+      return;
+    }
+    try {
+      this.loading.set(true);
+      this.error.set('');
+      const blob = await firstValueFrom(this.api.postBlob('migration/error-report.xlsx', {
+        sourceSoftware: this.sourceSoftware,
+        resource: this.resource,
+        migrationMode: true,
+        sandboxMode: this.sandboxMode(),
+        mapping: Object.fromEntries(this.mappingDraft().filter((row) => row.sourceColumn).map((row) => [row.sourceColumn, row.targetField])),
+        duplicateDecisions: this.duplicateDecisions(),
+        allowPartialImport: this.allowPartialLargeImport(),
+        ...this.sourceFilePayload()
+      }));
+      this.downloadBlob(this.errorReportFileName(), blob);
+      this.message.set('Migration error Excel exported.');
+    } catch (err: any) {
+      this.error.set(this.api.errorText(err, 'Unable to export migration error Excel.'));
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   exportPreviewSummary(): void {
@@ -3319,6 +3341,20 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
       { metric: 'readinessScore', value: this.readinessScore() }
     ];
     this.downloadCsv('migration-preview-summary.csv', rows);
+  }
+
+  private downloadBlob(fileName: string, blob: Blob): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private errorReportFileName(): string {
+    const base = (this.fileName() || 'migration').replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'migration';
+    return `migration-error-report-${base}.xlsx`;
   }
 
   private downloadCsv(fileName: string, rows: Record<string, unknown>[]): void {

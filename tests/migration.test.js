@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { deflateRawSync } from "node:zlib";
+import * as XLSX from "xlsx";
 import { createApp } from "../server/app.js";
 import { columnsFor, db } from "../server/db.js";
 
@@ -106,6 +107,37 @@ test("migration dry-run validates rows without saving live records", async () =>
   }
 });
 
+test("migration exports validation errors as Excel workbook", async () => {
+  const server = await listen(createApp());
+  const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
+  try {
+    const stamp = Date.now();
+    const response = await fetch(`${baseUrl}/migration/error-report.xlsx`, {
+      method: "POST",
+      headers: await authHeaders(baseUrl),
+      body: JSON.stringify({
+        sourceSoftware: "excel",
+        resource: "clients",
+        fileName: `error-report-${stamp}.xlsx`,
+        rows: [{ phone: `+91 90000 ${String(stamp).slice(-5)}`, originalRecordId: `bad-${stamp}` }]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /spreadsheetml\.sheet/i);
+    assert.equal(response.headers.get("x-migration-error-rows"), "1");
+
+    const workbook = XLSX.read(Buffer.from(await response.arrayBuffer()), { type: "buffer" });
+    assert.ok(workbook.SheetNames.includes("Summary"));
+    assert.ok(workbook.SheetNames.includes("Issue Rows"));
+    const issues = XLSX.utils.sheet_to_json(workbook.Sheets["Issue Rows"]);
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].status, "error");
+    assert.equal(issues[0].sourceRowNumber, 2);
+    assert.match(String(issues[0].message), /name is required/i);
+  } finally {
+    await close(server);
+  }
+});
 test("migration import stamps metadata and rollback removes imported records", async () => {
   const server = await listen(createApp());
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`;

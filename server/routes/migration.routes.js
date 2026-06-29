@@ -392,6 +392,18 @@ migrationRouter.post(
 );
 
 migrationRouter.post(
+  "/migration/error-report.xlsx",
+  requirePermission("write", migrationResource),
+  asyncHandler((req, res) => {
+    const report = migrationService.errorReportWorkbook(req.body || {}, req.access);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${report.fileName}"`);
+    res.setHeader("X-Migration-Error-Rows", String(report.rowCount || 0));
+    res.status(200).send(report.buffer);
+  })
+);
+
+migrationRouter.post(
   "/migration/dry-run",
   requirePermission("write", migrationResource),
   asyncHandler((req, res) => {

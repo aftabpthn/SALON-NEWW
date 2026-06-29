@@ -915,13 +915,24 @@ export const migrationService = {
 
   failedRows(payload, access) {
     const preview = previewPayload(payload, access, { persist: false, dryRun: true });
-    const rows = (preview.allRows || preview.rows || []).filter(isFailedMigrationRow);
+    const rows = migrationIssueRows(preview);
     return {
       fileName: preview.fileName,
       sourceSoftware: preview.sourceSoftware,
       summary: preview.summary,
       dataQualityScore: this.dataQualityScore(preview.summary),
       rows: rows.slice(0, 500)
+    };
+  },
+
+  errorReportWorkbook(payload, access) {
+    const preview = previewPayload(payload, access, { persist: false, dryRun: true });
+    const rows = migrationIssueRows(preview);
+    const workbook = buildMigrationErrorWorkbook(preview, rows, this.dataQualityScore(preview.summary));
+    return {
+      fileName: migrationErrorReportFileName(preview.fileName),
+      rowCount: rows.length,
+      buffer: XLSX.write(workbook, { bookType: "xlsx", type: "buffer" })
     };
   },
 
@@ -3957,6 +3968,107 @@ function importSettings(payload, access = {}) {
     approvalGate: payload.skipApprovalGate === true ? "skipped_by_admin" : "required",
     sourceEvidence: migrationSourceEvidence(payload, access, payload.fileName || "")
   };
+}
+
+function migrationIssueRows(preview = {}) {
+  const rows = Array.isArray(preview.allRows) ? preview.allRows : (preview.rows || []);
+  return rows.filter(isFailedMigrationRow);
+}
+
+function buildMigrationErrorWorkbook(preview = {}, rows = [], dataQualityScore = 0) {
+  const workbook = XLSX.utils.book_new();
+  const summary = preview.summary || {};
+  const summaryRows = [
+    { metric: "fileName", value: preview.fileName || "" },
+    { metric: "sourceSoftware", value: preview.sourceSoftware || "" },
+    { metric: "exportedAt", value: now() },
+    { metric: "totalRows", value: Number(summary.totalRows || 0) },
+    { metric: "validRows", value: Number(summary.validRows || 0) },
+    { metric: "warningRows", value: Number(summary.warningRows || 0) },
+    { metric: "errorRows", value: Number(summary.errorRows || 0) },
+    { metric: "duplicateRows", value: Number(summary.duplicateRows || 0) },
+    { metric: "exportedIssueRows", value: rows.length },
+    { metric: "dataQualityScore", value: Number(dataQualityScore || 0) }
+  ];
+  const resourceRows = Object.entries(summary.byResource || {}).map(([resource, bucket]) => ({
+    resource,
+    totalRows: Number(bucket?.total || 0),
+    validRows: Number(bucket?.valid || 0),
+    warningRows: Number(bucket?.warnings || 0),
+    errorRows: Number(bucket?.errors || 0),
+    duplicateRows: Number(bucket?.duplicates || 0)
+  }));
+  const branchRows = Object.entries(summary.byBranch || {}).map(([branchId, bucket]) => ({
+    branchId,
+    totalRows: Number(bucket?.total || 0),
+    validRows: Number(bucket?.valid || 0),
+    warningRows: Number(bucket?.warnings || 0),
+    errorRows: Number(bucket?.errors || 0)
+  }));
+  const issueRows = rows.length ? rows.map(migrationIssueReportRow) : [{ issueType: "none", message: "No failed, warning or duplicate rows found." }];
+  const sheets = [
+    ["Summary", summaryRows, [24, 42]],
+    ["Issue Rows", issueRows, [18, 14, 24, 12, 12, 22, 22, 18, 42, 42, 42, 10, 16, 22, 18, 18, 18, 18]],
+    ["By Resource", resourceRows.length ? resourceRows : [{ resource: "none", totalRows: 0 }], [20, 12, 12, 12, 12, 14]],
+    ["By Branch", branchRows.length ? branchRows : [{ branchId: "none", totalRows: 0 }], [22, 12, 12, 12, 12]]
+  ];
+  for (const [name, data, widths] of sheets) {
+    const sheet = XLSX.utils.json_to_sheet(data);
+    sheet["!cols"] = widths.map((width) => ({ wch: width }));
+    XLSX.utils.book_append_sheet(workbook, sheet, name);
+  }
+  return workbook;
+}
+
+function migrationIssueReportRow(row = {}) {
+  const payload = row.payload || {};
+  const raw = row.raw || {};
+  const out = {
+    issueType: migrationIssueType(row),
+    status: row.status || "",
+    sourceSheet: row.sourceSheet || "",
+    sourceRowNumber: Number(row.sourceRowNumber || 0),
+    resource: row.resource || row.entity || "",
+    sourceExternalId: row.sourceExternalId || "",
+    branchId: payload.branchId || "",
+    message: row.message || "",
+    errors: migrationReportCell(row.errors || []),
+    warnings: migrationReportCell(row.warnings || []),
+    duplicate: row.duplicate ? "yes" : "no",
+    name: payload.name || payload.clientName || "",
+    phone: payload.phone || payload.clientPhone || "",
+    email: payload.email || "",
+    clientId: payload.clientId || "",
+    invoiceNumber: payload.invoiceNumber || ""
+  };
+  for (const [key, value] of Object.entries(raw)) {
+    out[`source_${migrationReportColumnKey(key)}`] = migrationReportCell(value);
+  }
+  out.rawJson = migrationReportCell(raw);
+  out.payloadJson = migrationReportCell(payload);
+  return out;
+}
+
+function migrationIssueType(row = {}) {
+  if (row.status === "error") return "critical_error";
+  if (row.duplicate) return "duplicate_or_conflict";
+  if (row.status === "warning") return "warning";
+  return row.status || "issue";
+}
+
+function migrationReportColumnKey(key = "") {
+  return cleanText(key).replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "column";
+}
+
+function migrationReportCell(value) {
+  if (Array.isArray(value)) return value.map((item) => migrationReportCell(item)).filter(Boolean).join(" | ");
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return cleanText(value);
+}
+
+function migrationErrorReportFileName(fileName = "migration") {
+  const base = sourceNameForFile(fileName).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "migration";
+  return `migration-error-report-${base}-${new Date().toISOString().slice(0, 10)}.xlsx`;
 }
 
 function emptySummary(sourceSoftware, fileName, dryRun) {
