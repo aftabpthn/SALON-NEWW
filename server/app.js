@@ -84,6 +84,7 @@ import { bookingPortalRouter } from "./routes/booking-portal.routes.js";
 import { bookingPortalV2Router } from "./routes/booking-portal-v2.routes.js";
 import { crmRouter } from "./routes/crm.routes.js";
 import { clientMasterRouter } from "./routes/client-master.routes.js";
+import { clientCustomFormSettingsRouter } from "./routes/client-custom-form-settings.routes.js";
 import { customer360Router } from "./routes/customer-360.routes.js";
 import { clientReportsRouter } from "./routes/client-reports.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
@@ -361,6 +362,7 @@ export function createApp() {
   app.use("/api/v1", zReportRouter);
   app.use("/api/v1", paymentRouter);
   app.use("/api/v1", posSettingsRouter);
+  app.use("/api/v1", clientCustomFormSettingsRouter);
   app.use("/api/v1", bookingPaymentsRouter);
   app.use("/api/v1", appointmentDepositGateRouter);
   app.use("/api/v1", legacyRevenueRouter);
@@ -508,6 +510,7 @@ export function createApp() {
   app.use("/api", zReportRouter);
   app.use("/api", paymentRouter);
   app.use("/api", posSettingsRouter);
+  app.use("/api", clientCustomFormSettingsRouter);
   app.use("/api", bookingPaymentsRouter);
   app.use("/api", appointmentDepositGateRouter);
   app.use("/api", legacyRevenueRouter);

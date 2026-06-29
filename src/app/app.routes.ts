@@ -232,6 +232,7 @@ export const routes: Routes = [
   },
   { path: 'setting/calendar', loadComponent: () => import('./pages/calendar-settings.component').then(m => m.CalendarSettingsComponent), title: 'Calendar Settings' },
   { path: 'settings/calendar', loadComponent: () => import('./pages/calendar-settings.component').then(m => m.CalendarSettingsComponent), title: 'Calendar Settings' },
+  { path: 'settings/clients/custom-form', loadComponent: () => import('./pages/client-custom-form-settings.component').then(m => m.ClientCustomFormSettingsComponent), title: 'Clients - Custom Form' },
   {
     path: 'settings',
     component: ModulePageComponent,

@@ -58,6 +58,7 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings">General Settings</a>
         <a class="active" routerLink="/setting/calendar">Calendar Settings</a>
+        <a routerLink="/settings/clients/custom-form">Clients - Custom Form</a>
         <a routerLink="/business-details">Business Details</a>
         <a routerLink="/pos/payment-modes">Payment Methods</a>
         <a routerLink="/message-logs">Message History</a>
