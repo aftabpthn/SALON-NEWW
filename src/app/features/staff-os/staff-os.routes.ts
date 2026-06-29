@@ -33,6 +33,7 @@ export const STAFF_OS_ROUTES: Routes = [
       { path: 'attendance-dashboard', loadComponent: () => import('./pages/attendance-dashboard.page').then((m) => m.AttendanceDashboardPage), title: 'Staff OS - Attendance' },
       { path: 'face-punch', loadComponent: () => import('./pages/face-punch.page').then((m) => m.FacePunchPage), title: 'Staff OS - Face Punch' },
       { path: 'payroll-dashboard', loadComponent: () => import('./pages/payroll-dashboard.page').then((m) => m.PayrollDashboardPage), title: 'Staff OS - Payroll' },
+      { path: 'payroll-history', loadComponent: () => import('./pages/payroll-history.page').then((m) => m.PayrollHistoryPage), title: 'Staff OS - Payroll History' },
       { path: 'payroll-rules', loadComponent: () => import('./pages/payroll-rules.page').then((m) => m.PayrollRulesPage), title: 'Staff OS - Payroll Rules' },
       { path: 'salary-generate', loadComponent: () => import('./pages/salary-generate.page').then((m) => m.SalaryGeneratePage), title: 'Staff OS - Salary Generate' },
       { path: 'generate-salary', pathMatch: 'full', redirectTo: 'salary-generate' },

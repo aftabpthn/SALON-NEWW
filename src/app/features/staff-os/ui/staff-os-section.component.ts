@@ -1957,6 +1957,7 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
           </div>
           <div class="staff-register-actions">
             <span>{{ staffDirectoryRows().length }} staff</span>
+            <a class="refresh" routerLink="/staff-os/payroll-history" [queryParams]="staffContextParams()">Payroll History</a>
             <a class="refresh" routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
             <a class="refresh" routerLink="/staff-os/payroll-salary-structure">Salary Structure</a>
             <button type="button" class="refresh" (click)="store.load()">Refresh</button>

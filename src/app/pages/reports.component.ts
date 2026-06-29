@@ -591,6 +591,7 @@ export class ReportsComponent implements OnInit {
     { label: 'Membership Sales By Customer', path: '/memberships', queryParams: { tab: 'reports', report: 'membershipSalesByCustomer' }, module: 'Membership reports' },
     { label: 'Staff Sales', path: '/reports/staff-sales', module: 'POS attribution' },
     { label: 'Commission Preview', path: '/reports/commission-preview', module: 'Payroll' },
+    { label: 'Payroll History', path: '/staff-os/payroll-history', module: 'Payroll' },
     { label: 'Account Ledger', path: '/reports/account-ledger', module: 'Finance' },
     { label: 'Inventory Reports', path: '/inventory/reports', module: 'Inventory' },
     { label: 'Appointment Activity', path: '/appointment-activity', module: 'Bookings' },

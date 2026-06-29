@@ -419,6 +419,7 @@ export class AppComponent {
         { path: '/staff-os/leave-management', label: 'Leave Management', icon: 'LM', keywords: 'leave request approval balance calendar' },
         { path: '/staff-os/leave-master', label: 'Leave Master', icon: 'LV', keywords: 'leave master casual paid sick quota monthly yearly' },
         { path: '/staff-os/payroll-dashboard', label: 'Payroll Dashboard', icon: 'PD', keywords: 'payroll export salary payout statutory' },
+        { path: '/staff-os/payroll-history', label: 'Payroll History', icon: 'PH', keywords: 'payroll history salary paid draft approved net gross deduction staff' },
         { path: '/staff-os/payroll-rules', label: 'Payroll Rules', icon: 'PR', keywords: 'payroll rules overtime week off salary formula' },
         { path: '/staff-os/salary-workspace', label: 'Salary Setup', icon: 'SY', keywords: 'staff basic salary salary setup employee salary add edit payroll' },
         { path: '/staff-os/payroll-salary-structure', label: 'Salary Structure', icon: 'SS', keywords: 'payroll salary structure pf pt esic tds statutory flexi' },
