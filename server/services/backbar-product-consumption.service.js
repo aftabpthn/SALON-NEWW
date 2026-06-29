@@ -1405,6 +1405,11 @@ export class BackbarProductConsumptionService {
     }
     const dailyTrendRows = [...usageDayMap.values()].sort((a, b) => String(b.period).localeCompare(String(a.period))).slice(0, 30);
     const weeklyTrendRows = [...usageWeekMap.values()].sort((a, b) => String(b.period).localeCompare(String(a.period))).slice(0, 16);
+    const approvalRows = approvals.map((request) => ({
+      ...request,
+      ageHours: request.status === "pending" && request.createdAt ? Math.max(0, Math.round((Date.now() - new Date(request.createdAt).getTime()) / 3600000)) : 0,
+      activeBalanceText: `${request.activeBalanceQty || 0} ${request.measureUnit || ""}`.trim()
+    })).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 80);
     const approvalSlaRows = approvalRows.map((request) => {
       const createdAt = request.createdAt || "";
       const updatedAt = request.updatedAt || "";
@@ -1747,11 +1752,7 @@ export class BackbarProductConsumptionService {
         qualityScore: Math.max(0, Math.round(100 - exceptionRatio))
       };
     }).sort((a, b) => Number(a.qualityScore || 0) - Number(b.qualityScore || 0) || Number(b.exceptionCost || 0) - Number(a.exceptionCost || 0)).slice(0, 80);
-    const approvalRows = approvals.map((request) => ({
-      ...request,
-      ageHours: request.status === "pending" && request.createdAt ? Math.max(0, Math.round((Date.now() - new Date(request.createdAt).getTime()) / 3600000)) : 0,
-      activeBalanceText: `${request.activeBalanceQty || 0} ${request.measureUnit || ""}`.trim()
-    })).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 80);
+
     const entityLedger = [
       ...entries.map((entry) => ({
         entityType: entry.usageType === "client" ? "client_usage" : "exception_usage",

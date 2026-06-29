@@ -103,8 +103,8 @@ const DEFAULT_MODIFIERS = [
 
       <section class="auto-consume-flow">
         <article><span>Trigger 1</span><strong>POS billed</strong><small>Usage lines</small></article>
-        <article><span>Trigger 2</span><strong>Service done</strong><small>Stock consume</small></article>
-        <article><span>Trigger 3</span><strong>Invoice final</strong><small>Ledger post</small></article>
+        <article><span>Trigger 2</span><strong>Appointment complete</strong><small>Stock consume</small></article>
+        <article><span>Trigger 3</span><strong>Invoice finalization</strong><small>Ledger post</small></article>
         <article><span>Result</span><strong>Tracked</strong><small>FIFO + alerts</small></article>
       </section>
 

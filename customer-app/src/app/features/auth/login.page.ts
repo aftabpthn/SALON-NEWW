@@ -816,10 +816,13 @@ export class LoginPage implements OnInit, OnDestroy {
   }
 
   showWhatsApp() {
-    this.notice = "WhatsApp login is coming soon. Use mobile SMS OTP, Google, Facebook, or email for now.";
+    this.step = "mobile";
+    this.notice = "";
+    this.mobileNotice = "";
     this.mobileModalOpen = false;
     this.code = "";
     this.otpChannel = "whatsapp";
+    this.countryCode = this.countryCode || "+91";
   }
 
   async sendMobileOtp(event?: Event) {
@@ -827,7 +830,21 @@ export class LoginPage implements OnInit, OnDestroy {
     this.phone = this.phoneDigits(this.phone);
     const phone = this.fullPhone();
     if (!/^\+91\d{10}$/.test(phone)) {
-      this.mobileNotice = "Enter a valid 10-digit India mobile number.";
+      const message = "Enter a valid 10-digit India mobile number.";
+      this.mobileNotice = message;
+      if (!this.mobileModalOpen) this.notice = message;
+      return;
+    }
+    if (this.otpChannel === "whatsapp") {
+      this.mobileNotice = "";
+      this.notice = "";
+      await this.auth.requestOtp(phone, "whatsapp")
+        .then((response) => {
+          this.code = "";
+          this.step = "mobileCode";
+          this.notice = this.otpNotice(response);
+        })
+        .catch((error) => this.handleOtpRequestError(error));
       return;
     }
     if (this.isLocalPhoneAuthHost()) {
@@ -875,7 +892,15 @@ export class LoginPage implements OnInit, OnDestroy {
     this.notice = "";
     const otp = this.mobileOtpValue() || this.code.trim();
     if (!/^\d{6}$/.test(otp)) {
-      this.mobileNotice = "Enter the 6-digit OTP.";
+      const message = "Enter the 6-digit OTP.";
+      this.mobileNotice = message;
+      if (!this.mobileModalOpen) this.notice = message;
+      return;
+    }
+    if (!this.mobileModalOpen || this.otpChannel === "whatsapp") {
+      await this.auth.verifyOtp(this.fullPhone(), otp)
+        .then((session) => this.afterProviderSignIn(session))
+        .catch(() => undefined);
       return;
     }
     await this.auth.verifyFirebasePhoneOtp(otp)

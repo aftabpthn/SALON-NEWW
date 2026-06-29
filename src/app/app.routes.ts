@@ -3,7 +3,8 @@ import { permissionGuard } from './core/permission.guard';
 import { ModulePageComponent } from './pages/module-page.component';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+  { path: '', pathMatch: 'full', redirectTo: 'home' },
+  { path: 'home', loadComponent: () => import('./pages/dashboard.component').then(m => m.DashboardComponent), title: 'Home' },
   { path: 'dashboard', loadComponent: () => import('./pages/dashboard.component').then(m => m.DashboardComponent), title: 'Dashboard' },
   { path: 'dashboard/executive', loadComponent: () => import('./pages/dashboard/executive/executive.page').then(m => m.ExecutiveDashboardPage), title: 'Executive Dashboard' },
   { path: 'apps', loadComponent: () => import('./pages/apps-launchpad.component').then(m => m.AppsLaunchpadComponent), title: 'All Apps' },
@@ -457,5 +458,5 @@ export const routes: Routes = [
   {
     path: 'localization', component: ModulePageComponent, title: 'Multi-Country', data: { entity: 'localizationProfiles', title: 'Multi-Country Localization', subtitle: 'Multi-brand and multi-country tax, currency and translation profiles.', createLabel: 'Add localization profile', columns: [{ key: 'name', label: 'Profile' }, { key: 'primaryCountry', label: 'Primary country' }, { key: 'status', label: 'Status', type: 'badge' }], fields: [{ key: 'name', label: 'Profile name', required: true }, { key: 'primaryCountry', label: 'Primary country', required: true }, { key: 'countries', label: 'Countries JSON', type: 'json', defaultValue: [] }, { key: 'currencies', label: 'Currencies JSON', type: 'json', defaultValue: [] }, { key: 'taxRules', label: 'Tax rules JSON', type: 'json', defaultValue: {} }, { key: 'translations', label: 'Translations JSON', type: 'json', defaultValue: {} }] }
   },
-  { path: '**', redirectTo: 'dashboard' }
+  { path: '**', redirectTo: 'home' }
 ];

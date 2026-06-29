@@ -132,11 +132,11 @@ type ActiveNavTabGroup = {
     <div class="app-shell" [class.sidebar-is-compact]="sidebarCompact()">
       <aside class="sidebar enterprise-sidebar" [class.sidebar-compact]="sidebarCompact()">
         <div class="sidebar-brand-row">
-          <a class="brand" routerLink="/dashboard" aria-label="Aura dashboard">
-            <span class="brand-mark">A</span>
+          <a class="brand" routerLink="/home" aria-label="Aura Shine home">
+            <span class="brand-mark" aria-hidden="true">AS</span>
             <span>
-              <strong>Aura Salon</strong>
-              <small>CRM / POS suite</small>
+              <strong>Aura Shine</strong>
+              <small>Enterprise CRM / POS</small>
             </span>
           </a>
           <button class="sidebar-toggle" type="button" (click)="toggleSidebarCompact()" [attr.aria-pressed]="sidebarCompact()" [title]="sidebarCompact() ? 'Expand sidebar' : 'Collapse sidebar'">
@@ -179,7 +179,7 @@ type ActiveNavTabGroup = {
                       class="nav-subitem nested"
                       [routerLink]="child.path"
                       routerLinkActive="active"
-                      [routerLinkActiveOptions]="{ exact: child.path === '/dashboard' }"
+                      [routerLinkActiveOptions]="{ exact: child.path === '/home' || child.path === '/dashboard' }"
                       (click)="rememberNavGroup(group.id)"
                     >
                       <span class="nav-icon" aria-hidden="true">{{ child.icon }}</span>
@@ -192,7 +192,7 @@ type ActiveNavTabGroup = {
                     class="nav-subitem"
                     [routerLink]="item.path"
                     routerLinkActive="active"
-                    [routerLinkActiveOptions]="{ exact: item.path === '/dashboard' }"
+                    [routerLinkActiveOptions]="{ exact: item.path === '/home' || item.path === '/dashboard' }"
                     (click)="rememberNavGroup(group.id)"
                   >
                     <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -218,7 +218,7 @@ type ActiveNavTabGroup = {
       <main class="workspace" id="main-content">
         <header class="topbar">
           <div class="topbar-brand-title">
-            <h1>Aurashine OS</h1>
+            <h1>Aura Shine OS</h1>
           </div>
           <div class="topbar-actions">
             <aura-workspace-switcher
@@ -264,7 +264,7 @@ type ActiveNavTabGroup = {
               class="workspace-page-tab"
               [routerLink]="tab.path"
               routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: tab.path === tabs.path || tab.path === '/dashboard' }"
+              [routerLinkActiveOptions]="{ exact: tab.path === tabs.path || tab.path === '/home' || tab.path === '/dashboard' }"
             >
               <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
               <span>{{ tab.label }}</span>
@@ -350,7 +350,7 @@ export class AppComponent {
   ];
 
   readonly favoriteNavItems: NavItem[] = [
-    { path: '/dashboard', label: 'Dashboard', icon: 'D', keywords: 'home kpi overview' },
+    { path: '/home', label: 'Home', icon: 'HM', keywords: 'home dashboard kpi overview' },
     { path: '/apps', label: 'All Apps', icon: 'AP', keywords: 'launchpad modules full suite apps' },
     { path: '/growth-rank-bot', label: 'AI Rank Bot', icon: 'RB', keywords: 'instagram facebook google rank local seo ai growth bot' },
     { path: '/appointments', label: 'Calendar', icon: 'C', keywords: 'booking appointment schedule enterprise scheduler staff calendar' },
@@ -372,15 +372,15 @@ export class AppComponent {
       id: 'command',
       label: 'Command',
       icon: 'CM',
-      primaryPath: '/dashboard',
+      primaryPath: '/home',
       items: [
         {
-          path: '/dashboard',
+          path: '/home',
           label: 'Home & Apps',
           icon: 'HA',
           keywords: 'home dashboard overview kpi owner launchpad apps modules suite',
           children: [
-            { path: '/dashboard', label: 'Dashboard', icon: 'D', keywords: 'home overview kpi owner' },
+            { path: '/home', label: 'Home', icon: 'HM', keywords: 'home dashboard overview kpi owner' },
             { path: '/apps', label: 'All Apps', icon: 'AP', keywords: 'launchpad modules full suite salon apps' }
           ]
         },
@@ -858,7 +858,7 @@ export class AppComponent {
     if (previous && previous !== this.activeRoute()) {
       return `Back to ${this.pageLabelForUrl(previous) || 'previous page'}`;
     }
-    return 'Back to Dashboard';
+    return 'Back to Home';
   });
 
   constructor(
@@ -972,8 +972,8 @@ export class AppComponent {
       this.router.navigateByUrl(previous);
       return;
     }
-    if (current !== '/dashboard') {
-      this.router.navigateByUrl('/dashboard');
+    if (!this.isHomePath(this.routePath(current))) {
+      this.router.navigateByUrl('/home');
     }
   }
 
@@ -1155,7 +1155,7 @@ export class AppComponent {
 
   private navPermissionForPath(path: string): string | string[] {
     const cleanPath = this.routePath(path);
-    if (!cleanPath || cleanPath === '/' || cleanPath === '/dashboard' || cleanPath === '/apps') return '';
+    if (!cleanPath || cleanPath === '/' || this.isHomePath(cleanPath) || cleanPath === '/apps') return '';
     return this.navPermissionRules.find((rule) => rule.pattern.test(cleanPath))?.permission || '';
   }
 
@@ -1170,7 +1170,13 @@ export class AppComponent {
 
   private isRouteActive(url: string, path: string): boolean {
     const cleanUrl = this.routePath(url);
-    return cleanUrl === path || cleanUrl.startsWith(`${path}/`);
+    const cleanPath = this.routePath(path);
+    if (this.isHomePath(cleanUrl) && this.isHomePath(cleanPath)) return true;
+    return cleanUrl === cleanPath || cleanUrl.startsWith(`${cleanPath}/`);
+  }
+
+  private isHomePath(path: string): boolean {
+    return path === '/home' || path === '/dashboard';
   }
 
   private pageLabelForUrl(url: string): string {

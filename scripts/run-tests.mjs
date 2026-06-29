@@ -8,7 +8,7 @@ const dbPath = join(testDataDir, "salon-crm.sqlite");
 const forwardedArgs = process.argv.slice(2);
 const testTargets = forwardedArgs.length ? forwardedArgs : ["tests/*.test.js"];
 
-const child = spawn(process.execPath, ["--test", "--test-concurrency=1", ...testTargets], {
+const child = spawn(process.execPath, ["--import", "./tests/helpers/authenticated-fetch-preload.mjs", "--test", "--test-concurrency=1", ...testTargets], {
   stdio: "inherit",
   shell: false,
   env: {
