@@ -201,6 +201,7 @@ export const routes: Routes = [
   { path: 'reports/inward-revenue', loadComponent: () => import('./pages/inward-revenue-report.component').then(m => m.InwardRevenueReportComponent), title: 'Inward Revenue Report' },
   { path: 'reports/financial-summary', loadComponent: () => import('./pages/financial-summary-report.component').then(m => m.FinancialSummaryReportComponent), title: 'Financial Summary' },
   { path: 'reports', loadComponent: () => import('./pages/reports.component').then(m => m.ReportsComponent), title: 'Reports & Analytics' },
+  { path: 'locations/sharing', loadComponent: () => import('./pages/location-sharing-command-center.component').then(m => m.LocationSharingCommandCenterComponent), title: 'Location Sharing Command Center' },
   { path: 'saas', loadComponent: () => import('./pages/saas-onboarding.component').then(m => m.SaasOnboardingComponent), title: 'SaaS Control' },
   { path: 'super-admin', loadComponent: () => import('./pages/super-admin.component').then(m => m.SuperAdminComponent), title: 'SaaS Super Admin' },
   {

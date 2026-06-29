@@ -502,6 +502,7 @@ export class AppComponent {
         { path: '/super-admin', label: 'Super Admin', icon: 'SA', keywords: 'tenant admin platform' },
         { path: '/saas', label: 'SaaS', icon: 'X', keywords: 'saas onboarding tenant' },
         { path: '/branches', label: 'Branches', icon: 'B', keywords: 'branch location' },
+        { path: '/locations/sharing', label: 'Location Sharing', icon: 'LS', keywords: 'branch location sharing multi location customer package membership product service vendor staff' },
         { path: '/settings', label: 'Settings', icon: 'G', keywords: 'settings configuration' },
         { path: '/setting/calendar', label: 'Calendar Settings', icon: 'CS', keywords: 'calendar settings time slot color appointment status' },
         { path: '/permissions', label: 'Permissions', icon: 'PM', keywords: 'role rbac permission' },
