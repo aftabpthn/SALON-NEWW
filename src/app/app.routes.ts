@@ -191,6 +191,8 @@ export const routes: Routes = [
   { path: 'business-details', loadComponent: () => import('./pages/business-details.component').then(m => m.BusinessDetailsComponent), title: 'Business Details' },
   { path: 'reports/account-ledger', loadComponent: () => import('./pages/account-ledger.component').then(m => m.AccountLedgerComponent), title: 'Account Ledger' },
   { path: 'reports/commission-preview', loadComponent: () => import('./pages/commission-preview-report.component').then(m => m.CommissionPreviewReportComponent), title: 'Commission Preview' },
+  { path: 'reports/appointment-detail-list', loadComponent: () => import('./pages/appointment-detail-list-report.component').then(m => m.AppointmentDetailListReportComponent), title: 'Detail Appointment List' },
+  { path: 'reports/staff-appointments', loadComponent: () => import('./pages/staff-appointments-report.component').then(m => m.StaffAppointmentsReportComponent), title: 'Appointment Booked By Staff' },
   { path: 'reports/staff-sales', loadComponent: () => import('./pages/staff-sales-report.component').then(m => m.StaffSalesReportComponent), title: 'Staff Sales Report' },
   { path: 'reports/invoices', loadComponent: () => import('./pages/invoice-reports.component').then(m => m.InvoiceReportsComponent), title: 'Invoice Reports Command Center' },
   { path: 'reports/pending-packages', loadComponent: () => import('./pages/pending-packages-report.component').then(m => m.PendingPackagesReportComponent), title: 'Pending Packages' },

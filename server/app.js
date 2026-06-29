@@ -70,6 +70,7 @@ import { securityAdvancedRouter } from "./routes/security-advanced.routes.js";
 import { securityHoneypotRouter } from "./routes/security-honeypot.routes.js";
 import { appointmentSafetyRouter, calendarPublicRouter } from "./routes/appointment-safety.routes.js";
 import { appointmentActivityRouter } from "./routes/appointment-activity.routes.js";
+import { appointmentSalonistReportRouter } from "./routes/appointment-salonist-report.routes.js";
 import { appointmentSmsRouter } from "./routes/appointment-sms.routes.js";
 import { enterpriseSchedulerRouter } from "./routes/enterprise-scheduler.routes.js";
 import { billingRouter } from "./routes/billing.routes.js";
@@ -287,6 +288,7 @@ export function createApp() {
   app.use("/api/v1", bookingAnalyticsRouter);
   app.use("/api/v1", bookingIntelligenceRouter);
   app.use("/api/v1", appointmentActivityRouter);
+  app.use("/api/v1", appointmentSalonistReportRouter);
   app.use("/api/v1", appointmentSmsRouter);
   app.use("/api/v1", enterpriseSchedulerRouter);
   app.use("/api/v1", waitlistRouter);
@@ -472,6 +474,7 @@ export function createApp() {
   app.use("/api", bookingAnalyticsRouter);
   app.use("/api", bookingIntelligenceRouter);
   app.use("/api", appointmentActivityRouter);
+  app.use("/api", appointmentSalonistReportRouter);
   app.use("/api", appointmentSmsRouter);
   app.use("/api", enterpriseSchedulerRouter);
   app.use("/api", accountMasterRouter);
