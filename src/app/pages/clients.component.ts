@@ -181,16 +181,16 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="duplicate-panel-header">
             <div>
               <h3>Duplicate contacts</h3>
-              <p>{{ duplicateGroups().length }} group(s) from same phone number</p>
+              <p>{{ phoneDuplicateGroupCount() }} group(s) from same phone number</p>
             </div>
             <div class="duplicate-panel-actions">
-              <button class="primary-button mini" type="button" *ngIf="duplicateGroups().length" (click)="mergeAllDuplicateGroups()" [disabled]="duplicateMergeAllLoading()">{{ duplicateMergeAllLoading() ? 'Merging...' : 'Merge all' }}</button>
-              <button class="ghost-button mini" type="button" (click)="loadDuplicateGroups()" [disabled]="duplicateLoading() || duplicateMergeAllLoading()">Scan again</button>
+              <button class="primary-button mini" type="button" *ngIf="phoneDuplicateGroupCount()" (click)="mergeAllDuplicateGroups()">{{ duplicateMergeAllLoading() ? 'Retry merge all' : 'Merge all' }}</button>
+              <button class="ghost-button mini" type="button" (click)="loadDuplicateGroups()" [disabled]="duplicateLoading()">Scan again</button>
             </div>
           </div>
           <app-state [loading]="duplicateLoading()" [error]="duplicateError()"></app-state>
           <p class="duplicate-message" *ngIf="duplicateMessage()">{{ duplicateMessage() }}</p>
-          <p class="duplicate-message" *ngIf="duplicateGroups().length > visibleDuplicateGroups().length">Showing first {{ visibleDuplicateGroups().length }} groups. Merge all still processes all {{ duplicateGroups().length }} groups.</p>
+          <p class="duplicate-message" *ngIf="phoneDuplicateGroupCount() > visibleDuplicateGroups().length">Showing first {{ visibleDuplicateGroups().length }} groups. Merge all still processes all {{ phoneDuplicateGroupCount() }} phone groups.</p>
           <div class="duplicate-group-list" *ngIf="!duplicateLoading() && duplicateGroups().length">
             <article class="duplicate-group" *ngFor="let group of visibleDuplicateGroups()" [class.active]="activeDuplicateGroupKey() === group.groupKey">
               <div class="duplicate-group-header">
@@ -966,7 +966,15 @@ export class ClientsComponent implements OnInit, OnDestroy {
   }
 
   visibleDuplicateGroups(): ApiRecord[] {
-    return this.duplicateGroups().filter((group) => this.isPhoneDuplicateGroup(group)).slice(0, 100);
+    return this.phoneDuplicateGroups().slice(0, 100);
+  }
+
+  phoneDuplicateGroupCount(): number {
+    return this.phoneDuplicateGroups().length;
+  }
+
+  private phoneDuplicateGroups(): ApiRecord[] {
+    return this.duplicateGroups().filter((group) => this.isPhoneDuplicateGroup(group));
   }
 
   private isPhoneDuplicateGroup(group: ApiRecord | null | undefined): boolean {
@@ -1020,9 +1028,12 @@ export class ClientsComponent implements OnInit, OnDestroy {
   }
 
   mergeAllDuplicateGroups(): void {
-    const groupCount = this.duplicateGroups().filter((group) => this.isPhoneDuplicateGroup(group)).length;
-    if (!groupCount) return;
-    if (!window.confirm(`Merge all ${groupCount} duplicate group(s)? This will keep the suggested primary contact in each group.`)) return;
+    this.duplicateMergeAllLoading.set(false);
+    const groupCount = this.phoneDuplicateGroupCount();
+    if (!groupCount) {
+      this.duplicateMessage.set('No same-phone duplicate groups to merge.');
+      return;
+    }
     this.saving.set(true);
     this.duplicateMergeAllLoading.set(true);
     this.duplicateError.set('');
