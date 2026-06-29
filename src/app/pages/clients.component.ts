@@ -303,6 +303,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       min-width: 0;
       padding-inline-end: var(--client-edge-safe);
       box-sizing: border-box;
+      overflow-x: hidden;
     }
 
     .client-command-hero {
@@ -372,8 +373,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
     .salonist-kpis {
       display: grid;
-      grid-template-columns: repeat(6, minmax(160px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
       gap: 14px;
+      width: 100%;
       min-width: 0;
     }
 
@@ -515,9 +517,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .client-database-panel .table-toolbar {
       position: sticky;
       top: 0;
-      z-index: 2;
-      display: grid;
-      grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 140px 140px minmax(220px, 1.2fr) auto auto auto;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
       align-items: end;
       gap: 12px;
       overflow: visible;
@@ -529,16 +531,22 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .client-database-panel .field {
+      flex: 1 1 220px;
       min-width: 0;
     }
 
+    .client-database-panel .date-field {
+      flex: 0 1 170px;
+    }
+
     .client-database-panel .search-field {
+      flex: 2 1 320px;
       min-width: 0;
       width: 100%;
     }
 
     .client-tag-segment {
-      grid-column: 1 / -1;
+      flex: 1 0 100%;
       justify-content: flex-start;
     }
 
@@ -557,6 +565,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
       color: white;
       font-weight: 900;
       cursor: pointer;
+    }
+
+    .client-action-menu,
+    .column-editor,
+    .client-database-panel .table-toolbar > .primary-button {
+      flex: 0 0 auto;
     }
 
     .dropdown-panel,
@@ -625,11 +639,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .client-database-panel .client-bulk-actions {
+      flex: 1 0 100%;
       min-width: 0;
       max-width: 100%;
       display: flex;
-      justify-self: end;
-      justify-content: flex-end;
+      justify-content: flex-start;
       flex-wrap: wrap;
       gap: 8px;
     }
@@ -639,6 +653,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .client-database-panel .table-wrap {
+      width: 100%;
+      max-width: 100%;
       max-height: min(780px, 72vh);
       overflow: auto;
       overscroll-behavior: contain;
