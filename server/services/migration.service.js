@@ -1112,9 +1112,41 @@ function approvalIdentityFromSubmission(payload = {}) {
 function approvalMatchesIdentity(approval = {}, identity = {}) {
   const approvalJobId = cleanText(approval.jobId);
   const identityJobId = cleanText(identity.jobId);
-  return Boolean(identityJobId && approvalJobId && approvalJobId === identityJobId);
+  if (identityJobId && approvalJobId && approvalJobId === identityJobId) return true;
+  if (!approvalScopeMatchesIdentity(approval, identity)) return false;
+
+  const approvalHash = cleanText(approval.sourceFileHash);
+  const identityHash = cleanText(identity.sourceFileHash);
+  if (identityHash && approvalHash && approvalHash === identityHash) return true;
+
+  const approvalFileName = approvalFileNameKey(approval.fileName);
+  const identityFileName = approvalFileNameKey(identity.fileName);
+  const approvalRows = integer(approval.totalRows, 0);
+  const identityRows = integer(identity.totalRows, 0);
+  return Boolean(approvalFileName && identityFileName && approvalFileName === identityFileName && approvalRows > 0 && approvalRows === identityRows);
 }
 
+function approvalScopeMatchesIdentity(approval = {}, identity = {}) {
+  const approvalResource = approvalResourceKey(approval.resource);
+  const identityResource = approvalResourceKey(identity.resource);
+  const resourceMatches = !approvalResource || !identityResource || approvalResource === 'auto' || identityResource === 'auto' || approvalResource === identityResource;
+  const approvalSource = approvalSourceKey(approval.sourceSoftware);
+  const identitySource = approvalSourceKey(identity.sourceSoftware);
+  const sourceMatches = !approvalSource || !identitySource || approvalSource === identitySource;
+  return resourceMatches && sourceMatches;
+}
+
+function approvalResourceKey(value) {
+  return cleanKey(value);
+}
+
+function approvalSourceKey(value) {
+  return cleanText(value) ? sourceKey(value) : '';
+}
+
+function approvalFileNameKey(value) {
+  return cleanText(value).toLowerCase().split(/[\\/]/).pop() || '';
+}
 function requiredMappingComplete(mapping = {}, resource = "") {
   const canonical = canonicalResource(resource || "");
   if (!canonical) return true;

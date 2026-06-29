@@ -2759,23 +2759,57 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     return this.approvals().find((approval) => approval.status === 'pending' && this.approvalMatchesActiveUpload(approval)) || null;
   }
 
-  private activeApprovalIdentity(): { jobId: string; sourceFileHash: string; fileName: string; totalRows: number } {
+  private activeApprovalIdentity(): { jobId: string; sourceFileHash: string; fileName: string; totalRows: number; resource: string; sourceSoftware: string } {
     const job = this.largeJob();
     const summary = this.summary() as any;
     const sourceEvidence = summary?.sourceEvidence || job?.settings?.sourceEvidence || {};
     return {
-      jobId: String(job?.id || this.jobs()[0]?.id || ''),
+      jobId: String(job?.id || ''),
       sourceFileHash: String(this.fileSha256() || job?.sourceFileHash || job?.settings?.sourceFileHash || sourceEvidence?.sha256 || ''),
       fileName: String(job?.fileName || this.fileName() || sourceEvidence?.fileName || ''),
-      totalRows: Number(job?.totalRows || summary?.totalRows || 0)
+      totalRows: Number(job?.totalRows || summary?.totalRows || 0),
+      resource: String(job?.resource || this.resource || 'auto'),
+      sourceSoftware: String(job?.sourceSoftware || this.sourceSoftware || '')
     };
   }
 
   private approvalMatchesActiveUpload(approval: ApprovalRecord | null | undefined): boolean {
-    const activeJobId = String(this.largeJob()?.id || '');
-    return Boolean(approval && activeJobId && approval.jobId === activeJobId);
+    if (!approval) return false;
+    const active = this.activeApprovalIdentity();
+    const approvalJobId = this.approvalText(approval.jobId);
+    if (active.jobId && approvalJobId && approvalJobId === active.jobId) return true;
+    if (!this.approvalScopeMatches(approval, active)) return false;
+
+    const approvalHash = this.approvalText(approval.sourceFileHash);
+    if (active.sourceFileHash && approvalHash && approvalHash === active.sourceFileHash) return true;
+
+    const approvalFileName = this.approvalFileName(approval.fileName);
+    const activeFileName = this.approvalFileName(active.fileName);
+    const approvalRows = Number(approval.totalRows || 0);
+    return Boolean(approvalFileName && activeFileName && approvalFileName === activeFileName && approvalRows > 0 && approvalRows === active.totalRows);
   }
 
+  private approvalScopeMatches(approval: ApprovalRecord, active: { resource: string; sourceSoftware: string }): boolean {
+    const approvalResource = this.approvalResourceKey(approval.resource);
+    const activeResource = this.approvalResourceKey(active.resource);
+    const resourceMatches = !approvalResource || !activeResource || approvalResource === 'auto' || activeResource === 'auto' || approvalResource === activeResource;
+    const approvalSource = this.approvalText(approval.sourceSoftware).toLowerCase();
+    const activeSource = this.approvalText(active.sourceSoftware).toLowerCase();
+    const sourceMatches = !approvalSource || !activeSource || approvalSource === activeSource;
+    return resourceMatches && sourceMatches;
+  }
+
+  private approvalResourceKey(value: string | undefined): string {
+    return this.approvalText(value).toLowerCase().replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  private approvalFileName(value: string | undefined): string {
+    return this.approvalText(value).toLowerCase().split(/[\\/]/).pop() || '';
+  }
+
+  private approvalText(value: string | undefined): string {
+    return String(value || '').trim();
+  }
   async submitApproval(): Promise<void> {
     if (!this.summary()) {
       if (!this.hasSelectedSourcePayload()) {
