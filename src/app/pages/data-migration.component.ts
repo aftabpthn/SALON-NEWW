@@ -1780,7 +1780,8 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
       this.error.set(`Final import blocked: ${criticalErrors} critical rows found. Fix them or enable partial import to skip those rows.`);
       return;
     }
-    if (!this.importApprovalReady()) {
+    const approvedApproval = this.approvedApproval();
+    if (!approvedApproval) {
       this.resumeFinalImportAfterApproval = true;
       this.error.set('Final import blocked: Approval required for this exact upload/job. Approve latest to continue import automatically.');
       return;
@@ -1799,8 +1800,16 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     const success = criticalErrors
       ? (this.sandboxMode() ? 'Sandbox partial import complete. Critical rows were skipped.' : 'Partial import complete. Valid rows saved; critical rows skipped.')
       : (this.sandboxMode() ? 'Sandbox import complete. Review results before live migration.' : 'Final import complete. Data saved in live modules.');
+    const approvalIdentity = this.activeApprovalIdentity();
     this.resumeFinalImportAfterApproval = false;
-    await this.callMigration('migration/import', success, { allowPartialImport: this.allowPartialLargeImport() });
+    await this.callMigration('migration/import', success, {
+      allowPartialImport: this.allowPartialLargeImport(),
+      approvalId: approvedApproval.id,
+      jobId: approvalIdentity.jobId || approvedApproval.jobId || '',
+      sourceFileHash: approvalIdentity.sourceFileHash || approvedApproval.sourceFileHash || '',
+      fileName: approvalIdentity.fileName || approvedApproval.fileName || '',
+      totalRows: approvalIdentity.totalRows || approvedApproval.totalRows || 0
+    });
     await this.loadJobs();
   }
 
@@ -2762,6 +2771,9 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     return this.approvals().find((approval) => approval.status === 'pending' && this.approvalMatchesActiveUpload(approval)) || null;
   }
 
+  private approvedApproval(): ApprovalRecord | null {
+    return this.approvals().find((approval) => approval.status === 'approved' && this.approvalMatchesActiveUpload(approval)) || null;
+  }
   private activeApprovalIdentity(): { jobId: string; sourceFileHash: string; fileName: string; totalRows: number; resource: string; sourceSoftware: string } {
     const job = this.largeJob();
     const summary = this.summary() as any;
@@ -3180,7 +3192,7 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
   }
 
   importApprovalReady(): boolean {
-    return this.approvals().some((approval) => approval.status === 'approved' && this.approvalMatchesActiveUpload(approval));
+    return Boolean(this.approvedApproval());
   }
 
   progressLabel(): string {

@@ -1045,7 +1045,10 @@ function migrationApprovalGate(access = {}, summary = {}, identityInput = {}) {
     .prepare("SELECT * FROM migration_approvals WHERE tenantId = @tenantId AND status = 'approved' ORDER BY createdAt DESC LIMIT 100")
     .all({ tenantId: access.tenantId })
     .map(deserializeApproval);
-  const matched = approvals.find((approval) => approvalMatchesIdentity(approval, identity));
+  const requestedApprovalId = cleanText(identity.approvalId || identityInput.approvalId);
+  const matched = (requestedApprovalId
+    ? approvals.find((approval) => approval.id === requestedApprovalId && approvalMatchesIdentity(approval, identity))
+    : null) || approvals.find((approval) => approvalMatchesIdentity(approval, identity));
   const approved = Boolean(matched);
   const hasErrors = Number(summary.errorRows || 0) > 0;
   return {
@@ -1060,6 +1063,7 @@ function migrationApprovalGate(access = {}, summary = {}, identityInput = {}) {
 function normalizeApprovalIdentity(identity = {}, summary = {}) {
   const sourceEvidence = identity.sourceEvidence || summary.sourceEvidence || summary.summary?.sourceEvidence || {};
   return {
+    approvalId: cleanText(identity.approvalId),
     jobId: cleanText(identity.jobId),
     resource: canonicalResource(identity.resource || "") || cleanText(identity.resource || summary.resource || "auto") || "auto",
     sourceSoftware: sourceKey(identity.sourceSoftware || summary.sourceSoftware || ""),
@@ -1072,6 +1076,7 @@ function normalizeApprovalIdentity(identity = {}, summary = {}) {
 function approvalIdentityForPayload(payload = {}, preview = {}, access = {}) {
   const summary = preview.summary || {};
   return normalizeApprovalIdentity({
+    approvalId: payload.approvalId || "",
     jobId: payload.jobId || "",
     resource: payload.resource || "auto",
     sourceSoftware: payload.sourceSoftware || preview.sourceSoftware || summary.sourceSoftware || "",
@@ -1081,7 +1086,6 @@ function approvalIdentityForPayload(payload = {}, preview = {}, access = {}) {
     sourceEvidence: summary.sourceEvidence
   }, summary);
 }
-
 function approvalIdentityForJob(job = {}, summary = {}) {
   return normalizeApprovalIdentity({
     jobId: job.id,
