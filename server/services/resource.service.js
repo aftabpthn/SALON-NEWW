@@ -378,7 +378,7 @@ function duplicateClientGroup(key, clients) {
   return {
     groupKey: key.value,
     matchType: key.type,
-    matchLabel: key.type === "phone" ? "Same phone" : "Same email",
+    matchLabel: "Same phone",
     matchValues: [key.label],
     suggestedPrimaryId: String(primary?.id || ""),
     duplicateCount: clients.length,
@@ -386,14 +386,9 @@ function duplicateClientGroup(key, clients) {
   };
 }
 function duplicateKeysForClient(client) {
-  const keys = [];
   const phone = normalizeDuplicatePhone(client.phone || client.mobile || client.mobileNumber || client.contactNumber);
-  const email = normalizeDuplicateEmail(client.email);
-  if (phone) keys.push({ type: "phone", value: `phone:${phone}`, label: phone });
-  if (email) keys.push({ type: "email", value: `email:${email}`, label: email });
-  return keys;
+  return phone ? [{ type: "phone", value: `phone:${phone}`, label: phone }] : [];
 }
-
 function normalizeDuplicatePhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (digits.length < 7) return "";

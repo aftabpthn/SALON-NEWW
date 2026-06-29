@@ -181,7 +181,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="duplicate-panel-header">
             <div>
               <h3>Duplicate contacts</h3>
-              <p>{{ duplicateGroups().length }} group(s) from matching phone or email</p>
+              <p>{{ duplicateGroups().length }} group(s) from same phone number</p>
             </div>
             <div class="duplicate-panel-actions">
               <button class="primary-button mini" type="button" *ngIf="duplicateGroups().length" (click)="mergeAllDuplicateGroups()" [disabled]="duplicateMergeAllLoading()">{{ duplicateMergeAllLoading() ? 'Merging...' : 'Merge all' }}</button>
@@ -741,7 +741,7 @@ export class ClientsComponent implements OnInit, OnDestroy {
     'rebooking-rate'
   ]);
   private pendingEditClientId = '';
-  readonly clientBatchSize = 500;
+  readonly clientBatchSize = 25000;
   private clientLimit = this.clientBatchSize;
   private clientBatchTimer: ReturnType<typeof setTimeout> | undefined;
   private clientLoadInFlight = false;
@@ -955,7 +955,7 @@ export class ClientsComponent implements OnInit, OnDestroy {
           selection[key] = String(group.suggestedPrimaryId || this.duplicateGroupClients(group)[0]?.id || '');
         }
         this.duplicatePrimarySelection.set(selection);
-        this.duplicateMessage.set(successMessage || (duplicateGroups.length ? '' : 'No duplicate contacts found from phone or email.'));
+        this.duplicateMessage.set(successMessage || (duplicateGroups.length ? '' : 'No duplicate contacts found from same phone number.'));
         this.duplicateLoading.set(false);
       },
       error: (error) => {
