@@ -62,7 +62,7 @@
         </div>
         <div class="payment-mode-total">
           <span>Total Received</span>
-          <span>₹{{ paymentModeSummary().reduce((s, p) => s + p.amount, 0).toLocaleString('en-IN') }}</span>
+           <span>₹{{ paymentModeTotal().toLocaleString('en-IN') }}</span>
         </div>
       </div>
     </div>

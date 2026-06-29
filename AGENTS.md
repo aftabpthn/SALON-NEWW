@@ -82,10 +82,21 @@ Rules:
 
 ## 5. Git Safety / Backup — code kabhi waste na ho
 - Har working change ke baad: `git add -A && git commit -m "<what>" && git push origin HEAD`.
+- Codex jo bhi code/config/docs change kare, final response se pehle exact changed scope ko Git me commit + `git push origin HEAD` kare, taaki GitHub par live update ho jaye.
 - Risky kaam (3+ files / migration / rename / delete) se PEHLE checkpoint commit + push.
 - **NEVER bina explicit user permission:** `git reset --hard`, `git checkout -- .`,
   `git clean -fd`, force push. Unsure ho to STOP karke poochho.
 - Project OneDrive path me hi rahe; OneDrive sync band mat karo.
+
+---
+
+## Delete Safety Rule
+
+- Kisi bhi existing code, file, route, API, schema, UI section, test, config, ya business logic ko delete/remove karne se pehle user se explicit permission lo.
+- Refactor ke naam par bhi removal mat karo jab tak user ne clearly approve na kiya ho.
+- Agar obsolete code remove karna zaroori lage, pehle short reason + exact file/symbol list batao, phir approval ka wait karo.
+- Additive change preferred: delete ke bajay disable, wrap, extend, or deprecate approach use karo jab feasible ho.
+- Delete safety: existing code/file/route/API/schema/UI/test/config/business logic remove karne se pehle explicit user permission lo. Pehle exact removal list aur reason batao; approval ke bina additive/wrapper approach use karo.
 
 ---
 

@@ -35,6 +35,9 @@ export class ReportsEnterpriseComponent implements OnInit {
   readonly kpiLoading = signal(true);
   readonly paymentModeSummary = signal<PaymentModeItem[]>([]);
   readonly paymentModeLoading = signal(true);
+  readonly paymentModeTotal = computed(() =>
+    this.paymentModeSummary().reduce((s, p) => s + p.amount, 0)
+  );
 
   readonly tabs = computed(() => {
     const base = [
