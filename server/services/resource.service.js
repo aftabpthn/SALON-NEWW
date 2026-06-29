@@ -161,6 +161,7 @@ export class ResourceService {
       try {
         const result = this.mergeDuplicateClients(primaryId, {
           duplicateClientIds,
+          includeAllBranches: query.includeAllBranches,
           reason: payload.reason || "Merged by frontdesk duplicate merge all"
         }, access);
         const archivedIds = Array.isArray(result.archivedClientIds) ? result.archivedClientIds : [];
@@ -185,7 +186,7 @@ export class ResourceService {
     if (!targetPrimaryId) throw badRequest("Primary client is required");
     if (!duplicateClientIds.length) throw badRequest("At least one duplicate client is required");
 
-    const scope = tenantService.accessScope(access, "clients");
+    const scope = this.listScope("clients", { includeAllBranches: truthy(payload.includeAllBranches) || truthy(payload.allBranches) }, access);
     const clients = [targetPrimaryId, ...duplicateClientIds].map((id) => {
       const client = this.repository("clients").getById(id, scope);
       if (!client || client.deletedAt) throw notFound(`Client ${id} not found`);
@@ -201,7 +202,8 @@ export class ResourceService {
       const archivedClientIds = duplicates.map((duplicate) => this.archiveClient(
         duplicate,
         `Merged into client ${primary.id}`,
-        access
+        access,
+        scope
       ).id || duplicate.id);
       return {
         primary: updatedPrimary,
@@ -212,7 +214,7 @@ export class ResourceService {
     })();
   }
 
-  archiveClient(client, reason, access) {
+  archiveClient(client, reason, access, scope = tenantService.accessScope(access, "clients")) {
     const columns = columnsFor("clients");
     const now = new Date().toISOString();
     const payload = {
@@ -223,9 +225,9 @@ export class ResourceService {
     };
     const safePayload = Object.fromEntries(Object.entries(payload).filter(([key]) => columns.includes(key)));
     if (!Object.keys(safePayload).length) {
-      return this.repository("clients").delete(client.id, tenantService.accessScope(access, "clients"));
+      return this.repository("clients").delete(client.id, scope);
     }
-    const archived = this.repository("clients").update(client.id, safePayload, tenantService.accessScope(access, "clients"));
+    const archived = this.repository("clients").update(client.id, safePayload, scope);
     return { id: archived.id, archived: true };
   }
 
