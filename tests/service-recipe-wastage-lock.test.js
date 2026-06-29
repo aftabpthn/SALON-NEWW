@@ -44,3 +44,11 @@ test("recipe editor no longer duplicates hair spa preset lock controls", () => {
   assert.doesNotMatch(recipesPage, /Waste lock %/);
   assert.match(productConsumePage, /Auto waste/);
 });
+
+test("product consume drafts fallback to service required products", () => {
+  assert.match(inventoryService, /serviceRequiredProductDraftLines/);
+  assert.match(inventoryService, /service\.requiredProducts/);
+  assert.match(inventoryService, /recipeLineItems\.length \? recipeLineItems : fallbackLineItems/);
+  assert.match(inventoryService, /Auto draft from service product lock/);
+  assert.match(inventoryService, /status: lineItems\.length \? "draft" : "recipe_missing"/);
+});

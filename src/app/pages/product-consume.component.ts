@@ -797,7 +797,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
 
           <div class="consume-table">
             <div class="row head">
-              <span>Product</span><span>Auto qty / unit</span><span>Waste</span><span>Range</span><span>Reason</span><span>Substitutes</span><span>Cost</span>
+              <span>Product</span><span>Auto qty / unit</span><span>Waste</span><span>Range</span><span>Reason</span><span>Substitutes</span><span>Cost</span><span>Action</span>
             </div>
             <div class="row" *ngFor="let line of draft.lineItems; let i = index">
               <span>
@@ -810,21 +810,35 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
                   </small>
                 </div>
               </span>
-              <span class="qty-unit">
-                <input type="number" min="0" step="0.01" [ngModel]="line.actualQty" (ngModelChange)="updateQty(i, $event)" [disabled]="draft.status === 'confirmed'">
-                <select [ngModel]="line.unit" (ngModelChange)="updateLine(i, { unit: $event })" [disabled]="draft.status === 'confirmed'">
+              <span class="qty-unit" *ngIf="lineEditing(i, draft); else qtyRead">
+                <input type="number" min="0" step="0.01" [ngModel]="line.actualQty" (ngModelChange)="updateQty(i, $event)">
+                <select [ngModel]="line.unit" (ngModelChange)="updateLine(i, { unit: $event })">
                   <option *ngFor="let unit of units" [value]="unit">{{ unit }}</option>
                 </select>
               </span>
-              <span><input type="number" min="0" step="0.01" [class.waste-warn]="lineWasteWarn(line)" [class.waste-block]="lineWasteApprovalRequired(line)" [ngModel]="line.wastagePct || 0" (ngModelChange)="updateLine(i, { wastagePct: $event })" [disabled]="draft.status === 'confirmed'"></span>
-              <span class="range-fields">
-                <input type="number" min="0" step="0.01" placeholder="Min" [ngModel]="line.minQty || 0" (ngModelChange)="updateLine(i, { minQty: $event })" [disabled]="draft.status === 'confirmed'">
-                <input type="number" min="0" step="0.01" placeholder="Max" [ngModel]="line.maxQty || 0" (ngModelChange)="updateLine(i, { maxQty: $event })" [disabled]="draft.status === 'confirmed'">
+              <ng-template #qtyRead><span class="line-read">{{ line.actualQty || 0 }} {{ line.unit || 'pcs' }}</span></ng-template>
+              <span *ngIf="lineEditing(i, draft); else wasteRead"><input type="number" min="0" step="0.01" [class.waste-warn]="lineWasteWarn(line)" [class.waste-block]="lineWasteApprovalRequired(line)" [ngModel]="line.wastagePct || 0" (ngModelChange)="updateLine(i, { wastagePct: $event })"></span>
+              <ng-template #wasteRead><span class="line-read" [class.waste-warn]="lineWasteWarn(line)" [class.waste-block]="lineWasteApprovalRequired(line)">{{ line.wastagePct || 0 }}%</span></ng-template>
+              <span class="range-fields" *ngIf="lineEditing(i, draft); else rangeRead">
+                <input type="number" min="0" step="0.01" placeholder="Min" [ngModel]="line.minQty || 0" (ngModelChange)="updateLine(i, { minQty: $event })">
+                <input type="number" min="0" step="0.01" placeholder="Max" [ngModel]="line.maxQty || 0" (ngModelChange)="updateLine(i, { maxQty: $event })">
                 <small *ngIf="autoWastePct(line) > 0">Auto waste {{ autoWastePct(line) }}%</small>
               </span>
-              <span><input [class.reason-needed]="lineNeedsReason(line)" [ngModel]="line.reason || ''" (ngModelChange)="updateLine(i, { reason: $event })" placeholder="Required if overuse" [disabled]="draft.status === 'confirmed'"></span>
-              <span><input [ngModel]="line.substitutes || ''" (ngModelChange)="updateLine(i, { substitutes: $event })" placeholder="Alternate product ids/name" [disabled]="draft.status === 'confirmed'"></span>
+              <ng-template #rangeRead>
+                <span class="line-read">
+                  {{ line.minQty || 0 }} - {{ line.maxQty || 0 }}
+                  <small *ngIf="autoWastePct(line) > 0">Auto waste {{ autoWastePct(line) }}%</small>
+                </span>
+              </ng-template>
+              <span *ngIf="lineEditing(i, draft); else reasonRead"><input [class.reason-needed]="lineNeedsReason(line)" [ngModel]="line.reason || ''" (ngModelChange)="updateLine(i, { reason: $event })" placeholder="Required if overuse"></span>
+              <ng-template #reasonRead><span class="line-read" [class.reason-needed]="lineNeedsReason(line)">{{ line.reason || '-' }}</span></ng-template>
+              <span *ngIf="lineEditing(i, draft); else substituteRead"><input [ngModel]="line.substitutes || ''" (ngModelChange)="updateLine(i, { substitutes: $event })" placeholder="Alternate product ids/name"></span>
+              <ng-template #substituteRead><span class="line-read">{{ line.substitutes || '-' }}</span></ng-template>
               <span>{{ money(lineActualCost(line)) }}</span>
+              <span class="line-actions">
+                <button type="button" class="ghost mini" *ngIf="draft.status !== 'confirmed' && !lineEditing(i, draft)" (click)="editLine(i)">Edit</button>
+                <button type="button" class="ghost mini" *ngIf="lineEditing(i, draft)" (click)="doneLineEdit()">Done</button>
+              </span>
             </div>
           </div>
 
@@ -921,7 +935,11 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             </article>
           </section>
 
-          <div class="manual-product-add" *ngIf="draft.status !== 'confirmed'">
+          <div class="manual-product-toggle" *ngIf="draft.status !== 'confirmed' && !extraProductOpen">
+            <button type="button" class="ghost" (click)="openExtraProduct()">Add extra product</button>
+          </div>
+
+          <div class="manual-product-add" *ngIf="draft.status !== 'confirmed' && extraProductOpen">
             <label class="product-picker">
               <span>Product</span>
               <input [(ngModel)]="productQuery" (ngModelChange)="productForm.productId = ''; productPickerOpen = true" placeholder="Search product by name / SKU">
@@ -962,6 +980,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
               <input [(ngModel)]="productForm.substitutes" placeholder="Alternate product ids/name">
             </label>
             <button type="button" class="ghost" (click)="addProductLine()">Add product</button>
+            <button type="button" class="ghost" (click)="cancelExtraProduct()">Cancel</button>
           </div>
 
           <label class="notes">
@@ -1027,13 +1046,16 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .info-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .info-grid label { border: 1px solid #d8e1ea; border-radius: 3px; padding: 10px; display: grid; gap: 6px; }
     .consume-table { border: 1px solid #d8e1ea; border-radius: 0; overflow: auto; }
-    .row { display: grid; grid-template-columns: 1.6fr 1.1fr .7fr 1.1fr 1.3fr 1.4fr .75fr; gap: 12px; align-items: center; padding: 12px; border-bottom: 1px solid #edf4f3; min-width: 1120px; }
+    .row { display: grid; grid-template-columns: 1.6fr 1.1fr .7fr 1.1fr 1.3fr 1.4fr .75fr .65fr; gap: 12px; align-items: center; padding: 12px; border-bottom: 1px solid #edf4f3; min-width: 1240px; }
     .row:last-child { border-bottom: 0; }
     .line-ledger { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
     .line-ledger small { border: 1px solid #cfe1df; border-radius: 999px; padding: 4px 8px; background: #ecfdf5; color: #0f766e; font-weight: 800; text-transform: none; }
     .qty-unit, .range-fields { display: grid; grid-template-columns: 1fr 86px; gap: 8px; }
     .range-fields { grid-template-columns: 1fr 1fr; }
     .range-fields small { grid-column: 1 / -1; color: #b45309; font-size: 11px; font-weight: 900; }
+    .line-read { display: grid; min-height: 39px; align-content: center; border: 1px solid #e2ecea; border-radius: 0; background: #f8fbfa; padding: 9px 11px; color: #0f172a; font-weight: 800; }
+    .line-read small { display: block; margin-top: 2px; color: #b45309; font-size: 11px; }
+    .line-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .backbar-ledger { border: 1px solid #dcebea; border-radius: 16px; padding: 14px; display: grid; gap: 12px; background: #f8fbfa; }
     .owner-report, .owner-dashboard, .control-report, .staff-audit { border-radius: 0; padding: 14px 16px; display: grid; gap: 12px; }
     .owner-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
@@ -1121,7 +1143,8 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .history-row { display: grid; grid-template-columns: 1.2fr 1.4fr .8fr .8fr; gap: 10px; padding: 8px 0; border-top: 1px solid #edf4f3; }
     .ledger-empty { margin: 0; color: #64748b; }
     .notes { display: grid; gap: 8px; }
-    .manual-product-add { display: grid; grid-template-columns: minmax(260px, 2fr) .7fr .7fr .7fr .7fr .7fr 1.2fr auto; gap: 10px; align-items: end; }
+    .manual-product-toggle { display: flex; justify-content: flex-start; }
+    .manual-product-add { display: grid; grid-template-columns: minmax(260px, 2fr) .7fr .7fr .7fr .7fr .7fr 1.2fr auto auto; gap: 10px; align-items: end; }
     .manual-product-add label { display: grid; gap: 6px; }
     .manual-product-add span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     .product-picker { position: relative; }
@@ -1193,6 +1216,8 @@ export class ProductConsumeComponent {
   dashboardPeriod = 'daily';
   productQuery = '';
   productPickerOpen = false;
+  extraProductOpen = false;
+  editingLineIndex: number | null = null;
   readonly selected = computed(() => this.drafts().find((draft) => draft.id === this.selectedId()) || null);
   readonly draftCount = computed(() => this.drafts().filter((draft) => draft.status !== 'confirmed').length);
   readonly confirmedCount = computed(() => this.drafts().filter((draft) => draft.status === 'confirmed').length);
@@ -1249,6 +1274,8 @@ export class ProductConsumeComponent {
 
   select(draft: ConsumeDraft): void {
     this.selectedId.set(draft.id);
+    this.doneLineEdit();
+    this.cancelExtraProduct();
     this.loadBackbarLedger(draft.id);
   }
 
@@ -1265,6 +1292,29 @@ export class ProductConsumeComponent {
 
   updateNotes(notes: string): void {
     this.patchSelected((draft) => ({ ...draft, notes }));
+  }
+
+  lineEditing(index: number, draft: ConsumeDraft): boolean {
+    return draft.status !== 'confirmed' && this.editingLineIndex === index;
+  }
+
+  editLine(index: number): void {
+    this.editingLineIndex = index;
+  }
+
+  doneLineEdit(): void {
+    this.editingLineIndex = null;
+  }
+
+  openExtraProduct(): void {
+    this.extraProductOpen = true;
+    this.error.set('');
+  }
+
+  cancelExtraProduct(): void {
+    this.extraProductOpen = false;
+    this.productPickerOpen = false;
+    this.resetProductForm();
   }
 
   fillProductDefaults(): void {
@@ -1309,6 +1359,10 @@ export class ProductConsumeComponent {
   }
 
   addProductLine(): void {
+    if (!this.extraProductOpen) {
+      this.openExtraProduct();
+      return;
+    }
     const product = this.products().find((row) => row.id === this.productForm.productId);
     const qty = Number(this.productForm.qty || 0);
     if (!product || qty <= 0) {
@@ -1352,8 +1406,13 @@ export class ProductConsumeComponent {
         notes: draft.notes || 'Manual product consume added from invoice draft.'
       };
     });
-    this.productForm = { productId: '', qty: 1, unit: 'pcs', wastagePct: 0, minQty: 0, maxQty: 0, substitutes: '' };
+    this.cancelExtraProduct();
     this.message.set('Product line added. Save draft or confirm consume.');
+  }
+
+  private resetProductForm(): void {
+    this.productForm = { productId: '', qty: 1, unit: 'pcs', wastagePct: 0, minQty: 0, maxQty: 0, substitutes: '' };
+    this.productQuery = '';
   }
 
   saveDraft(): void {

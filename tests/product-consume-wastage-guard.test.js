@@ -33,3 +33,15 @@ test("product consume UI shows wastage lock and role-aware confirm", () => {
   assert.match(page, /ownerApproval: guard\.approvalRequired && this\.isOwnerApprover\(\)/);
   assert.match(page, /Staff waste hits/);
 });
+
+test("product consume UI hides blank extra product row until requested", () => {
+  assert.match(page, /Add extra product/);
+  assert.match(page, /extraProductOpen/);
+  assert.match(page, /openExtraProduct/);
+  assert.match(page, /cancelExtraProduct/);
+  assert.match(page, /lineEditing/);
+  assert.match(page, />Edit<\/button>/);
+  assert.match(page, />Done<\/button>/);
+  assert.match(page, /Product name locked|line\.productName \|\| line\.productId/);
+  assert.match(page, /if \(!this\.extraProductOpen\)/);
+});

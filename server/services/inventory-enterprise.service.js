@@ -368,6 +368,45 @@ function activeRecipeForService(serviceId, branchId, access) {
   `).get(access.tenantId, serviceId, branchId, branchId);
 }
 
+function serviceRequiredProductDraftLines(serviceId, branchId, serviceQuantity, access) {
+  if (!serviceId) return [];
+  const service = repositories.services.getById(serviceId, scope(access)) || {};
+  const requiredProducts = safeArray(service.requiredProducts || service.required_products);
+  return requiredProducts
+    .map((item) => {
+      const productId = item.productId || item.product_id || "";
+      if (!productId) return null;
+      const product = repositories.products.getById(productId, scope(access)) || {};
+      if (branchId && product.branchId && product.branchId !== branchId) return null;
+      const quantityPerService = number(item.quantityPerService ?? item.quantity_per_service ?? item.quantity ?? item.qty, 0);
+      if (quantityPerService <= 0) return null;
+      const unit = safeRecipeUnit(item.unit || product.packUnit || product.pack_unit || product.unit || "pcs");
+      const wastagePct = number(item.wastagePct ?? item.wastage_pct, 0);
+      const expectedQty = money(quantityPerService * serviceQuantity * (1 + wastagePct / 100));
+      const unitCost = number(item.unitCost ?? item.unit_cost ?? product.unitCost ?? product.costPrice ?? product.purchasePrice, 0);
+      return {
+        productId,
+        productName: item.productName || item.product_name || product.name || productId,
+        unit,
+        expectedQty,
+        actualQty: expectedQty,
+        wastagePct,
+        wastageApprovalPct: number(item.wastageApprovalPct ?? item.wastage_approval_pct, PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT),
+        wastageHitLimit: Math.max(1, Math.round(number(item.wastageHitLimit ?? item.wastage_hit_limit, PRODUCT_CONSUME_STAFF_WASTAGE_REPEAT_LIMIT))),
+        minQty: money(number(item.minQuantityPerService ?? item.min_quantity_per_service ?? item.minQty ?? item.min_qty, 0) * serviceQuantity),
+        maxQty: money(number(item.maxQuantityPerService ?? item.max_quantity_per_service ?? item.maxQty ?? item.max_qty, 0) * serviceQuantity),
+        unitCost,
+        stockUnit: stockUnitFor(product),
+        packSize: packSizeFor(product),
+        packUnit: packUnitFor(product),
+        stockUnitCost: number(product.unitCost ?? product.costPrice ?? product.purchasePrice, 0),
+        expectedCost: money(expectedQty * unitCost),
+        actualCost: money(expectedQty * unitCost)
+      };
+    })
+    .filter(Boolean);
+}
+
 function activeBranchId(payload = {}, access = {}) {
   return payload.branchId || payload.branch_id || access.requestedBranchId || access.branchId || "";
 }
@@ -1561,22 +1600,12 @@ export class InventoryEnterpriseService {
         drafts.push(this.productConsumeDraftRow(existing));
         continue;
       }
-      if (!recipe) {
-        this.upsertRecipeAlert({
-          branchId,
-          serviceId,
-          alertType: "missing_recipe",
-          severity: "high",
-          title: "Product consume recipe missing",
-          message: "POS invoice has a service, but no approved auto-consume recipe was found.",
-          evidence: { invoiceId: invoice.id || "", saleId: sale.id || "", serviceName: item.name || item.serviceName || "" }
-        }, access);
-      }
       const recipeItems = recipe
         ? db.prepare("SELECT * FROM service_recipe_items WHERE tenant_id=? AND recipe_id=? ORDER BY sort_order ASC, created_at ASC").all(access.tenantId, recipe.id)
         : [];
       const serviceQuantity = Math.max(1, number(item.quantity || item.qty || 1, 1));
-      const lineItems = recipeItems.map((line) => {
+      const fallbackLineItems = recipeItems.length ? [] : serviceRequiredProductDraftLines(serviceId, branchId, serviceQuantity, access);
+      const recipeLineItems = recipeItems.map((line) => {
         const expectedQty = money(number(line.quantity_per_service, 0) * serviceQuantity * (1 + number(line.wastage_pct, 0) / 100));
         const unitCost = number(line.unit_cost, 0);
         const minQty = money(number(line.min_quantity_per_service, 0) * serviceQuantity);
@@ -1597,6 +1626,18 @@ export class InventoryEnterpriseService {
           actualCost: money(expectedQty * unitCost)
         };
       });
+      const lineItems = recipeLineItems.length ? recipeLineItems : fallbackLineItems;
+      if (!lineItems.length) {
+        this.upsertRecipeAlert({
+          branchId,
+          serviceId,
+          alertType: "missing_recipe",
+          severity: "high",
+          title: "Product consume recipe missing",
+          message: "POS invoice has a service, but no approved auto-consume recipe or service product lock was found.",
+          evidence: { invoiceId: invoice.id || "", saleId: sale.id || "", serviceName: item.name || item.serviceName || "" }
+        }, access);
+      }
       const expectedCost = money(lineItems.reduce((sum, line) => sum + number(line.expectedCost, 0), 0));
       const draft = insertSnake("product_consume_drafts", {
         id: makeId("pcd"),
@@ -1607,7 +1648,7 @@ export class InventoryEnterpriseService {
         sale_id: sale.id || invoice.saleId || "",
         service_id: serviceId,
         service_name: item.name || item.serviceName || recipe?.service_name || serviceId || "Service",
-        recipe_id: recipe?.id || "",
+        recipe_id: recipeLineItems.length ? recipe?.id || "" : "",
         client_id: client.id || invoice.clientId || invoice.client_id || "",
         client_name: client.name || invoice.clientName || "",
         staff_id: item.staffId || item.staff_id || sale.staffId || sale.staff_id || "",
@@ -1616,9 +1657,11 @@ export class InventoryEnterpriseService {
         line_items_json: toJson(lineItems),
         expected_cost: expectedCost,
         actual_cost: expectedCost,
-        status: recipeItems.length ? "draft" : "recipe_missing",
-        notes: recipeItems.length
+        status: lineItems.length ? "draft" : "recipe_missing",
+        notes: recipeLineItems.length
           ? "Auto draft from POS invoice. Review and confirm to deduct stock."
+          : fallbackLineItems.length
+            ? "Auto draft from service product lock. Review and confirm to deduct stock."
           : "Recipe missing for this invoice service. Create/approve recipe, then regenerate product consume draft.",
         created_by: access.userId || "",
         updated_by: access.userId || ""
