@@ -192,11 +192,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <button type="button" [class.active]="activeTab() === 'commission'" (click)="setActiveTab('commission')">Commission / Payout</button>
         </nav>
 
-        <section class="panel" *ngIf="activeTab() === 'leaderboard'">
+        <section class="panel" *ngIf="activeTab() === 'leaderboard' && leaderboardView() === 'summary'">
           <div class="section-title">
             <div>
               <span class="eyebrow">Leaderboard</span>
               <h2>Staff summary</h2>
+            </div>
+            <div class="section-actions">
+              <span class="view-hint">One view at a time</span>
+              <button class="ghost-button mini" type="button" (click)="setLeaderboardView('items')">Staff by item</button>
             </div>
           </div>
           <div class="table-wrap fit-wrap">
@@ -504,12 +508,19 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </section>
 
-        <section class="panel" *ngIf="activeTab() === 'leaderboard'">
+        <section class="panel" *ngIf="activeTab() === 'leaderboard' && leaderboardView() === 'items'">
           <div class="section-title">
             <div>
               <span class="eyebrow">Line item audit</span>
               <h2>Staff by item</h2>
             </div>
+            <div class="section-actions">
+              <button class="ghost-button mini" type="button" (click)="setLeaderboardView('summary')">Back to summary</button>
+            </div>
+          </div>
+          <div class="report-info-strip">
+            <strong>Staff by item view</strong>
+            <span>Zenoti-style line audit: staff, client-facing item, quantity, share, amount and source in one focused table.</span>
           </div>
           <div class="table-wrap scroll-wrap">
             <table>
@@ -570,6 +581,44 @@ import { StateComponent } from '../shared/ui/state/state.component';
       flex-wrap: wrap;
       gap: 10px;
       justify-content: flex-end;
+    }
+    .section-title {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    .section-actions {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .view-hint {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .report-info-strip {
+      align-items: center;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+    }
+    .report-info-strip strong {
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    .report-info-strip span {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
     }
     .filter-panel {
       display: grid;
@@ -810,6 +859,7 @@ export class StaffSalesReportComponent implements OnInit {
   readonly error = signal('');
   readonly expandedStaff = signal('');
   readonly activeTab = signal<'leaderboard' | 'services' | 'products' | 'commission'>('leaderboard');
+  readonly leaderboardView = signal<'summary' | 'items'>('summary');
   readonly staffOptions = computed(() => {
     const map = new Map<string, string>();
     for (const row of (this.report()?.staff || []) as ApiRecord[]) {
@@ -863,9 +913,21 @@ export class StaffSalesReportComponent implements OnInit {
 
   setActiveTab(tab: 'leaderboard' | 'services' | 'products' | 'commission'): void {
     this.activeTab.set(tab);
+    if (tab === 'leaderboard') this.leaderboardView.set('summary');
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { report: this.reportParamForTab(tab) },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+  }
+
+  setLeaderboardView(view: 'summary' | 'items'): void {
+    this.activeTab.set('leaderboard');
+    this.leaderboardView.set(view);
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { report: view === 'items' ? 'staff-by-item' : 'staff-leaderboard' },
       queryParamsHandling: 'merge',
       replaceUrl: true
     });
@@ -1041,7 +1103,11 @@ export class StaffSalesReportComponent implements OnInit {
 
   private applyReportTabFromQuery(): void {
     const report = String(this.route.snapshot.queryParamMap.get('report') || '').toLowerCase();
-    if (report === 'services' || report === 'services-by-staff') this.activeTab.set('services');
+    this.leaderboardView.set('summary');
+    if (report === 'staff-by-item' || report === 'staff-items') {
+      this.activeTab.set('leaderboard');
+      this.leaderboardView.set('items');
+    } else if (report === 'services' || report === 'services-by-staff') this.activeTab.set('services');
     else if (report === 'products' || report === 'products-by-staff') this.activeTab.set('products');
     else if (report === 'commission' || report === 'commission-payout') this.activeTab.set('commission');
     else this.activeTab.set('leaderboard');
