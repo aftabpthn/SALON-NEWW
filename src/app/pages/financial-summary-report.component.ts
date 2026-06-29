@@ -9,6 +9,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 type MatrixCell = { key: string; label: string; tone?: 'section' | 'primary' | 'normal' };
 type MatrixColumn = { key: string; label: string; from?: string; to?: string };
 type ReportTab = 'summary' | 'payments' | 'daily-sheet' | 'daily-revenue' | 'member-sales' | 'sales-tax' | 'wallet-ledger';
+type PaymentDistributionCard = { key: string; filterKey: string; label: string; value: string };
 type PaymentDistributionRow = {
   date: string;
   invoiceDateValue: string;
@@ -468,17 +469,23 @@ type WalletLedgerRow = ApiRecord & {
       <ng-container *ngIf="!loading() && !error() && activeTab === 'payments'">
         <section class="payment-distribution-stack">
           <div class="payment-card-strip">
-            <article *ngFor="let card of paymentDistributionCards()">
+            <button
+              type="button"
+              *ngFor="let card of paymentDistributionCards()"
+              [class.active]="card.filterKey === paymentTypeFilter"
+              [attr.aria-pressed]="card.filterKey === paymentTypeFilter"
+              (click)="selectPaymentDistributionCard(card)"
+            >
               <strong>{{ card.value }}</strong>
               <span>{{ card.label }}</span>
-            </article>
+            </button>
           </div>
 
           <section class="panel payment-table-panel">
             <div class="section-title">
               <div>
                 <span class="eyebrow">Payment register</span>
-                <h2>Payment Distributions</h2>
+                <h2>{{ selectedPaymentReportTitle() }}</h2>
                 <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ paymentDistributionRows().length }} payment row(s)</p>
               </div>
               <div class="payment-actions">
@@ -1338,16 +1345,31 @@ type WalletLedgerRow = ApiRecord & {
       padding-bottom: 2px;
     }
 
-    .payment-card-strip article {
+    .payment-card-strip button {
       min-height: 72px;
       display: grid;
       gap: 8px;
       align-content: center;
+      text-align: left;
       padding: 12px;
       border: 1px solid var(--line);
       border-radius: var(--radius-md);
       background: #fff;
       box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      font: inherit;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+    }
+
+    .payment-card-strip button:hover,
+    .payment-card-strip button.active {
+      border-color: var(--brand);
+      box-shadow: 0 12px 26px rgba(16, 185, 129, 0.16);
+      transform: translateY(-1px);
+    }
+
+    .payment-card-strip button.active {
+      background: #f0fdf4;
     }
 
     .payment-card-strip strong {
@@ -2085,23 +2107,34 @@ export class FinancialSummaryReportComponent implements OnInit {
     return this.filteredInvoices().length;
   }
 
-  paymentDistributionCards(): Array<{ label: string; value: string }> {
+  paymentDistributionCards(): PaymentDistributionCard[] {
     const rows = this.paymentRowsInDateRange();
     const amountFor = (modeKey: string) => rows
       .filter((row) => modeKey === 'all' || row.paymentModeKey === modeKey)
       .reduce((sum, row) => sum + row.price, 0);
     return [
-      { label: 'Payment Count', value: String(rows.length) },
-      { label: 'Total Amount', value: this.money(amountFor('all')).toFixed(2) },
-      { label: 'CARD', value: this.money(amountFor('card')).toFixed(2) },
-      { label: 'CASH', value: this.money(amountFor('cash')).toFixed(2) },
-      { label: 'Check', value: this.money(amountFor('check')).toFixed(2) },
-      { label: 'DINGG PAYMENT', value: this.money(amountFor('dingg_payment')).toFixed(2) },
-      { label: 'UPI', value: this.money(amountFor('upi')).toFixed(2) },
-      { label: 'Prepaid', value: this.money(amountFor('prepaid')).toFixed(2) },
-      { label: 'Reward', value: this.money(amountFor('reward')).toFixed(2) },
-      { label: 'Giftcard', value: this.money(amountFor('giftcard')).toFixed(2) }
+      { key: 'count', filterKey: '', label: 'Payment Count', value: String(rows.length) },
+      { key: 'total', filterKey: '', label: 'Total Amount', value: this.money(amountFor('all')).toFixed(2) },
+      { key: 'card', filterKey: 'card', label: 'CARD', value: this.money(amountFor('card')).toFixed(2) },
+      { key: 'cash', filterKey: 'cash', label: 'CASH', value: this.money(amountFor('cash')).toFixed(2) },
+      { key: 'check', filterKey: 'check', label: 'Check', value: this.money(amountFor('check')).toFixed(2) },
+      { key: 'dingg_payment', filterKey: 'dingg_payment', label: 'DINGG PAYMENT', value: this.money(amountFor('dingg_payment')).toFixed(2) },
+      { key: 'upi', filterKey: 'upi', label: 'UPI', value: this.money(amountFor('upi')).toFixed(2) },
+      { key: 'prepaid', filterKey: 'prepaid', label: 'Prepaid', value: this.money(amountFor('prepaid')).toFixed(2) },
+      { key: 'reward', filterKey: 'reward', label: 'Reward', value: this.money(amountFor('reward')).toFixed(2) },
+      { key: 'giftcard', filterKey: 'giftcard', label: 'Giftcard', value: this.money(amountFor('giftcard')).toFixed(2) }
     ];
+  }
+
+  selectPaymentDistributionCard(card: PaymentDistributionCard): void {
+    this.paymentTypeFilter = card.filterKey;
+    this.paymentSearch = '';
+  }
+
+  selectedPaymentReportTitle(): string {
+    if (!this.paymentTypeFilter) return 'Payment Distributions';
+    const selected = this.paymentTypeOptions().find((type) => type.key === this.paymentTypeFilter);
+    return `${selected?.label || this.modeLabel(this.paymentTypeFilter)} Report`;
   }
 
   paymentTypeOptions(): Array<{ key: string; label: string }> {
