@@ -946,7 +946,7 @@ export class ClientsComponent implements OnInit, OnDestroy {
     if (!successMessage) this.duplicateMessage.set('');
     this.api.list<ApiRecord[]>('clients/duplicates', { includeAllBranches: true }).subscribe({
       next: (groups) => {
-        const duplicateGroups = Array.isArray(groups) ? groups : [];
+        const duplicateGroups = (Array.isArray(groups) ? groups : []).filter((group) => this.isPhoneDuplicateGroup(group));
         this.duplicateGroups.set(duplicateGroups);
         const selection: Record<string, string> = {};
         for (const group of duplicateGroups) {
@@ -966,7 +966,13 @@ export class ClientsComponent implements OnInit, OnDestroy {
   }
 
   visibleDuplicateGroups(): ApiRecord[] {
-    return this.duplicateGroups().slice(0, 100);
+    return this.duplicateGroups().filter((group) => this.isPhoneDuplicateGroup(group)).slice(0, 100);
+  }
+
+  private isPhoneDuplicateGroup(group: ApiRecord | null | undefined): boolean {
+    const type = String(group?.matchType || '').toLowerCase();
+    const key = String(group?.groupKey || '').toLowerCase();
+    return type === 'phone' || key.startsWith('phone:');
   }
   duplicateGroupClients(group: ApiRecord | null | undefined): ApiRecord[] {
     return Array.isArray(group?.clients) ? group.clients : [];
@@ -1014,7 +1020,7 @@ export class ClientsComponent implements OnInit, OnDestroy {
   }
 
   mergeAllDuplicateGroups(): void {
-    const groupCount = this.duplicateGroups().length;
+    const groupCount = this.duplicateGroups().filter((group) => this.isPhoneDuplicateGroup(group)).length;
     if (!groupCount) return;
     if (!window.confirm(`Merge all ${groupCount} duplicate group(s)? This will keep the suggested primary contact in each group.`)) return;
     this.saving.set(true);
@@ -1024,6 +1030,7 @@ export class ClientsComponent implements OnInit, OnDestroy {
     this.api.post<ApiRecord>('clients/duplicates/merge-all', {
       includeAllBranches: true,
       allBranches: true,
+      matchType: 'phone',
       reason: 'Merged by frontdesk duplicate merge all'
     }).subscribe({
       next: (result) => {
