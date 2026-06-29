@@ -629,9 +629,13 @@ export const migrationService = {
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
     if (!rows.length) throw badRequest("rows are required for chunk import.");
     const preview = previewPayload(largeChunkPayload(job, payload, rows), access, { persist: false, dryRun: false, jobId: job.id });
+    const allowPartialImport = payload.allowPartialImport === true;
     const gate = migrationApprovalGate(access, preview.summary, approvalIdentityForJob(job, preview.summary));
-    if ((!gate.allowed || preview.summary.errorRows) && payload.skipApprovalGate !== true) {
-      throw badRequest(`Final chunk import blocked: ${gate.reason}`);
+    if (!gate.approved && payload.skipApprovalGate !== true) {
+      throw badRequest("Owner approval required for this exact migration job.");
+    }
+    if (Number(preview.summary.errorRows || 0) > 0 && !allowPartialImport && payload.skipApprovalGate !== true) {
+      throw badRequest(`Final chunk import blocked: ${preview.summary.errorRows} critical row(s) present. Enable partial import to skip invalid rows or fix the source.`);
     }
     const batchId = makeId("batch");
     const sourceSoftware = job.sourceSoftware || sourceKey(payload.sourceSoftware);
@@ -652,7 +656,8 @@ export const migrationService = {
       jobId,
       sourceSoftware,
       migrationMode: payload.migrationMode !== false,
-      duplicateDecisions: payload.duplicateDecisions || {}
+      duplicateDecisions: payload.duplicateDecisions || {},
+      allowPartialImport
     }));
     const result = withBusyRetry(() => importTx());
     const summary = { ...preview.summary, ...result, completedAt: now(), chunkNumber: chunk.chunkNumber };
@@ -681,6 +686,11 @@ export const migrationService = {
     const id = makeId("mapr");
     const ts = now();
     const identity = approvalIdentityFromSubmission(payload);
+    const submittedSummary = payload.summary?.summary || payload.summary || {};
+    const errorCount = integer(payload.errorCount ?? submittedSummary.errorRows ?? submittedSummary.errorCount, 0);
+    const warningCount = integer(payload.warningCount ?? submittedSummary.warningRows ?? submittedSummary.warningCount, 0);
+    const validRows = integer(payload.validRows ?? submittedSummary.validRows, 0);
+    const importableRows = integer(payload.importableRows ?? validRows, validRows);
     const record = {
       id,
       tenantId: access.tenantId,
@@ -691,6 +701,10 @@ export const migrationService = {
       fileName: identity.fileName || "",
       sourceFileHash: identity.sourceFileHash || "",
       totalRows: identity.totalRows || 0,
+      errorCount,
+      warningCount,
+      validRows,
+      importableRows,
       status: "pending",
       note: cleanText(payload.note),
       summaryJson: JSON.stringify(payload.summary || {}),
@@ -703,11 +717,11 @@ export const migrationService = {
     };
     db.prepare(
       `INSERT INTO migration_approvals
-        (id, tenantId, branchId, jobId, resource, sourceSoftware, fileName, sourceFileHash, totalRows, status, note, summaryJson, submittedBy, submittedAt, reviewedBy, reviewedAt, createdAt, updatedAt)
+        (id, tenantId, branchId, jobId, resource, sourceSoftware, fileName, sourceFileHash, totalRows, errorCount, warningCount, validRows, importableRows, status, note, summaryJson, submittedBy, submittedAt, reviewedBy, reviewedAt, createdAt, updatedAt)
        VALUES
-        (@id, @tenantId, @branchId, @jobId, @resource, @sourceSoftware, @fileName, @sourceFileHash, @totalRows, @status, @note, @summaryJson, @submittedBy, @submittedAt, @reviewedBy, @reviewedAt, @createdAt, @updatedAt)`
+        (@id, @tenantId, @branchId, @jobId, @resource, @sourceSoftware, @fileName, @sourceFileHash, @totalRows, @errorCount, @warningCount, @validRows, @importableRows, @status, @note, @summaryJson, @submittedBy, @submittedAt, @reviewedBy, @reviewedAt, @createdAt, @updatedAt)`
     ).run(record);
-    auditMigration("migration.approval.submitted", { jobId: record.jobId, approvalId: id, fileName: record.fileName, sourceFileHash: record.sourceFileHash }, access);
+    auditMigration("migration.approval.submitted", { jobId: record.jobId, approvalId: id, fileName: record.fileName, sourceFileHash: record.sourceFileHash, totalRows: record.totalRows, errorCount, warningCount, validRows, importableRows }, access);
     return deserializeApproval(record);
   },
 
@@ -1039,7 +1053,7 @@ function migrationApprovalGate(access = {}, summary = {}, identityInput = {}) {
     approvalId: matched?.id || "",
     identity,
     allowed: approved && !hasErrors,
-    reason: hasErrors ? "critical_errors_present" : approved ? "approved" : "owner_approval_required_for_this_source"
+    reason: hasErrors ? "critical_errors_present" : approved ? "approved" : "owner_approval_required_for_exact_job"
   };
 }
 
@@ -1096,23 +1110,9 @@ function approvalIdentityFromSubmission(payload = {}) {
 }
 
 function approvalMatchesIdentity(approval = {}, identity = {}) {
-  // Additive matching: any one strong signal authorizes the import. A jobId or
-  // hash mismatch must NOT veto a valid match on another signal, otherwise the
-  // worker fails to honour an owner approval that referenced the same source
-  // file under a different jobId/hash provenance.
-  const approvalHash = cleanText(approval.sourceFileHash);
-  const identityHash = cleanText(identity.sourceFileHash);
-  if (identityHash && approvalHash && approvalHash === identityHash) return true;
-
   const approvalJobId = cleanText(approval.jobId);
   const identityJobId = cleanText(identity.jobId);
-  if (identityJobId && approvalJobId && approvalJobId === identityJobId) return true;
-
-  const fileMatches = cleanText(approval.fileName).toLowerCase() === cleanText(identity.fileName).toLowerCase();
-  const rowsMatch = Number(approval.totalRows || 0) === Number(identity.totalRows || 0);
-  const sourceMatches = cleanText(approval.sourceSoftware) === cleanText(identity.sourceSoftware);
-  const resourceMatches = cleanText(approval.resource || "auto") === cleanText(identity.resource || "auto");
-  return Boolean(identity.fileName && identity.totalRows && fileMatches && rowsMatch && sourceMatches && resourceMatches);
+  return Boolean(identityJobId && approvalJobId && approvalJobId === identityJobId);
 }
 
 function requiredMappingComplete(mapping = {}, resource = "") {
@@ -2136,7 +2136,7 @@ function validatePreparedRow(row, context, seen) {
     }
     if (empty(payload[required])) errors.push(`${required} is required`);
   }
-  if (payload.branchId?.startsWith?.(UNMAPPED_BRANCH_PREFIX)) errors.push(`Unmapped branchName ${unmappedBranchName(payload.branchId)}`);
+  if (payload.branchId?.startsWith?.(UNMAPPED_BRANCH_PREFIX)) errors.push(`Unmapped branch value ${unmappedBranchName(payload.branchId)}`);
   else if (payload.branchId && !context.branches.some((branch) => branch.id === payload.branchId)) errors.push(`Unknown branchId ${payload.branchId}`);
   const duplicate = duplicateFor(row, context, seen);
   if (duplicate) warnings.push(`Possible duplicate: ${duplicate}`);
@@ -2218,6 +2218,7 @@ function importPreviewRows(preview, options) {
     counters.byResource[row.resource] = resourceCounter;
     recordMigrationIdMap(row, result, options);
     insertMigrationRow("migration_row_results", {
+      id: makeIdLong("migres"),
       tenantId: options.access.tenantId,
       jobId: options.jobId,
       batchId: options.batchId,
@@ -3021,9 +3022,14 @@ function buildBranchLookup(access = {}) {
 
 function resolveBranchId(fields, access, branchLookup = null) {
   const explicit = cleanText(fields.branchId);
-  if (explicit) return explicit;
   const branchName = cleanText(fields.branchName);
   const lookup = branchLookup || buildBranchLookup(access);
+  if (explicit) {
+    if (lookup.byId.has(explicit)) return explicit;
+    const explicitBranchId = lookup.byName.get(cleanKey(explicit)) || sourceBranchAlias(explicit, lookup);
+    if (explicitBranchId) return explicitBranchId;
+    return UNMAPPED_BRANCH_PREFIX + explicit;
+  }
   if (branchName) {
     const branchId = lookup.byName.get(cleanKey(branchName)) || sourceBranchAlias(branchName, lookup);
     if (branchId) return branchId;
@@ -3311,6 +3317,7 @@ function persistPreview(response, access, dryRun) {
   });
   for (const row of response.rows) {
     insertMigrationRow("migration_row_results", {
+      id: makeIdLong("migres"),
       tenantId: access.tenantId,
       jobId: job.id,
       resource: row.resource,
@@ -3542,7 +3549,11 @@ export function ensureMigrationApprovalSchema() {
       sourceSoftware TEXT NOT NULL DEFAULT '',
       fileName TEXT NOT NULL DEFAULT '',
       sourceFileHash TEXT NOT NULL DEFAULT '',
-      totalRows INTEGER NOT NULL DEFAULT 0
+      totalRows INTEGER NOT NULL DEFAULT 0,
+      errorCount INTEGER NOT NULL DEFAULT 0,
+      warningCount INTEGER NOT NULL DEFAULT 0,
+      validRows INTEGER NOT NULL DEFAULT 0,
+      importableRows INTEGER NOT NULL DEFAULT 0
     );
   `);
   ensureMigrationApprovalColumns();
@@ -3573,7 +3584,11 @@ function ensureMigrationApprovalColumns() {
     ["sourceSoftware", "TEXT NOT NULL DEFAULT ''"],
     ["fileName", "TEXT NOT NULL DEFAULT ''"],
     ["sourceFileHash", "TEXT NOT NULL DEFAULT ''"],
-    ["totalRows", "INTEGER NOT NULL DEFAULT 0"]
+    ["totalRows", "INTEGER NOT NULL DEFAULT 0"],
+    ["errorCount", "INTEGER NOT NULL DEFAULT 0"],
+    ["warningCount", "INTEGER NOT NULL DEFAULT 0"],
+    ["validRows", "INTEGER NOT NULL DEFAULT 0"],
+    ["importableRows", "INTEGER NOT NULL DEFAULT 0"]
   ];
   for (const [name, definition] of requiredColumns) {
     if (!columns.has(name)) {
@@ -4312,11 +4327,11 @@ function importStagedLargeJobChunk(jobId, chunkNumber, payload, access) {
   const gate = migrationApprovalGate(access, preview.summary, approvalIdentityForJob(job, preview.summary));
   const hasCriticalErrors = Number(preview.summary.errorRows || 0) > 0;
   const approvalReady = gate.approved || payload.skipApprovalGate === true;
-  if (hasCriticalErrors && !allowPartialImport) {
-    throw badRequest("Final staged chunk import blocked: critical_errors_present");
-  }
   if (!approvalReady) {
-    throw badRequest("Final staged chunk import blocked: owner_approval_required_for_this_source");
+    throw badRequest("Owner approval required for this exact migration job.");
+  }
+  if (hasCriticalErrors && !allowPartialImport) {
+    throw badRequest(`Final staged chunk import blocked: ${preview.summary.errorRows} critical row(s) present. Enable partial import to skip invalid rows or fix the source.`);
   }
   const batchId = makeId("batch");
   insertMigrationRow("migration_import_batches", {

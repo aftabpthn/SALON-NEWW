@@ -18,6 +18,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
         <div class="client-hero-actions">
           <button class="ghost-button" type="button" (click)="loadReports()" [disabled]="reportLoading()">Refresh reports</button>
+          <button class="ghost-button" type="button" (click)="loadDuplicateGroups()" [disabled]="duplicateLoading()">{{ duplicateLoading() ? 'Scanning...' : 'Find duplicates' }}</button>
           <button class="primary-button" type="button" (click)="showForm() ? closeForm() : openCreateForm()">{{ showForm() ? 'Close form' : 'Add client' }}</button>
         </div>
       </div>
@@ -171,9 +172,54 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <button class="ghost-button mini" type="button" (click)="toggleSelectAllVisible()" [disabled]="!filteredClients.length">
               {{ allVisibleSelected ? 'Clear visible' : 'Select all' }}
             </button>
+            <button class="ghost-button mini" type="button" (click)="loadDuplicateGroups()" [disabled]="duplicateLoading()">Duplicates {{ duplicateGroups().length || '' }}</button>
             <button class="danger-button mini" type="button" (click)="deleteSelected()" [disabled]="!selectedCount || saving()">Delete selected</button>
           </div>
         </div>
+
+        <section class="duplicate-merge-panel" *ngIf="duplicateLoading() || duplicateError() || duplicateMessage() || duplicateGroups().length">
+          <div class="duplicate-panel-header">
+            <div>
+              <h3>Duplicate contacts</h3>
+              <p>{{ duplicateGroups().length }} group(s) from matching phone or email</p>
+            </div>
+            <div class="duplicate-panel-actions">
+              <button class="primary-button mini" type="button" *ngIf="duplicateGroups().length" (click)="mergeAllDuplicateGroups()" [disabled]="duplicateMergeAllLoading()">{{ duplicateMergeAllLoading() ? 'Merging...' : 'Merge all' }}</button>
+              <button class="ghost-button mini" type="button" (click)="loadDuplicateGroups()" [disabled]="duplicateLoading() || duplicateMergeAllLoading()">Scan again</button>
+            </div>
+          </div>
+          <app-state [loading]="duplicateLoading()" [error]="duplicateError()"></app-state>
+          <p class="duplicate-message" *ngIf="duplicateMessage()">{{ duplicateMessage() }}</p>
+          <p class="duplicate-message" *ngIf="duplicateGroups().length > visibleDuplicateGroups().length">Showing first {{ visibleDuplicateGroups().length }} groups. Merge all still processes all {{ duplicateGroups().length }} groups.</p>
+          <div class="duplicate-group-list" *ngIf="!duplicateLoading() && duplicateGroups().length">
+            <article class="duplicate-group" *ngFor="let group of visibleDuplicateGroups()" [class.active]="activeDuplicateGroupKey() === group.groupKey">
+              <div class="duplicate-group-header">
+                <div>
+                  <strong>{{ group.matchLabel }}</strong>
+                  <small>{{ duplicateMatchValues(group) }}</small>
+                </div>
+                <button class="primary-button mini" type="button" (click)="mergeDuplicateGroup(group, $event)" [disabled]="saving() || duplicateMergeAllLoading() || duplicateGroupClients(group).length < 2">Merge into selected</button>
+              </div>
+              <div class="duplicate-client-options">
+                <button
+                  class="duplicate-client-option"
+                  type="button"
+                  *ngFor="let duplicateClient of duplicateGroupClients(group)"
+                  [class.primary]="duplicateGroupPrimaryId(group) === clientId(duplicateClient)"
+                  (click)="setDuplicatePrimary(group, clientId(duplicateClient), $event)"
+                >
+                  <span class="avatar">{{ initials(clientDisplayName(duplicateClient)) }}</span>
+                  <span>
+                    <strong>{{ clientDisplayName(duplicateClient) }}</strong>
+                    <small>{{ clientContactLine(duplicateClient) }}</small>
+                    <small>{{ duplicateClient.visitCount || 0 }} visits · {{ (duplicateClient.totalSpend || 0) | currency: 'INR':'symbol':'1.0-0' }}</small>
+                  </span>
+                  <em>{{ duplicateGroupPrimaryId(group) === clientId(duplicateClient) ? 'Keep' : 'Merge' }}</em>
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
 
         <app-state [loading]="loading()" [error]="error()"></app-state>
 
@@ -230,6 +276,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ client.loyaltyPoints }} pts</td>
                 <td>{{ client.lastVisitAt ? (client.lastVisitAt | date: 'mediumDate') : 'New' }}</td>
                 <td class="actions-cell right">
+                  <button class="ghost-button mini duplicate-row-button" type="button" *ngIf="duplicateGroupForClient(client)" (click)="openDuplicateGroupForClient(client, $event)" [disabled]="saving()">Duplicates {{ duplicateCountForClient(client) }}</button>
                   <button class="ghost-button mini" type="button" (click)="editClient(client, $event)" [disabled]="saving()">Edit</button>
                   <label class="row-select" (click)="$event.stopPropagation()">
                     <input
@@ -464,7 +511,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       position: sticky;
       right: 0;
       z-index: 1;
-      min-width: 232px;
+      min-width: 292px;
       padding-right: 18px;
       background: color-mix(in srgb, var(--surface) 97%, white);
       box-shadow: -12px 0 24px color-mix(in srgb, var(--ink) 5%, transparent);
@@ -483,6 +530,113 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .client-database-panel .actions-cell > * {
       margin-left: 6px;
       vertical-align: middle;
+    }
+
+    .duplicate-merge-panel {
+      display: grid;
+      gap: 12px;
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--line));
+      border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--surface) 95%, var(--teal));
+    }
+
+    .duplicate-panel-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .duplicate-panel-header,
+    .duplicate-group-header,
+    .duplicate-client-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .duplicate-panel-header h3,
+    .duplicate-panel-header p {
+      margin: 0;
+    }
+
+    .duplicate-panel-header p,
+    .duplicate-group-header small,
+    .duplicate-client-option small {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .duplicate-group-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .duplicate-group {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+    }
+
+    .duplicate-group.active {
+      border-color: color-mix(in srgb, var(--teal) 54%, var(--line));
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--teal) 12%, transparent);
+    }
+
+    .duplicate-client-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 8px;
+    }
+
+    .duplicate-client-option {
+      width: 100%;
+      min-height: 74px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 9px;
+      color: inherit;
+      background: color-mix(in srgb, var(--surface) 96%, white);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .duplicate-client-option.primary {
+      border-color: color-mix(in srgb, var(--green) 56%, var(--line));
+      background: color-mix(in srgb, var(--surface) 88%, var(--green));
+    }
+
+    .duplicate-client-option > span:nth-child(2) {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      flex: 1 1 auto;
+    }
+
+    .duplicate-client-option em {
+      color: var(--muted);
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .duplicate-message {
+      margin: 0;
+      color: var(--teal);
+      font-weight: 850;
+    }
+
+    .duplicate-row-button {
+      border-color: color-mix(in srgb, var(--teal) 36%, var(--line));
     }
 
     @media (max-width: 1380px) {
@@ -533,7 +687,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       .client-database-panel .clients-crm-table th:last-child,
       .client-database-panel .clients-crm-table td:last-child {
         right: 0;
-        min-width: 204px;
+        min-width: 244px;
         padding-right: 12px;
       }
 
@@ -559,6 +713,13 @@ export class ClientsComponent implements OnInit, OnDestroy {
   readonly selectedMetricCategory = signal('All');
   readonly reportLoading = signal(true);
   readonly reportError = signal('');
+  readonly duplicateGroups = signal<ApiRecord[]>([]);
+  readonly duplicateLoading = signal(false);
+  readonly duplicateMergeAllLoading = signal(false);
+  readonly duplicateError = signal('');
+  readonly duplicateMessage = signal('');
+  readonly duplicatePrimarySelection = signal<Record<string, string>>({});
+  readonly activeDuplicateGroupKey = signal('');
   private readonly usefulMetricCardIds = new Set([
     'last-visit',
     'favorite-service',
@@ -703,7 +864,6 @@ export class ClientsComponent implements OnInit, OnDestroy {
       next: ({ clients, invoices, walletTransactions }) => {
         const loadedClients = this.normalizeClients(clients || []);
         this.hasMoreClients.set(loadedClients.length >= this.clientLimit);
-        this.scheduleNextClientBatch();
         const linkedWalletClients = this.withWalletBalances(loadedClients, walletTransactions || []);
         this.clients.set(this.withUnpaidBalances(linkedWalletClients, invoices || []));
         this.selectedClientIds.set(this.selectedClientIds().filter((id) => this.clients().some((client) => this.clientId(client) === id)));
@@ -722,14 +882,6 @@ export class ClientsComponent implements OnInit, OnDestroy {
     if (this.clientBatchTimer) clearTimeout(this.clientBatchTimer);
     this.clientBatchTimer = undefined;
     this.loadNextClientBatch(true);
-  }
-
-  private scheduleNextClientBatch(): void {
-    if (!this.hasMoreClients() || this.clientBatchTimer) return;
-    this.clientBatchTimer = setTimeout(() => {
-      this.clientBatchTimer = undefined;
-      this.loadNextClientBatch(false);
-    }, 1000);
   }
 
   private loadNextClientBatch(showSpinner: boolean): void {
@@ -784,6 +936,149 @@ export class ClientsComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => this.reportError.set(this.api.errorText(error, 'Unable to load client 360 report'))
+    });
+  }
+
+  loadDuplicateGroups(successMessage = ''): void {
+    if (this.duplicateLoading()) return;
+    this.duplicateLoading.set(true);
+    this.duplicateError.set('');
+    if (!successMessage) this.duplicateMessage.set('');
+    this.api.list<ApiRecord[]>('clients/duplicates', { includeAllBranches: true }).subscribe({
+      next: (groups) => {
+        const duplicateGroups = Array.isArray(groups) ? groups : [];
+        this.duplicateGroups.set(duplicateGroups);
+        const selection: Record<string, string> = {};
+        for (const group of duplicateGroups) {
+          const key = String(group.groupKey || '');
+          if (!key) continue;
+          selection[key] = String(group.suggestedPrimaryId || this.duplicateGroupClients(group)[0]?.id || '');
+        }
+        this.duplicatePrimarySelection.set(selection);
+        this.duplicateMessage.set(successMessage || (duplicateGroups.length ? '' : 'No duplicate contacts found from phone or email.'));
+        this.duplicateLoading.set(false);
+      },
+      error: (error) => {
+        this.duplicateError.set(this.api.errorText(error, 'Unable to scan duplicate clients'));
+        this.duplicateLoading.set(false);
+      }
+    });
+  }
+
+  visibleDuplicateGroups(): ApiRecord[] {
+    return this.duplicateGroups().slice(0, 100);
+  }
+  duplicateGroupClients(group: ApiRecord | null | undefined): ApiRecord[] {
+    return Array.isArray(group?.clients) ? group.clients : [];
+  }
+
+  duplicateMatchValues(group: ApiRecord | null | undefined): string {
+    const values = Array.isArray(group?.matchValues) ? group.matchValues.filter(Boolean).map(String) : [];
+    return values.length ? values.join(', ') : 'Matching contact details';
+  }
+
+  duplicateGroupPrimaryId(group: ApiRecord | null | undefined): string {
+    const key = String(group?.groupKey || '');
+    const selection = this.duplicatePrimarySelection();
+    return String(selection[key] || group?.suggestedPrimaryId || this.duplicateGroupClients(group)[0]?.id || '');
+  }
+
+  setDuplicatePrimary(group: ApiRecord, clientId: string, event?: Event): void {
+    event?.stopPropagation();
+    const key = String(group?.groupKey || '');
+    const id = String(clientId || '');
+    if (!key || !id) return;
+    this.activeDuplicateGroupKey.set(key);
+    this.duplicatePrimarySelection.set({ ...this.duplicatePrimarySelection(), [key]: id });
+  }
+
+  duplicateGroupForClient(client: ApiRecord | null | undefined): ApiRecord | null {
+    const id = this.clientId(client);
+    if (!id) return null;
+    return this.duplicateGroups().find((group) => this.duplicateGroupClients(group).some((item) => this.clientId(item) === id)) || null;
+  }
+
+  duplicateCountForClient(client: ApiRecord | null | undefined): number {
+    const group = this.duplicateGroupForClient(client);
+    return group ? Math.max(this.duplicateGroupClients(group).length - 1, 0) : 0;
+  }
+
+  openDuplicateGroupForClient(client: ApiRecord, event?: Event): void {
+    event?.stopPropagation();
+    const group = this.duplicateGroupForClient(client);
+    if (group?.groupKey) {
+      this.activeDuplicateGroupKey.set(String(group.groupKey));
+      return;
+    }
+    this.loadDuplicateGroups();
+  }
+
+  mergeAllDuplicateGroups(): void {
+    const groupCount = this.duplicateGroups().length;
+    if (!groupCount) return;
+    if (!window.confirm(`Merge all ${groupCount} duplicate group(s)? This will keep the suggested primary contact in each group.`)) return;
+    this.saving.set(true);
+    this.duplicateMergeAllLoading.set(true);
+    this.duplicateError.set('');
+    this.duplicateMessage.set('Merging duplicate contacts...');
+    this.api.post<ApiRecord>('clients/duplicates/merge-all', {
+      includeAllBranches: true,
+      allBranches: true,
+      reason: 'Merged by frontdesk duplicate merge all'
+    }).subscribe({
+      next: (result) => {
+        const mergedClients = Number(result?.mergedClients || 0);
+        const mergedGroups = Number(result?.mergedGroups || 0);
+        const remainingGroups = Number(result?.remainingGroups || 0);
+        const successMessage = `Merged ${mergedClients} duplicate client(s) across ${mergedGroups} group(s). ${remainingGroups} group(s) remaining.`;
+        this.duplicateMessage.set(successMessage);
+        this.saving.set(false);
+        this.duplicateMergeAllLoading.set(false);
+        this.load(false);
+        this.loadReports(false);
+        this.loadDuplicateGroups(successMessage);
+      },
+      error: (error) => {
+        this.duplicateError.set(this.api.errorText(error, 'Unable to merge all duplicate clients'));
+        this.saving.set(false);
+        this.duplicateMergeAllLoading.set(false);
+      }
+    });
+  }
+  mergeDuplicateGroup(group: ApiRecord, event?: Event): void {
+    event?.stopPropagation();
+    const clients = this.duplicateGroupClients(group);
+    const primaryId = this.duplicateGroupPrimaryId(group);
+    const duplicateClientIds = clients.map((client) => this.clientId(client)).filter((id) => id && id !== primaryId);
+    if (!primaryId || !duplicateClientIds.length) return;
+    const primary = clients.find((client) => this.clientId(client) === primaryId);
+    if (!window.confirm(`Merge ${duplicateClientIds.length} duplicate client(s) into "${this.clientDisplayName(primary)}"?`)) return;
+    this.saving.set(true);
+    this.duplicateError.set('');
+    this.duplicateMessage.set('');
+    this.api.post<ApiRecord>(`clients/${encodeURIComponent(primaryId)}/merge-duplicates`, {
+      duplicateClientIds,
+      reason: 'Merged from frontdesk duplicate client panel'
+    }).subscribe({
+      next: (result) => {
+        const archivedIds = Array.isArray(result?.archivedClientIds) ? result.archivedClientIds.map(String) : duplicateClientIds;
+        const updatedPrimary = result?.primary ? this.normalizeClients([result.primary])[0] : null;
+        const remaining = this.clients().filter((client) => !archivedIds.includes(this.clientId(client)));
+        this.clients.set(updatedPrimary
+          ? remaining.map((client) => this.clientId(client) === primaryId ? { ...client, ...updatedPrimary } : client)
+          : remaining);
+        this.selectedClientIds.set(this.selectedClientIds().filter((id) => !archivedIds.includes(id)));
+        const successMessage = `Merged ${archivedIds.length} duplicate client(s).`;
+        this.duplicateMessage.set(successMessage);
+        this.saving.set(false);
+        this.load(false);
+        this.loadReports(false);
+        this.loadDuplicateGroups(successMessage);
+      },
+      error: (error) => {
+        this.duplicateError.set(this.api.errorText(error, 'Unable to merge duplicate clients'));
+        this.saving.set(false);
+      }
     });
   }
   save(): void {

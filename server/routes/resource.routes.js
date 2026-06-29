@@ -19,9 +19,65 @@ resourceRouter.get(
 );
 
 resourceRouter.get(
+  "/clients/duplicates",
+  requirePermission("read", () => "clients"),
+  asyncHandler((req, res) => {
+    res.json(resourceService.duplicateClients(req.query, req.access));
+  })
+);
+
+resourceRouter.post(
+  "/clients/duplicates/merge-all",
+  requirePermission("write", () => "clients"),
+  asyncHandler((req, res) => {
+    const result = resourceService.mergeAllDuplicateClients(req.body || {}, req.access);
+    securityService.audit({
+      action: "client.duplicates_merge_all",
+      targetType: "clients",
+      targetId: "duplicates",
+      details: result,
+      severity: "warning"
+    }, req.access, req);
+    realtimeService.dashboardUpdated(req.access, req.access.branchId || "", {
+      source: "clients",
+      action: "duplicates_merge_all",
+      id: "duplicates"
+    });
+    res.json(result);
+  })
+);
+resourceRouter.post(
+  "/clients/:id/merge-duplicates",
+  requirePermission("write", () => "clients"),
+  asyncHandler((req, res) => {
+    const result = resourceService.mergeDuplicateClients(req.params.id, req.body || {}, req.access);
+    securityService.audit({
+      action: "client.duplicates_merged",
+      targetType: "clients",
+      targetId: req.params.id,
+      details: {
+        primaryClientId: req.params.id,
+        duplicateClientIds: req.body?.duplicateClientIds || req.body?.duplicateIds || [],
+        referenceUpdates: result.referenceUpdates
+      },
+      severity: "warning"
+    }, req.access, req);
+    realtimeService.dashboardUpdated(req.access, result.primary?.branchId || req.access.branchId || "", {
+      source: "clients",
+      action: "duplicates_merged",
+      id: req.params.id
+    });
+    res.json(result);
+  })
+);
+resourceRouter.get(
   "/:resource/:id",
   requirePermission("read"),
   asyncHandler((req, res) => {
+    if (req.params.resource === "clients" && req.params.id === "duplicates") {
+      res.json(resourceService.duplicateClients(req.query, req.access));
+      return;
+    }
     const row = resourceService.get(req.params.resource, req.params.id, req.access);
     setVersionHeader(req, res, row);
     res.json(row);

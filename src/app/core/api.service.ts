@@ -193,7 +193,7 @@ export class ApiService {
 
   private timeoutFor(resource: string): number {
     const normalized = resource.replace(/^\/+/, '').split(/[?#]/)[0];
-    if (normalized.startsWith('migration/')) return 1800000;
+    if (normalized.startsWith('migration/') || normalized === 'clients/duplicates/merge-all') return 1800000;
     return 15000;
   }
 

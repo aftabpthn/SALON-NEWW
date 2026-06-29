@@ -733,6 +733,17 @@ export class LoginPage implements OnInit, OnDestroy {
       return;
     }
     void this.resumeExistingSession();
+    void this.handleFacebookRedirectResult();
+  }
+
+  private async handleFacebookRedirectResult() {
+    if (this.auth.isAuthenticated()) return;
+    try {
+      const session = await this.auth.handleFacebookRedirect();
+      if (session) this.afterProviderSignIn(session);
+    } catch {
+      /* error already set by auth service */
+    }
   }
 
   ngOnDestroy() {
@@ -954,7 +965,7 @@ export class LoginPage implements OnInit, OnDestroy {
 
   async continueWithFacebook() {
     this.notice = "";
-    await this.auth.signInWithFacebook().then((session) => this.afterProviderSignIn(session)).catch(() => undefined);
+    await this.auth.signInWithFacebook().catch(() => undefined);
   }
 
   async continueWithApple() {

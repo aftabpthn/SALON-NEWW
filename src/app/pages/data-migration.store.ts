@@ -23,9 +23,9 @@ type ReconciliationLine = { metric: string; expected: number | null; actual: num
 
 type LargeReconciliationSnapshot = { id: string; status: 'passed' | 'warning' | 'failed' | string; snapshotType?: string; createdAt?: string; expected?: any; actual?: any; differences?: Array<{ code?: string; severity?: string; resource?: string; expected?: number; actual?: number; missing?: number; message?: string }> };
 
-type ApprovalRecord = { id: string; jobId?: string; resource?: string; status: string; note?: string; submittedAt?: string; reviewedAt?: string; summary?: any };
+type ApprovalRecord = { id: string; jobId?: string; resource?: string; sourceSoftware?: string; fileName?: string; sourceFileHash?: string; totalRows?: number; errorCount?: number; warningCount?: number; validRows?: number; importableRows?: number; status: string; note?: string; submittedAt?: string; reviewedAt?: string; summary?: any };
 
-type LargeMigrationJob = { id: string; status: string; totalRows?: number; processedRows?: number; validRows?: number; importedRows?: number; skippedRows?: number; errorRows?: number; warningRows?: number; chunkSize?: number; resumeToken?: string; chunks?: Array<{ id: string; chunkNumber: number; status: string; totalRows: number; importedRows?: number; skippedRows?: number; errorRows?: number; warningRows?: number; checksum?: string; completedAt?: string; failureReason?: string }>; reconciliations?: LargeReconciliationSnapshot[] };
+type LargeMigrationJob = { id: string; status: string; totalRows?: number; processedRows?: number; validRows?: number; importedRows?: number; skippedRows?: number; errorRows?: number; warningRows?: number; chunkSize?: number; resumeToken?: string; sourceSoftware?: string; resource?: string; fileName?: string; sourceFileHash?: string; settings?: { sourceFileHash?: string; sourceEvidence?: any } & Record<string, any>; chunks?: Array<{ id: string; chunkNumber: number; status: string; totalRows: number; importedRows?: number; skippedRows?: number; errorRows?: number; warningRows?: number; checksum?: string; completedAt?: string; failureReason?: string }>; reconciliations?: LargeReconciliationSnapshot[] };
 
 type MigrationRecoveryReport = { status: string; blockers: string[]; summary: { totalRows: number; importedRows: number; failedRows: number; warningRows: number; retryCandidates: number; missingLiveTargets: number; batches: number }; failedRows: Array<{ rowKey: string; resource: string; sourceExternalId?: string; message: string; retryable: boolean; retryReason: string }>; warningRows: Array<{ rowKey: string; resource: string; sourceExternalId?: string; message: string; retryable: boolean; retryReason: string }>; retryCandidates: Array<{ rowKey: string; resource: string; sourceExternalId?: string; message: string; retryable: boolean; retryReason: string }>; rollbackPlan?: { recommended: boolean; endpoint: string; batches: Array<{ batchId: string; status: string; resource: string; importedRows: number; errorRows: number; createdAt?: string }> }; idMapCoverage?: Record<string, Record<string, number>>; missingLiveTargets?: Array<{ rowKey: string; resource: string; sourceExternalId?: string; targetId?: string; message: string }>; nextActions: string[] };
 
@@ -403,7 +403,7 @@ export class DataMigrationStore {
 
   async runImport(): Promise<void> {
     if (!this.importApprovalReady()) {
-      this.error.set('Final import blocked: run Analyze, submit for approval, then approve the latest request.');
+      this.error.set('Final import blocked: Approval required for this exact upload/job.');
       return;
     }
     if (!this.validateRequiredMapping()) return;
@@ -909,7 +909,24 @@ export class DataMigrationStore {
   }
 
   latestPendingApproval(): ApprovalRecord | null {
-    return this.approvals().find((approval) => approval.status === 'pending') || null;
+    return this.approvals().find((approval) => approval.status === 'pending' && this.approvalMatchesActiveUpload(approval)) || null;
+  }
+
+  private activeApprovalIdentity(): { jobId: string; sourceFileHash: string; fileName: string; totalRows: number } {
+    const job = this.largeJob();
+    const summary = this.summary() as any;
+    const sourceEvidence = summary?.sourceEvidence || job?.settings?.sourceEvidence || {};
+    return {
+      jobId: String(job?.id || this.jobs()[0]?.id || ''),
+      sourceFileHash: String(job?.sourceFileHash || job?.settings?.sourceFileHash || sourceEvidence?.sha256 || ''),
+      fileName: String(job?.fileName || this.fileName() || sourceEvidence?.fileName || ''),
+      totalRows: Number(job?.totalRows || summary?.totalRows || 0)
+    };
+  }
+
+  private approvalMatchesActiveUpload(approval: ApprovalRecord | null | undefined): boolean {
+    const activeJobId = String(this.largeJob()?.id || '');
+    return Boolean(approval && activeJobId && approval.jobId === activeJobId);
   }
 
   async submitApproval(): Promise<void> {
@@ -922,8 +939,28 @@ export class DataMigrationStore {
       this.loading.set(true);
       this.error.set('');
       this.approvalDebug.set('');
+      const summary = this.summary();
+      const approvalIdentity = this.activeApprovalIdentity();
+      const sourceEvidence = (summary as any)?.sourceEvidence || null;
+      const errorCount = Number(summary?.errorRows || this.largeJob()?.errorRows || 0);
+      const warningCount = Number(summary?.warningRows || this.largeJob()?.warningRows || 0);
+      const validRows = Number(summary?.validRows || this.largeJob()?.validRows || 0);
+      const importableRows = validRows + warningCount;
+      const approvalSourceEvidence = { ...(sourceEvidence || {}), fileName: approvalIdentity.fileName, sha256: approvalIdentity.sourceFileHash };
       const approval = await firstValueFrom(this.api.post<ApprovalRecord>('migration/approvals', {
-        jobId: this.jobs()[0]?.id || '', resource: this.resource || 'auto', note: this.approvalNote || this.goLiveGate(), summary: { readinessScore: this.readinessScore(), dataQualityScore: this.dataQualityScore(), summary: this.summary(), reconciliation: this.reconciliationResult(), duplicateDecisions: this.duplicateDecisions() }
+        jobId: approvalIdentity.jobId,
+        resource: this.resource || 'auto',
+        sourceSoftware: this.sourceSoftware,
+        fileName: approvalIdentity.fileName,
+        sourceFileHash: approvalIdentity.sourceFileHash,
+        totalRows: approvalIdentity.totalRows,
+        errorCount,
+        warningCount,
+        validRows,
+        importableRows,
+        sourceEvidence: approvalSourceEvidence,
+        note: this.approvalNote || this.goLiveGate(),
+        summary: { readinessScore: this.readinessScore(), dataQualityScore: this.dataQualityScore(), summary, sourceEvidence: approvalSourceEvidence, reconciliation: this.reconciliationResult(), duplicateDecisions: this.duplicateDecisions() }
       }));
       if (!approval?.id) this.approvalDebug.set('Backend approval response did not include an id. Check migrationService.submitApproval response.');
       this.approvals.update((current) => { const withoutDuplicate = current.filter((item) => item.id !== approval?.id); return approval?.id ? [approval, ...withoutDuplicate] : current; });
@@ -1045,7 +1082,7 @@ export class DataMigrationStore {
   }
 
   importApprovalReady(): boolean {
-    return this.approvals().some((approval) => approval.status === 'approved');
+    return this.approvals().some((approval) => approval.status === 'approved' && this.approvalMatchesActiveUpload(approval));
   }
 
   progressLabel(): string {

@@ -1,5 +1,5 @@
-import { columnsFor, db, resources, serialize } from "../db.js";
-import { AppError, conflict, notFound } from "../utils/app-error.js";
+import { columnsFor, db, deserialize, resources, serialize } from "../db.js";
+import { AppError, badRequest, conflict, notFound } from "../utils/app-error.js";
 import { repositoryForResource, repositories } from "../repositories/repository-registry.js";
 import { availabilityAugmentService } from "./availability-augment.service.js";
 import { appointmentActivityService, APPOINTMENT_ACTIVITY_ACTIONS } from "./appointment-activity.service.js";
@@ -125,17 +125,108 @@ export class ResourceService {
       return this.repository("clients").delete(id, tenantService.accessScope(access, "clients"));
     } catch (error) {
       if (!isForeignKeyConstraint(error)) throw error;
-      const columns = columnsFor("clients");
-      const now = new Date().toISOString();
-      const payload = {
-        deletedAt: now,
-        deletedBy: access.userId || access.user?.id || "system",
-        deletedReason: "Archived instead of hard delete because this client has linked invoices, payments, appointments or wallet history."
-      };
-      const safePayload = Object.fromEntries(Object.entries(payload).filter(([key]) => columns.includes(key)));
-      const archived = this.repository("clients").update(id, safePayload, tenantService.accessScope(access, "clients"));
-      return { id: archived.id, archived: true };
+      return this.archiveClient(existing, "Archived instead of hard delete because this client has linked invoices, payments, appointments or wallet history.", access);
     }
+  }
+
+  duplicateClients(query = {}, access = {}) {
+    const scope = this.listScope("clients", { includeAllBranches: truthy(query.includeAllBranches) || truthy(query.allBranches) }, access);
+    const clients = listClientsForDuplicateScan(scope);
+    return buildDuplicateClientGroups(clients);
+  }
+
+  mergeAllDuplicateClients(payload = {}, access = {}) {
+    const query = {
+      includeAllBranches: truthy(payload.includeAllBranches) || truthy(payload.allBranches)
+    };
+    const groups = this.duplicateClients(query, access);
+    const summary = {
+      scannedGroups: groups.length,
+      mergedGroups: 0,
+      mergedClients: 0,
+      archivedClientIds: [],
+      remainingGroups: 0,
+      skippedGroups: 0,
+      errors: []
+    };
+
+    for (const group of groups) {
+      const groupClients = Array.isArray(group.clients) ? group.clients : [];
+      const primaryId = String(group.suggestedPrimaryId || groupClients[0]?.id || "");
+      const duplicateClientIds = groupClients.map((client) => String(client.id || "")).filter((id) => id && id !== primaryId);
+      if (!primaryId || !duplicateClientIds.length) {
+        summary.skippedGroups += 1;
+        continue;
+      }
+      try {
+        const result = this.mergeDuplicateClients(primaryId, {
+          duplicateClientIds,
+          reason: payload.reason || "Merged by frontdesk duplicate merge all"
+        }, access);
+        const archivedIds = Array.isArray(result.archivedClientIds) ? result.archivedClientIds : [];
+        summary.mergedGroups += 1;
+        summary.mergedClients += archivedIds.length;
+        summary.archivedClientIds.push(...archivedIds);
+      } catch (error) {
+        summary.skippedGroups += 1;
+        summary.errors.push({ groupKey: group.groupKey || "", message: error?.message || "Unable to merge duplicate group" });
+      }
+    }
+
+    summary.archivedClientIds = [...new Set(summary.archivedClientIds)];
+    summary.remainingGroups = this.duplicateClients(query, access).length;
+    return summary;
+  }
+  mergeDuplicateClients(primaryId, payload = {}, access = {}) {
+    const targetPrimaryId = String(primaryId || "").trim();
+    const duplicateClientIds = [...new Set((payload.duplicateClientIds || payload.duplicateIds || [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean))].filter((id) => id !== targetPrimaryId);
+    if (!targetPrimaryId) throw badRequest("Primary client is required");
+    if (!duplicateClientIds.length) throw badRequest("At least one duplicate client is required");
+
+    const scope = tenantService.accessScope(access, "clients");
+    const clients = [targetPrimaryId, ...duplicateClientIds].map((id) => {
+      const client = this.repository("clients").getById(id, scope);
+      if (!client || client.deletedAt) throw notFound(`Client ${id} not found`);
+      if (client.branchId) tenantService.assertBranchAccess(access, client.branchId);
+      return client;
+    });
+    const primary = clients[0];
+    const duplicates = clients.slice(1);
+
+    return db.transaction(() => {
+      const referenceUpdates = duplicates.flatMap((duplicate) => reassignClientReferences(duplicate.id, primary.id, access.tenantId));
+      const updatedPrimary = this.repository("clients").update(primary.id, mergedClientPayload(primary, duplicates), scope);
+      const archivedClientIds = duplicates.map((duplicate) => this.archiveClient(
+        duplicate,
+        `Merged into client ${primary.id}`,
+        access
+      ).id || duplicate.id);
+      return {
+        primary: updatedPrimary,
+        mergedClientIds: duplicateClientIds,
+        archivedClientIds,
+        referenceUpdates
+      };
+    })();
+  }
+
+  archiveClient(client, reason, access) {
+    const columns = columnsFor("clients");
+    const now = new Date().toISOString();
+    const payload = {
+      deletedAt: now,
+      deletedBy: access.userId || access.user?.id || "system",
+      deletedReason: reason,
+      notes: uniqueText([client.notes, reason])
+    };
+    const safePayload = Object.fromEntries(Object.entries(payload).filter(([key]) => columns.includes(key)));
+    if (!Object.keys(safePayload).length) {
+      return this.repository("clients").delete(client.id, tenantService.accessScope(access, "clients"));
+    }
+    const archived = this.repository("clients").update(client.id, safePayload, tenantService.accessScope(access, "clients"));
+    return { id: archived.id, archived: true };
   }
 
   repository(resource) {
@@ -252,6 +343,181 @@ export class ResourceService {
 
 export const resourceService = new ResourceService();
 
+function listClientsForDuplicateScan(scope = {}) {
+  if (!scope.tenantId) return [];
+  const columns = columnsFor("clients");
+  if (!columns.length) return [];
+  const where = ["tenantId = @tenantId"];
+  const params = { tenantId: scope.tenantId };
+  if (scope.branchId && columns.includes("branchId")) {
+    where.push("branchId = @branchId");
+    params.branchId = scope.branchId;
+  }
+  if (columns.includes("deletedAt")) where.push("COALESCE(deletedAt, '') = ''");
+  return db.prepare(`SELECT * FROM clients WHERE ${where.join(" AND ")}`).all(params).map((row) => deserialize("clients", row));
+}
+
+function buildDuplicateClientGroups(clients = []) {
+  const groups = new Map();
+  for (const client of clients) {
+    const id = String(client.id || "");
+    if (!id) continue;
+    for (const key of duplicateKeysForClient(client)) {
+      if (!groups.has(key.value)) groups.set(key.value, { key, clients: [] });
+      groups.get(key.value).clients.push(client);
+    }
+  }
+  return [...groups.values()]
+    .filter((group) => group.clients.length > 1)
+    .map((group) => duplicateClientGroup(group.key, group.clients))
+    .sort((left, right) => right.clients.length - left.clients.length || left.matchLabel.localeCompare(right.matchLabel));
+}
+
+function duplicateClientGroup(key, clients) {
+  const primary = [...clients].sort((left, right) => clientMergeRank(right) - clientMergeRank(left))[0] || clients[0];
+  return {
+    groupKey: key.value,
+    matchType: key.type,
+    matchLabel: key.type === "phone" ? "Same phone" : "Same email",
+    matchValues: [key.label],
+    suggestedPrimaryId: String(primary?.id || ""),
+    duplicateCount: clients.length,
+    clients: clients.map(slimDuplicateClient)
+  };
+}
+function duplicateKeysForClient(client) {
+  const keys = [];
+  const phone = normalizeDuplicatePhone(client.phone || client.mobile || client.mobileNumber || client.contactNumber);
+  const email = normalizeDuplicateEmail(client.email);
+  if (phone) keys.push({ type: "phone", value: `phone:${phone}`, label: phone });
+  if (email) keys.push({ type: "email", value: `email:${email}`, label: email });
+  return keys;
+}
+
+function normalizeDuplicatePhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length < 7) return "";
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+function normalizeDuplicateEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return email.includes("@") ? email : "";
+}
+
+function clientMergeRank(client) {
+  return Number(client.totalSpend || 0)
+    + Number(client.visitCount || 0) * 1000
+    + Number(client.walletBalance || 0)
+    + Number(client.loyaltyPoints || 0)
+    + dateScore(client.lastVisitAt);
+}
+
+function dateScore(value) {
+  const timestamp = Date.parse(value || "");
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000000000) : 0;
+}
+
+function slimDuplicateClient(client) {
+  return {
+    id: String(client.id || ""),
+    name: client.name || client.fullName || client.clientName || client.customerName || client.phone || client.email || client.id,
+    phone: client.phone || client.mobile || client.mobileNumber || client.contactNumber || "",
+    email: client.email || "",
+    branchId: client.branchId || "",
+    totalSpend: Number(client.totalSpend || 0),
+    visitCount: Number(client.visitCount || 0),
+    walletBalance: Number(client.walletBalance || 0),
+    loyaltyPoints: Number(client.loyaltyPoints || 0),
+    lastVisitAt: client.lastVisitAt || "",
+    tags: arrayValue(client.tags)
+  };
+}
+
+let clientReferenceTargetCache;
+
+function clientReferenceTargets() {
+  if (clientReferenceTargetCache) return clientReferenceTargetCache;
+  const targets = [];
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all();
+  for (const { name: table } of tables) {
+    if (!safeIdentifier(table)) continue;
+    const columns = columnsFor(table);
+    const tenantColumn = columns.includes("tenantId") ? "tenantId" : columns.includes("tenant_id") ? "tenant_id" : "";
+    if (!tenantColumn || !safeIdentifier(tenantColumn)) continue;
+    const referenceColumns = ["clientId", "client_id", "customerId", "customer_id", "primaryAccountId"]
+      .filter((column) => columns.includes(column))
+      .filter((column) => table !== "clients" || column === "primaryAccountId")
+      .filter(safeIdentifier);
+    for (const column of referenceColumns) targets.push({ table, column, tenantColumn });
+  }
+  clientReferenceTargetCache = targets;
+  return targets;
+}
+
+function reassignClientReferences(duplicateId, primaryId, tenantId) {
+  const updates = [];
+  for (const { table, column, tenantColumn } of clientReferenceTargets()) {
+    const statement = db.prepare(`UPDATE ${table} SET ${column} = @primaryId WHERE ${tenantColumn} = @tenantId AND ${column} = @duplicateId`);
+    const result = statement.run({ primaryId, duplicateId, tenantId });
+    if (result.changes) updates.push({ table, column, rows: result.changes });
+  }
+  return updates;
+}
+
+function mergedClientPayload(primary, duplicates) {
+  const clients = [primary, ...duplicates];
+  const latestVisit = clients.map((client) => client.lastVisitAt).filter(Boolean).sort().at(-1) || primary.lastVisitAt || "";
+  const payload = {
+    name: primary.name || duplicates.find((client) => client.name)?.name || primary.phone || primary.email || primary.id,
+    phone: primary.phone || duplicates.find((client) => client.phone)?.phone || "",
+    email: primary.email || duplicates.find((client) => client.email)?.email || "",
+    gender: primary.gender || duplicates.find((client) => client.gender)?.gender || "",
+    birthday: primary.birthday || duplicates.find((client) => client.birthday)?.birthday || "",
+    anniversary: primary.anniversary || duplicates.find((client) => client.anniversary)?.anniversary || "",
+    membershipId: primary.membershipId || duplicates.find((client) => client.membershipId)?.membershipId || "",
+    tags: uniqueArray(clients.flatMap((client) => arrayValue(client.tags))),
+    notes: uniqueText([
+      primary.notes,
+      duplicates.map((client) => client.notes).filter(Boolean).join("\n"),
+      `Merged duplicate clients: ${duplicates.map((client) => client.id).join(", ")}`
+    ]),
+    walletBalance: clients.reduce((total, client) => total + Number(client.walletBalance || 0), 0),
+    loyaltyPoints: clients.reduce((total, client) => total + Number(client.loyaltyPoints || 0), 0),
+    totalSpend: clients.reduce((total, client) => total + Number(client.totalSpend || 0), 0),
+    visitCount: clients.reduce((total, client) => total + Number(client.visitCount || 0), 0),
+    lastVisitAt: latestVisit,
+    visitHistory: uniqueArray(clients.flatMap((client) => arrayValue(client.visitHistory))),
+    purchaseHistory: uniqueArray(clients.flatMap((client) => arrayValue(client.purchaseHistory))),
+    whatsappHistory: uniqueArray(clients.flatMap((client) => arrayValue(client.whatsappHistory))),
+    consentForms: uniqueArray(clients.flatMap((client) => arrayValue(client.consentForms)))
+  };
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+function arrayValue(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  return [value];
+}
+
+function uniqueArray(values = []) {
+  const seen = new Set();
+  return values.filter((value) => {
+    const key = typeof value === "object" ? JSON.stringify(value) : String(value);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function uniqueText(parts = []) {
+  return [...new Set(parts.map((part) => String(part || "").trim()).filter(Boolean))].join("\n");
+}
+
+function safeIdentifier(value) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(value || ""));
+}
 function truthy(value) {
   return value === true || value === "true" || value === "1" || value === 1;
 }

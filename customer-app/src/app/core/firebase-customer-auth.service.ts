@@ -56,14 +56,38 @@ export class FirebaseCustomerAuthService {
     return result.user;
   }
 
-  async signInWithFacebook(): Promise<User> {
+  async signInWithFacebook(): Promise<void> {
     const auth = await this.requireAuth();
-    const { FacebookAuthProvider, signInWithPopup } = await import("firebase/auth");
+    const { FacebookAuthProvider, signInWithRedirect } = await import("firebase/auth");
     const provider = new FacebookAuthProvider();
     provider.addScope("email");
     provider.addScope("public_profile");
-    const result = await signInWithPopup(auth, provider);
-    return result.user;
+    console.log("[FacebookAuth] Redirecting to Facebook OAuth...", { authDomain: this.authDomain(), projectId: this.projectId() });
+    try {
+      await signInWithRedirect(auth, provider);
+      console.log("[FacebookAuth] Redirect initiated");
+    } catch (error) {
+      console.error("[FacebookAuth] signInWithRedirect failed", error);
+      throw error;
+    }
+  }
+
+  async getFacebookRedirectResult(): Promise<User | null> {
+    const auth = await this.requireAuth();
+    const { getRedirectResult } = await import("firebase/auth");
+    console.log("[FacebookAuth] Checking redirect result...");
+    try {
+      const result = await getRedirectResult(auth);
+      if (result?.user) {
+        console.log("[FacebookAuth] Redirect result found", { uid: result.user.uid, email: result.user.email });
+        return result.user;
+      }
+      console.log("[FacebookAuth] No redirect result");
+      return null;
+    } catch (error) {
+      console.error("[FacebookAuth] getRedirectResult failed", error);
+      throw error;
+    }
   }
 
   async signInWithEmail(email: string, password: string): Promise<User> {
@@ -164,11 +188,12 @@ export class FirebaseCustomerAuthService {
   friendlyMessage(error: unknown, fallback: string): string {
     const code = this.errorCode(error);
     const apiMessage = this.apiErrorMessage(error);
-    if (code === "auth/popup-closed-by-user") return "Sign-in was cancelled.";
-    if (code === "auth/popup-blocked") return "Allow popups for this site, then try again.";
-    if (code === "auth/unauthorized-domain") return `Firebase is blocking this domain. Add ${window.location.hostname} to Authentication > Settings > Authorized domains for project ${this.projectId()}.`;
-    if (code === "auth/operation-not-allowed") return `Firebase rejected this provider for project ${this.projectId()} (${this.authDomain()}, app ${this.appId()}). Enable it on this exact Firebase project and web app configuration.`;
-    if (code === "auth/account-exists-with-different-credential") return "An account already exists with this email. Sign in with the original method, then link Apple from account settings.";
+    if (code === "auth/popup-closed-by-user") { console.error("[FacebookAuth] Popup closed by user", { code, error }); return "Sign-in was cancelled."; }
+    if (code === "auth/popup-blocked") { console.error("[FacebookAuth] Popup blocked", { code, error }); return "Allow popups for this site, then try again."; }
+    if (code === "auth/unauthorized-domain") { console.error("[FacebookAuth] Unauthorized domain", { code, error, hostname: window.location.hostname }); return `Firebase is blocking this domain. Add ${window.location.hostname} to Authentication > Settings > Authorized domains for project ${this.projectId()}.`; }
+    if (code === "auth/operation-not-allowed") { console.error("[FacebookAuth] Operation not allowed", { code, error, projectId: this.projectId(), authDomain: this.authDomain(), appId: this.appId() }); return `Firebase rejected this provider for project ${this.projectId()} (${this.authDomain()}, app ${this.appId()}). Enable it on this exact Firebase project and web app configuration.`; }
+    if (code === "auth/account-exists-with-different-credential") { console.error("[FacebookAuth] Account exists with different credential", { code, error }); return "An account already exists with this email using a different sign-in method. Please sign in with your existing method, then link this provider from account settings."; }
+    if (code === "auth/cancelled-popup-request") { console.error("[FacebookAuth] Popup request was cancelled", { code, error }); return "Sign-in was cancelled."; }
     if (code === "auth/invalid-phone-number" || code === "auth/missing-phone-number") return "Enter a valid phone number with country code.";
     if (code === "auth/too-many-requests" || code === "auth/quota-exceeded") return "Too many OTP attempts or SMS quota exceeded. Please wait and try again.";
     if (code === "auth/captcha-check-failed") return "reCAPTCHA verification failed. Refresh the page and try again.";

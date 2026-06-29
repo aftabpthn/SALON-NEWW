@@ -93,6 +93,14 @@ type ApprovalRecord = {
   id: string;
   jobId?: string;
   resource?: string;
+  sourceSoftware?: string;
+  fileName?: string;
+  sourceFileHash?: string;
+  totalRows?: number;
+  errorCount?: number;
+  warningCount?: number;
+  validRows?: number;
+  importableRows?: number;
   status: string;
   note?: string;
   submittedAt?: string;
@@ -112,6 +120,11 @@ type LargeMigrationJob = {
   chunkSize?: number;
   resumeToken?: string;
   createdAt?: string;
+  sourceSoftware?: string;
+  resource?: string;
+  fileName?: string;
+  sourceFileHash?: string;
+  settings?: { sourceFileHash?: string; sourceEvidence?: any } & Record<string, any>;
   chunks?: Array<{ id: string; chunkNumber: number; status: string; totalRows: number; importedRows?: number; skippedRows?: number; errorRows?: number; warningRows?: number; checksum?: string; completedAt?: string; failureReason?: string; summary?: { diagnostics?: AnalyzerDiagnostics } & Record<string, any> }>;
   reconciliations?: LargeReconciliationSnapshot[];
   summary?: { diagnostics?: AnalyzerDiagnostics } & Record<string, any>;
@@ -276,6 +289,7 @@ type MigrationRecoveryReport = {
             <button class="primary-button" [disabled]="!hasSelectedSourcePayload() || loading() || alreadyImportedCurrentFile()" (click)="runImport()">{{ operationButtonLabel('import', 'Final import') }}</button>
             <button class="ghost-button" type="button" [disabled]="!templateColumns().length" (click)="downloadTemplate()">Template</button>
           </div>
+          <p class="estimate-text" *ngIf="hasSelectedSourcePayload()">{{ analyzeEstimateText() }}</p>
           <div class="migration-progress-panel" *ngIf="migrationProgressVisible()">
             <div>
               <span>{{ activeMigrationLabel() }}</span>
@@ -336,7 +350,7 @@ type MigrationRecoveryReport = {
             <article><span>Job ID</span><strong>{{ largeJob()?.id || '-' }}</strong><small>{{ largeJob()?.resumeToken || 'Create a staged job from analyzed data' }}</small></article>
             <article><span>Rows</span><strong>{{ largeJob()?.totalRows || summary()?.totalRows || 0 }}</strong><small>{{ largeJob()?.processedRows || 0 }} processed</small></article>
             <article><span>Imported</span><strong>{{ largeJob()?.importedRows || 0 }}</strong><small>{{ largeJob()?.skippedRows || 0 }} skipped</small></article>
-            <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeReadyChunks() }}/{{ largeJobChunks().length }} chunks ready · {{ csvStagedRows() }} staged rows</small></article>
+            <article><span>Worker progress</span><strong>{{ largeJobProgress() }}%</strong><small>{{ largeJobProgressDetail() }}</small></article>
           </div>
           <p class="muted" *ngIf="largeUploadStatus() === 'complete' && largeJob()">
             Auto-created by Large Import Mode. Chunks are already staged and queued for processing.
@@ -392,7 +406,7 @@ type MigrationRecoveryReport = {
               <span>Diagnostics source</span><strong>{{ diagnosticsSource() }}</strong>
             </div>
           </div>
-          <p class="muted" *ngIf="!importApprovalReady()">Owner approval required before queued import writes into live modules.</p>
+          <p class="muted" *ngIf="!importApprovalReady()">Approval required for this exact upload/job.</p>
           <p class="migration-warning" *ngIf="largePendingChunks()">{{ largePendingChunks() }} chunk(s) still need analysis. Queue/resume is blocked unless partial import is enabled.</p>
           <div class="chunk-list" *ngIf="largeJobChunks().length">
             <article *ngFor="let chunk of largeJobChunks()" [class.done]="chunk.status === 'imported' || chunk.status === 'imported_with_errors' || chunk.status === 'skipped_with_errors'" [class.danger]="chunk.status === 'failed'">
@@ -578,7 +592,7 @@ type MigrationRecoveryReport = {
             Analyze must run before approval.
           </p>
           <p class="success-text" *ngIf="summary() && !latestPendingApproval() && !importApprovalReady()">
-            Analyze is complete. Click "Submit for approval".
+            Analyze is complete. Submit approval for this exact upload/job.
           </p>
           <p class="error-text" *ngIf="approvalDebug()">{{ approvalDebug() }}</p>
           <div class="approval-list">
@@ -917,6 +931,7 @@ type MigrationRecoveryReport = {
     .toggle-field { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
     .toggle-field input { width: 20px; min-height: 20px; padding: 0; }
     .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+    .estimate-text { margin: -4px 0 12px; border: 1px solid #d7e6e2; border-radius: 8px; background: #f8fffd; color: #475569; padding: 10px 12px; font-size: 13px; font-weight: 800; line-height: 1.45; }
     .normalizer-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; border: 1px solid #cfe0dc; border-radius: 8px; background: #f8fffd; padding: 12px; }
     .normalizer-card span, .migration-progress-panel span { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     .normalizer-card strong, .migration-progress-panel strong { display: block; margin-top: 4px; }
@@ -1765,7 +1780,7 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.importApprovalReady()) {
-      this.error.set('Final import blocked: run Analyze, submit for approval, then approve the latest request.');
+      this.error.set('Final import blocked: Approval required for this exact upload/job.');
       return;
     }
     if (this.shouldUseLargeMigrationFlow() && (!this.largeJob()?.id || this.largeJobIsTerminal())) {
@@ -1830,6 +1845,99 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     return Math.max(0, Math.min(100, Math.round(((Number(job?.importedRows || 0) + Number(job?.skippedRows || 0) + Number(job?.errorRows || 0)) / total) * 100)));
   }
 
+  largeJobProgressDetail(): string {
+    const chunks = this.largeJobChunks();
+    const totalChunks = chunks.length;
+    const analyzedStatuses = new Set(['analyzed', 'analyzed_with_errors', 'failed', 'imported', 'imported_with_errors', 'skipped_with_errors']);
+    const importedStatuses = new Set(['imported', 'imported_with_errors', 'skipped_with_errors']);
+    const analyzed = chunks.filter((chunk) => analyzedStatuses.has(String(chunk.status || ''))).length;
+    const imported = chunks.filter((chunk) => importedStatuses.has(String(chunk.status || ''))).length;
+    const failed = chunks.filter((chunk) => String(chunk.status || '') === 'failed').length;
+    if (!totalChunks) {
+      const stagedRows = Number(this.csvStagedRows() || 0);
+      return stagedRows ? `${this.formatCount(stagedRows)} staged rows - ETA ${this.estimatedAnalyzeTimeText()}` : `No chunks yet - ETA ${this.estimatedAnalyzeTimeText()}`;
+    }
+    return `${analyzed}/${totalChunks} analyzed - ${imported}/${totalChunks} imported - ${failed} failed - ETA ${this.estimatedAnalyzeTimeText()}`;
+  }
+
+  analyzeEstimateText(): string {
+    const mode = this.largeUploadMode() || this.shouldAnalyzeAsLargePackage() ? 'Large Analyze' : 'Analyze';
+    const running = this.loading() && this.activeMigrationOperation() === 'analyze';
+    const prefix = running ? `${mode} running` : this.summary() ? `${mode} re-run estimate` : `${mode} estimate`;
+    return `${prefix}: ${this.analyzeWorkloadLabel()} - approx ${this.estimatedAnalyzeTimeText()}.`;
+  }
+
+  private analyzeWorkloadLabel(): string {
+    const rows = this.estimatedAnalyzeRows();
+    const chunks = this.estimatedAnalyzeChunks(rows);
+    if (rows) {
+      const chunkText = chunks > 1 ? ` across about ${chunks} chunks` : '';
+      return `${this.formatCount(rows)} rows${chunkText}`;
+    }
+    const name = this.fileName();
+    const fileText = this.fileSize() ? this.fileSizeLabel() : 'selected file';
+    const modeText = this.largeUploadMode() ? ' in Large Import Mode' : '';
+    return `${fileText}${name ? ` ${name}` : ''}${modeText}`;
+  }
+
+  private estimatedAnalyzeRows(): number {
+    return Number(
+      this.normalizerResult()?.summary?.totalRows
+      || this.largeJob()?.totalRows
+      || this.summary()?.totalRows
+      || this.commandCenterReport()?.simulator?.estimatedImportRows
+      || 0
+    );
+  }
+
+  private estimatedAnalyzeChunks(rows = this.estimatedAnalyzeRows()): number {
+    const actualChunks = this.largeJobChunks().length;
+    if (actualChunks) return actualChunks;
+    const fileName = this.fileName().toLowerCase();
+    const chunkable = this.largeUploadMode() || rows > 50000 || fileName.endsWith('.zip') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    if (!chunkable || !rows) return 0;
+    return Math.max(1, Math.ceil(rows / Math.max(100, this.largeChunkSize())));
+  }
+
+  private estimatedAnalyzeTimeText(): string {
+    const rows = this.estimatedAnalyzeRows();
+    const chunks = this.estimatedAnalyzeChunks(rows);
+    const fileName = this.fileName().toLowerCase();
+    const archiveLike = fileName.endsWith('.zip') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const largeMode = this.largeUploadMode() || this.shouldAnalyzeAsLargePackage() || rows > 50000 || chunks > 1;
+    if (rows) {
+      const rowBatches = Math.max(1, Math.ceil(rows / 10000));
+      const minSeconds = largeMode ? 20 + Math.max(1, chunks) * 4 : 8 + rowBatches * 4;
+      const maxSeconds = largeMode ? 45 + Math.max(1, chunks) * 10 : 20 + rowBatches * 8;
+      return this.durationRange(minSeconds, maxSeconds);
+    }
+    const sizeMb = Number(this.fileSize() || 0) / 1024 / 1024;
+    if (!sizeMb) return 'available after file select';
+    if (largeMode || archiveLike) {
+      return this.durationRange(Math.max(60, sizeMb * 2), Math.max(180, sizeMb * 8));
+    }
+    return this.durationRange(Math.max(15, sizeMb * 1.5), Math.max(45, sizeMb * 5));
+  }
+
+  private durationRange(minSeconds: number, maxSeconds: number): string {
+    const min = Math.max(5, Math.round(minSeconds));
+    const max = Math.max(min, Math.round(maxSeconds));
+    const left = this.durationLabel(min);
+    const right = this.durationLabel(max);
+    return left === right ? `~${left}` : `~${left}-${right}`;
+  }
+
+  private durationLabel(seconds: number): string {
+    if (seconds < 60) {
+      const rounded = Math.max(10, Math.round(seconds / 10) * 10);
+      return `${rounded} sec`;
+    }
+    return `${Math.max(1, Math.round(seconds / 60))} min`;
+  }
+
+  private formatCount(value: number): string {
+    return Math.round(Number(value || 0)).toLocaleString('en-IN');
+  }
   largeMigrationChecklist(): Array<{ label: string; done: boolean }> {
     return [
       { label: 'Source file uploaded', done: this.canPrepareLargeMigration() },
@@ -2648,7 +2756,24 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
   }
 
   latestPendingApproval(): ApprovalRecord | null {
-    return this.approvals().find((approval) => approval.status === 'pending') || null;
+    return this.approvals().find((approval) => approval.status === 'pending' && this.approvalMatchesActiveUpload(approval)) || null;
+  }
+
+  private activeApprovalIdentity(): { jobId: string; sourceFileHash: string; fileName: string; totalRows: number } {
+    const job = this.largeJob();
+    const summary = this.summary() as any;
+    const sourceEvidence = summary?.sourceEvidence || job?.settings?.sourceEvidence || {};
+    return {
+      jobId: String(job?.id || this.jobs()[0]?.id || ''),
+      sourceFileHash: String(this.fileSha256() || job?.sourceFileHash || job?.settings?.sourceFileHash || sourceEvidence?.sha256 || ''),
+      fileName: String(job?.fileName || this.fileName() || sourceEvidence?.fileName || ''),
+      totalRows: Number(job?.totalRows || summary?.totalRows || 0)
+    };
+  }
+
+  private approvalMatchesActiveUpload(approval: ApprovalRecord | null | undefined): boolean {
+    const activeJobId = String(this.largeJob()?.id || '');
+    return Boolean(approval && activeJobId && approval.jobId === activeJobId);
   }
 
   async submitApproval(): Promise<void> {
@@ -2668,21 +2793,32 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
       this.loading.set(true);
       this.error.set('');
       this.approvalDebug.set('');
-      const sourceEvidence = (this.summary() as any)?.sourceEvidence || null;
+      const summary = this.summary();
+      const sourceEvidence = (summary as any)?.sourceEvidence || null;
+      const approvalIdentity = this.activeApprovalIdentity();
+      const errorCount = Number(summary?.errorRows || this.largeJob()?.errorRows || 0);
+      const warningCount = Number(summary?.warningRows || this.largeJob()?.warningRows || 0);
+      const validRows = Number(summary?.validRows || this.largeJob()?.validRows || 0);
+      const importableRows = validRows + warningCount;
+      const approvalSourceEvidence = { ...(sourceEvidence || {}), fileName: approvalIdentity.fileName, sha256: approvalIdentity.sourceFileHash };
       const approval = await firstValueFrom(this.api.post<ApprovalRecord>('migration/approvals', {
-        jobId: this.largeJob()?.id || this.jobs()[0]?.id || '',
+        jobId: approvalIdentity.jobId,
         resource: this.resource || 'auto',
         sourceSoftware: this.sourceSoftware,
-        fileName: this.fileName(),
-        sourceFileHash: this.fileSha256() || sourceEvidence?.sha256 || '',
-        totalRows: this.summary()?.totalRows || 0,
-        sourceEvidence,
+        fileName: approvalIdentity.fileName,
+        sourceFileHash: approvalIdentity.sourceFileHash,
+        totalRows: approvalIdentity.totalRows,
+        errorCount,
+        warningCount,
+        validRows,
+        importableRows,
+        sourceEvidence: approvalSourceEvidence,
         note: this.approvalNote || this.goLiveGate(),
         summary: {
           readinessScore: this.readinessScore(),
           dataQualityScore: this.dataQualityScore ? this.dataQualityScore() : undefined,
-          summary: this.summary(),
-          sourceEvidence,
+          summary,
+          sourceEvidence: approvalSourceEvidence,
           reconciliation: this.reconciliationResult(),
           duplicateDecisions: this.duplicateDecisions()
         }
@@ -2998,7 +3134,7 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
   }
 
   importApprovalReady(): boolean {
-    return this.approvals().some((approval) => approval.status === 'approved');
+    return this.approvals().some((approval) => approval.status === 'approved' && this.approvalMatchesActiveUpload(approval));
   }
 
   progressLabel(): string {

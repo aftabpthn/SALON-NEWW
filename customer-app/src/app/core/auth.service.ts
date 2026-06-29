@@ -80,11 +80,35 @@ export class AuthService {
     });
   }
 
-  async signInWithFacebook(): Promise<AuthSession> {
-    return this.runFirebaseAuth("Unable to sign in with Facebook", async () => {
-      const user = await this.firebaseAuth.signInWithFacebook();
-      return this.exchangeFirebaseUser(user, "facebook");
-    });
+  async signInWithFacebook(): Promise<void> {
+    this.loading.set(true);
+    this.error.set("");
+    try {
+      await this.firebaseAuth.signInWithFacebook();
+    } catch (error) {
+      console.error("[AuthService] Unable to sign in with Facebook", error);
+      this.error.set(this.firebaseAuth.friendlyMessage(error, "Unable to sign in with Facebook"));
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async handleFacebookRedirect(): Promise<AuthSession | null> {
+    this.loading.set(true);
+    this.error.set("");
+    try {
+      const user = await this.firebaseAuth.getFacebookRedirectResult();
+      if (!user) return null;
+      const session = await this.exchangeFirebaseUser(user, "facebook");
+      return session;
+    } catch (error) {
+      console.error("[AuthService] Facebook redirect result error", error);
+      this.error.set(this.firebaseAuth.friendlyMessage(error, "Unable to complete Facebook sign-in"));
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   async signInWithEmail(email: string, password: string): Promise<AuthSession> {
@@ -534,6 +558,7 @@ export class AuthService {
     try {
       return await action();
     } catch (error) {
+      console.error(`[AuthService] ${fallback}`, error);
       this.error.set(this.firebaseAuth.friendlyMessage(error, fallback));
       throw error;
     } finally {
