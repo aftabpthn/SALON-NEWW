@@ -226,12 +226,6 @@ export class TipsService {
     const latest = new Map();
     for (const entry of history) latest.set(entry.tipId, entry);
 
-    const duplicateMap = new Map();
-    for (const row of rawRows) {
-      const key = `${row.invoiceId || ""}:${row.staffId || ""}`;
-      duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
-    }
-
     let rows = rawRows.map((row) => {
       const latestLedger = latest.get(row.tipId);
       const createdAt = row.createdAt || "";
@@ -282,7 +276,12 @@ export class TipsService {
         serviceRevenue: serviceRevenueFrom(row)
       };
     });
+    const invoiceTipKeys = new Set(rows.map((row) => this.tipDuplicateKey(row)));
+    const saleRows = this.saleJsonTipRows(query, access, latest)
+      .filter((row) => !invoiceTipKeys.has(this.tipDuplicateKey(row)));
+    rows = [...rows, ...saleRows];
     rows = rows.filter((row) => this.matchesDerivedFilters(row, query));
+    const duplicateMap = this.duplicateMapFromRows(rows);
     const staffSummary = this.staffSummaryFromRows(rows);
     const alerts = this.alertsFromRows(rows, duplicateMap);
     const totalTips = money(rows.reduce((sum, row) => sum + row.amount, 0));
@@ -316,6 +315,153 @@ export class TipsService {
     };
   }
 
+  saleJsonTipRows(query = {}, access = {}, latest = new Map()) {
+    if (!tableExists("sales") || !columnsFor("sales").has("membershipRedeem")) return [];
+    const tenantId = access.tenantId || query.tenantId || "tenant_aura";
+    const branchId = query.branchId || query.branch_id || access.branchId || "";
+    const hasInvoices = tableExists("invoices");
+    const saleTenant = column("sales", "s", ["tenantId", "tenant_id"], "");
+    const saleCreated = column("sales", "s", ["createdAt", "created_at"], "s.id");
+    const saleBranch = column("sales", "s", ["branchId", "branch_id"], "''");
+    const saleClient = column("sales", "s", ["clientId", "client_id"], "''");
+    const saleStaff = column("sales", "s", ["staffId", "staff_id"], "''");
+    const saleItems = column("sales", "s", ["items", "lineItems", "line_items"], "''");
+    const saleMembershipRedeem = column("sales", "s", ["membershipRedeem", "membership_redeem"], "''");
+    const saleSplitPayments = column("sales", "s", ["splitPayments", "split_payments"], "''");
+    const invoiceSaleId = hasInvoices ? column("invoices", "i", ["saleId", "sale_id"], "") : "";
+    const invoiceBranch = hasInvoices ? column("invoices", "i", ["branchId", "branch_id"], "") : "";
+    const invoiceClient = hasInvoices ? column("invoices", "i", ["clientId", "client_id"], "") : "";
+    const invoiceId = hasInvoices ? column("invoices", "i", ["id"], "") : "";
+    const invoiceNumber = hasInvoices ? column("invoices", "i", ["invoiceNumber", "invoice_number", "invoice_no"], "") : "";
+    const invoiceTotal = hasInvoices ? column("invoices", "i", ["total", "grand_total", "grandTotal"], "") : "";
+    const invoicePaid = hasInvoices ? column("invoices", "i", ["paid", "paid_amount", "paidAmount"], "") : "";
+    const invoiceDue = hasInvoices ? column("invoices", "i", ["balance", "due_amount", "dueAmount"], "") : "";
+    const invoiceStatus = hasInvoices ? column("invoices", "i", ["status"], "") : "";
+    const invoiceLineItems = hasInvoices ? column("invoices", "i", ["lineItems", "line_items"], "") : "";
+    const invoiceCreated = hasInvoices ? column("invoices", "i", ["createdAt", "created_at"], "") : "";
+    const branchExpr = coalesce([invoiceBranch, saleBranch], "''");
+    const clientExpr = coalesce([invoiceClient, saleClient], "''");
+    const joins = [];
+    if (hasInvoices && invoiceSaleId) joins.push(`LEFT JOIN invoices i ON ${invoiceSaleId} = s.id`);
+    if (tableExists("clients")) joins.push(`LEFT JOIN clients c ON c.id = ${clientExpr}`);
+    if (tableExists("staff")) joins.push(`LEFT JOIN staff st ON st.id = ${saleStaff}`);
+    if (tableExists("branches")) joins.push(`LEFT JOIN branches b ON b.id = ${branchExpr}`);
+
+    const where = [];
+    const params = {};
+    if (saleTenant) {
+      where.push(`${saleTenant} = @tenantId`);
+      params.tenantId = tenantId;
+    }
+    if (query.from) {
+      where.push(`substr(${saleCreated}, 1, 10) >= @from`);
+      params.from = query.from;
+    }
+    if (query.to) {
+      where.push(`substr(${saleCreated}, 1, 10) <= @to`);
+      params.to = query.to;
+    }
+    if (branchId) {
+      where.push(`${branchExpr} = @branchId`);
+      params.branchId = branchId;
+    }
+
+    const rawSales = db.prepare(
+      `SELECT
+          s.id AS saleId,
+          ${saleStaff} AS saleStaffId,
+          ${saleMembershipRedeem} AS membershipRedeem,
+          ${saleSplitPayments} AS splitPayments,
+          ${saleCreated} AS createdAt,
+          ${saleItems} AS saleItems,
+          ${coalesce([invoiceLineItems, saleItems], "''")} AS lineItems,
+          ${coalesce([invoiceId], "''")} AS invoiceId,
+          ${coalesce([invoiceNumber], "''")} AS invoiceNumber,
+          ${coalesce([invoiceTotal], "0")} AS invoiceTotal,
+          ${coalesce([invoicePaid], "0")} AS paidAmount,
+          ${coalesce([invoiceDue], "0")} AS dueAmount,
+          ${coalesce([invoiceStatus], "''")} AS invoiceStatus,
+          ${coalesce([invoiceCreated, saleCreated], "''")} AS invoiceCreatedAt,
+          ${column("sales", "s", ["appointmentId", "appointment_id"], "''")} AS appointmentId,
+          ${branchExpr} AS branchId,
+          ${clientExpr} AS clientId,
+          ${tableExists("clients") ? coalesce([column("clients", "c", ["name"], "")], "''") : "''"} AS clientName,
+          ${tableExists("clients") ? coalesce([column("clients", "c", ["phone", "contact"], "")], "''") : "''"} AS clientPhone,
+          ${tableExists("staff") ? coalesce([column("staff", "st", ["name"], "")], "''") : "''"} AS saleStaffName,
+          ${tableExists("staff") ? coalesce([column("staff", "st", ["phone", "contact"], "")], "''") : "''"} AS saleStaffPhone,
+          ${tableExists("staff") ? coalesce([column("staff", "st", ["status"], "")], "''") : "''"} AS saleStaffStatus,
+          ${tableExists("branches") ? coalesce([column("branches", "b", ["name"], "")], "''") : "''"} AS branchName
+        FROM sales s
+        ${joins.join("\n")}
+        WHERE ${where.length ? where.join(" AND ") : "1 = 1"}
+        ORDER BY ${saleCreated} DESC
+        LIMIT 5000`
+    ).all(params);
+
+    const rows = [];
+    for (const sale of rawSales) {
+      const redeem = safeJson(sale.membershipRedeem, {});
+      const tips = Array.isArray(redeem.tips) ? redeem.tips : [];
+      const splitPayments = safeJson(sale.splitPayments, []);
+      const payment = Array.isArray(splitPayments) ? splitPayments.find(Boolean) || {} : splitPayments || {};
+      tips.forEach((tip, index) => {
+        const amount = money(tip?.amount || tip?.tipAmount || 0);
+        if (amount <= 0) return;
+        const tipId = String(tip.id || tip.tipId || `sale_tip_${sale.saleId}_${index}`);
+        const latestLedger = latest.get(tipId);
+        const createdAt = sale.invoiceCreatedAt || sale.createdAt || "";
+        const status = latestLedger?.status === "paid_out"
+          ? "paid_out"
+          : latestLedger?.status === "reversed"
+            ? "reversed"
+            : "pending_payout";
+        const staffId = String(tip.staffId || tip.staff_id || sale.saleStaffId || "");
+        const staffName = tip.staffName || tip.staff_name || sale.saleStaffName || staffId || "Unassigned";
+        const paymentMode = tip.paymentMode || tip.payment_mode || payment.mode || payment.paymentMode || "cash";
+        rows.push({
+          id: tipId,
+          tipId,
+          date: String(createdAt).slice(0, 10),
+          time: String(createdAt).slice(11, 19) || "-",
+          createdAt,
+          invoiceId: sale.invoiceId || "",
+          invoiceNumber: sale.invoiceNumber || sale.invoiceId || "-",
+          saleId: sale.saleId || "",
+          saleType: sale.appointmentId ? "Appointment" : "Quick Sale",
+          clientId: sale.clientId || "",
+          clientName: sale.clientName || "Walk-in",
+          clientPhone: sale.clientPhone || "-",
+          staffId,
+          staffName,
+          staffPhone: tip.staffPhone || sale.saleStaffPhone || "-",
+          staffStatus: sale.saleStaffStatus || "active",
+          receiverStaff: staffName,
+          amount,
+          amountPaise: toPaise(amount),
+          tipAmount: amount,
+          tipPaymentMode: paymentMode,
+          paymentMode,
+          collectedBy: latestLedger?.createdBy || "-",
+          settlementPaymentId: tip.paymentId || tip.payment_id || payment.id || payment.paymentId || "-",
+          paymentReference: tip.paymentReference || tip.reference || payment.reference || payment.referenceNo || "-",
+          invoiceTotal: money(sale.invoiceTotal || 0),
+          paidAmount: money(sale.paidAmount || 0),
+          dueAmount: money(sale.dueAmount || 0),
+          invoiceStatus: sale.invoiceStatus || "saved",
+          tipStatus: status,
+          payoutDate: latestLedger?.status === "paid_out" ? latestLedger.createdAt : "",
+          payoutReference: latestLedger?.payoutReference || "",
+          payoutNote: latestLedger?.note || "",
+          branchId: sale.branchId || branchId || "",
+          branchName: sale.branchName || sale.branchId || branchId || "-",
+          source: "POS checkout",
+          serviceRevenue: serviceRevenueFrom(sale)
+        });
+      });
+    }
+    return rows;
+  }
+
   staffSummary(query = {}, access = {}) {
     const report = this.report(query, access);
     return { summary: report.summary, rows: report.staffSummary };
@@ -325,9 +471,10 @@ export class TipsService {
     this.ensurePayoutLedgerSchema();
     const tipIds = Array.isArray(payload.tipIds) ? payload.tipIds.filter(Boolean) : [];
     if (!tipIds.length) throw badRequest("tipIds are required");
+    const tenantId = access.tenantId || payload.tenantId || "tenant_aura";
     const placeholders = tipIds.map((_, index) => `@tip${index}`).join(", ");
     const params = Object.fromEntries(tipIds.map((id, index) => [`tip${index}`, id]));
-    params.tenantId = access.tenantId;
+    params.tenantId = tenantId;
     const tenantColumn = columnsFor("invoice_tips").has("tenant_id") ? "tenant_id" : "tenantId";
     const rows = db.prepare(
       `SELECT ${column("invoice_tips", "it", ["id"])} AS tipId,
@@ -339,6 +486,18 @@ export class TipsService {
          LEFT JOIN invoices i ON i.id = ${column("invoice_tips", "it", ["invoice_id", "invoiceId"])}
         WHERE it.${tenantColumn} = @tenantId AND it.id IN (${placeholders})`
     ).all(params);
+    const foundIds = new Set(rows.map((row) => row.tipId));
+    const fallbackRows = this.report({}, access).rows
+      .filter((row) => tipIds.includes(row.tipId) && !foundIds.has(row.tipId))
+      .map((row) => ({
+        tipId: row.tipId,
+        invoiceId: row.invoiceId || "",
+        staffId: row.staffId || "",
+        amount: row.amount || 0,
+        branchId: row.branchId || access.branchId || ""
+      }));
+    const payoutRows = [...rows, ...fallbackRows];
+    if (!payoutRows.length) throw notFound("Tip not found");
     const insert = db.prepare(
       `INSERT INTO tip_payout_ledger
         (id, tenantId, branchId, tipId, invoiceId, staffId, amountPaise, status, note, payoutReference, createdBy, createdAt)
@@ -347,10 +506,10 @@ export class TipsService {
     );
     const createdAt = nowIso();
     const write = db.transaction(() => {
-      for (const row of rows) {
+      for (const row of payoutRows) {
         insert.run({
           id: `tip_payout_${crypto.randomUUID().slice(0, 12)}`,
-          tenantId: access.tenantId,
+          tenantId,
           branchId: row.branchId || access.branchId || "",
           tipId: row.tipId,
           invoiceId: row.invoiceId || "",
@@ -367,8 +526,8 @@ export class TipsService {
     write();
     return {
       status: "paid_out",
-      count: rows.length,
-      amount: money(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0)),
+      count: payoutRows.length,
+      amount: money(payoutRows.reduce((sum, row) => sum + Number(row.amount || 0), 0)),
       payoutReference: payload.payoutReference || "",
       createdAt
     };
@@ -376,8 +535,9 @@ export class TipsService {
 
   markReversed(tipId, payload = {}, access = {}) {
     this.ensurePayoutLedgerSchema();
+    const tenantId = access.tenantId || payload.tenantId || "tenant_aura";
     const tenantColumn = columnsFor("invoice_tips").has("tenant_id") ? "tenant_id" : "tenantId";
-    const row = db.prepare(
+    let row = db.prepare(
       `SELECT ${column("invoice_tips", "it", ["id"])} AS tipId,
               ${column("invoice_tips", "it", ["invoice_id", "invoiceId"])} AS invoiceId,
               ${column("invoice_tips", "it", ["staff_id", "staffId"])} AS staffId,
@@ -386,7 +546,19 @@ export class TipsService {
          FROM invoice_tips it
          LEFT JOIN invoices i ON i.id = ${column("invoice_tips", "it", ["invoice_id", "invoiceId"])}
         WHERE it.${tenantColumn} = @tenantId AND it.id = @tipId`
-    ).get({ tenantId: access.tenantId, tipId });
+    ).get({ tenantId, tipId });
+    if (!row) {
+      const fallback = this.report({}, access).rows.find((tip) => tip.tipId === tipId);
+      if (fallback) {
+        row = {
+          tipId: fallback.tipId,
+          invoiceId: fallback.invoiceId || "",
+          staffId: fallback.staffId || "",
+          amount: fallback.amount || 0,
+          branchId: fallback.branchId || access.branchId || ""
+        };
+      }
+    }
     if (!row) throw notFound("Tip not found");
     const createdAt = nowIso();
     db.prepare(
@@ -396,7 +568,7 @@ export class TipsService {
         (@id, @tenantId, @branchId, @tipId, @invoiceId, @staffId, @amountPaise, @status, @note, @payoutReference, @createdBy, @createdAt)`
     ).run({
       id: `tip_reverse_${crypto.randomUUID().slice(0, 12)}`,
-      tenantId: access.tenantId,
+      tenantId,
       branchId: row.branchId || access.branchId || "",
       tipId: row.tipId,
       invoiceId: row.invoiceId || "",
@@ -439,10 +611,51 @@ export class TipsService {
   }
 
   matchesDerivedFilters(row, query) {
+    const text = (value) => String(value || "").toLowerCase();
+    if (query.from && row.date && row.date < query.from) return false;
+    if (query.to && row.date && row.date > query.to) return false;
+    if (query.staffId && row.staffId !== query.staffId) return false;
+    if (query.branchId && row.branchId !== query.branchId) return false;
+    if (query.paymentMode && row.paymentMode !== query.paymentMode) return false;
     if (query.tipStatus && row.tipStatus !== query.tipStatus) return false;
     if (query.saleType && String(row.saleType).toLowerCase().replace(" ", "_") !== query.saleType) return false;
     if (query.cashier && !String(row.collectedBy).toLowerCase().includes(String(query.cashier).toLowerCase())) return false;
+    if (query.client) {
+      const clientText = `${text(row.clientName)} ${text(row.clientPhone)}`;
+      if (!clientText.includes(text(query.client))) return false;
+    }
+    if (query.invoice) {
+      const invoiceText = `${text(row.invoiceNumber)} ${text(row.invoiceId)}`;
+      if (!invoiceText.includes(text(query.invoice))) return false;
+    }
+    const queryText = text(query.q || query.search);
+    if (queryText) {
+      const haystack = [
+        row.invoiceNumber,
+        row.invoiceId,
+        row.clientName,
+        row.clientPhone,
+        row.staffName,
+        row.staffId,
+        row.paymentMode,
+        row.branchName
+      ].map(text).join(" ");
+      if (!haystack.includes(queryText)) return false;
+    }
     return true;
+  }
+
+  tipDuplicateKey(row) {
+    return `${row.invoiceId || row.saleId || ""}:${row.staffId || row.staffName || ""}:${toPaise(row.amount)}:${row.date || ""}`;
+  }
+
+  duplicateMapFromRows(rows) {
+    const duplicateMap = new Map();
+    for (const row of rows) {
+      const key = `${row.invoiceId || row.saleId || ""}:${row.staffId || row.staffName || ""}`;
+      duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
+    }
+    return duplicateMap;
   }
 
   staffSummaryFromRows(rows) {

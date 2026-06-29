@@ -43,6 +43,13 @@ test("tips payout workflow is append-only and permissioned", () => {
   assert.match(routes, /requirePermission\("write", \(\) => "finance"\)/, "payout mutations should require finance write permission");
 });
 
+test("tips report includes POS checkout tips saved on sales JSON", () => {
+  assert.match(service, /saleJsonTipRows/, "report should merge POS checkout tips from sales JSON");
+  assert.match(service, /membershipRedeem/, "sales membershipRedeem tips should be read as a fallback source");
+  assert.match(service, /POS checkout/, "fallback rows should identify POS checkout source");
+  assert.match(service, /tipDuplicateKey/, "invoice_tips and POS JSON tips should not duplicate the same tip");
+});
+
 test("tips UI includes advanced ledger, staff breakdown, alerts, payout and exports", () => {
   for (const label of [
     "Staff Tips / Tip Payout Register",
@@ -67,6 +74,8 @@ test("tips UI includes advanced ledger, staff breakdown, alerts, payout and expo
   }
   assert.match(component, /tips\/report/, "tip register should load the backend report source");
   assert.match(component, /tips\/payout/, "tip register should post payout actions");
+  assert.match(component, /tip-filter-panel/, "tip filters should use the compact page-specific layout");
+  assert.match(component, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/, "desktop filters should render three fields per row");
   assert.match(component, /routerLink="\/staff-os\/staff-profile"/, "staff action should open Staff 360");
   assert.match(component, /routerLink="\/pos\/invoices"/, "invoice action should open POS invoices");
   assert.match(component, /routerLink="\/clients"/, "client action should open client search");

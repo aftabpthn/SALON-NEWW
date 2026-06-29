@@ -93,7 +93,7 @@ type TipsReport = {
         </div>
       </div>
 
-      <section class="panel filter-panel">
+      <section class="panel filter-panel tip-filter-panel">
         <label class="field">
           <span>From</span>
           <input type="date" [(ngModel)]="from" />
@@ -322,7 +322,44 @@ type TipsReport = {
         </section>
       </ng-container>
     </section>
-  `
+  `,
+  styles: [`
+    :host .tip-filter-panel {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px 14px;
+      align-items: end;
+    }
+
+    :host .tip-filter-panel .field {
+      min-width: 0;
+    }
+
+    :host .tip-filter-panel .search-field {
+      grid-column: span 2;
+    }
+
+    :host .tip-filter-panel .primary-button {
+      min-height: 48px;
+      align-self: end;
+    }
+
+    @media (max-width: 1100px) {
+      :host .tip-filter-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      :host .tip-filter-panel {
+        grid-template-columns: 1fr;
+      }
+
+      :host .tip-filter-panel .search-field {
+        grid-column: auto;
+      }
+    }
+  `]
 })
 export class PosTipsComponent implements OnInit {
   readonly rows = signal<TipLedgerRow[]>([]);
