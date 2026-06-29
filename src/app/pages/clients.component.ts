@@ -1029,10 +1029,12 @@ export class ClientsComponent implements OnInit, OnDestroy {
       this.duplicateMessage.set('No same-phone duplicate groups to merge.');
       return;
     }
+    const visibleDuplicateGroups = this.duplicateGroups();
     this.saving.set(true);
     this.duplicateMergeAllLoading.set(true);
     this.duplicateError.set('');
     this.duplicateMessage.set('Merging duplicate contacts...');
+    this.duplicateGroups.set([]);
     this.api.post<ApiRecord>('clients/duplicates/merge-all', {
       includeAllBranches: true,
       allBranches: true,
@@ -1049,10 +1051,11 @@ export class ClientsComponent implements OnInit, OnDestroy {
         this.duplicateMergeAllLoading.set(false);
         this.load(false);
         this.loadReports(false);
-        this.loadDuplicateGroups(successMessage);
+        this.duplicateGroups.set([]);
       },
       error: (error) => {
         this.duplicateError.set(this.api.errorText(error, 'Unable to merge all duplicate clients'));
+        this.duplicateGroups.set(visibleDuplicateGroups);
         this.saving.set(false);
         this.duplicateMergeAllLoading.set(false);
       }

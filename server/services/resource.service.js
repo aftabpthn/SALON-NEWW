@@ -166,15 +166,15 @@ export class ResourceService {
         const archivedIds = Array.isArray(result.archivedClientIds) ? result.archivedClientIds : [];
         summary.mergedGroups += 1;
         summary.mergedClients += archivedIds.length;
-        summary.archivedClientIds.push(...archivedIds);
+        if (summary.archivedClientIds.length < 200) summary.archivedClientIds.push(...archivedIds.slice(0, 200 - summary.archivedClientIds.length));
       } catch (error) {
         summary.skippedGroups += 1;
-        summary.errors.push({ groupKey: group.groupKey || "", message: error?.message || "Unable to merge duplicate group" });
+        if (summary.errors.length < 20) summary.errors.push({ groupKey: group.groupKey || "", message: error?.message || "Unable to merge duplicate group" });
       }
     }
 
     summary.archivedClientIds = [...new Set(summary.archivedClientIds)];
-    summary.remainingGroups = this.duplicateClients(query, access).length;
+    summary.remainingGroups = Math.max(0, summary.scannedGroups - summary.mergedGroups - summary.skippedGroups);
     return summary;
   }
   mergeDuplicateClients(primaryId, payload = {}, access = {}) {
