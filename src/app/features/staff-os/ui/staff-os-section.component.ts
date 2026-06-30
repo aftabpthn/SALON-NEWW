@@ -446,15 +446,17 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
           <input #attendanceUploadInput class="hidden-file" type="file" accept=".csv,text/csv" (change)="uploadAttendanceCsv($event)" />
           <aside class="staff-register-side" aria-label="Staff quick menu">
             <a routerLink="/staff-os/staff-list" [class.active]="section === 'staff-list' && staffListStatusFilter() !== 'inactive'" (click)="setStaffListStatusFilter('all')">Staff List</a>
-            <button type="button" (click)="openAddStaff()">Add Staff</button>
             <a routerLink="/staff-os/roster-calendar">Staff Schedule</a>
             <a routerLink="/staff-os/commission-dashboard">Commission</a>
             <a routerLink="/permissions">Roles</a>
-            <button type="button" (click)="attendanceUploadInput.click()" [disabled]="attendanceUploadSaving()">{{ attendanceUploadSaving() ? 'Uploading...' : 'Upload Attendance' }}</button>
             <a routerLink="/staff-os/staff-list" [class.active]="section === 'staff-list' && staffListStatusFilter() === 'inactive'" (click)="setStaffListStatusFilter('inactive')">Inactive Staff</a>
+            <div class="staff-register-side-group attendance-tools">
+              <span>Attendance</span>
+              <a routerLink="/staff-os/attendance-dashboard">Dashboard</a>
+              <button type="button" (click)="attendanceUploadInput.click()" [disabled]="attendanceUploadSaving()">{{ attendanceUploadSaving() ? 'Uploading...' : 'Upload CSV' }}</button>
+            </div>
             <div class="staff-register-side-group">
-              <span>More staff tools</span>
-              <a routerLink="/staff-os/attendance-dashboard">Attendance Dashboard</a>
+              <span>More tools</span>
               <a routerLink="/staff-os/payroll-dashboard">Payroll</a>
               <a routerLink="/staff-os/bulk-employee-update">Bulk Update</a>
             </div>
@@ -470,17 +472,9 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
               <div class="staff-register-actions">
                 <span>{{ staffListFilteredRows().length }} of {{ staffDirectoryRows().length }} records</span>
                 <button type="button" class="refresh" (click)="store.load()">Refresh</button>
+                <button type="button" class="refresh" (click)="exportStaffCsv()" [disabled]="!staffListFilteredRows().length">Export CSV</button>
                 <button type="button" class="primary" (click)="openAddStaff()">Add staff</button>
-                <details class="staff-action-menu">
-                  <summary>Action</summary>
-                  <div>
-                    <button type="button" (click)="exportStaffCsv()" [disabled]="!staffListFilteredRows().length">Export CSV</button>
-                    <button type="button" (click)="attendanceUploadInput.click()" [disabled]="attendanceUploadSaving()">{{ attendanceUploadSaving() ? 'Uploading...' : 'Upload Attendance' }}</button>
-                    <a routerLink="/staff-os/bulk-employee-update">Bulk employee update</a>
-                    <a routerLink="/permissions">Roles</a>
-                  </div>
-                </details>
-              </div>
+</div>
             </div>
 
             <div class="staff-register-kpis" *ngIf="isStaffRegisterSection()">
@@ -567,10 +561,9 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                   </tr>
                 </tbody>
               </table>
-              <div *ngIf="!staffListFilteredRows().length && !store.loading()" class="empty action-empty">
+              <div *ngIf="!staffListFilteredRows().length && !store.loading()" class="empty action-empty staff-empty-state">
                 <strong>No staff records found.</strong>
-                <span>Add staff first to unlock attendance, payroll and commission reports.</span>
-                <button type="button" class="primary" (click)="openAddStaff()">Add staff</button>
+                <span>Use the top Add staff button to create the first employee record.</span>
               </div>
             </div>
             <div class="staff-register-footer" *ngIf="isStaffRegisterSection()">
@@ -2230,8 +2223,11 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-register-side a:hover, .staff-register-side button:hover, .staff-register-side .active { background: #e9e9e9; color: #05070d; }
     .staff-register-side button:disabled { cursor: wait; opacity: .65; }
     .staff-register-side-group { border-top: 1px solid #eef2f6; display: grid; gap: 4px; margin-top: 8px; padding-top: 10px; }
+    .staff-register-side-group.attendance-tools { background: #f8fbff; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px; padding: 10px 8px; }
+    .staff-register-side-group.attendance-tools > span { padding-left: 4px; }
     .staff-register-side-group > span { color: #64748b; font-size: 11px; font-weight: 900; padding: 0 12px 4px; text-transform: uppercase; }
     .staff-register-main .state { border-left: 0; border-radius: 0; border-right: 0; }
+    .staff-empty-state { background: #fbfdff; border-bottom: 1px solid #dfe7ef; min-height: 122px; padding: 18px 16px; }
     .staff-register-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
     .staff-register-actions { align-items: center; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .staff-register-actions > span { color: #5b6b81; font-weight: 900; margin: 0 8px 0 0; }
@@ -2648,7 +2644,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       .staff-register-layout { grid-template-columns: 1fr; }
       .staff-register-main { border-left: 0; border-top: 1px solid #e5edf4; }
       .staff-register-side { border-bottom: 1px solid #e5edf4; grid-template-columns: repeat(2, minmax(0, 1fr)); position: static; }
-      .staff-register-side-group { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .staff-register-side-group { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .staff-register-side-group > span { grid-column: 1 / -1; }
       .staff-list-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .staff-search-field { grid-column: 1 / -1; }
@@ -3321,7 +3317,7 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
     if (this.section === 'training-center') return 'Training, performance and staff development records.';
     if (this.section === 'staff-profile') return 'Profile, salary, attendance and access records.';
     if (this.staffListStatusFilter() === 'inactive') return 'Paused, archived and deleted employees with one-click restore.';
-    return 'Active employee records with attendance, payroll, role and commission actions.';
+    return 'Employee records with attendance, payroll, role and commission actions.';
   }
 
   setStaffListQuery(value: string): void {
