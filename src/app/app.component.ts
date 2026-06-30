@@ -130,7 +130,7 @@ type ActiveNavTabGroup = {
 
     <ng-template #adminShell>
     <div class="app-shell" [class.sidebar-is-compact]="sidebarCompact()">
-      <aside class="sidebar enterprise-sidebar" [class.sidebar-compact]="sidebarCompact()">
+      <aside class="sidebar enterprise-sidebar inline-app-sidebar" [class.sidebar-compact]="sidebarCompact()">
         <div class="sidebar-brand-row">
           <a class="brand" routerLink="/home" aria-label="Aura Shine home">
             <span class="brand-mark" aria-hidden="true">AS</span>

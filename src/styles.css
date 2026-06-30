@@ -5758,3 +5758,62 @@ app-staff-os-section .context-links { justify-content: flex-start; }
     min-height: 40px;
   }
 }
+
+/* Hard reset for the inline app.component sidebar.
+   Root cause: merged CSS also styles the newer rail/panel sidebar component
+   with the same .enterprise-sidebar class, so the older inline shell picked up
+   dark rail/panel layout rules and rendered empty/misaligned. */
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar {
+  position: sticky !important;
+  top: 0 !important;
+  align-self: start !important;
+  width: 326px !important;
+  max-width: 326px !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  display: grid !important;
+  grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+  padding: 14px 12px !important;
+  color: var(--ink) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 249, 0.96)) !important;
+  border-right: 1px solid rgba(15, 118, 110, 0.14) !important;
+  box-shadow: 16px 0 44px rgba(15, 23, 42, 0.08) !important;
+  overflow: hidden !important;
+}
+
+.app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar {
+  width: 56px !important;
+  max-width: 56px !important;
+  padding: 12px 7px !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-brand-row,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-list.nav-accordion,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-callout {
+  transform: none !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search {
+  display: grid !important;
+  align-items: initial !important;
+  gap: 6px !important;
+  margin: 0 !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-list.nav-accordion {
+  min-height: 0 !important;
+  display: grid !important;
+  align-content: start !important;
+  gap: 8px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+@media (max-width: 1260px) {
+  .app-shell:not(.sidebar-is-compact) > aside.inline-app-sidebar.enterprise-sidebar {
+    width: 286px !important;
+    max-width: 286px !important;
+  }
+}
