@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
@@ -160,8 +160,8 @@ type ActiveModuleTabs = {
         </div>
 
         <label class="sidebar-search" *ngIf="!sidebarUiCompact()">
-          <input [ngModel]="navQuery()" (ngModelChange)="navQuery.set($event)" aria-label="Search modules" placeholder="Search" />
-          <button class="sidebar-search-clear" type="button" *ngIf="navQuery()" (click)="navQuery.set('')">Clear</button>
+          <input [ngModel]="navSearchDraft()" (ngModelChange)="setNavSearchDraft($event)" aria-label="Search modules" placeholder="Search" />
+          <button class="sidebar-search-clear" type="button" *ngIf="navSearchDraft()" (click)="clearNavSearch()">Clear</button>
         </label>
 
         <nav class="nav-list nav-accordion" aria-label="Primary navigation">
@@ -472,7 +472,7 @@ type ActiveModuleTabs = {
     }
   `]
 })
-export class AppComponent {
+export class AppComponent implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   readonly branches = signal<ApiRecord[]>([]);
   readonly tenants = signal<ApiRecord[]>([]);
@@ -498,6 +498,7 @@ export class AppComponent {
       ? 'Verify & sign in'
       : 'Sign in securely');
 
+  readonly navSearchDraft = signal('');
   readonly navQuery = signal('');
   readonly activeRoute = signal('');
   readonly previousRoute = signal('');
@@ -508,6 +509,8 @@ export class AppComponent {
   readonly expandedGroupIds = signal<string[]>(this.readExpandedGroups());
   private readonly maxBackHistory = 10;
   private readonly emptyNavItems: NavItem[] = [];
+  private readonly maxSidebarSearchResultsPerGroup = 8;
+  private navSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private isBackNavigation = false;
   private readonly navGroupIconFallback = 'M4 5h7v7H4z M13 5h7v7h-7z M4 14h7v5H4z M13 14h7v5h-7z';
   private readonly navGroupIconPaths: Record<string, string> = {
@@ -1334,13 +1337,28 @@ export class AppComponent {
     this.sidebarHoverExpanded.set(false);
   }
 
-  trackNavGroup(_: number, group: NavGroup): string {
-    return group.id;
+  ngOnDestroy(): void {
+    if (this.navSearchTimer) clearTimeout(this.navSearchTimer);
   }
 
-  trackNavItem(_: number, item: NavItem): string {
-    return this.navItemRouteKey(item);
+  setNavSearchDraft(value: string): void {
+    this.navSearchDraft.set(value);
+    if (this.navSearchTimer) clearTimeout(this.navSearchTimer);
+    this.navSearchTimer = setTimeout(() => {
+      this.navQuery.set(value);
+      this.navSearchTimer = null;
+    }, 120);
   }
+
+  clearNavSearch(): void {
+    if (this.navSearchTimer) clearTimeout(this.navSearchTimer);
+    this.navSearchTimer = null;
+    this.navSearchDraft.set('');
+    this.navQuery.set('');
+  }
+  readonly trackNavGroup = (_: number, group: NavGroup): string => group.id;
+
+  readonly trackNavItem = (_: number, item: NavItem): string => this.navItemRouteKey(item);
 
   isGroupExpanded(group: NavGroup): boolean {
     return Boolean(this.navQuery()) || this.expandedGroupIds().includes(group.id);
@@ -1442,6 +1460,7 @@ export class AppComponent {
 
     return [...ranked.values()]
       .sort((left, right) => left.index - right.index)
+      .slice(0, this.maxSidebarSearchResultsPerGroup)
       .map((entry) => entry.item);
   }
 
