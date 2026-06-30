@@ -282,8 +282,8 @@ type ActiveStaffLocalNav = {
         </section>
 
         <section class="workspace-route-shell" [class.workspace-route-shell--staff]="activeStaffLocalNav() !== null">
-          <aside class="staff-local-rail" *ngIf="activeStaffLocalNav() as staffNav" aria-label="Staff OS local navigation">
-            <div class="staff-local-rail-head">
+          <section class="staff-local-strip" *ngIf="activeStaffLocalNav() as staffNav" aria-label="Staff OS module navigation">
+            <div class="staff-local-strip-head">
               <span class="nav-icon" aria-hidden="true">{{ staffNav.icon }}</span>
               <div>
                 <span class="eyebrow">Staff OS</span>
@@ -301,7 +301,7 @@ type ActiveStaffLocalNav = {
                 <span>{{ item.label }}</span>
               </a>
             </nav>
-          </aside>
+          </section>
           <div class="workspace-route-content">
             <router-outlet></router-outlet>
           </div>
@@ -327,10 +327,8 @@ type ActiveStaffLocalNav = {
     }
 
     .workspace-route-shell--staff {
-      display: grid;
-      grid-template-columns: 204px minmax(0, 1fr);
-      align-items: stretch;
-      min-height: calc(100vh - 150px);
+      display: flex;
+      flex-direction: column;
       border: 1px solid #d7e4ec;
       background: #fff;
     }
@@ -339,26 +337,28 @@ type ActiveStaffLocalNav = {
       min-width: 0;
     }
 
-    .staff-local-rail {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      padding: 12px;
+    .staff-local-strip {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
       background: linear-gradient(180deg, #ffffff 0%, #f8fbfa 100%);
-      border-right: 1px solid #d7e4ec;
+      border-bottom: 1px solid #d7e4ec;
       min-width: 0;
     }
 
-    .staff-local-rail-head {
+    .staff-local-strip-head {
       display: grid;
       grid-template-columns: 30px minmax(0, 1fr);
       align-items: center;
       gap: 10px;
-      padding: 8px 6px 10px;
-      border-bottom: 1px solid #e4ecef;
+      min-width: 168px;
+      padding-right: 12px;
+      border-right: 1px solid #e4ecef;
     }
 
-    .staff-local-rail-head strong {
+    .staff-local-strip-head strong {
       display: block;
       color: #123a36;
       font-size: 14px;
@@ -367,20 +367,25 @@ type ActiveStaffLocalNav = {
 
     .staff-local-nav {
       display: flex;
-      flex-direction: column;
-      gap: 6px;
+      gap: 8px;
+      min-width: 0;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: thin;
     }
 
     .staff-local-nav a {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: 28px max-content;
       align-items: center;
-      gap: 9px;
-      min-height: 38px;
-      padding: 6px 8px;
+      gap: 8px;
+      flex: 0 0 auto;
+      min-height: 36px;
+      padding: 6px 10px;
+      background: #fff;
       color: #1f2a3d;
       text-decoration: none;
-      border: 1px solid transparent;
+      border: 1px solid #d8e5e9;
       border-radius: 8px;
       font-weight: 800;
       font-size: 13px;
@@ -398,17 +403,27 @@ type ActiveStaffLocalNav = {
 
     @media (max-width: 760px) {
       .workspace-route-shell--staff {
-        grid-template-columns: 1fr;
+        display: block;
       }
 
-      .staff-local-rail {
+      .staff-local-strip {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .staff-local-strip-head {
         border-right: 0;
-        border-bottom: 1px solid #d7e4ec;
+        border-bottom: 1px solid #e4ecef;
+        padding: 0 0 8px;
       }
 
       .staff-local-nav {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        padding-bottom: 5px;
+      }
+
+      .staff-local-nav a {
+        grid-template-columns: 28px minmax(0, 1fr);
+        min-width: 150px;
       }
     }
   `]
