@@ -1,19 +1,21 @@
 :root {
-  --color-bg: #f1f5f9;
+  --color-bg: #FAF7F2;
   --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
-  --color-text: #0f172a;
-  --color-muted: #64748b;
-  --color-border: #e2e8f0;
-  --color-primary: #0f766e;
-  --color-primary-strong: #105e59;
-  --color-info: #2f5fbd;
-  --color-success: #267a45;
-  --color-warning: #b7791f;
-  --color-danger: #b42318;
-  --color-accent: #6d4cc2;
+  --color-surface-muted: #FCFAF7;
+  --color-text: #1F2933;
+  --color-muted: #6B7280;
+  --color-border: #E7DED6;
+  --color-primary: #4B1238;
+  --color-primary-strong: #6D1B4D;
+  --color-info: #4B1238;
+  --color-success: #16A34A;
+  --color-warning: #F59E0B;
+  --color-danger: #E11D48;
+  --color-accent: #E8A7B8;
+  --color-primary-soft: rgba(75, 18, 56, 0.1);
+  --color-surface-sunken: #F5EFE8;
   --radius-sm: 6px;
-  --radius-md: 8px;
+  --radius-md: 10px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -22,21 +24,21 @@
   --font-page-title: clamp(1.45rem, 1.1rem + 1vw, 2.05rem);
   --font-section-title: 1.08rem;
   --font-label: 0.82rem;
-  --bg: #f1f5f9;
+  --bg: #FAF7F2;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --teal: #0f766e;
-  --teal-2: #0d9488;
-  --blue: #2f5fbd;
-  --amber: #b7791f;
-  --red: #b42318;
-  --green: #267a45;
-  --violet: #6d4cc2;
-  --rose: #b83280;
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --surface-2: #FCFAF7;
+  --ink: #1F2933;
+  --muted: #6B7280;
+  --line: #E7DED6;
+  --teal: #4B1238;
+  --teal-2: #6D1B4D;
+  --blue: #4B1238;
+  --amber: #F59E0B;
+  --red: #E11D48;
+  --green: #16A34A;
+  --violet: #4B1238;
+  --rose: #E8A7B8;
+  --shadow: 0 12px 30px rgba(75, 18, 56, 0.08);
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg);
@@ -7096,6 +7098,1280 @@ aura-command-palette .cmdk-foot {
   }
 }
 
+/* Layout polish: list, feed and detail surfaces, no behavior changes. */
+.workspace > router-outlet + * :where(.activity-list, .alert-list, .rank-list, .summary-lines, .detail-grid, .info-grid, .link-grid, .analysis-grid, .profile-stats, .timeline, .timeline-list, .history-list, .feed-list, .queue-list, .message-list, .note-list, .comment-list) {
+  min-width: 0;
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.activity-list, .alert-list, .rank-list, .timeline, .timeline-list, .history-list, .feed-list, .queue-list, .message-list, .note-list, .comment-list) > :where(article, div, li, button) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.detail-grid, .info-grid, .analysis-grid, .link-grid, .profile-stats) > * {
+  min-width: 0;
+  border-radius: 8px !important;
+}
+
+.workspace > router-outlet + * :where(.summary-lines, .detail-grid, .info-grid, .analysis-grid, .link-grid) :where(strong, span, small, p) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.split, .two-col, .two-column, .master-detail, .detail-layout, .settings-layout, .profile-layout, .review-layout, .ops-layout) {
+  min-width: 0;
+  gap: 14px !important;
+}
+
+.workspace > router-outlet + * :where(.split, .two-col, .two-column, .master-detail, .detail-layout, .settings-layout, .profile-layout, .review-layout, .ops-layout) > * {
+  min-width: 0;
+}
+
+.workspace > router-outlet + * :where(.row, .item, .line, .stage, .feed-row, .history-row, .queue-row, .message-row, .note-row, .comment-row) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.muted, .small, .st-note, .inline-note, .helper-text, .field-hint) {
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.split, .two-col, .two-column, .master-detail, .detail-layout, .settings-layout, .profile-layout, .review-layout, .ops-layout) {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace > router-outlet + * :where(.detail-grid, .info-grid, .analysis-grid, .link-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Layout polish: workflow boards, calendars and side rails, no behavior changes. */
+.workspace > router-outlet + * :where(.calendar-panel, .calendar-layout, .calendar-board, .day-board-scroll, .week-board, .month-grid, .timeline-board, .resource-grid, .scheduler-grid-shell, .enterprise-scheduler, .operations-grid, .stage-board, .roster-board, .schedule-board, .action-kanban, .builder-grid, .split-grid) {
+  min-width: 0;
+  border-radius: 8px !important;
+}
+
+.workspace > router-outlet + * :where(.day-board-scroll, .week-board, .month-grid, .timeline-board, .resource-grid, .scheduler-grid-shell, .calendar-board, .stage-board, .roster-board, .schedule-board, .action-kanban) {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.calendar-action-row, .calendar-filter-row, .calendar-toolbar-actions, .workspace-actions, .action-inbox-buttons, .drawer-time-grid, .inline-form-grid, .block-time-grid, .reschedule-grid, .sms-route-grid, .review-grid) {
+  min-width: 0;
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.calendar-action-row, .calendar-toolbar-actions, .workspace-actions, .action-inbox-buttons) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.category-rail, .staff-category-rail, .cash-category-rail, .tab-rail, .zenoti-action-rail, .staff-local-rail) {
+  min-width: 0;
+  border-radius: 8px !important;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.category-rail, .staff-category-rail, .cash-category-rail, .tab-rail, .zenoti-action-rail, .staff-local-rail) :where(button, a) {
+  min-height: 36px !important;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.scheduler-card, .kanban-card, .kanban-empty, .timeline-item, .timeline-row, .resource-card, .month-day, .week-day, .day-cell, .slot-summary, .slot-hover-label, .ops-panel) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .workspace > router-outlet + * :where(.workspace-shell, .staff-workspace-shell, .cash-workspace-shell, .calendar-layout, .builder-grid, .split-grid, .ledger-master-grid, .employee-profile-grid, .public-profile-grid, .enterprise-scheduler) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace > router-outlet + * :where(.category-rail, .staff-category-rail, .cash-category-rail, .tab-rail, .zenoti-action-rail) {
+    position: static !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .workspace > router-outlet + * :where(.category-rail, .staff-category-rail, .cash-category-rail, .tab-rail, .zenoti-action-rail) :where(button, a) {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.calendar-action-row, .calendar-filter-row, .calendar-toolbar-actions, .workspace-actions, .action-inbox-buttons) {
+    justify-content: flex-start !important;
+  }
+}
+
+/* Layout polish: previews, uploads and guided flows, no behavior changes. */
+.workspace > router-outlet + * :where(.wizard-steps, .wizard-form, .wizard-grid, .wizard-footer, .step-list, .step-row, .preview-grid, .preview-panel, .preview-card, .preview-box, .preview-section, .preview-scroll, .preview-table, .preview-row, .upload-panel, .upload-form, .media-upload-card, .gallery-upload-card, .gallery-preview-grid, .gallery-preview-tile, .file-preview, .bill-preview, .ledger-preview, .portal-preview, .bulk-preview, .settlement-preview-bar, .invoice-preview, .color-control) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.wizard-steps, .wizard-footer, .preview-actions, .preview-tools, .preview-head, .media-upload-header, .settlement-preview-bar, .color-control) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.wizard-footer, .preview-actions, .preview-tools) {
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.avatar, .staff-avatar, .agent-avatar, .client-avatar, .plan-avatar, .package-avatar, .product-avatar, .supplier-avatar, .um-avatar, .brand-mark, .logo-ring, .guide-logo, .swatch) {
+  flex: 0 0 auto;
+  overflow: hidden;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.workspace > router-outlet + * :where(.cover-preview, .gallery-preview-tile img, .preview-frame, .media-upload-card img, .gallery-upload-card img) {
+  max-width: 100%;
+  border-radius: 8px !important;
+}
+
+.workspace > router-outlet + * :where(pre, .json-preview, .export-preview, .tally-preview, .preview-line) {
+  max-width: 100%;
+  overflow: auto;
+  border-radius: 8px !important;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.wizard-grid, .preview-grid, .gallery-preview-grid, .upload-form, .inline-form-grid, .drawer-time-grid, .block-time-grid, .reschedule-grid, .sms-route-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace > router-outlet + * :where(.wizard-footer, .preview-actions, .preview-tools, .media-upload-header, .settlement-preview-bar) {
+    justify-content: flex-start !important;
+  }
+}
+
+/* Layout polish: legacy command headers and compact action clusters, no behavior changes. */
+.workspace > router-outlet + * :where(.brand-block, .top-actions, .header-actions, .command-actions, .center-line, .desk-heading, .register-heading, .desk-tabs, .quick-buttons, .quick-action-list, .module-link-grid, .inline-row, .meta-row, .marketplace-meta-row, .client360-header-actions) {
+  min-width: 0;
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.brand-block, .center-line, .desk-heading, .register-heading, .inline-row, .meta-row, .marketplace-meta-row) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+
+.workspace > router-outlet + * :where(.center-line, .desk-heading, .register-heading) {
+  justify-content: space-between !important;
+}
+
+.workspace > router-outlet + * :where(.top-actions, .header-actions, .command-actions, .quick-buttons, .quick-action-list, .client360-header-actions) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.desk-tabs) {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.desk-tabs button, .top-actions button, .top-actions a, .header-actions button, .header-actions a, .command-actions button, .command-actions a, .quick-buttons button, .quick-buttons a, .quick-action-list a, .client360-header-actions button, .client360-header-actions a) {
+  min-height: 34px !important;
+  border-radius: 7px !important;
+  white-space: nowrap !important;
+}
+
+.workspace > router-outlet + * :where(.module-link-grid) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.module-link-card) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.brand-block small, .desk-heading span, .register-heading span, .meta-row, .marketplace-meta-row) {
+  line-height: 1.25;
+  letter-spacing: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.center-line, .desk-heading, .register-heading, .inline-row) {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    align-items: start !important;
+  }
+
+  .workspace > router-outlet + * :where(.top-actions, .header-actions, .command-actions, .quick-buttons, .quick-action-list, .client360-header-actions) {
+    justify-content: flex-start !important;
+  }
+
+  .workspace > router-outlet + * :where(.top-actions button, .top-actions a, .header-actions button, .header-actions a, .command-actions button, .command-actions a, .quick-buttons button, .quick-buttons a) {
+    flex: 1 1 140px;
+  }
+}
+
+/* Layout polish: overlays, drawers, menus and toasts, no behavior changes. */
+.workspace > router-outlet + * :where(.drawer-shell .drawer, .subdrawer-shell .subdrawer, .appointment-drawer, .scheduler-drawer, .booking-drawer, .recovery-drawer, .risk-drawer, .sla-drawer, .reports-drawer, .provider-drawer, .audit-drawer, .review-response-drawer, .ai-summary-drawer, .client-drawer, .plan-drawer, .package-drawer, .setup-drawer, .detail-drawer, .activity-detail-drawer, .aura-drawer, .renewal-modal, .entry-dialog) {
+  max-width: min(1180px, calc(100vw - 24px));
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.drawer-head, .drawer-heading, .drawer-title, .drawer-header, .modal-header, .dialog-title, .aura-drawer__header, .drawer-tabs, .drawer-badges, .drawer-mode-list) {
+  min-width: 0;
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.drawer-head, .drawer-heading, .drawer-title, .dialog-title, .aura-drawer__header) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+}
+
+.workspace > router-outlet + * :where(.drawer-stack, .drawer-content, .drawer-body, .aura-drawer__body, .aura-drawer-body, .drawer-grid, .drawer-section, .drawer-panel, .drawer-action-card, .drawer-focus-card) {
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.drawer-section, .drawer-panel, .drawer-action-card, .drawer-focus-card, .booking-guard, .review-box) {
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.drawer-tabs, .drawer-badges, .drawer-mode-list) {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.drawer-tabs button, .drawer-mode-list span, .drawer-badges span) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.workspace > router-outlet + * :where(.dropdown-panel, .column-popover, .row-action-menu, .action-menu, .staff-action-menu, .hdr-menu, .wsw-menu, .toast, .aura-toast, .aura-toast-container, .aura-toast-host) {
+  min-width: 0;
+  max-width: min(420px, calc(100vw - 24px));
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.dropdown-panel button, .column-popover button, .row-action-menu button, .action-menu button, .staff-action-menu button, .hdr-menu a, .hdr-menu button, .wsw-menu button, .toast button, .aura-toast button) {
+  min-height: 34px !important;
+  border-radius: 7px !important;
+}
+
+@media (max-width: 900px) {
+  .workspace > router-outlet + * :where(.drawer-content, .drawer-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.drawer-shell .drawer, .subdrawer-shell .subdrawer, .appointment-drawer, .scheduler-drawer, .booking-drawer, .recovery-drawer, .risk-drawer, .sla-drawer, .reports-drawer, .provider-drawer, .audit-drawer, .review-response-drawer, .ai-summary-drawer, .client-drawer, .plan-drawer, .package-drawer, .setup-drawer, .detail-drawer, .activity-detail-drawer, .aura-drawer, .renewal-modal, .entry-dialog) {
+    max-width: 100%;
+    border-radius: 0 !important;
+  }
+
+  .workspace > router-outlet + * :where(.drawer-head, .drawer-heading, .drawer-title, .dialog-title, .aura-drawer__header) {
+    display: grid !important;
+    grid-template-columns: 1fr auto;
+  }
+}
+
+/* Layout polish: metrics, reports and chart surfaces, no behavior changes. */
+.workspace-module-tabs,
+.workspace > router-outlet + * :where(.metric-strip, .metrics, .metrics-grid, .metric-grid, .kpi-grid, .kpi-strip, .workspace-kpi-grid, .staff-register-kpis, .attendance-stats, .attendance-live-strip, .roster-kpi-strip, .payroll-kpi-strip, .payroll-risk-strip, .cc-metrics, .ai-metrics-grid, .command-kpi-grid, .daily-sheet-kpis, .status-strip, .status-grid, .report-summary-grid, .report-metrics, .mini-metrics, .stat-grid, .connected-kpi-grid, .feedback-kpis) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.metric-card, .kpi-card, .command-kpi, .cc-metric-card, .status-card, .readiness-score, .summary-card, .report-card, .report-panel, .report-center, .insight-panel, .revenue-trend-panel, .chart-container, .chart-bars, .graph-panel, .analytics-panel, .daily-sheet-card, .score-panel, .score-card, .executive-score-card) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.metric-card, .kpi-card, .command-kpi, .cc-metric-card, .status-card, .summary-card, .report-card, .report-panel, .daily-sheet-card, .score-panel, .score-card) :where(span, strong, small, p, h3, h4) {
+  max-width: 100%;
+  min-width: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.chart-container, .chart-bars, .graph-panel, .analytics-panel, .revenue-trend-panel) :where(canvas, svg) {
+  max-width: 100%;
+}
+
+.workspace > router-outlet + * :where(.report-tabs, .workspace-module-tabs-nav) {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px !important;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.report-tabs button, .report-tabs a, .workspace-module-tab) {
+  flex: 0 0 auto;
+  min-height: 34px !important;
+  border-radius: 7px !important;
+  white-space: nowrap !important;
+}
+
+.workspace-module-tabs {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.metric-strip, .metrics, .metrics-grid, .metric-grid, .kpi-grid, .kpi-strip, .workspace-kpi-grid, .staff-register-kpis, .attendance-stats, .attendance-live-strip, .roster-kpi-strip, .payroll-kpi-strip, .payroll-risk-strip, .cc-metrics, .ai-metrics-grid, .command-kpi-grid, .daily-sheet-kpis, .status-strip, .status-grid, .report-summary-grid, .report-metrics, .mini-metrics, .stat-grid, .connected-kpi-grid, .feedback-kpis) {
+    grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)) !important;
+  }
+}
+
+/* Layout polish: settings, switches and checklist controls, no behavior changes. */
+.workspace > router-outlet + * :where(.settings-grid, .settings-section, .settings-panel, .settings-card, .settings-content, .settings-list, .control-panel, .control-strip, .control-heading, .control-filters, .control-cards, .control-tabs, .attendance-controls, .table-controls, .list-controls, .row-controls, .mode-grid, .mode-list, .mode-table, .mode-row, .channel-grid, .channel-strip, .toggle-grid, .toggle-panel, .policy-center, .policy-kpi-grid, .policy-card-strip, .settings-form-grid, .permission-row, .approval-check-grid, .approval-checklist, .checklist, .checklist-grid, .checklist-col, .config-grid, .worker-settings, .mapping-toolbar, .mapping-list, .mapping-table, .mapping-row, .rule-shell, .rule-band, .rule-card, .rule-grid, .rule-heading, .rule-actions, .advanced-grid, .context-grid, .context-links, .link-check-grid, .branch-context-card) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.settings-section, .settings-card, .control-panel, .control-card, .mode-row, .check-item, .check-row, .rule-band, .rule-card, .branch-context-card, .setup-warning, .setup-message, .policy-center, .settings-row) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.control-strip, .control-filters, .attendance-controls, .table-controls, .list-controls, .row-controls, .mode-actions, .rule-actions, .context-links, .channel-strip, .toggles, .mapping-toolbar) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.check-line, .check-field, .check-card, .check-pill, .check-cell, .check-inline, .check, .switch, .switch-card, .switch-row, .switch-line, .toggle-row, .toggle-field, .toggle-label, .inline-toggle, .hide-toggle, .copy-check, .bypass-toggle, .group-control, .checkbox-field) {
+  min-width: 0;
+  min-height: 36px;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.check-line, .check-field, .check-card, .check-pill, .check-cell, .check-inline, .check, .switch, .switch-card, .switch-row, .switch-line, .toggle-row, .toggle-field, .toggle-label, .inline-toggle, .hide-toggle, .copy-check, .bypass-toggle, .group-control, .checkbox-field) :where(input[type='checkbox'], input[type='radio']) {
+  flex: 0 0 auto;
+}
+
+.workspace > router-outlet + * :where(input[type='file'], input[type='color'], input[type='range']) {
+  max-width: 100%;
+}
+
+.workspace > router-outlet + * :where(.settings-nav) {
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 900px) {
+  .workspace > router-outlet + * :where(.settings-grid, .settings-content, .settings-panel, .control-heading, .mode-grid, .channel-grid, .toggle-grid, .policy-kpi-grid, .settings-form-grid, .approval-check-grid, .checklist-grid, .config-grid, .advanced-grid, .context-grid, .link-check-grid, .rule-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.settings-nav) {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .workspace > router-outlet + * :where(.control-strip, .control-filters, .attendance-controls, .table-controls, .list-controls, .row-controls, .mode-actions, .rule-actions, .context-links, .channel-strip, .toggles, .mapping-toolbar) {
+    justify-content: flex-start !important;
+  }
+}
+
+/* Layout polish: POS, invoices and payment surfaces, no behavior changes. */
+.workspace > router-outlet + * :where(.pos-layout, .split-layout, .invoice-register-layout, .billing-shell, .bill-layout, .payment-distribution-stack, .refund-shell, .pos-guard-grid, .discount-drilldown-grid, .totals-grid, .settlement-breakdown, .payment-card-strip, .payment-grid, .generated-settlement-lines, .settlement-preview-metrics, .client-invoice-table, .invoice-summary-grid, .billing-control-grid, .payment-mode-list, .settlement-list, .deposit-list) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.checkout-panel, .billing-panel, .billing-control-card, .invoice-detail-panel, .bill-panel, .client-bill-card, .service-bill-card, .settlement-card, .deposit-box, .deposit-row, .payment-table-panel, .payment-mode-card, .payment-mode-row, .payment-mode-total, .generated-settlement-card, .package-billing-alert, .pos-client-form, .bill-preview, .bill-side, .bill-main) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.payment-header, .bill-header, .bill-panel-head, .bill-status-row, .billing-control-strip, .settlement-preview-bar, .payment-actions, .invoice-actions, .client-search-actions, .round-off-actions, .bill-tabs, .payment-mode-chips, .payment-mode-list) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0;
+}
+
+.workspace > router-outlet + * :where(.payment-actions, .invoice-actions, .client-search-actions, .round-off-actions) {
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.payment-mode-chips, .bill-tabs, .payment-mode-list) {
+  flex-wrap: nowrap !important;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.payment-mode-chip, .bill-tabs button, .payment-mode-row) {
+  flex: 0 0 auto;
+  min-height: 32px !important;
+  border-radius: 7px !important;
+  white-space: nowrap;
+}
+
+.workspace > router-outlet + * :where(.split-lines, .split-line, .line-discount-control, .payment-table-wrap, .invoice-line-table-wrap, .client-invoice-table-wrap, .smart-search-results, .pos-search-results, .settlement-list, .deposit-list) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.split-line, .client-invoice-row, .cart-row, .mode-row, .settlement-card, .deposit-row) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.checkout-panel .total, .invoice-preview .total, .total-box, .voucher-total, .total-row, .zenoti-totals, .settlement-preview-metrics article) {
+  min-width: 0;
+  border-radius: 8px !important;
+}
+
+.workspace > router-outlet + * :where(.checkout-panel .total, .invoice-preview .total, .voucher-total, .payment-mode-total, .settlement-preview-metrics article) :where(span, strong, small, b) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .workspace > router-outlet + * :where(.pos-layout, .split-layout, .invoice-register-layout, .billing-shell, .bill-layout, .payment-grid, .settlement-breakdown, .payment-card-strip, .billing-control-grid, .totals-grid, .pos-guard-grid, .discount-drilldown-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.payment-actions, .invoice-actions, .client-search-actions, .round-off-actions) {
+    justify-content: flex-start !important;
+  }
+
+  .workspace > router-outlet + * :where(.payment-actions button, .invoice-actions button, .client-search-actions button, .client-search-actions a, .round-off-actions button) {
+    flex: 1 1 140px;
+  }
+}
+
+/* Layout polish: communication, templates and reputation surfaces, no behavior changes. */
+.workspace > router-outlet + * :where(.engagement-shell, .inbox-layout, .review-center-grid, .template-grid, .settings-grid, .message-history-page, .whatsapp-workspace, .sms-command-grid, .action-queue-grid, .review-grid, .review-stream, .campaign-builder, .public-preview) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.thread-rail, .conversation-panel, .client-rail, .client-card, .composer, .thread-card, .review-row, .review-card, .review-list, .detail-panel, .filter-panel, .review-list-panel, .review-detail-panel, .template-card, .template-panel, .history-panel, .settings-panel, .whatsapp-summary-card, .whatsapp-report-panel, .sms-route-card, .queue-panel, .queue-card, .action-queue-card, .campaign-preview, .preview-card, .reply-history article) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.conversation-header, .conversation-actions, .composer-footer, .composer-tabs, .composer-toolbar, .reply-tools, .review-title, .review-title-row, .review-topline, .review-meta, .reply-strip, .template-head, .template-actions, .panel-actions, .hero-actions, .campaign-actions, .thread-top, .thread-meta, .heading-actions, .actions-row) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0;
+}
+
+.workspace > router-outlet + * :where(.conversation-actions, .composer-footer, .reply-tools, .template-actions, .panel-actions, .hero-actions, .campaign-actions, .heading-actions, .actions-row) {
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.composer-tabs, .channel-grid, .template-tabs, .message-tabs, .shortcut-tabs) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.composer-tabs button, .channel-grid button, .template-tabs button, .message-tabs button, .shortcut-tabs button) {
+  flex: 0 0 auto;
+  min-height: 34px !important;
+  white-space: nowrap;
+}
+
+.workspace > router-outlet + * :where(.composer-toolbar) {
+  grid-template-columns: minmax(130px, .65fr) minmax(220px, 1fr) auto !important;
+}
+
+.workspace > router-outlet + * :where(.composer textarea, .review-detail-panel textarea, .template-card textarea, .whatsapp-report-panel textarea, .message-cell, .suggested-message, .review-text, .review-text-block, .reply-history p, .thread-card p) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.workspace > router-outlet + * :where(.thread-rail, .review-list-panel, .review-list, .queue-stack, .review-feed, .review-stream, .whatsapp-list) {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.workspace > router-outlet + * :where(.message-history-page table, .template-panel table, .history-panel table, .review-list table) {
+  min-width: 720px;
+}
+
+.workspace > router-outlet + * :where(.message-history-page, .template-panel, .history-panel, .review-list, .preview-scroll) {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 1120px) {
+  .workspace > router-outlet + * :where(.engagement-shell, .inbox-layout, .review-center-grid, .sms-command-grid, .template-grid, .settings-grid, .action-queue-grid, .review-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace > router-outlet + * :where(.thread-rail, .conversation-panel, .client-rail, .review-list-panel, .review-detail-panel) {
+    max-height: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.conversation-actions, .composer-footer, .reply-tools, .template-actions, .panel-actions, .hero-actions, .campaign-actions, .heading-actions, .actions-row) {
+    justify-content: flex-start !important;
+  }
+
+  .workspace > router-outlet + * :where(.conversation-actions button, .composer-footer button, .reply-tools button, .template-actions button, .panel-actions button, .hero-actions button, .campaign-actions button, .heading-actions button, .actions-row button) {
+    flex: 1 1 136px;
+  }
+
+  .workspace > router-outlet + * :where(.composer-toolbar) {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Layout polish: catalog, membership, inventory and supplier surfaces, no behavior changes. */
+.workspace > router-outlet + * :where(.catalog-grid, .catalog-picker, .services-category-workspace, .service-product-lock-grid, .service-plan, .service-line, .service-grid, .membership-overview-grid, .giftcard-workspace, .self-service-grid, .self-service-filter-grid, .wallet-snapshot-grid, .packages-main, .package-service-table, .inventory-enterprise-page, .inventory-detail-page, .zenoti-recipe-workspace, .product-layout, .product-grid, .product-360-grid, .supplier-layout, .supplier-grid, .zenoti-supplier-workspace, .product-sales-control-grid, .discount-intelligence-stack, .discount-drilldown-grid, .coupon-test, .campaign-builder, .pricing-grid) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.service-card, .service-line, .service-product-lock-row, .service-list-panel, .service-category-panel, .package-detail-card, .package-history-card, .membership-history-card, .package-drawer, .package-billing-alert, .package-redeem-panel, .benefit-mapping-box, .generated-benefit-card, .wallet-preview, .wallet-ledger-row, .product-profile-card, .product-card, .supplier-card, .supplier-draft-panel, .recipe-canvas, .recipe-line, .pricing-panel, .product-inout-panel, .offer-preview, .campaign-preview) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.service-list-head, .service-line-head, .service-result-actions, .package-history-head, .package-history-actions, .membership-history-head, .membership-quick-actions, .membership-tabs, .product-tabs, .package-redeem-header, .benefit-mapping-box__header, .benefit-mapping-box__summary, .supplier-filter-row, .supplier-actions, .product-report-filters, .campaign-actions, .preview-actions, .self-service-actions) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0;
+}
+
+.workspace > router-outlet + * :where(.service-result-actions, .package-history-actions, .membership-quick-actions, .supplier-actions, .campaign-actions, .preview-actions, .self-service-actions) {
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.membership-tabs, .product-tabs, .service-chip-row, .benefit-lines, .package-redeem-grid, .benefit-mapping-lines, .benefit-mapping-summary-list) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.membership-tabs button, .product-tabs button, .service-chip-row > *, .benefit-lines > *, .package-redeem-grid > *, .benefit-mapping-line) {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.workspace > router-outlet + * :where(.package-service-table, .wallet-ledger-table-wrap, .service-product-lock-grid, .product-inout-table, .supplier-scroll-rail, .preview-scroll, .product-results, .smart-search-results, .service-search-results) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.zenoti-products-table, .services-table, .products-table, .service-matrix-wrap table, .product-inout-table table) {
+  min-width: 760px;
+}
+
+.workspace > router-outlet + * :where(.service-card, .package-history-card, .membership-history-card, .product-profile-card, .supplier-card, .product-card) :where(span, strong, small, p, em) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1020px) {
+  .workspace > router-outlet + * :where(.services-category-workspace, .membership-overview-grid, .giftcard-workspace, .self-service-grid, .wallet-snapshot-grid, .packages-main, .zenoti-recipe-workspace, .product-layout, .product-grid, .product-360-grid, .supplier-layout, .supplier-grid, .zenoti-supplier-workspace, .product-sales-control-grid, .discount-drilldown-grid, .pricing-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.service-result-actions, .package-history-actions, .membership-quick-actions, .supplier-actions, .campaign-actions, .preview-actions, .self-service-actions) {
+    justify-content: flex-start !important;
+  }
+
+  .workspace > router-outlet + * :where(.service-result-actions button, .package-history-actions button, .membership-quick-actions button, .supplier-actions button, .campaign-actions button, .preview-actions button, .self-service-actions button) {
+    flex: 1 1 136px;
+  }
+}
+
+/* Layout polish: admin, migration, compliance and ledger surfaces, no behavior changes. */
+.workspace > router-outlet + * :where(.migration-shell, .anomaly-grid, .export-strip, .approval-list, .mapping-table, .account-page, .account-master-shell, .ledger-shell, .ledger-master-grid, .manual-grid, .forecast-grid, .workdesk-grid, .layer-grid, .permission-grid, .permission-matrix, .um-tabs, .audit-list, .approval-link-grid, .accounting-stack, .accounting-grid, .ledger-lines) {
+  min-width: 0;
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.approval-item, .approval-box, .approval-id, .approval-meta, .account-hero, .account-list-panel, .account-form-panel, .account-table, .account-row, .ledger-titlebar, .ledger-toolbar, .ledger-table-wrap, .ledger-preview, .ledger-suggestion, .group-window, .workdesk-card, .layer-card, .audit-list > div, .accounting-panel, .ledger-lines, .token-approval-panel) {
+  min-width: 0;
+  border-radius: 8px !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.approval-actions, .approval-meta, .account-hero, .ledger-titlebar, .ledger-toolbar, .export-strip, .report-back-row, .audit-toolbar, .reports-actions, .table-meta, .branch-context-card, .accounting-grid, .inline-action-grid) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0;
+}
+
+.workspace > router-outlet + * :where(.approval-actions, .reports-actions, .report-back-row, .audit-toolbar, .inline-action-grid) {
+  justify-content: flex-end !important;
+}
+
+.workspace > router-outlet + * :where(.account-table, .ledger-table-wrap, .mapping-table, .form-table-wrap, .color-table-wrap, .hours-table-wrap, .completed-table-wrap, .revenue-table-wrap, .lead-table-wrap, .staff-performance-table, .report-table, .compact-table-wrap) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.account-row, .table-head, .report-row, .lead-table-row, .lead-table-head, .ledger-table th, .ledger-table td) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace > router-outlet + * :where(.um-tabs, .report-tabs, .cash-tabs, .migration-tabs) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.workspace > router-outlet + * :where(.um-tabs button, .report-tabs button, .cash-tabs button, .migration-tabs button) {
+  flex: 0 0 auto;
+  min-height: 34px !important;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .workspace > router-outlet + * :where(.account-master-shell, .ledger-master-grid, .manual-grid, .forecast-grid, .workdesk-grid, .layer-grid, .permission-grid, .accounting-grid, .approval-link-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.approval-actions, .reports-actions, .report-back-row, .audit-toolbar, .inline-action-grid) {
+    justify-content: flex-start !important;
+  }
+
+  .workspace > router-outlet + * :where(.approval-actions button, .reports-actions button, .report-back-row button, .audit-toolbar button, .inline-action-grid button) {
+    flex: 1 1 136px;
+  }
+}
+
+/* Final cleanup: hide secondary copy and tighten dense enterprise layouts, no behavior changes. */
+.workspace > router-outlet + * :where(.field-hint, .helper-text, .inline-note, .st-note, .empty-note, .product-preview-note, .template-hint, .service-lock-note, .preview-note, .section-hd__sub, .page-subtitle, .hero-subtitle, .summary-subtitle, .card-hint, .command-hint, .smart-search-hint) {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.workspace > router-outlet + * :where(p.eyebrow, span.eyebrow, .section-hd__eyebrow) {
+  display: none !important;
+}
+
+.workspace > router-outlet + * :where(.page-stack, .module-hero, .panel, .form-panel, .dashboard-grid, .quick-grid, .metrics-grid, .metric-grid, .kpi-grid, .summary-grid, .card-grid, .workspace-shell, .staff-workspace-shell, .cash-workspace-shell, .settings-grid, .workdesk-grid, .ops-grid, .report-grid, .reports-grid, .action-queue-grid, .template-grid, .catalog-grid, .product-grid, .supplier-grid, .detail-grid, .info-grid, .analysis-grid, .link-grid) {
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.activity-list, .alert-list, .rank-list, .timeline, .timeline-list, .history-list, .feed-list, .queue-list, .message-list, .note-list, .comment-list, .summary-lines, .approval-list, .settlement-list, .deposit-list, .review-stream, .whatsapp-list) {
+  gap: 8px !important;
+}
+
+.workspace > router-outlet + * :where(.toolbar, .suite-toolbar, .table-toolbar, .filter-bar, .filter-grid, .control-strip, .control-filters, .table-controls, .list-controls, .row-controls, .top-actions, .header-actions, .command-actions, .quick-buttons, .action-inbox-buttons, .workspace-actions, .calendar-action-row, .calendar-toolbar-actions, .payment-actions, .invoice-actions, .client-search-actions, .round-off-actions, .conversation-actions, .composer-footer, .reply-tools, .template-actions, .panel-actions, .hero-actions, .campaign-actions, .preview-actions, .approval-actions, .reports-actions, .report-back-row, .audit-toolbar, .inline-action-grid) {
+  gap: 8px !important;
+}
+
+.workspace > router-outlet + * :where(.metric-card, .kpi-card, .command-kpi, .cc-metric-card, .status-card, .summary-card, .report-card, .report-panel, .daily-sheet-card, .score-panel, .score-card, .service-card, .template-card, .review-card, .thread-card, .action-queue-card, .package-history-card, .membership-history-card, .product-profile-card, .supplier-card, .product-card, .approval-item, .ledger-preview, .ledger-suggestion) {
+  padding: clamp(10px, 1.6vw, 14px) !important;
+}
+
+.workspace > router-outlet + * :where(.drawer-shell .drawer, .subdrawer-shell .subdrawer, .appointment-drawer, .scheduler-drawer, .booking-drawer, .recovery-drawer, .risk-drawer, .sla-drawer, .reports-drawer, .provider-drawer, .audit-drawer, .review-response-drawer, .ai-summary-drawer, .client-drawer, .plan-drawer, .package-drawer, .setup-drawer, .detail-drawer, .activity-detail-drawer, .aura-drawer, .renewal-modal, .entry-dialog) {
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(.drawer-section, .drawer-panel, .drawer-action-card, .drawer-focus-card, .booking-guard, .review-box, .checkout-panel, .billing-panel, .billing-control-card, .invoice-detail-panel, .bill-panel, .client-bill-card, .service-bill-card, .settlement-card, .deposit-box, .payment-table-panel, .payment-mode-card, .generated-settlement-card, .package-billing-alert, .pos-client-form, .bill-preview, .bill-side, .bill-main) {
+  padding: clamp(10px, 1.5vw, 14px) !important;
+}
+
+.workspace > router-outlet + * :where(.desk-tabs, .membership-tabs, .product-tabs, .composer-tabs, .channel-grid, .template-tabs, .message-tabs, .shortcut-tabs, .um-tabs, .report-tabs, .cash-tabs, .migration-tabs, .payment-mode-chips, .bill-tabs, .payment-mode-list) {
+  gap: 6px !important;
+}
+
+.workspace > router-outlet + * :where(.desk-tabs button, .membership-tabs button, .product-tabs button, .composer-tabs button, .channel-grid button, .template-tabs button, .message-tabs button, .shortcut-tabs button, .um-tabs button, .report-tabs button, .cash-tabs button, .migration-tabs button, .payment-mode-chip, .bill-tabs button, .payment-mode-row) {
+  min-height: 32px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+.workspace > router-outlet + * :where(.page-heading p, .module-hero p, .studio-hero p, .account-hero p, .ledger-titlebar p) {
+  max-width: 780px;
+  margin-bottom: 0 !important;
+  line-height: 1.35 !important;
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(.page-stack, .module-hero, .panel, .form-panel, .dashboard-grid, .quick-grid, .metrics-grid, .metric-grid, .kpi-grid, .summary-grid, .card-grid, .workspace-shell, .staff-workspace-shell, .cash-workspace-shell, .settings-grid, .workdesk-grid, .ops-grid, .report-grid, .reports-grid, .action-queue-grid, .template-grid, .catalog-grid, .product-grid, .supplier-grid, .detail-grid, .info-grid, .analysis-grid, .link-grid) {
+    gap: 8px !important;
+  }
+
+  .workspace > router-outlet + * :where(.metric-card, .kpi-card, .command-kpi, .cc-metric-card, .status-card, .summary-card, .report-card, .report-panel, .daily-sheet-card, .score-panel, .score-card, .service-card, .template-card, .review-card, .thread-card, .action-queue-card, .package-history-card, .membership-history-card, .product-profile-card, .supplier-card, .product-card, .approval-item, .ledger-preview, .ledger-suggestion) {
+    padding: 10px !important;
+  }
+}
+
+/* Sidebar cleanup: remove repeated module-count helper text, keep count badges and navigation intact. */
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-copy small,
+app-enterprise-sidebar .group-header small {
+  display: none !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-copy,
+app-enterprise-sidebar .group-header > span {
+  gap: 0 !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger {
+  min-height: 42px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+app-enterprise-sidebar .group-header {
+  min-height: 32px !important;
+}
+
+/* Sidebar cleanup: remove section count badges and slim expanded navigation, no behavior changes. */
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-count {
+  display: none !important;
+}
+
+.app-shell:not(.sidebar-is-compact) {
+  grid-template-columns: 284px minmax(0, 1fr) !important;
+}
+
+.app-shell:not(.sidebar-is-compact) > aside.inline-app-sidebar.enterprise-sidebar {
+  width: 284px !important;
+  max-width: 284px !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger {
+  grid-template-columns: 30px minmax(0, 1fr) !important;
+  gap: 8px !important;
+  min-height: 40px !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-brand-row,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-list.nav-accordion,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-callout {
+  margin-left: 10px !important;
+  margin-right: 10px !important;
+}
+
+@media (max-width: 1260px) {
+  .app-shell:not(.sidebar-is-compact) {
+    grid-template-columns: 272px minmax(0, 1fr) !important;
+  }
+
+  .app-shell:not(.sidebar-is-compact) > aside.inline-app-sidebar.enterprise-sidebar {
+    width: 272px !important;
+    max-width: 272px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell:not(.sidebar-is-compact) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar {
+    width: min(284px, 100vw) !important;
+    max-width: min(284px, 100vw) !important;
+  }
+}
+
+/* Premium Salon CRM/POS theme refresh: visual-only global polish, no behavior changes. */
+:root {
+  --aura-bg: #FAF7F2;
+  --aura-card: #FFFFFF;
+  --aura-card-muted: #FCFAF7;
+  --aura-primary: #4B1238;
+  --aura-primary-hover: #6D1B4D;
+  --aura-rose: #E8A7B8;
+  --aura-success: #16A34A;
+  --aura-warning: #F59E0B;
+  --aura-danger: #E11D48;
+  --aura-text: #1F2933;
+  --aura-muted: #6B7280;
+  --aura-border: #E7DED6;
+  --aura-shadow-soft: 0 14px 34px rgba(75, 18, 56, 0.08);
+  --aura-shadow-card: 0 10px 26px rgba(75, 18, 56, 0.07);
+  --aura-focus: 0 0 0 3px rgba(232, 167, 184, 0.48);
+}
+
+body,
+.enterprise-app-shell,
+.app-shell,
+.workspace,
+.enterprise-workspace {
+  background:
+    radial-gradient(circle at top left, rgba(232, 167, 184, 0.18), transparent 280px),
+    linear-gradient(180deg, #fffaf6 0%, var(--aura-bg) 360px) !important;
+  color: var(--aura-text) !important;
+}
+
+.workspace,
+.enterprise-workspace {
+  padding-bottom: 32px !important;
+}
+
+.command-topbar,
+.workspace-header,
+.workspace-module-tabs,
+.workspace-local-rail,
+.workspace-route-content > .workspace-module-tabs {
+  background: rgba(255, 255, 255, 0.82) !important;
+  border-color: var(--aura-border) !important;
+  box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06) !important;
+  backdrop-filter: blur(18px);
+}
+
+.workspace-local-nav a,
+.workspace-module-tab,
+.command-topbar a,
+.command-topbar button {
+  border-radius: 10px !important;
+}
+
+.workspace-local-nav a.active,
+.workspace-local-nav a:hover,
+.workspace-local-nav a:focus-visible,
+.workspace-module-tab.active,
+.workspace-module-tab:hover,
+.workspace-module-tab:focus-visible {
+  background: rgba(75, 18, 56, 0.1) !important;
+  color: var(--aura-primary) !important;
+  border-color: rgba(75, 18, 56, 0.18) !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+.app-shell > aside.sidebar.enterprise-sidebar,
+.app-shell > .enterprise-sidebar {
+  background:
+    linear-gradient(180deg, #5C1644 0%, #4B1238 48%, #351025 100%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 16px 0 36px rgba(75, 18, 56, 0.18) !important;
+  color: #fff !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.brand strong, .brand small, .sidebar-search span, .nav-section-copy strong, .nav-section-copy small, .sidebar-callout strong, .sidebar-callout p),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.brand strong, .brand small, .sidebar-search span, .nav-section-copy strong, .nav-section-copy small, .sidebar-callout strong, .sidebar-callout p),
+.app-shell > .enterprise-sidebar :where(.salon-info strong, .salon-info small, .group-label, .nav-text, .user-info strong, .user-status) {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.brand-mark, .nav-icon, .nav-count, .rail-logo, .group-dot, .user-avatar),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.brand-mark, .nav-icon, .nav-count),
+.app-shell > .enterprise-sidebar :where(.rail-logo, .nav-icon, .group-dot, .user-avatar) {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
+  box-shadow: none !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.sidebar-toggle, .sidebar-search-clear, .quick-btn, .rail-footer button),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.sidebar-toggle, .sidebar-search-clear),
+.app-shell > .enterprise-sidebar :where(.quick-btn, .rail-footer button) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.sidebar-search, .sidebar-callout, .salon-profile, .scope-field, .user-profile-bottom),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.sidebar-search, .sidebar-callout),
+.app-shell > .enterprise-sidebar :where(.sidebar-search, .salon-profile, .scope-field, .user-profile-bottom) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: none !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search input,
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search input,
+.app-shell > .enterprise-sidebar .sidebar-search input,
+.app-shell > .enterprise-sidebar .scope-field select {
+  color: #fff !important;
+  background: transparent !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search input::placeholder,
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search input::placeholder,
+.app-shell > .enterprise-sidebar .sidebar-search input::placeholder {
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-section-trigger, .nav-subitem, .nav-subgroup-title, .group-header, .nav-item, .rail-nav a),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-section-trigger, .nav-subitem, .nav-subgroup-title),
+.app-shell > .enterprise-sidebar :where(.group-header, .nav-item, .rail-nav a) {
+  color: rgba(255, 255, 255, 0.84) !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-section-trigger:hover, .nav-subitem:hover, .nav-subgroup-title:hover, .group-header:hover, .nav-item:hover, .rail-nav a:hover),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-section-trigger:hover, .nav-subitem:hover, .nav-subgroup-title:hover),
+.app-shell > .enterprise-sidebar :where(.group-header:hover, .nav-item:hover, .rail-nav a:hover) {
+  background: rgba(255, 255, 255, 0.11) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #fff !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-section.active-section > .nav-section-trigger, .nav-subitem.active, .nav-subgroup-title.active, .nav-group.active-section > .group-header, .nav-item.active, .rail-nav a.active),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-section.active-section > .nav-section-trigger, .nav-subitem.active, .nav-subgroup-title.active),
+.app-shell > .enterprise-sidebar :where(.nav-group.active-section > .group-header, .nav-item.active, .rail-nav a.active) {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.96), rgba(255, 245, 249, 0.88)) !important;
+  border-color: rgba(232, 167, 184, 0.62) !important;
+  color: var(--aura-primary) !important;
+  box-shadow: 0 10px 24px rgba(22, 11, 18, 0.16) !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-section.active-section > .nav-section-trigger .nav-icon, .nav-subitem.active .nav-icon, .nav-subgroup-title.active .nav-icon),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-section.active-section > .nav-section-trigger .nav-icon, .nav-subitem.active .nav-icon, .nav-subgroup-title.active .nav-icon),
+.app-shell > .enterprise-sidebar :where(.nav-item.active .nav-icon, .rail-nav a.active small, .nav-group.active-section .group-dot) {
+  background: rgba(75, 18, 56, 0.12) !important;
+  color: var(--aura-primary) !important;
+}
+
+.workspace > router-outlet + * :where(.module-hero, .panel, .form-panel, .metric-card, .metric, .kpi-card, .command-kpi, .cc-metric-card, .status-card, .summary-card, .report-card, .report-panel, .daily-sheet-card, .score-panel, .score-card, .dashboard-hub-card, .action-card, .quick-card, .control-card, .card, .state, .table-wrap, .tbl-wrap, .aura-table-wrap, .compact-table-wrap, .checkout-panel, .billing-panel, .bill-panel, .bill-main, .bill-side, .client-card, .thread-card, .review-card, .template-card, .service-card, .product-card, .supplier-card, .approval-item, .ledger-preview, .ledger-suggestion, .calendar-panel, .drawer-section, .drawer-panel, .drawer-action-card, .drawer-focus-card) {
+  background: var(--aura-card) !important;
+  border: 1px solid var(--aura-border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--aura-shadow-card) !important;
+  color: var(--aura-text) !important;
+}
+
+.workspace > router-outlet + * :where(.module-hero, .panel, .form-panel, .report-panel, .checkout-panel, .billing-panel, .bill-panel, .calendar-panel, .drawer-panel) {
+  padding: clamp(14px, 2vw, 20px) !important;
+}
+
+.workspace > router-outlet + * :where(.module-hero h1, .page-heading h1, .panel h2, .panel h3, .section-title h2, .section-title h3, .metric-card strong, .kpi-card strong, .summary-card strong, .report-card strong, .bill-panel strong, .checkout-panel strong) {
+  color: var(--aura-text) !important;
+  letter-spacing: 0 !important;
+}
+
+.workspace > router-outlet + * :where(p, small, .muted, .hint, .subtext, .table-meta, .metric-card span, .metric-card small, .kpi-card span, .kpi-card small, .summary-card span, .summary-card small, .report-card span, .report-card small) {
+  color: var(--aura-muted) !important;
+}
+
+.workspace > router-outlet + * :where(.module-hero, .page-heading, .section-title, .panel-head, .table-toolbar, .filter-bar, .filter-grid, .control-strip, .control-filters, .table-controls, .list-controls, .top-actions, .header-actions, .workspace-actions, .calendar-action-row, .calendar-toolbar-actions, .payment-actions, .invoice-actions, .client-search-actions, .round-off-actions, .panel-actions, .hero-actions, .reports-actions) {
+  gap: 10px !important;
+}
+
+.workspace > router-outlet + * :where(button, .button, .dark-button, .primary-button, .ghost-button, .outline-button, .mini, .filter-chip, .event-chip, .payment-mode-chip, .workspace-module-tab),
+.command-topbar :where(button, a),
+.auth-card :where(button, a) {
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.workspace > router-outlet + * :where(.dark-button, .primary-button, .save-button, .pos-save-button, .cta-button, button[type='submit']),
+.command-topbar .dark-button,
+.auth-card button[type='submit'] {
+  background: linear-gradient(180deg, var(--aura-primary-hover), var(--aura-primary)) !important;
+  border-color: var(--aura-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 24px rgba(75, 18, 56, 0.18) !important;
+}
+
+.workspace > router-outlet + * :where(.dark-button:hover, .primary-button:hover, .save-button:hover, .pos-save-button:hover, .cta-button:hover, button[type='submit']:hover),
+.command-topbar .dark-button:hover,
+.auth-card button[type='submit']:hover {
+  background: linear-gradient(180deg, #7A2357, var(--aura-primary-hover)) !important;
+  transform: translateY(-1px);
+}
+
+.workspace > router-outlet + * :where(.ghost-button, .outline-button, .filter-chip, .event-chip, .payment-mode-chip, .workspace-module-tab),
+.command-topbar :where(.ghost-button, .outline-button) {
+  background: #fff !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-primary) !important;
+}
+
+.workspace > router-outlet + * :where(.ghost-button:hover, .outline-button:hover, .filter-chip:hover, .filter-chip.active, .event-chip:hover, .event-chip.active, .payment-mode-chip:hover, .payment-mode-chip.active) {
+  background: rgba(75, 18, 56, 0.08) !important;
+  border-color: rgba(75, 18, 56, 0.22) !important;
+  color: var(--aura-primary) !important;
+}
+
+.workspace > router-outlet + * :where(input, select, textarea, .input, .search-input),
+.auth-card :where(input, select, textarea),
+.command-topbar :where(input, select, textarea) {
+  background: #fff !important;
+  border: 1px solid var(--aura-border) !important;
+  border-radius: 10px !important;
+  color: var(--aura-text) !important;
+  box-shadow: inset 0 1px 0 rgba(75, 18, 56, 0.03) !important;
+}
+
+.workspace > router-outlet + * :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible),
+.auth-card :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible),
+.command-topbar :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible),
+.app-shell > aside.enterprise-sidebar :where(button:focus-visible, a:focus-visible, input:focus, select:focus) {
+  border-color: var(--aura-primary) !important;
+  outline: none !important;
+  box-shadow: var(--aura-focus) !important;
+}
+
+.workspace > router-outlet + * :where(label, .field span, .form-label, th) {
+  color: var(--aura-text) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.workspace > router-outlet + * :where(.table-wrap, .tbl-wrap, .aura-table-wrap, .aura-table, .compact-table-wrap, .ledger-table-wrap, .hours-table-wrap, .color-table-wrap, .form-table-wrap, .payment-table-wrap, .invoice-line-table-wrap, .client-invoice-table-wrap, .account-table, .report-table) {
+  overflow: auto !important;
+  border-color: var(--aura-border) !important;
+  background: var(--aura-card) !important;
+}
+
+.workspace > router-outlet + * :where(table) {
+  border-color: var(--aura-border) !important;
+}
+
+.workspace > router-outlet + * :where(th) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #FFF8F3 !important;
+  border-bottom: 1px solid var(--aura-border) !important;
+  color: var(--aura-text) !important;
+}
+
+.workspace > router-outlet + * :where(td) {
+  border-color: rgba(231, 222, 214, 0.82) !important;
+  color: var(--aura-text) !important;
+}
+
+.workspace > router-outlet + * :where(tbody tr:hover, .table-row:hover, .client-invoice-row:hover, .account-row:hover, .report-row:hover) {
+  background: rgba(232, 167, 184, 0.12) !important;
+}
+
+.workspace > router-outlet + * :where(.empty-state, .empty, .nav-empty, .no-results, .state.empty, .empty-panel) {
+  background: #FFF8F3 !important;
+  border: 1px dashed var(--aura-border) !important;
+  border-radius: 12px !important;
+  color: var(--aura-muted) !important;
+}
+
+.workspace > router-outlet + * :where(.badge, .pill, .status-pill, .state-pill, .status-badge, .score-pill, .mini-status, .mini-badge, .tag, .data-io-status) {
+  border-radius: 999px !important;
+  border: 1px solid rgba(75, 18, 56, 0.16) !important;
+  background: rgba(75, 18, 56, 0.08) !important;
+  color: var(--aura-primary) !important;
+  font-weight: 800 !important;
+}
+
+.workspace > router-outlet + * :where(.green, .success, .good, .ok, .live, .completed, .approved, .resolved, .status-success, .status-completed, .status-approved, .status-paid, .status-live, .badge.success, .badge.good, .badge.green, .status-badge.status-paid, .status-pill.status-completed) {
+  border-color: rgba(22, 163, 74, 0.28) !important;
+  background: rgba(22, 163, 74, 0.1) !important;
+  color: var(--aura-success) !important;
+}
+
+.workspace > router-outlet + * :where(.amber, .warn, .warning, .pending, .medium, .open, .recommended, .status-warning, .status-pending, .status-pending_approval, .status-badge.status-pending, .status-pill.status-pending, .badge.warn, .badge.warning, .badge.pending) {
+  border-color: rgba(245, 158, 11, 0.32) !important;
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: #9A5B00 !important;
+}
+
+.workspace > router-outlet + * :where(.red, .danger, .error, .failed, .cancelled, .canceled, .rejected, .expired, .blocked, .exception, .status-danger, .status-cancelled, .status-canceled, .status-rejected, .status-failed, .badge.danger, .status-badge.status-rejected, .status-pill.status-cancelled) {
+  border-color: rgba(225, 29, 72, 0.3) !important;
+  background: rgba(225, 29, 72, 0.1) !important;
+  color: var(--aura-danger) !important;
+}
+
+.workspace > router-outlet + * :where(.confirmed, .status-confirmed, .status-badge.status-confirmed, .status-pill.status-confirmed, .badge.confirmed) {
+  border-color: rgba(75, 18, 56, 0.28) !important;
+  background: rgba(75, 18, 56, 0.1) !important;
+  color: var(--aura-primary) !important;
+}
+
+.workspace > router-outlet + * :where(.metric-card, .kpi-card, .command-kpi, .cc-metric-card, .summary-card, .report-card, .daily-sheet-card, .score-card) {
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace > router-outlet + * :where(.metric-card)::before,
+.workspace > router-outlet + * :where(.kpi-card)::before,
+.workspace > router-outlet + * :where(.command-kpi)::before,
+.workspace > router-outlet + * :where(.summary-card)::before,
+.workspace > router-outlet + * :where(.report-card)::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--aura-primary);
+  opacity: 0.9;
+}
+
+.workspace > router-outlet + * :where(.metric-card.green, .kpi-card.green)::before { background: var(--aura-success); }
+.workspace > router-outlet + * :where(.metric-card.amber, .kpi-card.amber)::before { background: var(--aura-warning); }
+.workspace > router-outlet + * :where(.metric-card.red, .kpi-card.red)::before { background: var(--aura-danger); }
+.workspace > router-outlet + * :where(.metric-card.rose, .kpi-card.rose)::before { background: var(--aura-rose); }
+
+.workspace > router-outlet + * :where(.calendar-panel, .calendar-layout, .calendar-board, .day-board-scroll, .week-board, .month-grid, .timeline-board, .resource-grid, .scheduler-grid-shell, .enterprise-scheduler) {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: var(--aura-border) !important;
+}
+
+.workspace > router-outlet + * :where(.booking-card, .appointment-card, .event-card, .calendar-event, .slot-card, .timeline-card) {
+  background: #fff !important;
+  border: 1px solid var(--aura-border) !important;
+  border-left: 4px solid var(--aura-primary) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 18px rgba(75, 18, 56, 0.07) !important;
+}
+
+.workspace > router-outlet + * :where(.booking-card.completed, .appointment-card.completed, .event-card.completed, .calendar-event.completed) { border-left-color: var(--aura-success) !important; }
+.workspace > router-outlet + * :where(.booking-card.pending, .appointment-card.pending, .event-card.pending, .calendar-event.pending) { border-left-color: var(--aura-warning) !important; }
+.workspace > router-outlet + * :where(.booking-card.cancelled, .booking-card.canceled, .appointment-card.cancelled, .appointment-card.canceled, .event-card.cancelled, .calendar-event.cancelled) { border-left-color: var(--aura-danger) !important; }
+.workspace > router-outlet + * :where(.booking-card.confirmed, .appointment-card.confirmed, .event-card.confirmed, .calendar-event.confirmed) { border-left-color: var(--aura-primary) !important; }
+
+.workspace > router-outlet + * :where(.pos-layout, .split-layout, .invoice-register-layout, .billing-shell, .bill-layout, .payment-distribution-stack, .refund-shell, .pos-guard-grid, .totals-grid, .payment-card-strip, .payment-grid, .billing-control-grid) {
+  gap: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.checkout-panel .total, .invoice-preview .total, .total-box, .voucher-total, .total-row, .zenoti-totals, .settlement-preview-metrics article) {
+  background: linear-gradient(135deg, rgba(75, 18, 56, 0.96), rgba(109, 27, 77, 0.92)) !important;
+  color: #fff !important;
+  border: 0 !important;
+  box-shadow: 0 14px 28px rgba(75, 18, 56, 0.18) !important;
+}
+
+.workspace > router-outlet + * :where(.checkout-panel .total, .invoice-preview .total, .total-box, .voucher-total, .total-row, .zenoti-totals, .settlement-preview-metrics article) :where(span, strong, small, b) {
+  color: #fff !important;
+}
+
+.workspace > router-outlet + * :where(.payment-mode-chip, .payment-mode-row, .bill-tabs button, .desk-tabs button, .membership-tabs button, .product-tabs button, .composer-tabs button, .message-tabs button, .shortcut-tabs button) {
+  min-height: 38px !important;
+  padding-inline: 12px !important;
+}
+
+.workspace > router-outlet + * :where(.drawer-shell .drawer, .subdrawer-shell .subdrawer, .appointment-drawer, .scheduler-drawer, .booking-drawer, .recovery-drawer, .risk-drawer, .sla-drawer, .reports-drawer, .provider-drawer, .audit-drawer, .review-response-drawer, .ai-summary-drawer, .client-drawer, .plan-drawer, .package-drawer, .setup-drawer, .detail-drawer, .activity-detail-drawer, .aura-drawer, .renewal-modal, .entry-dialog) {
+  background: var(--aura-bg) !important;
+  border-color: var(--aura-border) !important;
+  box-shadow: 0 22px 54px rgba(75, 18, 56, 0.16) !important;
+}
+
+@media (max-width: 980px) {
+  .workspace,
+  .enterprise-workspace {
+    padding-inline: 14px !important;
+  }
+
+  .workspace > router-outlet + * :where(.module-hero, .panel, .form-panel, .report-panel, .checkout-panel, .billing-panel, .bill-panel, .calendar-panel, .drawer-panel) {
+    padding: 12px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace > router-outlet + * :where(button, .button, .dark-button, .primary-button, .ghost-button, .outline-button, .filter-chip, .event-chip, .payment-mode-chip) {
+    min-height: 42px !important;
+  }
+
+  .workspace > router-outlet + * :where(.table-toolbar, .filter-bar, .filter-grid, .control-strip, .control-filters, .table-controls, .list-controls, .top-actions, .header-actions, .workspace-actions, .calendar-action-row, .calendar-toolbar-actions, .payment-actions, .invoice-actions, .client-search-actions, .round-off-actions, .panel-actions, .hero-actions, .reports-actions) {
+    align-items: stretch !important;
+  }
+}
+
+/* Sidebar active item contrast fix: keep premium light pill, make label and icon readable. */
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-subitem.active, .nav-subgroup-title.active),
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger,
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-subitem.active, .nav-subgroup-title.active) {
+  background: linear-gradient(90deg, #fff8fb, #f8e5ec) !important;
+  border-color: rgba(232, 167, 184, 0.78) !important;
+  color: var(--aura-primary) !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger :where(.nav-section-copy, .nav-section-copy strong, .nav-section-copy small, span:not(.nav-icon)),
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-subitem.active, .nav-subgroup-title.active) :where(span:not(.nav-icon), strong, small),
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger :where(.nav-section-copy, .nav-section-copy strong, .nav-section-copy small, span:not(.nav-icon)),
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-subitem.active, .nav-subgroup-title.active) :where(span:not(.nav-icon), strong, small) {
+  color: var(--aura-primary) !important;
+  opacity: 1 !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger .nav-icon,
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.nav-subitem.active, .nav-subgroup-title.active) .nav-icon,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger .nav-icon,
+.app-shell > aside.sidebar.enterprise-sidebar :where(.nav-subitem.active, .nav-subgroup-title.active) .nav-icon {
+  background: rgba(75, 18, 56, 0.12) !important;
+  border-color: rgba(75, 18, 56, 0.16) !important;
+  color: var(--aura-primary) !important;
+}
+
 /* Compact icon sidebar: permanent rail with search flyout. */
 .app-shell,
 .app-shell.sidebar-is-compact {
@@ -7202,6 +8478,9 @@ aura-command-palette .cmdk-foot {
   top: 0 !important;
   display: flex !important;
   align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 42px !important;
   margin: 0 0 10px !important;
   z-index: 2 !important;
   background: rgba(255, 255, 255, 0.36) !important;
@@ -7210,12 +8489,22 @@ aura-command-palette .cmdk-foot {
 }
 
 .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-flyout .sidebar-search input {
+  width: 100% !important;
+  min-width: 0 !important;
   min-height: 40px !important;
-  padding-right: 66px !important;
+  padding: 0 12px 0 36px !important;
   color: var(--color-text) !important;
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
+  font-size: 0.78rem !important;
+  line-height: 1.2 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-flyout .sidebar-search:has(.sidebar-search-clear) input {
+  padding-right: 64px !important;
 }
 
 .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-flyout .sidebar-search input::placeholder {
@@ -7483,6 +8772,7 @@ aura-command-palette .cmdk-foot {
 .workspace-route-shell--local-rail-collapsed .workspace-local-nav a .workspace-local-nav-label {
   display: none !important;
 }
+
 /* Local module rail behavior: fixed circular buttons with hover labels. */
 @media (min-width: 761px) {
   .workspace-route-shell--with-local-nav,
@@ -7597,4 +8887,94 @@ aura-command-palette .cmdk-foot {
     opacity: 1 !important;
     transform: translateY(-50%) translateX(0) !important;
   }
+}
+
+/* Local rail overlap fix: reserve the narrow rail column and keep route content visible. */
+.workspace-route-shell.workspace-route-shell--with-local-nav {
+  display: grid !important;
+  grid-template-columns: 204px minmax(0, 1fr) !important;
+  align-items: start !important;
+  column-gap: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav.workspace-route-shell--local-rail-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr) !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav .workspace-local-rail {
+  grid-column: 1 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  align-self: stretch !important;
+  z-index: 3 !important;
+  overflow: hidden !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content {
+  grid-column: 2 !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  padding-left: 12px !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav :where(.workspace-module-tabs, .calendar-panel, .calendar-layout, .calendar-board, .day-board-scroll, .week-board, .month-grid, .timeline-board, .resource-grid, .scheduler-grid-shell, .enterprise-scheduler, .appointment-grid, .slot-grid) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger::after {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  .workspace-route-shell.workspace-route-shell--with-local-nav,
+  .workspace-route-shell.workspace-route-shell--with-local-nav.workspace-route-shell--local-rail-collapsed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content {
+    grid-column: 1 !important;
+    padding-left: 0 !important;
+  }
+}
+/* Staff/local route shell: no top gap and no module-tab overlap. */
+.workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content {
+  align-content: start !important;
+  row-gap: 0 !important;
+  padding-top: 0 !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content > .workspace-module-tabs {
+  position: static !important;
+  top: auto !important;
+  z-index: 4 !important;
+  margin: 0 !important;
+  border-top: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content > router-outlet + * {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav app-staff-os-section .staff-list-mode {
+  gap: 0 !important;
+}
+
+.workspace-route-shell.workspace-route-shell--with-local-nav app-staff-os-section .staff-list-mode .staff-register-panel {
+  margin-top: 0 !important;
+  border-top: 0 !important;
 }

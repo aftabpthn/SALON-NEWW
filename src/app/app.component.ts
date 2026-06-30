@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, ViewChild, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
@@ -143,10 +143,6 @@ type ActiveModuleTabs = {
       <aside
         class="sidebar enterprise-sidebar inline-app-sidebar"
         [class.sidebar-compact]="sidebarUiCompact()"
-        (mouseenter)="openSidebarPreview()"
-        (mouseleave)="closeSidebarPreview()"
-        (focusin)="openSidebarPreview()"
-        (focusout)="closeSidebarPreview($event)"
       >
         <div class="sidebar-brand-row">
           <a class="brand" routerLink="/home" aria-label="Aura Shine home">
@@ -158,15 +154,68 @@ type ActiveModuleTabs = {
           </a>
 
         </div>
+        <div class="sidebar-search-slot" [class.open]="sidebarSearchOpen() || navSearchDraft()">
+          <button
+            class="sidebar-search-icon-button"
+            type="button"
+            (click)="toggleSidebarSearch()"
+            aria-label="Search modules and pages"
+            [attr.aria-expanded]="sidebarSearchOpen()"
+            title="Search"
+          >
+            <svg class="sidebar-search-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M10.5 5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z M15 15l4 4"></path>
+            </svg>
+          </button>
 
-        <label class="sidebar-search" *ngIf="!sidebarUiCompact()">
-          <input [ngModel]="navSearchDraft()" (ngModelChange)="setNavSearchDraft($event)" aria-label="Search modules" placeholder="Search" />
-          <button class="sidebar-search-clear" type="button" *ngIf="navSearchDraft()" (click)="clearNavSearch()">Clear</button>
-        </label>
+          <section class="sidebar-search-flyout" *ngIf="sidebarSearchOpen() || navSearchDraft()" aria-label="Search navigation">
+            <label class="sidebar-search">
+              <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M10.5 5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z M15 15l4 4"></path>
+              </svg>
+              <input
+                #sidebarSearchInput
+                [ngModel]="navSearchDraft()"
+                (ngModelChange)="setNavSearchDraft($event)"
+                (keydown.escape)="closeSidebarSearch(true)"
+                aria-label="Search modules and pages"
+                placeholder="Search modules, pages"
+              />
+              <button class="sidebar-search-clear" type="button" *ngIf="navSearchDraft()" (click)="clearNavSearch()">Clear</button>
+            </label>
+
+            <div class="sidebar-search-results" *ngIf="navQuery().trim(); else sidebarSearchHint">
+              <section class="sidebar-search-group" *ngFor="let group of visibleNavGroups(); trackBy: trackNavGroup">
+                <span class="sidebar-search-group-label">{{ group.label }}</span>
+                <a
+                  class="sidebar-search-result"
+                  *ngFor="let item of visibleSidebarItems(group); trackBy: trackNavItem"
+                  [class.active]="isSidebarNavItemActive(item)"
+                  [routerLink]="item.path"
+                  [queryParams]="item.queryParams || null"
+                  routerLinkActive="active"
+                  [routerLinkActiveOptions]="{ exact: item.path === '/home' || item.path === '/dashboard' }"
+                  (click)="rememberNavGroup(group.id); closeSidebarSearch(true)"
+                >
+                  <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
+                  <span>{{ item.label }}</span>
+                </a>
+              </section>
+              <div class="nav-empty" *ngIf="!visibleNavGroups().length">
+                <strong>{{ i18n.t('shell.noModule', 'No module found') }}</strong>
+                <button class="ghost-button mini" type="button" (click)="clearNavSearch()">Reset search</button>
+              </div>
+            </div>
+
+            <ng-template #sidebarSearchHint>
+              <p class="sidebar-search-hint">Search any module or page</p>
+            </ng-template>
+          </section>
+        </div>
 
         <nav class="nav-list nav-accordion" aria-label="Primary navigation">
           <section class="nav-section" *ngFor="let group of visibleNavGroups(); trackBy: trackNavGroup" [class.active-section]="isGroupActive(group)">
-            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [title]="group.label">
+            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [title]="group.label" [attr.data-label]="group.label">
               <span class="nav-icon nav-icon--module" aria-hidden="true">
                 <svg class="nav-icon-svg" viewBox="0 0 24 24" focusable="false">
                   <path [attr.d]="navGroupIconPath(group.id)"></path>
@@ -560,12 +609,13 @@ export class AppComponent implements OnDestroy {
 
   readonly navSearchDraft = signal('');
   readonly navQuery = signal('');
+  readonly sidebarSearchOpen = signal(false);
   readonly activeRoute = signal('');
   readonly previousRoute = signal('');
   readonly routeHistory = signal<string[]>([]);
   readonly sidebarCompact = signal(true);
   readonly sidebarHoverExpanded = signal(false);
-  readonly sidebarUiCompact = computed(() => this.sidebarCompact() && !this.sidebarHoverExpanded());
+  readonly sidebarUiCompact = computed(() => true);
   readonly localRailHoverExpanded = signal(false);
   readonly localRailExpanded = computed(() => this.localRailHoverExpanded());
   readonly expandedGroupIds = signal<string[]>(this.readExpandedGroups());
@@ -585,9 +635,12 @@ export class AppComponent implements OnDestroy {
     finance: 'M4 7h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4z M4 7V5h12 M15 13h5 M8 10h5 M8 14h4',
     marketing: 'M4 11h3l9-4v10l-9-4H4z M7 13l2 6 M18 9l2-2 M18 15l2 2',
     admin: 'M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z M12 9v5 M9.5 11.5h5',
+    settings: 'M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z M19.4 15a7.8 7.8 0 0 0 .1-1l2-1.2-2-3.5-2.3.9a7 7 0 0 0-1.7-1L15.2 6h-4l-.4 3.2a7 7 0 0 0-1.7 1l-2.3-.9-2 3.5 2 1.2a7.8 7.8 0 0 0 0 2l-2 1.2 2 3.5 2.3-.9a7 7 0 0 0 1.7 1l.4 3.2h4l.4-3.2a7 7 0 0 0 1.7-1l2.3.9 2-3.5z',
     'ai-platform': 'M12 3l1.2 3.4L16 8l-2.8 1.6L12 13l-1.2-3.4L8 8l2.8-1.6z M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8z M18 13l.7 1.8 2.3.7-2.3.7L18 18l-.7-1.8-2.3-.7 2.3-.7z'
   };
   private loadedLocalizationTenantId = '';
+
+  @ViewChild('sidebarSearchInput') private sidebarSearchInput?: ElementRef<HTMLInputElement>;
   private readonly navPermissionRules: Array<{ pattern: RegExp; permission: string | string[] }> = [
     { pattern: /^\/(security|enterprise-security-shield|security-alerts|security-blocklist|security-policy-center|permissions|compliance|audit-compliance|two-factor)/, permission: ['read:security', 'write:security', 'admin:security'] },
     { pattern: /^\/(business-details|settings|branches|white-label|localization)/, permission: ['read:settings', 'write:settings', 'read:branches', 'write:branches'] },
@@ -1045,6 +1098,27 @@ export class AppComponent implements OnDestroy {
       ]
     },
     {
+      id: 'settings',
+      label: 'Settings',
+      icon: 'SE',
+      primaryPath: '/settings',
+      items: [
+        {
+          path: '/settings',
+          label: 'Business Settings',
+          icon: 'BS',
+          keywords: 'settings business configuration calendar tax marketplace client custom form',
+          children: [
+            { path: '/settings', label: 'Settings', icon: 'G', keywords: 'settings configuration' },
+            { path: '/settings/calendar', label: 'Calendar Settings', icon: 'CS', keywords: 'calendar booking slot appointment settings' },
+            { path: '/settings/taxes', label: 'Tax Settings', icon: 'TX', keywords: 'gst tax invoice settings' },
+            { path: '/settings/clients/custom-form', label: 'Client Form', icon: 'CF', keywords: 'client custom form settings' },
+            { path: '/settings/marketplace', label: 'Marketplace', icon: 'MP', keywords: 'marketplace integration settings' }
+          ]
+        }
+      ]
+    },
+    {
       id: 'ai-platform',
       label: 'AI & Automation',
       icon: 'AI',
@@ -1124,7 +1198,23 @@ export class AppComponent implements OnDestroy {
   });
   readonly activeLocalNav = computed<ActiveLocalNav | null>(() => {
     const branch = this.navBranchForUrl(this.activeRoute());
-    if (!branch?.item.children?.length) return null;
+    if (!branch) return null;
+
+    if (branch.group.id === 'clients') {
+      const children = branch.group.items.filter((item) => this.canAccessNavItem(item));
+      if (!children.length) return null;
+
+      return {
+        groupId: branch.group.id,
+        groupLabel: branch.group.label,
+        path: branch.group.primaryPath,
+        label: branch.group.label,
+        icon: branch.group.icon,
+        children
+      };
+    }
+
+    if (!branch.item.children?.length) return null;
 
     const children = this.localNavChildren(branch.group.id, branch.item).filter((item) => this.canAccessNavItem(item));
     if (!children.length) return null;
@@ -1141,6 +1231,7 @@ export class AppComponent implements OnDestroy {
   readonly activeModuleTabs = computed<ActiveModuleTabs | null>(() => {
     const branch = this.navBranchForUrl(this.activeRoute());
     if (!branch) return null;
+    if (branch.group.id === 'clients') return null;
 
     const items = branch.group.items.filter((item) => this.canAccessNavItem(item));
     if (!items.length) return null;
@@ -1429,6 +1520,25 @@ export class AppComponent implements OnDestroy {
     this.navSearchDraft.set('');
     this.navQuery.set('');
   }
+
+  toggleSidebarSearch(): void {
+    if (this.sidebarSearchOpen() && !this.navSearchDraft()) {
+      this.closeSidebarSearch();
+      return;
+    }
+    this.openSidebarSearch();
+  }
+
+  openSidebarSearch(): void {
+    this.sidebarSearchOpen.set(true);
+    setTimeout(() => this.sidebarSearchInput?.nativeElement.focus(), 0);
+  }
+
+  closeSidebarSearch(clear = false): void {
+    this.sidebarSearchOpen.set(false);
+    if (clear) this.clearNavSearch();
+  }
+
   readonly trackNavGroup = (_: number, group: NavGroup): string => group.id;
 
   readonly trackNavItem = (_: number, item: NavItem): string => this.navItemRouteKey(item);
