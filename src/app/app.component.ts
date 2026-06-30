@@ -39,6 +39,11 @@ type ActiveNavTabGroup = {
   children: NavItem[];
 };
 
+type ActiveStaffModuleTabs = {
+  label: string;
+  items: NavItem[];
+};
+
 type ActiveStaffLocalNav = {
   path: string;
   label: string;
@@ -175,8 +180,8 @@ type ActiveStaffLocalNav = {
               </span>
               <span class="nav-count">{{ navLeafCount(group.items) }}</span>
             </button>
-            <div class="nav-section-items" *ngIf="!sidebarUiCompact() && (navQuery() || isGroupExpanded(group))">
-              <ng-container *ngFor="let item of group.items">
+            <div class="nav-section-items" *ngIf="!sidebarUiCompact() && (navQuery() || isGroupExpanded(group)) && visibleSidebarItems(group).length">
+              <ng-container *ngFor="let item of visibleSidebarItems(group)">
                 <div class="nav-subgroup" *ngIf="item.children?.length; else singleNavItem">
                   <a
                     class="nav-subgroup-title"
@@ -243,6 +248,22 @@ type ActiveStaffLocalNav = {
           {{ globalError() }}
           <button class="ghost-button mini" type="button" (click)="globalError.set('')">{{ i18n.t('shell.dismiss', 'Dismiss') }}</button>
         </div>
+
+        <section class="staff-module-tabs" *ngIf="activeStaffModuleTabs() as staffTabs" aria-label="Staff OS modules">
+          <nav class="staff-module-tabs-nav" aria-label="Staff OS module groups">
+            <a
+              *ngFor="let tab of staffTabs.items"
+              class="staff-module-tab"
+              [routerLink]="tab.path"
+              [class.active]="isNavItemActive(tab)"
+              [attr.aria-current]="isNavItemActive(tab) ? 'page' : null"
+              (click)="rememberNavGroup('staff')"
+            >
+              <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
+              <span>{{ tab.label }}</span>
+            </a>
+          </nav>
+        </section>
 
         <section
           class="workspace-page-tabs"
@@ -983,6 +1004,18 @@ export class AppComponent {
       children
     };
   });
+  readonly activeStaffModuleTabs = computed<ActiveStaffModuleTabs | null>(() => {
+    const branch = this.navBranchForUrl(this.activeRoute());
+    if (branch?.group.id !== 'staff') return null;
+
+    const items = branch.group.items.filter((item) => this.canAccessNavItem(item));
+    if (!items.length) return null;
+
+    return {
+      label: branch.group.label,
+      items
+    };
+  });
   readonly activePageTabs = computed<ActiveNavTabGroup | null>(() => {
     const route = this.routePath(this.activeRoute());
     if (this.activeStaffLocalNav()) return null;
@@ -1207,7 +1240,7 @@ export class AppComponent {
   }
 
   openNavGroup(group: NavGroup): void {
-    if (this.sidebarUiCompact()) {
+    if (this.sidebarUiCompact() || group.id === 'staff') {
       this.router.navigateByUrl(group.primaryPath);
       return;
     }
@@ -1293,6 +1326,10 @@ export class AppComponent {
 
   navLeafCount(items: NavItem[]): number {
     return items.length;
+  }
+
+  visibleSidebarItems(group: NavGroup): NavItem[] {
+    return group.id === 'staff' ? [] : group.items;
   }
 
   private staffLocalChildren(item: NavItem): NavItem[] {

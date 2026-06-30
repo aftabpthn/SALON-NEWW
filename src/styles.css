@@ -4691,6 +4691,89 @@ body::before {
   background: rgba(15, 118, 110, 0.1);
 }
 
+
+.staff-module-tabs {
+  position: sticky;
+  top: 94px;
+  z-index: 19;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px);
+}
+
+.staff-module-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.staff-module-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  max-width: 240px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 7px;
+  color: #34483f;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 0.8rem;
+  font-weight: 850;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.staff-module-tab span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-module-tab:hover,
+.staff-module-tab:focus-visible,
+.staff-module-tab.active {
+  color: #0f4f49;
+  border-color: rgba(15, 118, 110, 0.28);
+  background: rgba(228, 245, 239, 0.98);
+  box-shadow: inset 0 -3px 0 var(--teal);
+  outline: none;
+}
+
+.staff-module-tab .nav-icon {
+  width: 26px;
+  height: 26px;
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+@media (max-width: 760px) {
+  .staff-module-tabs {
+    position: static;
+    margin: 0 0 8px;
+    padding: 7px;
+    border-radius: 9px;
+  }
+
+  .staff-module-tabs-nav {
+    gap: 5px;
+  }
+
+  .staff-module-tab {
+    max-width: none;
+    min-height: 34px;
+    padding: 0 9px;
+  }
+}
 .workspace-page-tabs.command-nav-compact {
   margin: 0 0 8px;
   padding: 4px 6px;
