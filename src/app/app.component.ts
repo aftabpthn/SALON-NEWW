@@ -172,6 +172,7 @@ type ActiveNavTabGroup = {
                 <div class="nav-subgroup" *ngIf="item.children?.length; else singleNavItem">
                   <a
                     class="nav-subgroup-title"
+                    [class.active]="isNavItemActive(item)"
                     [routerLink]="item.path"
                     routerLinkActive="active"
                     (click)="rememberNavGroup(group.id)"
@@ -180,23 +181,11 @@ type ActiveNavTabGroup = {
                     <span>{{ item.label }}</span>
                     <small>{{ item.children?.length }}</small>
                   </a>
-                  <ng-container *ngIf="navQuery() || isGroupExpanded(group) || isGroupActive(group)">
-                    <a
-                      *ngFor="let child of item.children"
-                      class="nav-subitem nested"
-                      [routerLink]="child.path"
-                      routerLinkActive="active"
-                      [routerLinkActiveOptions]="{ exact: child.path === '/home' || child.path === '/dashboard' }"
-                      (click)="rememberNavGroup(group.id)"
-                    >
-                      <span class="nav-icon" aria-hidden="true">{{ child.icon }}</span>
-                      <span>{{ child.label }}</span>
-                    </a>
-                  </ng-container>
                 </div>
                 <ng-template #singleNavItem>
                   <a
                     class="nav-subitem"
+                    [class.active]="isNavItemActive(item)"
                     [routerLink]="item.path"
                     routerLinkActive="active"
                     [routerLinkActiveOptions]="{ exact: item.path === '/home' || item.path === '/dashboard' }"
@@ -1124,6 +1113,11 @@ export class AppComponent {
   isGroupActive(group: NavGroup): boolean {
     const url = this.activeRoute();
     return this.navLeaves(group.items).some((item) => this.isRouteActive(url, item.path));
+  }
+
+  isNavItemActive(item: NavItem): boolean {
+    const url = this.activeRoute();
+    return this.isRouteActive(url, item.path) || (item.children || []).some((child) => this.isRouteActive(url, child.path));
   }
 
   private ensureActiveGroupExpanded(url: string): void {
