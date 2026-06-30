@@ -857,7 +857,9 @@ export class AppComponent {
     return this.pageLabelForUrl(this.activeRoute()) || 'Command workspace';
   });
   readonly activePageTabs = computed<ActiveNavTabGroup | null>(() => {
-    const branch = this.navBranchForUrl(this.activeRoute());
+    const route = this.routePath(this.activeRoute());
+    if (this.isStaffRegisterRoute(route)) return null;
+    const branch = this.navBranchForUrl(route);
     if (!branch?.item.children?.length) return null;
     return {
       groupLabel: branch.group.label,
@@ -1145,6 +1147,9 @@ export class AppComponent {
     return items.flatMap((item) => item.children?.length ? item.children : [item]);
   }
 
+  private isStaffRegisterRoute(path: string): boolean {
+    return path === '/staff-os/staff-list' || path === '/staff-os/staff-profile' || path === '/staff-os/training-center';
+  }
   private navBranchForUrl(url: string): { group: NavGroup; item: NavItem } | null {
     const cleanUrl = this.routePath(url);
     for (const group of this.navGroups) {
