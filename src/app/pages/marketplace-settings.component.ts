@@ -636,7 +636,7 @@ export class MarketplaceSettingsComponent implements OnInit {
   load(): void {
     this.error.set('');
     this.message.set('');
-    this.api.list<{ settings?: ApiRecord; summary?: ReputationSummary }>('settings/marketplace').subscribe({
+    this.api.list<{ settings?: ApiRecord; summary?: ReputationSummary }>('v1/settings/marketplace').subscribe({
       next: (result) => {
         this.settings = this.normalize(result.settings || {});
         this.summary.set({ ...DEFAULT_SUMMARY, ...(result.summary || {}) });
@@ -652,7 +652,7 @@ export class MarketplaceSettingsComponent implements OnInit {
     this.error.set('');
     this.message.set('');
     const settings = this.normalize(this.settings);
-    this.api.put<{ settings?: ApiRecord; summary?: ReputationSummary }>('settings/marketplace', { settings }).subscribe({
+    this.api.put<{ settings?: ApiRecord; summary?: ReputationSummary }>('v1/settings/marketplace', { settings }).subscribe({
       next: (result) => {
         this.settings = this.normalize(result.settings || settings);
         this.summary.set({ ...DEFAULT_SUMMARY, ...(result.summary || this.summary()) });

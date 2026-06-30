@@ -76,7 +76,7 @@ test("marketplace settings frontend exposes reputation control UI", () => {
     assert.match(page, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing UI label ${label}`);
   }
 
-  assert.match(page, /settings\/marketplace/, "page should call marketplace settings API");
+  assert.match(page, /v1\/settings\/marketplace/, "page should call v1 marketplace settings API");
   assert.match(page, /autoRequestEnabled/, "auto request setting should be present");
   assert.match(page, /requestTiming/, "timing option should be present");
   assert.match(page, /highRatingDestination/, "rating destination rule should be present");
