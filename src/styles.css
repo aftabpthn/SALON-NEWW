@@ -6009,7 +6009,7 @@ app-staff-os-section .context-links { justify-content: flex-start; }
   gap: 12px !important;
   align-items: center !important;
   min-height: 58px !important;
-  margin-bottom: 14px !important;
+  margin-bottom: 0 !important;
   padding: 9px 18px !important;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06) !important;
 }
