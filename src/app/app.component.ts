@@ -156,9 +156,7 @@ type ActiveModuleTabs = {
               <small>Enterprise CRM / POS</small>
             </span>
           </a>
-          <button class="sidebar-toggle" type="button" (click)="toggleSidebarCompact()" [attr.aria-pressed]="sidebarCompact()" [title]="sidebarCompact() ? 'Expand sidebar' : 'Collapse sidebar'">
-            {{ sidebarCompact() ? '>>' : '<<' }}
-          </button>
+
         </div>
 
         <label class="sidebar-search" *ngIf="!sidebarUiCompact()">
@@ -186,8 +184,9 @@ type ActiveModuleTabs = {
                 <div class="nav-subgroup" *ngIf="item.children?.length; else singleNavItem">
                   <a
                     class="nav-subgroup-title"
-                    [class.active]="isNavItemActive(item)"
+                    [class.active]="isSidebarNavItemActive(item)"
                     [routerLink]="item.path"
+                    [queryParams]="item.queryParams || null"
                     routerLinkActive="active"
                     (click)="rememberNavGroup(group.id)"
                   >
@@ -199,8 +198,9 @@ type ActiveModuleTabs = {
                 <ng-template #singleNavItem>
                   <a
                     class="nav-subitem"
-                    [class.active]="isNavItemActive(item)"
+                    [class.active]="isSidebarNavItemActive(item)"
                     [routerLink]="item.path"
+                    [queryParams]="item.queryParams || null"
                     routerLinkActive="active"
                     [routerLinkActiveOptions]="{ exact: item.path === '/home' || item.path === '/dashboard' }"
                     (click)="rememberNavGroup(group.id)"
@@ -501,9 +501,9 @@ export class AppComponent {
   readonly activeRoute = signal('');
   readonly previousRoute = signal('');
   readonly routeHistory = signal<string[]>([]);
-  readonly sidebarCompact = signal(this.readInitialSidebarCompact());
+  readonly sidebarCompact = signal(false);
   readonly sidebarHoverExpanded = signal(false);
-  readonly sidebarUiCompact = computed(() => this.sidebarCompact() && !this.sidebarHoverExpanded());
+  readonly sidebarUiCompact = computed(() => false);
   readonly expandedGroupIds = signal<string[]>(this.readExpandedGroups());
   private readonly maxBackHistory = 10;
   private isBackNavigation = false;
@@ -1354,6 +1354,25 @@ export class AppComponent {
     return !querySpecificSiblingActive;
   }
 
+  isSidebarNavItemActive(item: NavItem): boolean {
+    const currentUrl = this.activeRoute();
+    const currentPath = this.routePath(currentUrl);
+    const targetPath = this.routePath(item.path);
+    const currentQuery = this.router.parseUrl(currentUrl).queryParams;
+    const queryEntries = Object.entries(item.queryParams || {});
+    if (queryEntries.length) {
+      return currentPath === targetPath && queryEntries.every(([key, value]) => String(currentQuery[key] ?? '') === value);
+    }
+
+    const querySpecificSiblingActive = this.activeLocalNav()?.children.some((candidate) => {
+      if (this.routePath(candidate.path) !== targetPath || !candidate.queryParams) return false;
+      return Object.entries(candidate.queryParams).every(([key, value]) => String(currentQuery[key] ?? '') === value);
+    });
+    if (currentPath === targetPath && querySpecificSiblingActive) return false;
+
+    return this.isNavItemActive(item);
+  }
+
   private ensureActiveGroupExpanded(url: string): void {
     const group = this.navGroups.find((item) => this.navLeaves(item.items).some((navItem) => this.isRouteActive(url, navItem.path)));
     if (!group || this.expandedGroupIds().includes(group.id)) return;
@@ -1363,8 +1382,8 @@ export class AppComponent {
   }
 
   private navItemText(item: NavItem, group: NavGroup): string {
-    const childText = (item.children || []).map((child) => `${child.label} ${child.path} ${child.icon} ${child.keywords || ''}`).join(' ');
-    return `${item.label} ${item.path} ${item.icon} ${item.keywords || ''} ${childText} ${group.label}`.toLowerCase();
+    const childText = this.localNavChildren(group.id, item).map((child) => this.navSearchText(child, group)).join(' ');
+    return `${this.navSearchText(item, group)} ${childText}`.toLowerCase();
   }
 
   navLeafCount(items: NavItem[]): number {
@@ -1372,7 +1391,71 @@ export class AppComponent {
   }
 
   visibleSidebarItems(group: NavGroup): NavItem[] {
-    return [];
+    const term = this.navQuery().trim().toLowerCase();
+    if (!term) return [];
+
+    const sourceGroup = this.navGroups.find((candidate) => candidate.id === group.id) || group;
+    const groupMatches = `${sourceGroup.label} ${sourceGroup.id}`.toLowerCase().includes(term);
+    const ranked = new Map<string, { item: NavItem; score: number; index: number }>();
+    let index = 0;
+
+    for (const parent of sourceGroup.items) {
+      for (const candidate of [parent, ...this.localNavChildren(sourceGroup.id, parent)]) {
+        const candidateIndex = index++;
+        if (!this.canAccessNavItem(candidate)) continue;
+        if (!groupMatches && !this.navSearchText(candidate, sourceGroup).includes(term)) continue;
+
+        const item = this.sidebarSearchItem(candidate);
+        const key = this.navItemRouteKey(item);
+        const score = this.navItemSearchScore(item, sourceGroup, term);
+        const existing = ranked.get(key);
+        if (!existing) {
+          ranked.set(key, { item, score, index: candidateIndex });
+        } else if (score > existing.score) {
+          ranked.set(key, { item, score, index: existing.index });
+        }
+      }
+    }
+
+    return [...ranked.values()]
+      .sort((left, right) => left.index - right.index)
+      .map((entry) => entry.item);
+  }
+
+  private sidebarSearchItem(item: NavItem): NavItem {
+    const result: NavItem = { path: item.path, label: item.label, icon: item.icon };
+    if (item.keywords) result.keywords = item.keywords;
+    if (item.queryParams) result.queryParams = item.queryParams;
+    if (item.permission) result.permission = item.permission;
+    return result;
+  }
+
+  private navSearchText(item: NavItem, group: NavGroup): string {
+    return `${item.label} ${item.path} ${item.icon} ${item.keywords || ''} ${group.label} ${group.id}`.toLowerCase();
+  }
+
+  private navItemRouteKey(item: NavItem): string {
+    const query = Object.entries(item.queryParams || {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
+    return `${this.routePath(item.path)}?${query}`;
+  }
+
+  private navItemSearchScore(item: NavItem, group: NavGroup, term: string): number {
+    const label = item.label.toLowerCase();
+    const keywords = (item.keywords || '').toLowerCase();
+    const path = item.path.toLowerCase();
+    const icon = item.icon.toLowerCase();
+    const groupText = `${group.label} ${group.id}`.toLowerCase();
+    if (label === term) return 100;
+    if (label.startsWith(term)) return 90;
+    if (label.includes(term)) return 80;
+    if (keywords.includes(term)) return 60;
+    if (path.includes(term)) return 50;
+    if (icon.includes(term)) return 40;
+    if (groupText.includes(term)) return 20;
+    return 0;
   }
 
   private localNavChildren(groupId: string, item: NavItem): NavItem[] {
