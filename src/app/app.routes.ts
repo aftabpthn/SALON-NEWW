@@ -158,6 +158,7 @@ export const routes: Routes = [
   { path: 'marketing', loadComponent: () => import('./pages/ai-marketing-automation.component').then(m => m.AiMarketingAutomationComponent), title: 'AI Marketing Automation' },
   { path: 'growth-rank-bot', loadComponent: () => import('./pages/growth-rank-bot.component').then(m => m.GrowthRankBotComponent), title: 'AI Rank Bot' },
   { path: 'whatsapp', loadComponent: () => import('./pages/whatsapp-automation.component').then(m => m.WhatsAppAutomationComponent), title: 'WhatsApp Automation' },
+  { path: 'message-templates', loadComponent: () => import('./pages/message-template-studio.component').then(m => m.MessageTemplateStudioComponent), title: 'Message Templates' },
   { path: 'message-logs', loadComponent: () => import('./pages/message-history-report.component').then(m => m.MessageHistoryReportComponent), title: 'Message History' },
   { path: 'business-details', loadComponent: () => import('./pages/business-details.component').then(m => m.BusinessDetailsComponent), title: 'Business Details' },
   { path: 'reports/account-ledger', loadComponent: () => import('./pages/account-ledger.component').then(m => m.AccountLedgerComponent), title: 'Account Ledger' },

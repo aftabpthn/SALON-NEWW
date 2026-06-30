@@ -485,6 +485,7 @@ export class AppComponent {
         { path: '/marketing', label: 'Marketing', icon: 'W', keywords: 'campaign marketing automation' },
         { path: '/engagement', label: 'Engagement Center', icon: 'EC', keywords: 'unified inbox hyperconnect client engagement whatsapp email calls' },
         { path: '/whatsapp', label: 'WhatsApp', icon: 'WA', keywords: 'whatsapp campaign chat' },
+        { path: '/message-templates', label: 'Message Templates', icon: 'MT', keywords: 'message templates sms whatsapp email notification settings' },
         { path: '/message-logs', label: 'Messages', icon: 'ML', keywords: 'message logs communication' },
         { path: '/reputation', label: 'Reviews', icon: 'RV', keywords: 'reviews reputation google' },
         { path: '/growth-advisor', label: 'Growth AI', icon: 'GA', keywords: 'growth advisor ai' },
