@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild, computed, effect, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { finalize, switchMap } from 'rxjs';
+import { finalize, firstValueFrom, switchMap } from 'rxjs';
 import { ApiRecord } from '../../../core/api.service';
 import { AppStateService } from '../../../core/state/app-state.service';
 import { StaffOsStore } from '../application/staff-os.store';
@@ -41,6 +41,8 @@ type IncentiveSlabDraft = {
   incentiveAmount: number;
 };
 type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
+type StaffListStatusFilter = 'all' | 'active' | 'inactive';
+type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salary' | 'designation' | 'status' | 'joiningDate';
 
 @Component({
   selector: 'app-staff-os-section',
@@ -446,9 +448,19 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
             <h2>{{ section === 'training-center' ? 'Training Center' : section === 'staff-profile' ? 'Employee profiles' : 'Manage employees' }}</h2>
           </div>
           <div class="staff-register-actions">
-            <span>{{ staffDirectoryRows().length }} records</span>
+            <span>{{ staffListFilteredRows().length }} of {{ staffDirectoryRows().length }} records</span>
+            <input #attendanceUploadInput class="hidden-file" type="file" accept=".csv,text/csv" (change)="uploadAttendanceCsv($event)" />
             <button type="button" class="refresh" (click)="store.load()">Refresh</button>
             <button type="button" class="primary" (click)="openAddStaff()">Add staff</button>
+            <details class="staff-action-menu">
+              <summary>Action</summary>
+              <div>
+                <button type="button" (click)="exportStaffCsv()" [disabled]="!staffListFilteredRows().length">Export CSV</button>
+                <button type="button" (click)="attendanceUploadInput.click()" [disabled]="attendanceUploadSaving()">{{ attendanceUploadSaving() ? 'Uploading...' : 'Upload Attendance' }}</button>
+                <a routerLink="/staff-os/bulk-employee-update">Bulk employee update</a>
+                <a routerLink="/permissions">Roles</a>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -459,67 +471,105 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
           <article><span>Login linked</span><strong>{{ loginLinkedCount() }}</strong><small>staff app access</small></article>
         </div>
 
+        <nav class="staff-list-quick-nav" *ngIf="section === 'staff-list'" aria-label="Staff list quick actions">
+          <button type="button" class="active">Staff List</button>
+          <button type="button" (click)="openAddStaff()">Add Staff</button>
+          <a routerLink="/staff-os/roster-calendar">Staff Schedule</a>
+          <a routerLink="/staff-os/commission-dashboard">Commission</a>
+          <a routerLink="/permissions">Roles</a>
+          <button type="button" (click)="attendanceUploadInput.click()" [disabled]="attendanceUploadSaving()">Upload Attendance</button>
+          <button type="button" [class.active]="staffListStatusFilter() === 'inactive'" (click)="setStaffListStatusFilter('inactive')">Inactive Staff</button>
+        </nav>
+
+        <div class="staff-list-toolbar" *ngIf="section === 'staff-list' || section === 'staff-profile' || section === 'training-center'">
+          <label>
+            <span>Show</span>
+            <select [ngModel]="staffListPageSize()" (ngModelChange)="setStaffListPageSize($event)">
+              <option [ngValue]="10">10</option>
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select [ngModel]="staffListStatusFilter()" (ngModelChange)="setStaffListStatusFilter($event)">
+              <option value="all">All staff</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+          <label class="staff-search-field">
+            <span>Search</span>
+            <input [ngModel]="staffListQuery()" (ngModelChange)="setStaffListQuery($event)" placeholder="Name, phone, staff ID, email, designation" />
+          </label>
+        </div>
         <div class="staff-register-scroll">
           <table class="staff-register-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Branch</th>
-                <th>Category</th>
-                <th>Live data</th>
-                <th>Status</th>
-                <th>Links</th>
+                <th class="name-column"><button type="button" (click)="sortStaffList('name')">Name {{ staffSortMark('name') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('contact')">Contact {{ staffSortMark('contact') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('employeeCode')">Staff ID {{ staffSortMark('employeeCode') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('email')">Email {{ staffSortMark('email') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('salary')">Salary {{ staffSortMark('salary') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('designation')">Designation {{ staffSortMark('designation') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('status')">Status {{ staffSortMark('status') }}</button></th>
+                <th><button type="button" (click)="sortStaffList('joiningDate')">Joining Date {{ staffSortMark('joiningDate') }}</button></th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let staff of staffDirectoryRows()">
+              <tr *ngFor="let staff of staffListPagedRows(); trackBy: trackStaffById">
                 <td>
-                  <strong>{{ staff.fullName }}</strong>
-                  <small *ngIf="staff.employeeDetails?.shortName || staff.employeeCode">
-                    {{ staff.employeeDetails?.shortName || 'No short name' }} · {{ staff.employeeCode || 'No code' }}
-                  </small>
+                  <div class="staff-name-cell">
+                    <img *ngIf="staff.profilePhoto; else staffAvatar" [src]="staff.profilePhoto" [alt]="staff.fullName" />
+                    <ng-template #staffAvatar><span class="staff-avatar">{{ staffInitials(staff) }}</span></ng-template>
+                    <div>
+                      <strong>{{ staff.fullName }}</strong>
+                      <small>{{ staff.staffCategoryName || staff.department || 'Staff' }}</small>
+                    </div>
+                  </div>
                 </td>
-                <td>{{ staff.branchId }}</td>
-                <td>{{ staff.staffCategoryName || staff.designation || staff.department || 'Staff' }}</td>
+                <td>{{ staff.mobile || '-' }}</td>
+                <td>{{ staff.employeeCode || staff.id }}</td>
+                <td>{{ staff.email || staff.loginEmail || '-' }}</td>
+                <td>{{ salaryAmount(staff) | currency:'INR':'symbol-narrow':'1.0-0' }}</td>
+                <td>{{ staff.designation || staff.staffCategoryName || staff.department || '-' }}</td>
+                <td><span class="badge" [class.good]="isStaffActive(staff)" [class.warn]="!isStaffActive(staff)">{{ statusLabelForStaff(staff) }}</span></td>
+                <td>{{ displayDate(staff.joiningDate) }}</td>
                 <td>
-                  <span class="live-badges">
-                    <span class="mini-badge" *ngFor="let badge of staffLiveBadges(staff)">{{ badge }}</span>
-                  </span>
-                </td>
-                <td><span class="badge">{{ staff.status }}</span></td>
-                <td>
-                  <span class="row-links">
-                    <a routerLink="/staff-os/staff-profile" [queryParams]="{ staffId: staff.id }">Profile</a>
-                    <a routerLink="/staff/my-work" [queryParams]="{ staffId: staff.id }">My Work</a>
-                    <a routerLink="/staff-os/attendance-dashboard" [queryParams]="{ staffId: staff.id }">Attendance</a>
-                    <a routerLink="/staff-os/payroll-dashboard" [queryParams]="{ staffId: staff.id }">Payroll</a>
-                    <a routerLink="/staff-os/salary-generate" [queryParams]="{ staffId: staff.id }">Salary</a>
-                  </span>
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    class="row-action"
-                    [disabled]="statusChanging() === staff.id"
-                    (click)="toggleStaffStatus(staff)"
-                  >
-                    {{ statusChanging() === staff.id ? 'Saving...' : statusActionLabel(staff) }}
-                  </button>
+                  <details class="staff-row-menu">
+                    <summary aria-label="Open staff actions">...</summary>
+                    <div>
+                      <a routerLink="/staff-os/staff-profile" [queryParams]="{ staffId: staff.id }">Profile</a>
+                      <a routerLink="/staff/my-work" [queryParams]="{ staffId: staff.id }">My Work</a>
+                      <a routerLink="/staff-os/attendance-dashboard" [queryParams]="{ staffId: staff.id }">Attendance</a>
+                      <a routerLink="/staff-os/payroll-dashboard" [queryParams]="{ staffId: staff.id }">Payroll</a>
+                      <button type="button" (click)="openSalaryEditor(staff)">Salary</button>
+                      <button type="button" (click)="prefillManualAttendance(staff)">Manual attendance</button>
+                      <button type="button" [disabled]="statusChanging() === staff.id" (click)="toggleStaffStatus(staff)">{{ statusChanging() === staff.id ? 'Saving...' : statusActionLabel(staff) }}</button>
+                    </div>
+                  </details>
                 </td>
               </tr>
             </tbody>
           </table>
-          <div *ngIf="!staffDirectoryRows().length && !store.loading()" class="empty action-empty">
+          <div *ngIf="!staffListFilteredRows().length && !store.loading()" class="empty action-empty">
             <strong>No staff records found.</strong>
             <span>Add staff first to unlock attendance, payroll and commission reports.</span>
             <button type="button" class="primary" (click)="openAddStaff()">Add staff</button>
           </div>
         </div>
         <div class="staff-register-footer" *ngIf="section === 'staff-list' || section === 'staff-profile' || section === 'training-center'">
-          <span>{{ staffDirectoryRows().length ? 1 : 0 }} to {{ staffDirectoryRows().length }} of {{ staffDirectoryRows().length }}</span>
-          <span>Page 1 of 1</span>
+          <span>{{ staffListStart() }} to {{ staffListEnd() }} of {{ staffListFilteredRows().length }}</span>
+          <div class="staff-pagination">
+            <button type="button" class="refresh" [disabled]="staffListPageSafe() <= 1" (click)="moveStaffListPage(-1)">Previous</button>
+            <span>Page {{ staffListPageSafe() }} of {{ staffListPageCount() }}</span>
+            <button type="button" class="refresh" [disabled]="staffListPageSafe() >= staffListPageCount()" (click)="moveStaffListPage(1)">Next</button>
+          </div>
         </div>
+        <div class="state success" *ngIf="staffActionMessage()">{{ staffActionMessage() }}</div>
         <div class="state error" *ngIf="staffActionError()">{{ staffActionError() }}</div>
       </section>
 
@@ -2163,6 +2213,29 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .staff-register-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
     .staff-register-actions { align-items: center; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .staff-register-actions > span { color: #5b6b81; font-weight: 900; margin: 0 8px 0 0; }
+    .hidden-file { display: none; }
+    .staff-action-menu, .staff-row-menu { position: relative; }
+    .staff-action-menu summary, .staff-row-menu summary { align-items: center; background: #202633; border: 1px solid #202633; border-radius: 3px; color: #fff; cursor: pointer; display: inline-flex; font-size: 13px; font-weight: 850; gap: 6px; list-style: none; min-height: 32px; padding: 7px 11px; }
+    .staff-action-menu summary::-webkit-details-marker, .staff-row-menu summary::-webkit-details-marker { display: none; }
+    .staff-action-menu summary::after { content: 'v'; font-size: 10px; }
+    .staff-action-menu div, .staff-row-menu div { background: #fff; border: 1px solid #d8e1ea; box-shadow: 0 14px 32px rgba(15, 23, 42, .16); display: grid; min-width: 190px; padding: 6px; position: absolute; right: 0; top: calc(100% + 6px); z-index: 15; }
+    .staff-action-menu a, .staff-action-menu button, .staff-row-menu a, .staff-row-menu button { background: #fff; border: 0; color: #10201a; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; min-height: 32px; padding: 8px 10px; text-align: left; text-decoration: none; }
+    .staff-action-menu a:hover, .staff-action-menu button:hover, .staff-row-menu a:hover, .staff-row-menu button:hover { background: #f4f7fa; }
+    .staff-list-quick-nav { align-items: center; border-bottom: 1px solid #d8e1ea; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; }
+    .staff-list-quick-nav a, .staff-list-quick-nav button { background: #fff; border: 1px solid #d8e1ea; border-radius: 3px; color: #10201a; cursor: pointer; font: inherit; font-size: 13px; font-weight: 850; min-height: 32px; padding: 7px 11px; text-decoration: none; }
+    .staff-list-quick-nav .active, .staff-list-quick-nav a:hover, .staff-list-quick-nav button:hover { background: #eef2f6; border-color: #c8d2df; }
+    .staff-list-toolbar { align-items: end; border-bottom: 1px solid #d8e1ea; display: grid; gap: 12px; grid-template-columns: 120px 180px minmax(220px, 1fr); padding: 12px 16px; }
+    .staff-list-toolbar label { color: #64748b; display: grid; font-size: 11px; font-weight: 900; gap: 5px; text-transform: uppercase; }
+    .staff-list-toolbar input, .staff-list-toolbar select { border: 1px solid #d8e1ea; border-radius: 8px; color: #10201a; font: inherit; min-height: 38px; padding: 8px 10px; width: 100%; }
+    .staff-name-cell { align-items: center; display: grid; gap: 10px; grid-template-columns: 38px minmax(0, 1fr); }
+    .staff-name-cell img, .staff-avatar { border: 2px solid #fff; border-radius: 999px; box-shadow: 0 0 0 1px #d8e1ea; height: 32px; width: 32px; }
+    .staff-name-cell img { object-fit: cover; }
+    .staff-avatar { align-items: center; background: #f6d365; color: #172033; display: inline-flex; font-size: 11px; font-weight: 950; justify-content: center; }
+    .staff-register-table .name-column { min-width: 250px; }
+    .staff-register-table th button { background: transparent; border: 0; color: inherit; cursor: pointer; font: inherit; font-size: 12px; font-weight: 900; padding: 0; text-align: left; text-transform: uppercase; }
+    .staff-row-menu summary { background: transparent; border: 0; color: #111827; font-size: 20px; justify-content: center; min-width: 40px; padding: 3px 8px; }
+    .staff-row-menu div { min-width: 170px; }
+    .staff-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
     .staff-register-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8e1ea; }
     .staff-register-kpis article { border-right: 1px solid #e5edf4; display: grid; gap: 3px; padding: 10px 16px; }
     .staff-register-kpis article:last-child { border-right: 0; }
@@ -2170,13 +2243,13 @@ type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
     .staff-register-kpis strong { color: #111827; font-size: 22px; line-height: 1; }
     .staff-register-kpis small { color: #64748b; }
     .staff-register-scroll { max-width: 100%; overflow: auto; }
-    .staff-register-table { border-collapse: collapse; min-width: 1160px; width: 100%; }
+    .staff-register-table { border-collapse: collapse; min-width: 1480px; width: 100%; }
     .staff-register-table th,
     .staff-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
     .staff-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
     .staff-register-table tbody tr:hover { background: #eef7fc; }
     .staff-register-table td small { color: #60766d; display: block; font-size: 12px; margin-top: 3px; }
-    .staff-register-footer { color: #64748b; display: flex; gap: 12px; justify-content: flex-end; padding: 8px 16px; border-top: 1px solid #d8e1ea; font-size: 12px; }
+    .staff-register-footer { align-items: center; color: #64748b; display: flex; gap: 12px; justify-content: space-between; padding: 8px 16px; border-top: 1px solid #d8e1ea; font-size: 12px; }
     .staff-workspace-panel { background: #fbfdff; }
     .workspace-heading { align-items: end; }
     .staff-workspace-shell { align-items: start; display: grid; gap: 14px; grid-template-columns: 300px minmax(0, 1fr); min-width: 0; }
@@ -2631,6 +2704,24 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   readonly addStaffSaving = signal(false);
   readonly addStaffError = signal('');
   readonly staffActionError = signal('');
+  readonly staffActionMessage = signal('');
+  readonly attendanceUploadSaving = signal(false);
+  readonly staffListQuery = signal('');
+  readonly staffListStatusFilter = signal<StaffListStatusFilter>('all');
+  readonly staffListPageSize = signal(10);
+  readonly staffListPage = signal(1);
+  readonly staffListSort = signal<StaffListSortField>('name');
+  readonly staffListSortDir = signal<'asc' | 'desc'>('asc');
+  readonly staffListFilteredRows = computed(() => this.sortedStaffRows());
+  readonly staffListPageCount = computed(() => Math.max(1, Math.ceil(this.staffListFilteredRows().length / this.staffListPageSize())));
+  readonly staffListPageSafe = computed(() => Math.min(Math.max(this.staffListPage(), 1), this.staffListPageCount()));
+  readonly staffListPagedRows = computed(() => {
+    const size = this.staffListPageSize();
+    const start = (this.staffListPageSafe() - 1) * size;
+    return this.staffListFilteredRows().slice(start, start + size);
+  });
+  readonly staffListStart = computed(() => this.staffListFilteredRows().length ? ((this.staffListPageSafe() - 1) * this.staffListPageSize()) + 1 : 0);
+  readonly staffListEnd = computed(() => Math.min(this.staffListFilteredRows().length, this.staffListStart() + this.staffListPagedRows().length - 1));
   readonly statusChanging = signal('');
   readonly salaryEditorStaff = signal<StaffOsStaff | null>(null);
   readonly salaryEditorSaving = signal(false);
@@ -3170,6 +3261,306 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
     return selectedStaffId ? rows.filter((staff) => staff.id === selectedStaffId) : rows;
   }
 
+  setStaffListQuery(value: string): void {
+    this.staffListQuery.set(String(value || ''));
+    this.staffListPage.set(1);
+  }
+
+  setStaffListStatusFilter(value: string): void {
+    const normalized = String(value || 'all') as StaffListStatusFilter;
+    this.staffListStatusFilter.set(normalized === 'active' || normalized === 'inactive' ? normalized : 'all');
+    this.staffListPage.set(1);
+  }
+
+  setStaffListPageSize(value: number | string): void {
+    const size = Number(value || 10);
+    this.staffListPageSize.set([10, 25, 50, 100].includes(size) ? size : 10);
+    this.staffListPage.set(1);
+  }
+
+  moveStaffListPage(delta: number): void {
+    const next = Math.min(this.staffListPageCount(), Math.max(1, this.staffListPageSafe() + delta));
+    this.staffListPage.set(next);
+  }
+
+  sortStaffList(field: StaffListSortField): void {
+    if (this.staffListSort() === field) {
+      this.staffListSortDir.set(this.staffListSortDir() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.staffListSort.set(field);
+      this.staffListSortDir.set(field === 'joiningDate' || field === 'salary' ? 'desc' : 'asc');
+    }
+    this.staffListPage.set(1);
+  }
+
+  staffSortMark(field: StaffListSortField): string {
+    if (this.staffListSort() !== field) return '';
+    return this.staffListSortDir() === 'asc' ? '^' : 'v';
+  }
+
+  trackStaffById(_index: number, staff: StaffOsStaff): string {
+    return staff.id;
+  }
+
+  sortedStaffRows(): StaffOsStaff[] {
+    const query = this.staffListQuery().trim().toLowerCase();
+    const status = this.staffListStatusFilter();
+    const rows = this.staffDirectoryRows().filter((staff) => {
+      if (status === 'active' && !this.isStaffActive(staff)) return false;
+      if (status === 'inactive' && this.isStaffActive(staff)) return false;
+      return !query || this.staffSearchText(staff).includes(query);
+    });
+    const direction = this.staffListSortDir() === 'asc' ? 1 : -1;
+    return [...rows].sort((left, right) => this.compareStaffValues(
+      this.staffSortValue(left, this.staffListSort()),
+      this.staffSortValue(right, this.staffListSort())
+    ) * direction);
+  }
+
+  isStaffActive(staff: StaffOsStaff): boolean {
+    const status = String(staff.status || '').toLowerCase();
+    return !status || status === 'active' || status === 'working';
+  }
+
+  statusLabelForStaff(staff: StaffOsStaff): string {
+    const status = String(staff.status || 'active').replace(/[_-]+/g, ' ');
+    return status ? status.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
+  }
+
+  staffInitials(staff: StaffOsStaff): string {
+    const parts = String(staff.fullName || `${staff.firstName || ''} ${staff.lastName || ''}`).trim().split(/\s+/).filter(Boolean);
+    return ((parts[0]?.[0] || 'S') + (parts[1]?.[0] || '')).toUpperCase();
+  }
+
+  displayDate(value: unknown): string {
+    const text = String(value || '').trim();
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+    return text || '-';
+  }
+
+  prefillManualAttendance(staff: StaffOsStaff): void {
+    this.staffActionError.set('');
+    this.staffActionMessage.set(`Manual attendance ready for ${staff.fullName}. Open Attendance or Upload Attendance to save rows.`);
+    this.patchAttendanceBranch(staff.branchId || this.defaultBranchId(this.branchOptions()));
+    this.manualAttendanceForm.patchValue({ branchId: staff.branchId, staffId: staff.id }, { emitEvent: false });
+  }
+
+  exportStaffCsv(): void {
+    const headers = ['Name', 'Contact', 'Staff ID', 'Email', 'Salary', 'Designation', 'Status', 'Joining Date', 'Branch'];
+    const rows = this.staffListFilteredRows().map((staff) => [
+      staff.fullName,
+      staff.mobile || '',
+      staff.employeeCode || staff.id,
+      staff.email || staff.loginEmail || '',
+      this.salaryAmount(staff),
+      staff.designation || staff.staffCategoryName || staff.department || '',
+      this.statusLabelForStaff(staff),
+      this.displayDate(staff.joiningDate),
+      staff.branchId || ''
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map((cell) => this.csvCell(cell)).join(',')).join('\n');
+    this.downloadTextFile(`staff-list-${new Date().toISOString().slice(0, 10)}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+
+  async uploadAttendanceCsv(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.staffActionError.set('');
+    this.staffActionMessage.set('');
+    this.attendanceUploadSaving.set(true);
+    try {
+      const rows = this.parseAttendanceCsv(await file.text());
+      if (!rows.length) throw new Error('Attendance CSV has no data rows.');
+      let saved = 0;
+      let failed = 0;
+      const errors: string[] = [];
+      for (const [index, row] of rows.entries()) {
+        const staff = this.findStaffForAttendanceUpload(row);
+        if (!staff) {
+          failed += 1;
+          errors.push(`Row ${index + 2}: staff not found`);
+          continue;
+        }
+        const date = this.normalizedUploadDate(this.uploadValue(row, ['date', 'businessdate', 'business_date']), this.attendanceDate());
+        const inTime = this.normalizedUploadTime(this.uploadValue(row, ['intime', 'in', 'clockin', 'clockintime', 'clock_in_time']), '10:00');
+        const outValue = this.uploadValue(row, ['outtime', 'out', 'clockout', 'clockouttime', 'clock_out_time']);
+        const outTime = outValue ? this.normalizedUploadTime(outValue, '19:00') : '';
+        const overtimeMinutes = Number(this.uploadValue(row, ['overtimeminutes', 'overtime', 'otminutes', 'ot']) || 0);
+        const notes = this.uploadValue(row, ['notes', 'note', 'remark', 'remarks']) || `attendance upload ${file.name}`;
+        try {
+          await firstValueFrom(this.store.manualClockIn({
+            branchId: staff.branchId,
+            staffId: staff.id,
+            businessDate: date,
+            clockInAt: this.attendanceTimestamp(date, inTime),
+            source: 'upload',
+            notes
+          }));
+          if (outTime) {
+            await firstValueFrom(this.store.manualClockOut({
+              branchId: staff.branchId,
+              staffId: staff.id,
+              businessDate: date,
+              clockOutAt: this.attendanceTimestamp(date, outTime),
+              overtimeMinutes,
+              source: 'upload',
+              notes
+            }));
+          }
+          saved += 1;
+        } catch (error) {
+          failed += 1;
+          errors.push(`Row ${index + 2}: ${this.errorMessage(error, 'attendance save failed')}`);
+        }
+      }
+      this.staffActionMessage.set(`Attendance upload complete: ${saved} saved, ${failed} failed.`);
+      this.staffActionError.set(errors.slice(0, 3).join(' | '));
+      this.refreshAttendanceCenter();
+      this.store.load();
+    } catch (error) {
+      this.staffActionError.set(this.errorMessage(error, 'Unable to upload attendance CSV'));
+    } finally {
+      this.attendanceUploadSaving.set(false);
+    }
+  }
+
+  private staffSearchText(staff: StaffOsStaff): string {
+    return [
+      staff.fullName,
+      staff.firstName,
+      staff.lastName,
+      staff.mobile,
+      staff.email,
+      staff.loginEmail,
+      staff.employeeCode,
+      staff.id,
+      staff.designation,
+      staff.department,
+      staff.staffCategoryName,
+      staff.branchId,
+      staff.status,
+      this.salaryAmount(staff)
+    ].filter((value) => value !== undefined && value !== null).join(' ').toLowerCase();
+  }
+
+  private staffSortValue(staff: StaffOsStaff, field: StaffListSortField): string | number {
+    switch (field) {
+      case 'contact': return staff.mobile || '';
+      case 'employeeCode': return staff.employeeCode || staff.id || '';
+      case 'email': return staff.email || staff.loginEmail || '';
+      case 'salary': return this.salaryAmount(staff);
+      case 'designation': return staff.designation || staff.staffCategoryName || staff.department || '';
+      case 'status': return staff.status || '';
+      case 'joiningDate': return staff.joiningDate || '';
+      case 'name': return staff.fullName || '';
+      default: return '';
+    }
+  }
+
+  private compareStaffValues(left: string | number, right: string | number): number {
+    if (typeof left === 'number' && typeof right === 'number') return left - right;
+    return String(left || '').localeCompare(String(right || ''), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  private csvCell(value: unknown): string {
+    return `"${String(value ?? '').replace(/"/g, '""')}"`;
+  }
+
+  private downloadTextFile(filename: string, content: string, type: string): void {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private parseAttendanceCsv(text: string): ApiRecord[] {
+    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+    if (lines.length < 2) return [];
+    const headers = this.parseCsvLine(lines[0]).map((header) => this.normalizeUploadHeader(header));
+    return lines.slice(1).map((line) => {
+      const values = this.parseCsvLine(line);
+      const row: ApiRecord = {};
+      headers.forEach((header, index) => {
+        if (header) row[header] = values[index] || '';
+      });
+      return row;
+    }).filter((row) => Object.values(row).some((value) => String(value || '').trim()));
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const cells: string[] = [];
+    let current = '';
+    let quoted = false;
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const next = line[index + 1];
+      if (char === '"' && quoted && next === '"') {
+        current += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = !quoted;
+      } else if (char === ',' && !quoted) {
+        cells.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current.trim());
+    return cells;
+  }
+
+  private normalizeUploadHeader(value: string): string {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+
+  private uploadValue(row: ApiRecord, keys: string[]): string {
+    for (const key of keys) {
+      const normalized = this.normalizeUploadHeader(key);
+      const value = row[normalized];
+      if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+    }
+    return '';
+  }
+
+  private findStaffForAttendanceUpload(row: ApiRecord): StaffOsStaff | null {
+    const staffId = this.uploadValue(row, ['staffid', 'staff_id', 'id']);
+    const code = this.uploadValue(row, ['staffcode', 'employeecode', 'employeeid', 'staffno']);
+    const name = this.uploadValue(row, ['name', 'staffname', 'employee', 'employeename']);
+    const mobile = this.uploadValue(row, ['mobile', 'phone', 'contact']);
+    const rows = this.staffDirectoryRows();
+    if (staffId) return rows.find((staff) => staff.id === staffId) || null;
+    if (code) return rows.find((staff) => String(staff.employeeCode || '').toLowerCase() === code.toLowerCase()) || null;
+    if (mobile) return rows.find((staff) => String(staff.mobile || '').replace(/\D/g, '') === mobile.replace(/\D/g, '')) || null;
+    if (name) return rows.find((staff) => String(staff.fullName || '').toLowerCase() === name.toLowerCase()) || null;
+    return null;
+  }
+
+  private normalizedUploadDate(value: string, fallback: string): string {
+    const text = String(value || fallback || '').trim();
+    const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+    const indian = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (indian) return `${indian[3]}-${indian[2].padStart(2, '0')}-${indian[1].padStart(2, '0')}`;
+    return fallback || new Date().toISOString().slice(0, 10);
+  }
+
+  private normalizedUploadTime(value: string, fallback: string): string {
+    const text = String(value || fallback || '').trim();
+    const match = text.match(/^(\d{1,2}):(\d{2})/);
+    if (match) return `${match[1].padStart(2, '0')}:${match[2]}`;
+    return fallback;
+  }
+
+  private errorMessage(error: unknown, fallback: string): string {
+    const candidate = error as { error?: { error?: string; message?: string }; message?: string };
+    return candidate?.error?.error || candidate?.error?.message || candidate?.message || fallback;
+  }
   opacity(index: number): number {
     return 0.25 + ((index % 7) / 10);
   }

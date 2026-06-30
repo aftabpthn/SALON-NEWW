@@ -1,5 +1,6 @@
 export interface StaffOsStaff {
   id: string;
+  tenantId?: string;
   branchId: string;
   employeeCode?: string;
   firstName: string;
@@ -7,6 +8,9 @@ export interface StaffOsStaff {
   fullName: string;
   mobile?: string;
   email?: string;
+  gender?: string;
+  dob?: string;
+  joiningDate?: string;
   employmentType?: string;
   status: string;
   roleId?: string;
