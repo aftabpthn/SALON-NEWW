@@ -503,9 +503,9 @@ export class AppComponent implements OnDestroy {
   readonly activeRoute = signal('');
   readonly previousRoute = signal('');
   readonly routeHistory = signal<string[]>([]);
-  readonly sidebarCompact = signal(false);
+  readonly sidebarCompact = signal(true);
   readonly sidebarHoverExpanded = signal(false);
-  readonly sidebarUiCompact = computed(() => false);
+  readonly sidebarUiCompact = computed(() => this.sidebarCompact() && !this.sidebarHoverExpanded());
   readonly expandedGroupIds = signal<string[]>(this.readExpandedGroups());
   private readonly maxBackHistory = 10;
   private readonly emptyNavItems: NavItem[] = [];
