@@ -170,7 +170,11 @@ type ActiveModuleTabs = {
         <nav class="nav-list nav-accordion" aria-label="Primary navigation">
           <section class="nav-section" *ngFor="let group of visibleNavGroups()" [class.active-section]="isGroupActive(group)">
             <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [title]="group.label">
-              <span class="nav-icon" aria-hidden="true">{{ group.icon }}</span>
+              <span class="nav-icon nav-icon--module" aria-hidden="true">
+                <svg class="nav-icon-svg" viewBox="0 0 24 24" focusable="false">
+                  <path [attr.d]="navGroupIconPath(group.id)"></path>
+                </svg>
+              </span>
               <span class="nav-section-copy">
                 <strong>{{ group.label }}</strong>
                 <small>{{ navLeafCount(group.items) }} {{ i18n.t('shell.modules', 'modules') }}</small>
@@ -245,7 +249,6 @@ type ActiveModuleTabs = {
           {{ globalError() }}
           <button class="ghost-button mini" type="button" (click)="globalError.set('')">{{ i18n.t('shell.dismiss', 'Dismiss') }}</button>
         </div>
-
 
 
         <section class="workspace-route-shell" [class.workspace-route-shell--with-local-nav]="activeLocalNav() !== null">
@@ -367,7 +370,7 @@ type ActiveModuleTabs = {
 
     .workspace-local-rail-head {
       display: grid;
-      grid-template-columns: 44px minmax(0, 1fr);
+      grid-template-columns: 38px minmax(0, 1fr);
       align-items: center;
       gap: 10px;
       padding: 8px 6px 10px;
@@ -378,17 +381,17 @@ type ActiveModuleTabs = {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      min-width: 44px;
-      height: 44px;
-      min-height: 44px;
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      min-height: 38px;
       padding: 0;
-      border: 1px solid #8fc9c1;
+      border: 1px solid #b9d8d3;
       border-radius: 999px;
       color: #0f766e;
       background: #fff;
-      box-shadow: 0 8px 18px rgba(15, 118, 110, 0.16);
-      font-size: 23px;
+      box-shadow: 0 6px 14px rgba(15, 118, 110, 0.12);
+      font-size: 20px;
       font-weight: 900;
       line-height: 1;
     }
@@ -451,6 +454,21 @@ type ActiveModuleTabs = {
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       }
     }
+
+    .nav-icon--module {
+      color: #0f766e;
+    }
+
+    .nav-icon--module .nav-icon-svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
   `]
 })
 export class AppComponent {
@@ -482,10 +500,25 @@ export class AppComponent {
   readonly navQuery = signal('');
   readonly activeRoute = signal('');
   readonly previousRoute = signal('');
+  readonly routeHistory = signal<string[]>([]);
   readonly sidebarCompact = signal(this.readInitialSidebarCompact());
   readonly sidebarHoverExpanded = signal(false);
   readonly sidebarUiCompact = computed(() => this.sidebarCompact() && !this.sidebarHoverExpanded());
   readonly expandedGroupIds = signal<string[]>(this.readExpandedGroups());
+  private readonly maxBackHistory = 10;
+  private isBackNavigation = false;
+  private readonly navGroupIconFallback = 'M4 5h7v7H4z M13 5h7v7h-7z M4 14h7v5H4z M13 14h7v5h-7z';
+  private readonly navGroupIconPaths: Record<string, string> = {
+    command: 'M4 5h7v7H4z M13 5h7v7h-7z M4 14h7v5H4z M13 14h7v5h-7z',
+    frontdesk: 'M4 18h16 M7 18v-2a5 5 0 0 1 10 0v2 M12 8v3 M9 8h6 M6 21h12',
+    pos: 'M5 5h14v14l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z M8 9h8 M8 13h6',
+    inventory: 'M3 8l9-4 9 4-9 4z M3 8v8l9 4 9-4V8 M12 12v8',
+    staff: 'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3 20v-1a5 5 0 0 1 5-5h1 M21 20v-1a5 5 0 0 0-5-5h-1 M9 20v-1a4 4 0 0 1 6 0v1',
+    finance: 'M4 7h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4z M4 7V5h12 M15 13h5 M8 10h5 M8 14h4',
+    marketing: 'M4 11h3l9-4v10l-9-4H4z M7 13l2 6 M18 9l2-2 M18 15l2 2',
+    admin: 'M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z M12 9v5 M9.5 11.5h5',
+    'ai-platform': 'M12 3l1.2 3.4L16 8l-2.8 1.6L12 13l-1.2-3.4L8 8l2.8-1.6z M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8z M18 13l.7 1.8 2.3.7-2.3.7L18 18l-.7-1.8-2.3-.7 2.3-.7z'
+  };
   private loadedLocalizationTenantId = '';
   private readonly navPermissionRules: Array<{ pattern: RegExp; permission: string | string[] }> = [
     { pattern: /^\/(security|enterprise-security-shield|security-alerts|security-blocklist|security-policy-center|permissions|compliance|audit-compliance|two-factor)/, permission: ['read:security', 'write:security', 'admin:security'] },
@@ -1063,11 +1096,16 @@ export class AppComponent {
     this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe((event) => {
       const url = (event as NavigationEnd).urlAfterRedirects;
       const current = this.activeRoute();
-      if (url !== current && this.isBackHistoryCandidate(current)) {
-        this.previousRoute.set(current);
+      if (url !== current) {
+        if (this.isBackNavigation) {
+          this.isBackNavigation = false;
+        } else {
+          this.recordBackHistory(current, url);
+        }
       }
       this.isPortal.set(this.isPortalUrl(url));
       this.activeRoute.set(url);
+      this.syncPreviousRouteFromHistory();
       this.ensureActiveGroupExpanded(url);
     });
     effect(() => {
@@ -1152,13 +1190,13 @@ export class AppComponent {
 
   goBack(): void {
     const current = this.activeRoute();
-    const previous = this.previousRoute();
-    if (previous && previous !== current) {
-      this.router.navigateByUrl(previous);
+    const previous = this.popBackRoute(current);
+    if (previous) {
+      this.navigateBackTo(previous, current);
       return;
     }
     if (!this.isHomePath(this.routePath(current))) {
-      this.router.navigateByUrl('/home');
+      this.navigateBackTo('/home', current);
     }
   }
 
@@ -1246,6 +1284,10 @@ export class AppComponent {
         this.globalError.set(message);
       }
     });
+  }
+
+  navGroupIconPath(groupId: string): string {
+    return this.navGroupIconPaths[groupId] || this.navGroupIconFallback;
   }
 
   openNavGroup(group: NavGroup): void {
@@ -1427,6 +1469,50 @@ export class AppComponent {
   private isBackHistoryCandidate(url: string): boolean {
     const path = this.routePath(url);
     return Boolean(path && path !== '/' && !this.isPortalUrl(path) && !path.startsWith('/auth'));
+  }
+
+  private recordBackHistory(currentUrl: string, nextUrl: string): void {
+    if (!currentUrl || currentUrl === nextUrl || !this.isBackHistoryCandidate(currentUrl)) {
+      this.syncPreviousRouteFromHistory();
+      return;
+    }
+    const currentHistory = this.routeHistory();
+    const latest = currentHistory[currentHistory.length - 1];
+    if (latest === currentUrl) {
+      this.syncPreviousRouteFromHistory();
+      return;
+    }
+    this.routeHistory.set([...currentHistory, currentUrl].slice(-this.maxBackHistory));
+    this.syncPreviousRouteFromHistory();
+  }
+
+  private popBackRoute(currentUrl: string): string {
+    const nextHistory = [...this.routeHistory()];
+    while (nextHistory.length) {
+      const candidate = nextHistory.pop() || '';
+      if (candidate && candidate !== currentUrl && this.isBackHistoryCandidate(candidate)) {
+        this.routeHistory.set(nextHistory);
+        this.syncPreviousRouteFromHistory();
+        return candidate;
+      }
+    }
+    this.routeHistory.set([]);
+    this.syncPreviousRouteFromHistory();
+    return '';
+  }
+
+  private navigateBackTo(url: string, currentUrl: string): void {
+    this.isBackNavigation = true;
+    void this.router.navigateByUrl(url).finally(() => {
+      if (this.activeRoute() === currentUrl) {
+        this.isBackNavigation = false;
+      }
+    });
+  }
+
+  private syncPreviousRouteFromHistory(): void {
+    const history = this.routeHistory();
+    this.previousRoute.set(history[history.length - 1] || '');
   }
 
   private isPortalUrl(url: string): boolean {
