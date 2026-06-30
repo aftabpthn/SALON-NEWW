@@ -275,7 +275,6 @@ type ActiveModuleTabs = {
               >
                 <span aria-hidden="true">&larr;</span>
               </button>
-              <span class="nav-icon" aria-hidden="true">{{ localNav.icon }}</span>
               <div>
                 <span class="eyebrow">{{ localNav.groupLabel }}</span>
                 <strong>{{ localNav.label }}</strong>
@@ -290,7 +289,6 @@ type ActiveModuleTabs = {
                 [attr.aria-current]="isLocalNavItemActive(item) ? 'page' : null"
                 (click)="rememberNavGroup(localNav.groupId)"
               >
-                <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
                 <span>{{ item.label }}</span>
               </a>
             </nav>
@@ -344,7 +342,7 @@ type ActiveModuleTabs = {
 
     .workspace-local-rail-head {
       display: grid;
-      grid-template-columns: 30px 30px minmax(0, 1fr);
+      grid-template-columns: 38px minmax(0, 1fr);
       align-items: center;
       gap: 10px;
       padding: 8px 6px 10px;
@@ -352,12 +350,21 @@ type ActiveModuleTabs = {
     }
 
     .workspace-local-back-button {
-      min-width: 30px;
-      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      min-height: 38px;
       padding: 0;
+      border: 1px solid #b9d8d3;
       border-radius: 999px;
-      color: #0f4f49;
-      font-size: 15px;
+      color: #0f766e;
+      background: #fff;
+      box-shadow: 0 6px 14px rgba(15, 118, 110, 0.12);
+      font-size: 20px;
+      font-weight: 900;
       line-height: 1;
     }
 
@@ -376,7 +383,7 @@ type ActiveModuleTabs = {
 
     .workspace-local-nav a {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       align-items: center;
       gap: 9px;
       min-height: 38px;
