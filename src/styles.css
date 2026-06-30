@@ -5394,3 +5394,367 @@ app-staff-os-section .context-links { justify-content: flex-start; }
 }
 /* END utility classes */
 
+
+/* Inline Aura Shine sidebar compatibility: app.component template */
+.app-shell > aside.sidebar.enterprise-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  width: 326px;
+  height: 100vh;
+  min-height: 100vh;
+  max-width: 326px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px 12px;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 249, 0.96)),
+    #ffffff;
+  border-right: 1px solid rgba(15, 118, 110, 0.14);
+  box-shadow: 16px 0 44px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+  width: 56px;
+  max-width: 56px;
+  padding: 12px 7px;
+  gap: 10px;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-brand-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 10px;
+  border-bottom: 1px solid rgba(15, 118, 110, 0.12);
+}
+
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .sidebar-brand-row {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding-bottom: 8px;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .brand {
+  min-width: 0;
+  gap: 9px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .brand-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #19a38f, #c99a35);
+  box-shadow: 0 12px 26px rgba(15, 118, 110, 0.24);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .brand strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .brand small,
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search span,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-copy small,
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-callout p {
+  color: #667485;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-toggle {
+  min-width: 36px;
+  min-height: 32px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 8px;
+  color: #0f4f49;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 0.68rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-toggle:hover {
+  background: rgba(228, 245, 239, 0.94);
+}
+
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .brand span:not(.brand-mark) {
+  display: none;
+}
+
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .sidebar-toggle {
+  width: 100%;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 54px 0 12px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.9);
+  outline: none;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search input:focus {
+  border-color: rgba(15, 118, 110, 0.32);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-clear {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #667485;
+  background: #eef4f2;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-list.nav-accordion {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, 0.35) transparent;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section {
+  display: grid;
+  gap: 6px;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #263443;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger:hover,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger {
+  border-color: rgba(15, 118, 110, 0.22);
+  color: #0f4f49;
+  background: rgba(228, 245, 239, 0.92);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section.active-section > .nav-section-trigger {
+  box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-copy strong,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-copy strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-icon,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-count {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-count {
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-section-items {
+  display: grid;
+  gap: 6px;
+  margin: 3px 0 2px 17px;
+  padding: 4px 0 4px 14px;
+  border-left: 1px solid rgba(15, 118, 110, 0.14);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subgroup {
+  display: grid;
+  gap: 5px;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subitem,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subgroup-title {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #263443;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subitem span:last-child,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subgroup-title span:not(.nav-icon) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subitem.nested {
+  margin-left: 12px;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subitem:hover,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subitem.active,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subgroup-title:hover,
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subgroup-title.active {
+  border-color: rgba(15, 118, 110, 0.22);
+  color: #0f4f49;
+  background: rgba(228, 245, 239, 0.94);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-subitem.active {
+  box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .nav-empty {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed rgba(15, 118, 110, 0.18);
+  border-radius: 10px;
+  color: #667485;
+  text-align: center;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-callout {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 14px;
+  color: #263443;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.08), transparent 62%),
+    rgba(255, 255, 255, 0.92);
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-callout strong {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell > aside.sidebar.enterprise-sidebar .sidebar-callout p {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .sidebar-search,
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .sidebar-callout,
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .nav-section-copy,
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .nav-count,
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .nav-section-items {
+  display: none;
+}
+
+.app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+  min-height: 42px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 7px;
+}
+
+@media (max-width: 1260px) {
+  .app-shell:not(.sidebar-is-compact) {
+    grid-template-columns: 286px minmax(0, 1fr);
+  }
+
+  .app-shell:not(.sidebar-is-compact) > aside.sidebar.enterprise-sidebar {
+    width: 286px;
+    max-width: 286px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell > aside.sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-height: 58px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    overflow-x: auto;
+  }
+
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-brand-row {
+    display: flex;
+    flex: 0 0 auto;
+    border-bottom: 0;
+    padding: 0;
+  }
+
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-list.nav-accordion {
+    display: flex;
+    flex-direction: row;
+    overflow: visible;
+  }
+
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+    width: 44px;
+    min-height: 40px;
+  }
+}
