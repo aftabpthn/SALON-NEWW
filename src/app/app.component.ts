@@ -246,21 +246,6 @@ type ActiveModuleTabs = {
           <button class="ghost-button mini" type="button" (click)="globalError.set('')">{{ i18n.t('shell.dismiss', 'Dismiss') }}</button>
         </div>
 
-        <section class="workspace-module-tabs" *ngIf="activeModuleTabs() as moduleTabs" [attr.aria-label]="moduleTabs.label + ' modules'">
-          <nav class="workspace-module-tabs-nav" [attr.aria-label]="moduleTabs.label + ' module groups'">
-            <a
-              *ngFor="let tab of moduleTabs.items"
-              class="workspace-module-tab"
-              [routerLink]="tab.path"
-              [class.active]="isNavItemActive(tab)"
-              [attr.aria-current]="isNavItemActive(tab) ? 'page' : null"
-              (click)="rememberNavGroup(moduleTabs.groupId)"
-            >
-              <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
-              <span>{{ tab.label }}</span>
-            </a>
-          </nav>
-        </section>
 
 
         <section class="workspace-route-shell" [class.workspace-route-shell--with-local-nav]="activeLocalNav() !== null">
@@ -294,6 +279,21 @@ type ActiveModuleTabs = {
             </nav>
           </aside>
           <div class="workspace-route-content">
+            <section class="workspace-module-tabs" *ngIf="activeModuleTabs() as moduleTabs" [attr.aria-label]="moduleTabs.label + ' modules'">
+              <nav class="workspace-module-tabs-nav" [attr.aria-label]="moduleTabs.label + ' module groups'">
+                <a
+                  *ngFor="let tab of moduleTabs.items"
+                  class="workspace-module-tab"
+                  [routerLink]="tab.path"
+                  [class.active]="isNavItemActive(tab)"
+                  [attr.aria-current]="isNavItemActive(tab) ? 'page' : null"
+                  (click)="rememberNavGroup(moduleTabs.groupId)"
+                >
+                  <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
+                  <span>{{ tab.label }}</span>
+                </a>
+              </nav>
+            </section>
             <router-outlet></router-outlet>
           </div>
         </section>
@@ -328,6 +328,31 @@ type ActiveModuleTabs = {
 
     .workspace-route-content {
       min-width: 0;
+    }
+
+    .workspace-route-shell--with-local-nav .workspace-route-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+    }
+
+    .workspace-route-content > .workspace-module-tabs {
+      position: sticky;
+      top: 64px;
+      z-index: 18;
+      margin: 0;
+      border-top: 0;
+      border-right: 0;
+      border-left: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .workspace-route-shell--with-local-nav .workspace-route-content > .workspace-module-tabs {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
     }
 
     .workspace-local-rail {
@@ -414,6 +439,11 @@ type ActiveModuleTabs = {
       .workspace-local-rail {
         border-right: 0;
         border-bottom: 1px solid #d7e4ec;
+      }
+
+      .workspace-route-content > .workspace-module-tabs {
+        position: static;
+        border-top: 1px solid rgba(15, 118, 110, 0.14);
       }
 
       .workspace-local-nav {
