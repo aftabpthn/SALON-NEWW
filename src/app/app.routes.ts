@@ -207,6 +207,7 @@ export const routes: Routes = [
   { path: 'settings/calendar', loadComponent: () => import('./pages/calendar-settings.component').then(m => m.CalendarSettingsComponent), title: 'Calendar Settings' },
   { path: 'settings/taxes', loadComponent: () => import('./pages/tax-settings.component').then(m => m.TaxSettingsComponent), title: 'Tax Settings' },
   { path: 'settings/clients/custom-form', loadComponent: () => import('./pages/client-custom-form-settings.component').then(m => m.ClientCustomFormSettingsComponent), title: 'Clients - Custom Form' },
+  { path: 'settings/marketplace', loadComponent: () => import('./pages/marketplace-settings.component').then(m => m.MarketplaceSettingsComponent), title: 'Marketplace Settings' },
   {
     path: 'settings',
     component: ModulePageComponent,

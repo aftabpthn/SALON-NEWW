@@ -151,6 +151,7 @@ import { locationSharingRouter } from "./routes/location-sharing.routes.js";
 import { localizationPreferenceRouter } from "./routes/localization-preference.routes.js";
 import { membershipEnterpriseRouter } from "./routes/membership-enterprise.routes.js";
 import { messageHistoryReportRouter } from "./routes/message-history-report.routes.js";
+import { marketplaceSettingsRouter } from "./routes/marketplace-settings.routes.js";
 import { messageTemplateStudioRouter } from "./routes/message-template-studio.routes.js";
 import { migrationRouter } from "./routes/migration.routes.js";
 import { mobileRouter } from "./routes/mobile.routes.js";
@@ -371,6 +372,7 @@ export function createApp() {
   app.use("/api/v1", posSettingsRouter);
   app.use("/api/v1", taxSettingsRouter);
   app.use("/api/v1", clientCustomFormSettingsRouter);
+  app.use("/api/v1", marketplaceSettingsRouter);
   app.use("/api/v1", bookingPaymentsRouter);
   app.use("/api/v1", appointmentDepositGateRouter);
   app.use("/api/v1", legacyRevenueRouter);
@@ -522,6 +524,7 @@ export function createApp() {
   app.use("/api", taxSettingsRouter);
   app.use("/api", posSettingsRouter);
   app.use("/api", clientCustomFormSettingsRouter);
+  app.use("/api", marketplaceSettingsRouter);
   app.use("/api", bookingPaymentsRouter);
   app.use("/api", appointmentDepositGateRouter);
   app.use("/api", legacyRevenueRouter);
