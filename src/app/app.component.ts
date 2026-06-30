@@ -160,8 +160,7 @@ type ActiveModuleTabs = {
         </div>
 
         <label class="sidebar-search" *ngIf="!sidebarUiCompact()">
-          <span>{{ i18n.t('shell.findModule', 'Find module') }}</span>
-          <input [ngModel]="navQuery()" (ngModelChange)="navQuery.set($event)" [placeholder]="i18n.t('shell.searchPlaceholder', 'Search POS, staff, reports')" />
+          <input [ngModel]="navQuery()" (ngModelChange)="navQuery.set($event)" aria-label="Search modules" placeholder="Search" />
           <button class="sidebar-search-clear" type="button" *ngIf="navQuery()" (click)="navQuery.set('')">Clear</button>
         </label>
 
