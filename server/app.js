@@ -182,6 +182,7 @@ import { staffOsRouter } from "./routes/staff-os.routes.js";
 import { staffEnterpriseRouter } from "./routes/staff-enterprise.routes.js";
 import { staffSelfRouter } from "./routes/staff-self.routes.js";
 import { superAdminRouter } from "./routes/super-admin.routes.js";
+import { taxSettingsRouter } from "./routes/tax-settings.routes.js";
 import { terminalRouter } from "./routes/terminal.routes.js";
 import { whatsappRouter } from "./routes/whatsapp.routes.js";
 import { whatsappWebhookRouter } from "./routes/whatsapp-webhook.routes.js";
@@ -368,6 +369,7 @@ export function createApp() {
   app.use("/api/v1", zReportRouter);
   app.use("/api/v1", paymentRouter);
   app.use("/api/v1", posSettingsRouter);
+  app.use("/api/v1", taxSettingsRouter);
   app.use("/api/v1", clientCustomFormSettingsRouter);
   app.use("/api/v1", bookingPaymentsRouter);
   app.use("/api/v1", appointmentDepositGateRouter);
@@ -517,6 +519,7 @@ export function createApp() {
   app.use("/api", printDeviceRouter);
   app.use("/api", zReportRouter);
   app.use("/api", paymentRouter);
+  app.use("/api", taxSettingsRouter);
   app.use("/api", posSettingsRouter);
   app.use("/api", clientCustomFormSettingsRouter);
   app.use("/api", bookingPaymentsRouter);
