@@ -342,7 +342,7 @@ type ActiveModuleTabs = {
 
     .workspace-local-rail-head {
       display: grid;
-      grid-template-columns: 38px minmax(0, 1fr);
+      grid-template-columns: 44px minmax(0, 1fr);
       align-items: center;
       gap: 10px;
       padding: 8px 6px 10px;
@@ -353,17 +353,17 @@ type ActiveModuleTabs = {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 38px;
-      min-width: 38px;
-      height: 38px;
-      min-height: 38px;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      min-height: 44px;
       padding: 0;
-      border: 1px solid #b9d8d3;
+      border: 1px solid #8fc9c1;
       border-radius: 999px;
       color: #0f766e;
       background: #fff;
-      box-shadow: 0 6px 14px rgba(15, 118, 110, 0.12);
-      font-size: 20px;
+      box-shadow: 0 8px 18px rgba(15, 118, 110, 0.16);
+      font-size: 23px;
       font-weight: 900;
       line-height: 1;
     }
