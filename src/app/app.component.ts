@@ -581,6 +581,7 @@ export class AppComponent implements OnDestroy {
     pos: 'M5 5h14v14l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z M8 9h8 M8 13h6',
     inventory: 'M3 8l9-4 9 4-9 4z M3 8v8l9 4 9-4V8 M12 12v8',
     staff: 'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3 20v-1a5 5 0 0 1 5-5h1 M21 20v-1a5 5 0 0 0-5-5h-1 M9 20v-1a4 4 0 0 1 6 0v1',
+    clients: 'M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M3 21v-1a5 5 0 0 1 5-5h2 M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M13 21v-1a5 5 0 0 1 5-5h1',
     finance: 'M4 7h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4z M4 7V5h12 M15 13h5 M8 10h5 M8 14h4',
     marketing: 'M4 11h3l9-4v10l-9-4H4z M7 13l2 6 M18 9l2-2 M18 15l2 2',
     admin: 'M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z M12 9v5 M9.5 11.5h5',
@@ -709,17 +710,6 @@ export class AppComponent implements OnDestroy {
             { path: '/book', label: 'Booking Site', icon: 'OB', keywords: 'online booking portal' }
           ]
         },
-        {
-          path: '/customer-360',
-          label: 'Clients',
-          icon: 'CL',
-          keywords: 'customer 360 client crm masters consultation feedback preferences',
-          children: [
-            { path: '/customer-360', label: 'Customer 360', icon: '360', keywords: 'customer intelligence guest' },
-            { path: '/clients', label: 'Client CRM', icon: 'CL', keywords: 'client guest crm' },
-            { path: '/client-masters', label: 'Client Masters', icon: 'CM', keywords: 'flexi client masters category source consultation feedback preferences' }
-          ]
-        }
       ]
     },
     {
@@ -897,6 +887,17 @@ export class AppComponent implements OnDestroy {
             { path: '/staff/my-work', label: 'My Work', icon: 'MW', keywords: 'staff login live appointments own work report' }
           ]
         }
+      ]
+    },
+    {
+      id: 'clients',
+      label: 'Clients',
+      icon: 'CL',
+      primaryPath: '/customer-360',
+      items: [
+        { path: '/customer-360', label: 'Customer 360', icon: '360', keywords: 'customer intelligence guest duplicate merge ltv risk timeline' },
+        { path: '/client-masters', label: 'Client Masters', icon: 'CM', keywords: 'flexi client masters category source consultation feedback preferences' },
+        { path: '/clients', label: 'Client CRM', icon: 'CL', keywords: 'client guest crm duplicate merge saved clients profile' }
       ]
     },
     {
