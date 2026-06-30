@@ -31,7 +31,8 @@ type NavGroup = {
   items: NavItem[];
 };
 
-type ActiveNavTabGroup = {
+type ActiveLocalNav = {
+  groupId: string;
   groupLabel: string;
   path: string;
   label: string;
@@ -39,17 +40,13 @@ type ActiveNavTabGroup = {
   children: NavItem[];
 };
 
-type ActiveStaffModuleTabs = {
+
+type ActiveModuleTabs = {
+  groupId: string;
   label: string;
   items: NavItem[];
 };
 
-type ActiveStaffLocalNav = {
-  path: string;
-  label: string;
-  icon: string;
-  children: NavItem[];
-};
 
 @Component({
   selector: 'app-root',
@@ -171,8 +168,8 @@ type ActiveStaffLocalNav = {
         </label>
 
         <nav class="nav-list nav-accordion" aria-label="Primary navigation">
-          <section class="nav-section" *ngFor="let group of visibleNavGroups()" [class.active-section]="isGroupActive(group)" [class.expanded]="isGroupExpanded(group)">
-            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [attr.aria-expanded]="isGroupExpanded(group)" [title]="group.label">
+          <section class="nav-section" *ngFor="let group of visibleNavGroups()" [class.active-section]="isGroupActive(group)">
+            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [title]="group.label">
               <span class="nav-icon" aria-hidden="true">{{ group.icon }}</span>
               <span class="nav-section-copy">
                 <strong>{{ group.label }}</strong>
@@ -249,15 +246,15 @@ type ActiveStaffLocalNav = {
           <button class="ghost-button mini" type="button" (click)="globalError.set('')">{{ i18n.t('shell.dismiss', 'Dismiss') }}</button>
         </div>
 
-        <section class="staff-module-tabs" *ngIf="activeStaffModuleTabs() as staffTabs" aria-label="Staff OS modules">
-          <nav class="staff-module-tabs-nav" aria-label="Staff OS module groups">
+        <section class="workspace-module-tabs" *ngIf="activeModuleTabs() as moduleTabs" [attr.aria-label]="moduleTabs.label + ' modules'">
+          <nav class="workspace-module-tabs-nav" [attr.aria-label]="moduleTabs.label + ' module groups'">
             <a
-              *ngFor="let tab of staffTabs.items"
-              class="staff-module-tab"
+              *ngFor="let tab of moduleTabs.items"
+              class="workspace-module-tab"
               [routerLink]="tab.path"
               [class.active]="isNavItemActive(tab)"
               [attr.aria-current]="isNavItemActive(tab) ? 'page' : null"
-              (click)="rememberNavGroup('staff')"
+              (click)="rememberNavGroup(moduleTabs.groupId)"
             >
               <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
               <span>{{ tab.label }}</span>
@@ -265,58 +262,33 @@ type ActiveStaffLocalNav = {
           </nav>
         </section>
 
-        <section
-          class="workspace-page-tabs"
-          [class.workspace-page-tabs--dense]="tabs.groupLabel === 'Staff OS'"
-          *ngIf="activePageTabs() as tabs"
-          aria-label="Related pages"
-        >
-          <div class="workspace-page-tabs-head">
-            <button
-              class="ghost-button page-context-back-button"
-              type="button"
-              (click)="goBack()"
-              [attr.aria-label]="backButtonLabel()"
-              [title]="backButtonLabel()"
-            >
-              <span aria-hidden="true">&larr;</span>
-              <span>Back</span>
-            </button>
-            <span class="nav-icon" aria-hidden="true">{{ tabs.icon }}</span>
-            <div>
-              <span class="eyebrow">{{ tabs.groupLabel }}</span>
-              <strong>{{ tabs.label }}</strong>
-            </div>
-          </div>
-          <nav class="workspace-page-tabs-nav" aria-label="Page sections">
-            <a
-              *ngFor="let tab of tabs.children"
-              class="workspace-page-tab"
-              [routerLink]="tab.path"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: tab.path === tabs.path || tab.path === '/home' || tab.path === '/dashboard' }"
-            >
-              <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
-              <span>{{ tab.label }}</span>
-            </a>
-          </nav>
-        </section>
 
-        <section class="workspace-route-shell" [class.workspace-route-shell--staff]="activeStaffLocalNav() !== null">
-          <aside class="staff-local-rail" *ngIf="activeStaffLocalNav() as staffNav" aria-label="Staff OS local navigation">
-            <div class="staff-local-rail-head">
-              <span class="nav-icon" aria-hidden="true">{{ staffNav.icon }}</span>
+        <section class="workspace-route-shell" [class.workspace-route-shell--with-local-nav]="activeLocalNav() !== null">
+          <aside class="workspace-local-rail" *ngIf="activeLocalNav() as localNav" [attr.aria-label]="localNav.groupLabel + ' local navigation'">
+            <div class="workspace-local-rail-head">
+              <button
+                class="ghost-button workspace-local-back-button"
+                type="button"
+                (click)="goBack()"
+                [attr.aria-label]="backButtonLabel()"
+                [title]="backButtonLabel()"
+              >
+                <span aria-hidden="true">&larr;</span>
+              </button>
+              <span class="nav-icon" aria-hidden="true">{{ localNav.icon }}</span>
               <div>
-                <span class="eyebrow">Staff OS</span>
-                <strong>{{ staffNav.label }}</strong>
+                <span class="eyebrow">{{ localNav.groupLabel }}</span>
+                <strong>{{ localNav.label }}</strong>
               </div>
             </div>
-            <nav class="staff-local-nav" aria-label="Staff OS route group">
+            <nav class="workspace-local-nav" [attr.aria-label]="localNav.label + ' pages'">
               <a
-                *ngFor="let item of staffNav.children"
+                *ngFor="let item of localNav.children"
                 [routerLink]="item.path"
                 [queryParams]="item.queryParams || null"
-                [class.active]="isStaffLocalNavItemActive(item)"
+                [class.active]="isLocalNavItemActive(item)"
+                [attr.aria-current]="isLocalNavItemActive(item) ? 'page' : null"
+                (click)="rememberNavGroup(localNav.groupId)"
               >
                 <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
                 <span>{{ item.label }}</span>
@@ -347,7 +319,7 @@ type ActiveStaffLocalNav = {
       min-width: 0;
     }
 
-    .workspace-route-shell--staff {
+    .workspace-route-shell--with-local-nav {
       display: grid;
       grid-template-columns: 204px minmax(0, 1fr);
       align-items: stretch;
@@ -360,7 +332,7 @@ type ActiveStaffLocalNav = {
       min-width: 0;
     }
 
-    .staff-local-rail {
+    .workspace-local-rail {
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -370,29 +342,39 @@ type ActiveStaffLocalNav = {
       min-width: 0;
     }
 
-    .staff-local-rail-head {
+    .workspace-local-rail-head {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: 30px 30px minmax(0, 1fr);
       align-items: center;
       gap: 10px;
       padding: 8px 6px 10px;
       border-bottom: 1px solid #e4ecef;
     }
 
-    .staff-local-rail-head strong {
+    .workspace-local-back-button {
+      min-width: 30px;
+      min-height: 30px;
+      padding: 0;
+      border-radius: 999px;
+      color: #0f4f49;
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .workspace-local-rail-head strong {
       display: block;
       color: #123a36;
       font-size: 14px;
       line-height: 1.2;
     }
 
-    .staff-local-nav {
+    .workspace-local-nav {
       display: flex;
       flex-direction: column;
       gap: 6px;
     }
 
-    .staff-local-nav a {
+    .workspace-local-nav a {
       display: grid;
       grid-template-columns: 30px minmax(0, 1fr);
       align-items: center;
@@ -408,9 +390,9 @@ type ActiveStaffLocalNav = {
       line-height: 1.2;
     }
 
-    .staff-local-nav a.active,
-    .staff-local-nav a:hover,
-    .staff-local-nav a:focus-visible {
+    .workspace-local-nav a.active,
+    .workspace-local-nav a:hover,
+    .workspace-local-nav a:focus-visible {
       background: #e8f7f4;
       color: #005f58;
       border-color: #a9d8d1;
@@ -418,16 +400,16 @@ type ActiveStaffLocalNav = {
     }
 
     @media (max-width: 760px) {
-      .workspace-route-shell--staff {
+      .workspace-route-shell--with-local-nav {
         grid-template-columns: 1fr;
       }
 
-      .staff-local-rail {
+      .workspace-local-rail {
         border-right: 0;
         border-bottom: 1px solid #d7e4ec;
       }
 
-      .staff-local-nav {
+      .workspace-local-nav {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       }
@@ -990,43 +972,33 @@ export class AppComponent {
   readonly activePageLabel = computed(() => {
     return this.pageLabelForUrl(this.activeRoute()) || 'Command workspace';
   });
-  readonly activeStaffLocalNav = computed<ActiveStaffLocalNav | null>(() => {
+  readonly activeLocalNav = computed<ActiveLocalNav | null>(() => {
     const branch = this.navBranchForUrl(this.activeRoute());
-    if (branch?.group.id !== 'staff' || !branch.item.children?.length) return null;
+    if (!branch?.item.children?.length) return null;
 
-    const children = this.staffLocalChildren(branch.item).filter((item) => this.canAccessNavItem(item));
+    const children = this.localNavChildren(branch.group.id, branch.item).filter((item) => this.canAccessNavItem(item));
     if (!children.length) return null;
 
     return {
+      groupId: branch.group.id,
+      groupLabel: branch.group.label,
       path: branch.item.path,
       label: branch.item.label,
       icon: branch.item.icon,
       children
     };
   });
-  readonly activeStaffModuleTabs = computed<ActiveStaffModuleTabs | null>(() => {
+  readonly activeModuleTabs = computed<ActiveModuleTabs | null>(() => {
     const branch = this.navBranchForUrl(this.activeRoute());
-    if (branch?.group.id !== 'staff') return null;
+    if (!branch) return null;
 
     const items = branch.group.items.filter((item) => this.canAccessNavItem(item));
     if (!items.length) return null;
 
     return {
+      groupId: branch.group.id,
       label: branch.group.label,
       items
-    };
-  });
-  readonly activePageTabs = computed<ActiveNavTabGroup | null>(() => {
-    const route = this.routePath(this.activeRoute());
-    if (this.activeStaffLocalNav()) return null;
-    const branch = this.navBranchForUrl(route);
-    if (!branch?.item.children?.length) return null;
-    return {
-      groupLabel: branch.group.label,
-      path: branch.item.path,
-      label: branch.item.label,
-      icon: branch.item.icon,
-      children: branch.item.children
     };
   });
   readonly backButtonLabel = computed(() => {
@@ -1240,15 +1212,7 @@ export class AppComponent {
   }
 
   openNavGroup(group: NavGroup): void {
-    if (this.sidebarUiCompact() || group.id === 'staff') {
-      this.router.navigateByUrl(group.primaryPath);
-      return;
-    }
-    const current = new Set(this.expandedGroupIds());
-    if (current.has(group.id)) current.delete(group.id);
-    else current.add(group.id);
-    this.expandedGroupIds.set([...current]);
-    localStorage.setItem('aura.expandedNavGroups', JSON.stringify([...current]));
+    this.router.navigateByUrl(group.primaryPath);
   }
 
   rememberNavGroup(groupId: string): void {
@@ -1291,7 +1255,7 @@ export class AppComponent {
     return this.isRouteActive(url, item.path) || (item.children || []).some((child) => this.isRouteActive(url, child.path));
   }
 
-  isStaffLocalNavItemActive(item: NavItem): boolean {
+  isLocalNavItemActive(item: NavItem): boolean {
     const currentUrl = this.activeRoute();
     const currentPath = this.routePath(currentUrl);
     const targetPath = this.routePath(item.path);
@@ -1303,7 +1267,7 @@ export class AppComponent {
       return queryEntries.every(([key, value]) => String(currentQuery[key] ?? '') === value);
     }
 
-    const querySpecificSiblingActive = this.activeStaffLocalNav()?.children.some((candidate) => {
+    const querySpecificSiblingActive = this.activeLocalNav()?.children.some((candidate) => {
       if (candidate === item || this.routePath(candidate.path) !== targetPath || !candidate.queryParams) return false;
       return Object.entries(candidate.queryParams).every(([key, value]) => String(currentQuery[key] ?? '') === value);
     });
@@ -1329,12 +1293,12 @@ export class AppComponent {
   }
 
   visibleSidebarItems(group: NavGroup): NavItem[] {
-    return group.id === 'staff' ? [] : group.items;
+    return [];
   }
 
-  private staffLocalChildren(item: NavItem): NavItem[] {
+  private localNavChildren(groupId: string, item: NavItem): NavItem[] {
     const children = [...(item.children || [])];
-    if (item.path === '/staff-os/staff-list') {
+    if (groupId === 'staff' && item.path === '/staff-os/staff-list') {
       children.push({
         path: '/staff-os/staff-list',
         label: 'Inactive Staff',
@@ -1365,7 +1329,6 @@ export class AppComponent {
     }
     for (const group of this.navGroups) {
       for (const item of group.items) {
-        if (!item.children?.length) continue;
         if (cleanUrl === item.path || cleanUrl.startsWith(`${item.path}/`)) {
           return { group, item };
         }

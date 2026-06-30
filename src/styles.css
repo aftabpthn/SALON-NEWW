@@ -4692,7 +4692,7 @@ body::before {
 }
 
 
-.staff-module-tabs {
+.workspace-module-tabs {
   position: sticky;
   top: 94px;
   z-index: 19;
@@ -4705,7 +4705,7 @@ body::before {
   backdrop-filter: blur(16px);
 }
 
-.staff-module-tabs-nav {
+.workspace-module-tabs-nav {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -4714,7 +4714,7 @@ body::before {
   scrollbar-width: thin;
 }
 
-.staff-module-tab {
+.workspace-module-tab {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -4732,16 +4732,16 @@ body::before {
   text-decoration: none;
 }
 
-.staff-module-tab span:last-child {
+.workspace-module-tab span:last-child {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.staff-module-tab:hover,
-.staff-module-tab:focus-visible,
-.staff-module-tab.active {
+.workspace-module-tab:hover,
+.workspace-module-tab:focus-visible,
+.workspace-module-tab.active {
   color: #0f4f49;
   border-color: rgba(15, 118, 110, 0.28);
   background: rgba(228, 245, 239, 0.98);
@@ -4749,7 +4749,7 @@ body::before {
   outline: none;
 }
 
-.staff-module-tab .nav-icon {
+.workspace-module-tab .nav-icon {
   width: 26px;
   height: 26px;
   color: #0f766e;
@@ -4757,18 +4757,18 @@ body::before {
 }
 
 @media (max-width: 760px) {
-  .staff-module-tabs {
+  .workspace-module-tabs {
     position: static;
     margin: 0 0 8px;
     padding: 7px;
     border-radius: 9px;
   }
 
-  .staff-module-tabs-nav {
+  .workspace-module-tabs-nav {
     gap: 5px;
   }
 
-  .staff-module-tab {
+  .workspace-module-tab {
     max-width: none;
     min-height: 34px;
     padding: 0 9px;
