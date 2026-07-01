@@ -17,7 +17,7 @@ export class RefreshOnNavigationRouteReuseStrategy implements RouteReuseStrategy
     return null;
   }
 
-  shouldReuseRoute(_future: ActivatedRouteSnapshot, _curr: ActivatedRouteSnapshot): boolean {
-    return false;
+  shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
+    return future.routeConfig === curr.routeConfig;
   }
 }
