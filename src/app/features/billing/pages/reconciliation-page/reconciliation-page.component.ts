@@ -67,7 +67,6 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
         <div class="hero-copy">
           <span class="eyebrow">Payment reconciliation</span>
           <h1>Settlement matching for Razorpay, UPI, card and bank</h1>
-          <p class="muted">Provider settlement, payment fees, GST on fees, refunds, adjustments aur mismatch review ek jagah.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost" type="button" [disabled]="loading()" (click)="load()">Refresh</button>
@@ -78,7 +77,7 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
 
       <section class="metric-grid">
         <article class="metric"><span class="eyebrow">Captured</span><strong>{{ money(providerSummary().captured) }}</strong><small class="muted">{{ providerLabel() }} collection</small></article>
-        <article class="metric"><span class="eyebrow">Expected settlement</span><strong>{{ money(providerSummary().expected) }}</strong><small class="muted">After fees, GST and refunds</small></article>
+        <article class="metric"><span class="eyebrow">Expected settlement</span><strong>{{ money(providerSummary().expected) }}</strong></article>
         <article class="metric"><span class="eyebrow">Difference</span><strong>{{ money(providerSummary().difference) }}</strong><small class="muted">{{ providerSummary().status }}</small></article>
         <article class="metric"><span class="eyebrow">Stored runs</span><strong>{{ storedRows().length }}</strong><small class="muted">{{ mismatchRows().length }} mismatch</small></article>
       </section>

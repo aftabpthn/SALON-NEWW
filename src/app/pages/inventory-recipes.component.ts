@@ -225,11 +225,11 @@ const DEFAULT_MODIFIERS = [
         <section class="panel impact-panel">
           <div class="section-title"><div><span class="eyebrow">Recipe impact</span><h2>Cost, margin and stock</h2></div></div>
           <div class="impact-stack">
-            <article><span>Expected service cost</span><strong>{{ expectedCostPreview() | currency:'INR':'symbol':'1.0-0' }}</strong><small>Qty + wastage + product unit cost</small></article>
+            <article><span>Expected service cost</span><strong>{{ expectedCostPreview() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
             <article><span>Service margin</span><strong>{{ marginPreview() | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ marginPctPreview() }}% after professional stock</small></article>
             <article><span>Product filter</span><strong>Consumable / Both</strong><small>{{ recipeProducts().length }} products available for BOM</small></article>
-            <article><span>FIFO mode</span><strong>Enforced</strong><small>Expiry-first batches are consumed before fresh stock</small></article>
-            <article><span>Live tracking</span><strong>SERVICE_USE</strong><small>POS, appointment and invoice usage writes stock ledger rows.</small></article>
+            <article><span>FIFO mode</span><strong>Enforced</strong></article>
+            <article><span>Live tracking</span><strong>SERVICE_USE</strong></article>
           </div>
           <div class="margin-meter">
             <div class="meter-label"><span>Margin health</span><strong>{{ marginPctPreview() }}%</strong></div>

@@ -16,7 +16,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Offline Resilience Command Center</span>
           <h2>Run billing, appointments and recovery workflows even when internet is unstable</h2>
-          <p>Each offline workflow now opens as a focused page, so billing, appointments, sync, conflicts, device health and risk alerts stay cleanly separated.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>
@@ -24,12 +23,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="amber" target="/kpi-details/offline/queued"><span>Queued</span><strong>{{ metrics.queued }}</strong><small>Pending sync</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/offline/synced"><span>Synced</span><strong>{{ metrics.synced }}</strong><small>Processed items</small></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/offline/conflicts"><span>Conflicts</span><strong>{{ metrics.conflicts }}</strong><small>Needs review</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/offline/cache-snapshots"><span>Cache snapshots</span><strong>{{ metrics.cacheSnapshots }}</strong><small>Local data packs</small></aura-kpi-card>
-        <aura-kpi-card tone="teal" target="/kpi-details/offline/offline-appointments"><span>Offline appointments</span><strong>{{ metrics.offlineAppointments }}</strong><small>Queued bookings</small></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/offline/offline-bills"><span>Offline bills</span><strong>{{ metrics.offlineBills }}</strong><small>Queued sales</small></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/offline/queued"><span>Queued</span><strong>{{ metrics.queued }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/offline/synced"><span>Synced</span><strong>{{ metrics.synced }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="red" target="/kpi-details/offline/conflicts"><span>Conflicts</span><strong>{{ metrics.conflicts }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/offline/cache-snapshots"><span>Cache snapshots</span><strong>{{ metrics.cacheSnapshots }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/offline/offline-appointments"><span>Offline appointments</span><strong>{{ metrics.offlineAppointments }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="violet" target="/kpi-details/offline/offline-bills"><span>Offline bills</span><strong>{{ metrics.offlineBills }}</strong></aura-kpi-card>
       </div>
 
       <section class="panel">
@@ -53,12 +52,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             <article class="action-card">
               <strong>{{ readinessScore() }}</strong>
               <span>{{ readinessLabel() }}</span>
-              <small>Based on queued items, conflicts and cache availability</small>
             </article>
             <article class="action-card">
               <strong>{{ summary()?.snapshots?.[0]?.createdAt ? (summary()?.snapshots?.[0]?.createdAt | date: 'short') : 'No cache yet' }}</strong>
               <span>Latest cache snapshot</span>
-              <small>Open Readiness Score for full cache strategy</small>
             </article>
           </div>
         </section>

@@ -46,7 +46,6 @@ interface StaffPreview {
         <div>
           <span class="eyebrow">Reputation</span>
           <h2>Command Center</h2>
-          <p>Multi-platform review health, response workflow, alerts and salon quality signals in one operating view.</p>
         </div>
         <div class="heading-actions">
           <button class="ghost-button" type="button" (click)="load()" [disabled]="loading">Refresh</button>
@@ -109,15 +108,15 @@ interface StaffPreview {
           </div>
 
           <div class="feedback-kpis" *ngIf="feedbackReport">
-            <article><span>No. of Feedback</span><strong>{{ feedbackNumber('totalFeedback') }}</strong><small>Captured reviews</small></article>
-            <article><span>Overall Rating</span><strong>{{ feedbackNumber('overallRating') | number:'1.1-1' }}</strong><small>Out of 5</small></article>
-            <article><span>Very Poor</span><strong>{{ feedbackNumber('veryPoor') }}</strong><small>1 star</small></article>
-            <article><span>Poor</span><strong>{{ feedbackNumber('poor') }}</strong><small>2 star</small></article>
-            <article><span>Average</span><strong>{{ feedbackNumber('average') }}</strong><small>3 star</small></article>
-            <article><span>Good</span><strong>{{ feedbackNumber('good') }}</strong><small>4 star</small></article>
-            <article><span>Awesome</span><strong>{{ feedbackNumber('awesome') }}</strong><small>5 star</small></article>
+            <article><span>No. of Feedback</span><strong>{{ feedbackNumber('totalFeedback') }}</strong></article>
+            <article><span>Overall Rating</span><strong>{{ feedbackNumber('overallRating') | number:'1.1-1' }}</strong></article>
+            <article><span>Very Poor</span><strong>{{ feedbackNumber('veryPoor') }}</strong></article>
+            <article><span>Poor</span><strong>{{ feedbackNumber('poor') }}</strong></article>
+            <article><span>Average</span><strong>{{ feedbackNumber('average') }}</strong></article>
+            <article><span>Good</span><strong>{{ feedbackNumber('good') }}</strong></article>
+            <article><span>Awesome</span><strong>{{ feedbackNumber('awesome') }}</strong></article>
             <article class="danger"><span>Recovery Pending</span><strong>{{ feedbackNumber('recoveryPending') }}</strong><small>{{ feedbackNumber('negativeFeedback') }} negative</small></article>
-            <article><span>Review Conversion</span><strong>{{ feedbackNumber('reviewConversionRate') }}%</strong><small>Submitted / sent</small></article>
+            <article><span>Review Conversion</span><strong>{{ feedbackNumber('reviewConversionRate') }}%</strong></article>
           </div>
 
           <div class="table-wrap" *ngIf="activeTab === 'feedback'">
@@ -296,7 +295,6 @@ interface StaffPreview {
           <div>
             <span class="eyebrow">Review link</span>
             <h3>Send invoice review link</h3>
-            <p>The link is queued automatically after invoice or checkout. For manual resend or testing, enter the appointment ID and send it from here.</p>
           </div>
           <label class="field">
             <span>Appointment ID</span>

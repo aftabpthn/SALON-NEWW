@@ -15,7 +15,6 @@ type BulkField = keyof EditableBulkEmployeeRow;
     <section class="bulk-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Employee Masters</p>
           <h1>Employee Master - Bulk Edit</h1>
         </div>
         <div class="topbar-actions">

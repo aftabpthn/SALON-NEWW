@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Offline Readiness Score</h2>
-          <p>Branch readiness based on cache freshness, queued sync work, conflicts and offline workload.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>
@@ -22,9 +21,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
         <article class="metric-card"><span>Score</span><strong>{{ score() }}</strong><small>{{ scoreDetail() }}</small></article>
-        <article class="metric-card"><span>Cached packs</span><strong>{{ metrics.cacheSnapshots || 0 }}</strong><small>Clients, services, staff, products</small></article>
-        <article class="metric-card"><span>Pending queue</span><strong>{{ metrics.queued || 0 }}</strong><small>Unsynced work</small></article>
-        <article class="metric-card"><span>Conflict risk</span><strong>{{ metrics.conflicts || 0 }}</strong><small>Needs manager review</small></article>
+        <article class="metric-card"><span>Cached packs</span><strong>{{ metrics.cacheSnapshots || 0 }}</strong></article>
+        <article class="metric-card"><span>Pending queue</span><strong>{{ metrics.queued || 0 }}</strong></article>
+        <article class="metric-card"><span>Conflict risk</span><strong>{{ metrics.conflicts || 0 }}</strong></article>
       </div>
 
       <section class="panel">

@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Smart Sync Queue</h2>
-          <p>Prioritize offline billing first, appointments second, and inventory or background mutations after that.</p>
         </div>
         <div class="form-actions">
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -31,12 +30,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article class="action-card">
               <strong>{{ retryDashboard()?.metrics?.priorityBilling || 0 }}</strong>
               <span>Billing priority</span>
-              <small>P1 protected invoice sync</small>
             </article>
             <article class="action-card">
               <strong>{{ retryDashboard()?.metrics?.priorityAppointments || 0 }}</strong>
               <span>Appointment priority</span>
-              <small>P2 protected booking sync</small>
             </article>
             <article class="action-card">
               <strong>{{ retryDashboard()?.metrics?.oldestQueuedAt ? (retryDashboard()?.metrics?.oldestQueuedAt | date: 'short') : 'Clear' }}</strong>

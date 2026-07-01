@@ -88,9 +88,7 @@ type ContactVerificationResponse = ContactVerification & {
   template: `
     <section class="module-hero">
       <div>
-        <p class="eyebrow">Business details</p>
         <h2>SMS routing and business profile</h2>
-        <p>Salon identity, owner mobile, provider mode and delivery channels control client, staff and owner SMS.</p>
       </div>
       <div class="hero-actions">
         <a class="ghost-button link-button" routerLink="/clients">Client page</a>
@@ -107,7 +105,6 @@ type ContactVerificationResponse = ContactVerification & {
       <article class="sms-route-card client">
         <span class="route-kicker">Client SMS</span>
         <h3>Client profile phone</h3>
-        <p>Appointment confirmations use the mobile number saved on the client profile.</p>
         <div class="route-status">
           <strong [class.ready]="clientSmsReady()">{{ clientSmsReady() ? 'SMS enabled' : 'SMS off' }}</strong>
           <small>{{ channelList(form.clientChannels) }}</small>
@@ -118,10 +115,8 @@ type ContactVerificationResponse = ContactVerification & {
       <article class="sms-route-card staff">
         <span class="route-kicker">Staff SMS</span>
         <h3>Staff profile phone</h3>
-        <p>Staff reminders use the mobile number saved on the staff profile.</p>
         <div class="route-status">
           <strong class="ready">Connected</strong>
-          <small>Uses saved staff records</small>
         </div>
         <a routerLink="/staff">Open staff page</a>
       </article>
@@ -129,7 +124,6 @@ type ContactVerificationResponse = ContactVerification & {
       <article class="sms-route-card owner">
         <span class="route-kicker">Owner SMS</span>
         <h3>Owner mobile routing</h3>
-        <p>Owner booking alerts and invoice alerts will queue to the saved owner mobile numbers below.</p>
         <div class="route-status">
           <strong [class.ready]="ownerSmsReady()">{{ ownerSmsReady() ? ownerMobileCount() + ' mobile(s)' : 'Add owner mobile' }}</strong>
           <small>{{ channelList(form.ownerChannels) }}</small>
@@ -140,10 +134,8 @@ type ContactVerificationResponse = ContactVerification & {
       <article class="sms-route-card logs">
         <span class="route-kicker">Delivery queue</span>
         <h3>Message logs</h3>
-        <p>Queued SMS rows are stored in real message logs with recipient, branch, client and appointment payload.</p>
         <div class="route-status">
           <strong class="ready">{{ providerLabel() }}</strong>
-          <small>Outbound SMS queue</small>
         </div>
         <a routerLink="/message-logs">Open message logs</a>
       </article>
@@ -151,7 +143,6 @@ type ContactVerificationResponse = ContactVerification & {
 
     <section class="settings-grid">
       <article class="panel">
-        <p class="eyebrow">Salon identity</p>
         <h3>Business info</h3>
         <div class="form-grid two">
           <label>
@@ -256,9 +247,7 @@ type ContactVerificationResponse = ContactVerification & {
 
         <div class="hours-editor">
           <div class="hours-copy">
-            <p class="eyebrow">Customer app timings</p>
             <h3>Business Hours</h3>
-            <p>Specify your opening closing time for your business.</p>
             <label class="switch-row">
               <span>Show/Hide Business Hours</span>
               <input class="switch-input" type="checkbox" [(ngModel)]="showBusinessHours" />
@@ -312,7 +301,6 @@ type ContactVerificationResponse = ContactVerification & {
       <article class="panel owner-routing-panel">
         <div class="panel-title-row">
           <div>
-            <p class="eyebrow">Owners and reporting</p>
             <h3>Alert recipients</h3>
           </div>
           <span class="recipient-count">{{ contactList(reportingEmailsText).length + contactList(ownerEmailsText).length + contactList(ownerMobilesText).length }} saved</span>
@@ -339,7 +327,6 @@ type ContactVerificationResponse = ContactVerification & {
             <span class="checkmark" aria-hidden="true"></span>
             <span>
               <strong>Client invoice close</strong>
-              <small>Send invoice alert to selected client channels</small>
             </span>
           </label>
           <label class="check-card">
@@ -347,7 +334,6 @@ type ContactVerificationResponse = ContactVerification & {
               <span class="checkmark" aria-hidden="true"></span>
               <span>
                 <strong>Owner invoice close</strong>
-                <small>Send invoice and appointment alerts to owner contacts only</small>
               </span>
             </label>
         </div>
@@ -358,7 +344,6 @@ type ContactVerificationResponse = ContactVerification & {
             <span class="checkmark" aria-hidden="true"></span>
             <span>
               <strong>Daily report email</strong>
-              <small>Send full-day PDF report only to verified reporting emails</small>
             </span>
           </label>
           <div class="report-schedule-grid">
@@ -412,7 +397,6 @@ type ContactVerificationResponse = ContactVerification & {
             <span *ngIf="pendingVerification()?.devOtp">Dev OTP: {{ pendingVerification()?.devOtp }}</span>
             <button type="button" (click)="verifyPendingContact()" [disabled]="contactVerificationLoading()">Verify and add</button>
           </div>
-          <small class="input-hint">Supports common international email formats, plus aliases and Unicode domains.</small>
         </div>
 
         <div class="contact-section">
@@ -446,7 +430,6 @@ type ContactVerificationResponse = ContactVerification & {
             <span *ngIf="pendingVerification()?.devOtp">Dev OTP: {{ pendingVerification()?.devOtp }}</span>
             <button type="button" (click)="verifyPendingContact()" [disabled]="contactVerificationLoading()">Verify and add</button>
           </div>
-          <small class="input-hint">Example: owner+branch@salon.co.in or unicode-name@idn.example</small>
         </div>
 
         <div class="contact-section">
@@ -485,7 +468,6 @@ type ContactVerificationResponse = ContactVerification & {
             <span *ngIf="pendingVerification()?.devOtp">Dev OTP: {{ pendingVerification()?.devOtp }}</span>
             <button type="button" (click)="verifyPendingContact()" [disabled]="contactVerificationLoading()">Verify and add</button>
           </div>
-          <small class="input-hint">Numbers are saved in international format. Length is checked using the selected or pasted country code.</small>
         </div>
 
         <div class="channel-grid improved-channel-grid">
@@ -514,24 +496,19 @@ type ContactVerificationResponse = ContactVerification & {
       </article>
 
       <article class="panel full">
-        <p class="eyebrow">Preview</p>
         <h3>What will happen after Save sale and invoice?</h3>
         <div class="preview-grid">
           <div>
             <strong>Client receives</strong>
-            <p>Invoice number, total, paid, due, salon contact and thank-you message.</p>
           </div>
           <div>
             <strong>Staff receives</strong>
-            <p>Appointment time, client name, service list and chair/room handoff from the live booking drawer.</p>
           </div>
           <div>
             <strong>Owners receive</strong>
-            <p>Invoice closed alert with client, branch, total, paid, due and invoice document id.</p>
           </div>
           <div>
             <strong>Safety</strong>
-            <p>Messages are queued per invoice, channel and recipient. Existing sent rows are not overwritten.</p>
           </div>
         </div>
       </article>

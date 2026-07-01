@@ -35,12 +35,10 @@
     <article class="metric-card">
       <span>Total conflicts</span>
       <strong>{{ result()?.conflictCount || 0 }}</strong>
-      <small>active detection</small>
     </article>
     <article class="metric-card" *ngFor="let severity of severities">
       <span>{{ severity }}</span>
       <strong>{{ severityCount(severity) }}</strong>
-      <small>severity count</small>
     </article>
   </section>
 

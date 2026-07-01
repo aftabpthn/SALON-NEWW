@@ -10,7 +10,6 @@ import { AuthService } from "../../core/auth.service";
     <ion-content>
       <main class="otp-shell">
         <form class="otp-card premium-card" (submit)="verify($event)">
-          <p class="eyebrow">Verification</p>
           <h1>Confirm your OTP</h1>
           <p class="muted">{{ deliveryText() }}</p>
           @if (error || auth.error()) {

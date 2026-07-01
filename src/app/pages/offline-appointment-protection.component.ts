@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Offline Appointment Protection</h2>
-          <p>Create offline appointments with slot, staff availability and duplicate booking safeguards visible.</p>
         </div>
         <button class="ghost-button" type="button" (click)="loadLists()">Refresh lists</button>
       </div>

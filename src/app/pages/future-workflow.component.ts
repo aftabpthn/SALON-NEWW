@@ -27,7 +27,6 @@ type WorkflowConfig = {
     <section class="workflow-shell">
       <header class="workflow-hero">
         <div>
-          <p class="eyebrow">Future workflow</p>
           <h1>{{ config.title }}</h1>
           <p>{{ config.subtitle }}</p>
         </div>
@@ -60,7 +59,6 @@ type WorkflowConfig = {
       <div class="workflow-grid">
         <form class="runner-panel" [formGroup]="runForm" (ngSubmit)="run()">
           <div class="panel-head">
-            <p class="eyebrow">Connected launcher</p>
             <h2>Run {{ config.title }}</h2>
           </div>
           <textarea formControlName="prompt" rows="6"></textarea>
@@ -69,7 +67,6 @@ type WorkflowConfig = {
 
         <section class="trace-panel">
           <div class="panel-head">
-            <p class="eyebrow">Live source trace</p>
             <h2>Data used</h2>
           </div>
           <div class="source-list">
@@ -84,7 +81,6 @@ type WorkflowConfig = {
 
       <section class="records-band">
         <div class="panel-head">
-          <p class="eyebrow">Connected records</p>
           <h2>{{ config.recordLabel }}</h2>
         </div>
         <div class="record-grid" *ngIf="primaryRows().length; else noRecords">
@@ -105,7 +101,6 @@ type WorkflowConfig = {
 
       <section class="output-band" *ngIf="output() as result">
         <div class="panel-head">
-          <p class="eyebrow">Generated output</p>
           <h2>{{ result.title || config.title }}</h2>
         </div>
         <p>{{ result.summary || result.reply || result.script || 'Workflow generated from live connected data.' }}</p>

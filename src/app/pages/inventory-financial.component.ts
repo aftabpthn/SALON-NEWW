@@ -25,10 +25,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="financial-kpis">
-        <article class="metric-card teal"><span>Cash locked</span><strong>{{ cashLocked() | currency:'INR':'symbol':'1.0-0' }}</strong><small>current stock value</small></article>
-        <article class="metric-card amber"><span>COGS</span><strong>{{ cogs() | currency:'INR':'symbol':'1.0-0' }}</strong><small>deducted inventory cost</small></article>
+        <article class="metric-card teal"><span>Cash locked</span><strong>{{ cashLocked() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card amber"><span>COGS</span><strong>{{ cogs() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
         <article class="metric-card red"><span>Dead stock</span><strong>{{ deadStockValue() | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ deadStockProducts().length }} item(s)</small></article>
-        <article class="metric-card blue"><span>Profit potential</span><strong>{{ profitPotential() | currency:'INR':'symbol':'1.0-0' }}</strong><small>gross margin in stock</small></article>
+        <article class="metric-card blue"><span>Profit potential</span><strong>{{ profitPotential() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
       <div class="financial-grid">

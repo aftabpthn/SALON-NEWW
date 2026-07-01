@@ -25,7 +25,6 @@ type BrandPreset = {
         <div>
           <span class="eyebrow">100x Enterprise Design System Live</span>
           <h1>Salon Brand Customization Studio</h1>
-          <p>Har salon apne brand ke hisaab se sidebar, hover, active menu, borders, cards, buttons, forms, tables aur status colors live set kar sakta hai.</p>
         </div>
         <div class="hero-actions">
           <button type="button" class="studio-button ghost" (click)="reset()">Reset</button>
@@ -115,10 +114,10 @@ type BrandPreset = {
               </div>
 
               <div class="preview-kpis">
-                <article><span>Today Sales</span><strong>₹48,500</strong><small>+12.4%</small></article>
-                <article><span>Appointments</span><strong>32</strong><small>8 in service</small></article>
-                <article><span>Net Profit</span><strong>₹18,900</strong><small>After expenses</small></article>
-                <article><span>Low Stock</span><strong>4</strong><small>Needs reorder</small></article>
+                <article><span>Today Sales</span><strong>₹48,500</strong></article>
+                <article><span>Appointments</span><strong>32</strong></article>
+                <article><span>Net Profit</span><strong>₹18,900</strong></article>
+                <article><span>Low Stock</span><strong>4</strong></article>
               </div>
 
               <div class="preview-content">

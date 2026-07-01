@@ -13,7 +13,6 @@ import { DEFAULT_STAFF_PAYROLL_RULES, normalizeStaffPayrollRules, readStaffPayro
         <div>
           <span>Staff OS / Payroll</span>
           <h1>Payroll Rules</h1>
-          <p>Set attendance, week off, shift, commission and advance deduction rules for Salary Generate.</p>
         </div>
         <div class="top-actions">
           <a routerLink="/staff-os/salary-workspace">Salary Setup</a>

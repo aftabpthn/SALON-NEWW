@@ -44,7 +44,6 @@ type GroupBucket = {
         <div>
           <span class="eyebrow">Finance / Masters</span>
           <h2>Account Master</h2>
-          <p>Create and maintain ledger accounts for vendors, banks, cash, expense, income, GST and customer balances.</p>
         </div>
         <div class="hero-actions">
           <button class="group-button" type="button" (click)="openGroupPanel()">Account Group</button>
@@ -57,10 +56,10 @@ type GroupBucket = {
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
       <section class="metric-grid" *ngIf="!loading() && !error()">
-        <article><span>Total accounts</span><strong>{{ accounts().length }}</strong><small>Visible and hidden ledgers</small></article>
-        <article><span>Visible</span><strong>{{ visibleAccounts().length }}</strong><small>Ready for transactions</small></article>
-        <article><span>Hidden</span><strong>{{ hiddenAccounts().length }}</strong><small>Suppressed from entry screens</small></article>
-        <article><span>GST ready</span><strong>{{ gstReadyAccounts().length }}</strong><small>GSTIN or PAN captured</small></article>
+        <article><span>Total accounts</span><strong>{{ accounts().length }}</strong></article>
+        <article><span>Visible</span><strong>{{ visibleAccounts().length }}</strong></article>
+        <article><span>Hidden</span><strong>{{ hiddenAccounts().length }}</strong></article>
+        <article><span>GST ready</span><strong>{{ gstReadyAccounts().length }}</strong></article>
       </section>
 
       <div class="account-master-shell" *ngIf="!loading() && !error()">

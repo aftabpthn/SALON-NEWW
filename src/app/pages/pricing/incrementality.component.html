@@ -43,7 +43,6 @@
     <article class="metric-card warning">
       <span>Wasted discount</span>
       <strong>{{ formatMoney(current.wastedDiscountPaise) }}</strong>
-      <small>Estimated from holdout behavior</small>
     </article>
     <article class="metric-card">
       <span>Incremental lift</span>
@@ -111,10 +110,6 @@
     <article class="panel recommendation-card">
       <span>Recommendation</span>
       <strong>{{ recommendation() }}</strong>
-      <p>
-        True ROI only becomes reliable after treatment and holdout outcomes are resolved.
-        Keep holdout small, consistent, and branch-scoped.
-      </p>
     </article>
   </section>
 </section>

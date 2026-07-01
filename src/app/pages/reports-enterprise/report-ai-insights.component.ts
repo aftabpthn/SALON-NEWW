@@ -14,7 +14,6 @@ import { Subscription } from 'rxjs';
           <span class="ai-icon">🤖</span>
           <div>
             <h3>AI Business Insights</h3>
-            <small>Intelligent analysis powered by salon data</small>
           </div>
         </div>
         <button class="ghost-button" (click)="refreshInsights()">🔄 Refresh insights</button>
@@ -37,7 +36,6 @@ import { Subscription } from 'rxjs';
       <div class="insights-empty" *ngIf="!loading() && !insights()">
         <span class="empty-icon">🤖</span>
         <strong>No insights available</strong>
-        <small>Select a date range to generate AI-powered business insights.</small>
       </div>
     </ng-container>
 

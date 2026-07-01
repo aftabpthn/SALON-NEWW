@@ -16,7 +16,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Client self-service</span>
           <h2>Membership status</h2>
-          <p>View active benefits, remaining credits, expiry reminders and approval-safe service requests.</p>
         </div>
       </div>
 
@@ -82,7 +81,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <textarea [(ngModel)]="cancelReason" placeholder="Tell the salon why you want to cancel"></textarea>
         </label>
         <button class="ghost-button danger-text" type="button" (click)="requestCancel()" [disabled]="saving() || !cancelReason.trim() || !data.membershipId">Request cancellation approval</button>
-        <p class="fine-print">Cancellation/refund requests do not apply directly. Owner or manager approval is required first.</p>
       </section>
 
       <section class="panel" *ngIf="summary() as data">

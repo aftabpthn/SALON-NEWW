@@ -35,9 +35,7 @@ type WaitlistDialog = {
     <ion-content>
       <main class="page bookings-page">
         <section class="bookings-hero">
-          <p class="eyebrow">Appointments</p>
           <h1 class="page-title">My bookings</h1>
-          <p class="muted">Manage upcoming visits, reschedule when needed, and keep a clean history of past appointments.</p>
           <div class="booking-command-grid">
             @for (item of bookingCommands; track item.label) {
               <article class="command-card premium-card">
@@ -55,7 +53,7 @@ type WaitlistDialog = {
         </ion-segment>
 
         @if (marketplace.loading()) {
-          <section class="empty premium-card"><h2>Loading bookings</h2><p class="muted">Fetching appointments from your customer account.</p></section>
+          <section class="empty premium-card"><h2>Loading bookings</h2></section>
         } @else if (marketplace.error()) {
           <section class="empty premium-card error"><h2>Could not load bookings</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
         } @else {
@@ -101,7 +99,6 @@ type WaitlistDialog = {
             } @empty {
               <section class="empty premium-card">
                 <h2>No bookings yet</h2>
-                <p class="muted">Book a service to see appointments in this tab.</p>
                 <ion-button class="primary-gradient" routerLink="/tabs/search">Find a place</ion-button>
               </section>
             }
@@ -114,7 +111,6 @@ type WaitlistDialog = {
           <section class="reschedule-sheet" role="dialog" aria-modal="true" aria-label="Choose new appointment date and time" (click)="$event.stopPropagation()">
             <div class="sheet-head">
               <div>
-                <p class="eyebrow">Reschedule</p>
                 <h2>Choose new date & time</h2>
                 <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
               </div>
@@ -162,7 +158,6 @@ type WaitlistDialog = {
           <section class="waitlist-sheet" role="dialog" aria-modal="true" aria-label="Join appointment waitlist" (click)="$event.stopPropagation()">
             <div class="sheet-head waitlist-head">
               <div>
-                <p class="eyebrow">Waitlist</p>
                 <h2>Join smart waitlist</h2>
                 <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
               </div>

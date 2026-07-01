@@ -213,7 +213,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <button type="button" class="waitlist-kpi-action" (click)="openWaitlistDrawer()">
           <span>Waitlist</span>
           <strong>+</strong>
-          <small>Add client entry</small>
         </button>
         <button type="button" *ngFor="let metric of metrics()" (click)="statusFilter.set(metric.status)">
           <span>{{ metric.label }}</span>
@@ -394,7 +393,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <span class="eyebrow">Week view</span>
             <h3>7-day booking spread</h3>
           </div>
-          <small>Click any booking for full action drawer</small>
         </div>
         <div class="week-board">
           <div class="week-day" *ngFor="let day of weekDays(); trackBy: trackDateValue">
@@ -418,7 +416,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <span class="eyebrow">Month heatmap</span>
             <h3>Booking count and revenue pressure</h3>
           </div>
-          <small>Color shows occupancy pressure</small>
         </div>
         <div class="month-grid">
           <button
@@ -441,7 +438,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <span class="eyebrow">Timeline</span>
             <h3>Horizontal staff swimlanes</h3>
           </div>
-          <small>Useful for group, bridal and parallel bookings</small>
         </div>
         <div class="timeline-board">
           <div class="timeline-row" *ngFor="let person of visibleStaff(); trackBy: trackStaff">
@@ -539,7 +535,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
           <div>
             <span class="eyebrow">Calendar waitlist</span>
             <h3>Add client to waitlist</h3>
-            <p>If no slot is available, hold the client with preferred date and time.</p>
           </div>
           <button type="button" class="ghost-button mini" (click)="closeWaitlistDrawer()">Close</button>
         </header>
@@ -768,7 +763,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
           <div>
             <span class="eyebrow">Staff calendar control</span>
             <h3>New Blocked Time</h3>
-            <p>Mark the staff slot unavailable. Booking guard will block appointments during this time.</p>
           </div>
           <button type="button" class="ghost-button mini" (click)="closeBlockTimeDrawer()">Close</button>
         </header>

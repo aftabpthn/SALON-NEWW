@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <div class="page-heading">
         <div>
           <h1>SaaS control plane</h1>
-          <p>SaaS &gt; Tenant onboarding, subscriptions, usage limits and custom domains</p>
         </div>
         <label class="search-field">
           <span>Current tenant</span>

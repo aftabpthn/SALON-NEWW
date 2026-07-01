@@ -17,7 +17,6 @@ type HeatmapCell = {
     <section class="heatmap-page">
       <header class="header">
         <div>
-          <p class="eyebrow">Staff OS Heatmaps</p>
           <h1>{{ title }}</h1>
         </div>
         <button type="button" class="button" (click)="load()">Refresh</button>
@@ -72,7 +71,6 @@ type HeatmapCell = {
         </div>
 
         <aside class="drawer" *ngIf="selected() as cell">
-          <p class="eyebrow">Drill-down</p>
           <h2>{{ cell.label }}</h2>
           <strong>{{ cell.value | number:'1.0-2' }}</strong>
           <pre>{{ cell.raw | json }}</pre>

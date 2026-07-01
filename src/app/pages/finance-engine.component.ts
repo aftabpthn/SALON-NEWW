@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="page-title">
         <div>
           <h1>Finance</h1>
-          <p>Finance &gt; Daily closing, cash drawer, expenses, payouts and outstanding balance</p>
         </div>
         <strong>Live finance engine</strong>
       </section>
@@ -21,18 +20,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <section class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <article><span>Revenue</span><strong>{{ metrics.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Payments today</small></article>
-        <article><span>Cash</span><strong>{{ metrics.cash | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Drawer impact</small></article>
-        <article><span>UPI</span><strong>{{ metrics.upi | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Digital payments</small></article>
-        <article><span>Expenses</span><strong>{{ metrics.expenses | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Paid today</small></article>
-        <article><span>Outstanding</span><strong>{{ metrics.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open balance</small></article>
-        <article><span>P/L</span><strong>{{ metrics.profitLoss | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Revenue less costs</small></article>
+        <article><span>Revenue</span><strong>{{ metrics.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>Cash</span><strong>{{ metrics.cash | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>UPI</span><strong>{{ metrics.upi | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>Expenses</span><strong>{{ metrics.expenses | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>Outstanding</span><strong>{{ metrics.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>P/L</span><strong>{{ metrics.profitLoss | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
       <section class="workdesk">
         <header class="desk-heading">
           <div>
-            <p class="eyebrow">Finance operations</p>
             <h2>Single compact work desk</h2>
           </div>
         </header>
@@ -92,7 +90,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="register-panel">
         <div class="register-heading">
           <div>
-            <p class="eyebrow">Outstanding balances</p>
             <h2>Open invoice register</h2>
           </div>
           <span>{{ (summary()?.outstanding || []).length }} invoices</span>
@@ -118,7 +115,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <div class="register-heading">
             <div>
-              <p class="eyebrow">Expense control</p>
               <h2>Expenses and refunds</h2>
             </div>
           </div>
@@ -130,7 +126,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <div class="register-heading">
             <div>
-              <p class="eyebrow">Daily close</p>
               <h2>Closing history</h2>
             </div>
           </div>

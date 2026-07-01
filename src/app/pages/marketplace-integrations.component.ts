@@ -434,7 +434,6 @@ const catalog: IntegrationCategory[] = [
         <div>
           <span class="eyebrow">Marketplace</span>
           <h2>Integrations</h2>
-          <p>Connect payments, messaging, accounting, booking widgets, analytics and migration providers for AuraShine operations.</p>
         </div>
         <div class="header-actions">
           <label class="search-box">

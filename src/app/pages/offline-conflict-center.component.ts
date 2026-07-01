@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Conflict Resolution Center</h2>
-          <p>Review offline conflicts with server-vs-device decision options before manager approval.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>

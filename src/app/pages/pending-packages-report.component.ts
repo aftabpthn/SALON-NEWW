@@ -23,7 +23,6 @@ type PendingPackageReport = {
         <div>
           <span class="eyebrow">Reports / Packages</span>
           <h2>Pending Packages</h2>
-          <p>Package service credits, redeemed quantity, pending liability and expiry risk in one report.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
@@ -73,37 +72,30 @@ type PendingPackageReport = {
           <article class="metric-card">
             <span>Total Service</span>
             <strong>{{ numberValue(data.summary.totalService) }}</strong>
-            <small>Package service quantity</small>
           </article>
           <article class="metric-card">
             <span>Services Amount</span>
             <strong>{{ data.summary.servicesAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Total package service value</small>
           </article>
           <article class="metric-card">
             <span>Pending Services Amount</span>
             <strong>{{ data.summary.pendingServicesAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Unused package liability</small>
           </article>
           <article class="metric-card">
             <span>Pending Qty</span>
             <strong>{{ numberValue(data.summary.pendingQty) }}</strong>
-            <small>Unredeemed credits</small>
           </article>
           <article class="metric-card">
             <span>Redeemed Qty</span>
             <strong>{{ numberValue(data.summary.redeemedQty) }}</strong>
-            <small>Consumed credits</small>
           </article>
           <article class="metric-card amber">
             <span>Expiring Packages</span>
             <strong>{{ data.summary.expiringPackages || 0 }}</strong>
-            <small>Expiry within 30 days</small>
           </article>
           <article class="metric-card red">
             <span>Expired Pending Packages</span>
             <strong>{{ data.summary.expiredPendingPackages || 0 }}</strong>
-            <small>Expired with pending credits</small>
           </article>
         </section>
 

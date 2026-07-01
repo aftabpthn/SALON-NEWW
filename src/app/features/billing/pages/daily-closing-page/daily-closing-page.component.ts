@@ -59,7 +59,6 @@ import { AppStateService } from '../../../../core/state/app-state.service';
         <div class="hero-copy">
           <span class="eyebrow">Daily closing</span>
           <h1>Cash, card, UPI and bank day close</h1>
-          <p class="muted">Z-report, cash variance, settlement proof, GL outbox aur day lock ek cashier close workflow me.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost" type="button" [disabled]="loading()" (click)="load()">Refresh</button>
@@ -70,9 +69,9 @@ import { AppStateService } from '../../../../core/state/app-state.service';
 
       <section class="metric-grid">
         <article class="metric"><span class="eyebrow">Lock status</span><strong>{{ lockStatusText() }}</strong><small class="muted">{{ branchId() }} · {{ businessDate() }}</small></article>
-        <article class="metric"><span class="eyebrow">Expected cash</span><strong>{{ money(expectedCash()) }}</strong><small class="muted">Cash collection minus cash outgoing</small></article>
-        <article class="metric"><span class="eyebrow">Cash variance</span><strong>{{ money(cashVariance()) }}</strong><small class="muted">Closing cash minus expected cash</small></article>
-        <article class="metric"><span class="eyebrow">Bank net</span><strong>{{ money(expectedBankNet()) }}</strong><small class="muted">UPI/card/bank after outgoing</small></article>
+        <article class="metric"><span class="eyebrow">Expected cash</span><strong>{{ money(expectedCash()) }}</strong></article>
+        <article class="metric"><span class="eyebrow">Cash variance</span><strong>{{ money(cashVariance()) }}</strong></article>
+        <article class="metric"><span class="eyebrow">Bank net</span><strong>{{ money(expectedBankNet()) }}</strong></article>
       </section>
 
       <section class="grid">

@@ -81,7 +81,6 @@ type TipsReport = {
         <div>
           <span class="eyebrow">POS / tips payout intelligence</span>
           <h2>Staff Tips / Tip Payout Register</h2>
-          <p>Invoice tips, staff payout status, cash/digital split, audit alerts and payout action in one register.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/pos">Back to POS</a>
@@ -158,15 +157,15 @@ type TipsReport = {
       <ng-container *ngIf="!loading()">
         <div class="metrics-grid">
           <article class="metric-card"><span>Total tips</span><strong>{{ (summary().totalTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ summary().tipCount || 0 }} tips</small></article>
-          <article class="metric-card"><span>Cash tips</span><strong>{{ (summary().cashTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Cash drawer payout</small></article>
-          <article class="metric-card"><span>Digital tips</span><strong>{{ (summary().digitalTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>UPI, card, wallet</small></article>
-          <article class="metric-card"><span>Pending payout</span><strong>{{ (summary().pendingPayout || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Needs staff payout</small></article>
-          <article class="metric-card"><span>Paid out tips</span><strong>{{ (summary().paidOutTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Settled</small></article>
-          <article class="metric-card"><span>Reversed tips</span><strong>{{ (summary().reversedTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Void/dispute</small></article>
+          <article class="metric-card"><span>Cash tips</span><strong>{{ (summary().cashTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Digital tips</span><strong>{{ (summary().digitalTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Pending payout</span><strong>{{ (summary().pendingPayout || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Paid out tips</span><strong>{{ (summary().paidOutTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Reversed tips</span><strong>{{ (summary().reversedTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card"><span>Top tipped staff</span><strong>{{ summary().topTippedStaff || '-' }}</strong><small>{{ (summary().topTippedStaffAmount || 0) | currency: 'INR':'symbol':'1.0-0' }}</small></article>
-          <article class="metric-card"><span>Avg tip / invoice</span><strong>{{ (summary().averageTipPerInvoice || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tip intensity</small></article>
-          <article class="metric-card"><span>Tip % of service revenue</span><strong>{{ summary().tipPercentOfServiceRevenue || 0 }}%</strong><small>Service revenue basis</small></article>
-          <article class="metric-card"><span>Audit alerts</span><strong>{{ summary().alerts || 0 }}</strong><small>Needs review</small></article>
+          <article class="metric-card"><span>Avg tip / invoice</span><strong>{{ (summary().averageTipPerInvoice || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Tip % of service revenue</span><strong>{{ summary().tipPercentOfServiceRevenue || 0 }}%</strong></article>
+          <article class="metric-card"><span>Audit alerts</span><strong>{{ summary().alerts || 0 }}</strong></article>
         </div>
 
         <section class="panel" *ngIf="alerts().length">

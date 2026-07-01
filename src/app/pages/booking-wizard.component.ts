@@ -17,7 +17,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
         <div>
           <span class="eyebrow">Enterprise booking wizard</span>
           <h2>Service → Staff → Slot → Customer → Confirm</h2>
-          <p>Auto-save, 10-minute slot hold, resume support and idempotent confirmation.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/book">Classic booking</a>
@@ -75,7 +74,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
               <div class="summary-card">
                 <span class="eyebrow">Staff matching</span>
                 <strong>{{ staffForBranch().length }} eligible team members</strong>
-                <small>Eligibility uses assigned service and branch filters.</small>
               </div>
             </div>
 
@@ -123,7 +121,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
               <article class="summary-card">
                 <span class="eyebrow">Safety</span>
                 <strong>{{ holdId() ? 'Slot hold active' : 'No active hold' }}</strong>
-                <small>Confirm uses Idempotency-Key to prevent double booking.</small>
               </article>
               <article class="summary-card" *ngIf="createdAppointment() as appointment">
                 <span class="eyebrow">Confirmed</span>

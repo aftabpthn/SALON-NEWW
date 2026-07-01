@@ -59,10 +59,10 @@ type ReceiveItem = {
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="po-kpis">
-        <article class="metric-card teal"><span>AI suggestions</span><strong>{{ suggestions().length }}</strong><small>Low-stock and stockout risk</small></article>
-        <article class="metric-card amber"><span>Draft PO</span><strong>{{ draftRows().length }}</strong><small>Pending approval</small></article>
-        <article class="metric-card blue"><span>Approved / sent</span><strong>{{ approvedRows().length }}</strong><small>Ready for GRN</small></article>
-        <article class="metric-card red"><span>Projected spend</span><strong>{{ projectedSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>PO + AI demand value</small></article>
+        <article class="metric-card teal"><span>AI suggestions</span><strong>{{ suggestions().length }}</strong></article>
+        <article class="metric-card amber"><span>Draft PO</span><strong>{{ draftRows().length }}</strong></article>
+        <article class="metric-card blue"><span>Approved / sent</span><strong>{{ approvedRows().length }}</strong></article>
+        <article class="metric-card red"><span>Projected spend</span><strong>{{ projectedSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
       <div class="po-layout">
@@ -140,7 +140,7 @@ type ReceiveItem = {
                       <input type="number" [ngModel]="item.unitCost" (ngModelChange)="updateDraftItem(index, { unitCost: toNumber($event) })" [ngModelOptions]="{standalone: true}" placeholder="Rate" />
                       <input type="number" [ngModel]="item.gstPercent" (ngModelChange)="updateDraftItem(index, { gstPercent: toNumber($event) })" [ngModelOptions]="{standalone: true}" placeholder="GST %" />
                     </td>
-                    <td><strong>{{ linePreview(item).taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before GST</small></td>
+                    <td><strong>{{ linePreview(item).taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
                     <td><strong>{{ linePreview(item).lineTotal | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST {{ linePreview(item).gstAmount | currency: 'INR':'symbol':'1.0-0' }}</small></td>
                     <td>
                       <input [ngModel]="item.batchNumber" (ngModelChange)="updateDraftItem(index, { batchNumber: $event })" [ngModelOptions]="{standalone: true}" placeholder="Batch" />

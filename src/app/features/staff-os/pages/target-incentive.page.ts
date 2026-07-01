@@ -39,7 +39,6 @@ const targetMeta: Record<StaffOsTargetIncentiveType, { title: string; label: str
     <section class="target-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Employee Masters</p>
           <h1>{{ meta().title }}</h1>
         </div>
         <div class="topbar-actions">
@@ -108,7 +107,6 @@ const targetMeta: Record<StaffOsTargetIncentiveType, { title: string; label: str
           <div class="tab-label">Target Slabs</div>
           <section class="selected-band">
             <div>
-              <p class="eyebrow">Selected</p>
               <h2>{{ selectedAssignee()?.name || 'Select a target' }}</h2>
             </div>
             <label class="hide-toggle"><input type="checkbox" [checked]="hideRecord()" (change)="hideRecord.set($any($event.target).checked)" /> Hide</label>
@@ -117,7 +115,6 @@ const targetMeta: Record<StaffOsTargetIncentiveType, { title: string; label: str
           <section class="slab-workbench">
             <ng-container *ngIf="isAdminMode(); else slabGrid">
               <div class="admin-target-box">
-                <p class="eyebrow">Admin Target Inc.</p>
                 <label>
                   <span>Employee Amount (%)</span>
                   <input type="number" min="0" [value]="adminAmountPercent()" (input)="updateAdminAmount('percent', $any($event.target).value)" />

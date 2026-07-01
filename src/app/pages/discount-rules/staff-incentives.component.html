@@ -22,17 +22,14 @@
     <article class="metric-card">
       <span>Pending</span>
       <strong>{{ formatMoney(pendingPaise()) }}</strong>
-      <small>needs manager approval</small>
     </article>
     <article class="metric-card">
       <span>Approved</span>
       <strong>{{ formatMoney(approvedPaise()) }}</strong>
-      <small>ready for payout</small>
     </article>
     <article class="metric-card">
       <span>Paid</span>
       <strong>{{ formatMoney(paidPaise()) }}</strong>
-      <small>closed payouts</small>
     </article>
   </section>
 
@@ -124,7 +121,6 @@
       <div class="payout-preview">
         <span>Suggested payout</span>
         <strong>{{ formatMoney(incentiveForm.incentivePaise) }}</strong>
-        <small>Sale + discount-discipline bonus, editable before save.</small>
       </div>
     </article>
   </section>

@@ -23,7 +23,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
       <main class="page-narrow edit-profile-page">
         <section class="hero-card premium-card">
           <div>
-            <p class="eyebrow">Profile details</p>
             <h1>{{ pageTitle() }}</h1>
             <p class="muted">{{ pageSubtitle() }}</p>
           </div>
@@ -46,22 +45,22 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <section class="settings-menu premium-card">
             <a routerLink="/tabs/profile/edit/personal">
               <span class="section-icon"><ion-icon name="person-outline"></ion-icon></span>
-            <span><strong>Personal information</strong><small>First name, last name, email, mobile OTP</small></span>
+            <span><strong>Personal information</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
             <a routerLink="/tabs/profile/edit/notifications">
               <span class="section-icon"><ion-icon name="notifications-outline"></ion-icon></span>
-              <span><strong>Notifications</strong><small>Booking reminders, promos, loyalty alerts</small></span>
+              <span><strong>Notifications</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
             <a routerLink="/tabs/profile/edit/password">
               <span class="section-icon"><ion-icon name="lock-closed-outline"></ion-icon></span>
-              <span><strong>Change password</strong><small>Update your email-login password</small></span>
+              <span><strong>Change password</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
             <a routerLink="/tabs/profile/edit/delete" class="danger-link">
               <span class="section-icon danger"><ion-icon name="trash-outline"></ion-icon></span>
-              <span><strong>Delete account</strong><small>Permanent deletion and anonymization</small></span>
+              <span><strong>Delete account</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
           </section>
@@ -72,7 +71,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <div class="section-heading">
             <span class="section-icon"><ion-icon name="person-outline"></ion-icon></span>
             <div>
-              <p class="eyebrow">Account</p>
               <h2>Personal information</h2>
             </div>
           </div>
@@ -140,7 +138,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <div class="section-heading">
             <span class="section-icon"><ion-icon name="shield-checkmark-outline"></ion-icon></span>
             <div>
-              <p class="eyebrow">Notifications</p>
               <h2>Preferences</h2>
             </div>
           </div>
@@ -158,7 +155,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <div class="section-heading">
             <span class="section-icon"><ion-icon name="lock-closed-outline"></ion-icon></span>
             <div>
-              <p class="eyebrow">Security</p>
               <h2>Change password</h2>
             </div>
           </div>
@@ -220,11 +216,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <div class="section-heading">
             <span class="section-icon danger"><ion-icon name="trash-outline"></ion-icon></span>
             <div>
-              <p class="eyebrow">Permanent delete</p>
               <h2>Delete account</h2>
             </div>
           </div>
-          <p class="muted">This is permanent. Your personal profile will be anonymized while booking and invoice records are preserved where required for audit history.</p>
           <ion-list class="delete-fields">
             <ion-item class="delete-input-row" lines="none">
               <ion-icon name="trash-outline" slot="start"></ion-icon>

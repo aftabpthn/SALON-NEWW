@@ -129,7 +129,6 @@ interface ClientScoreRow {
         <div>
           <span class="eyebrow">Appointments / register</span>
           <h2>Appointment Report & Full History Register</h2>
-          <p>Every appointment, booking time, status change, cancellation reason, POS invoice, payment balance and timeline in one page.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/appointments">Back to calendar</a>
@@ -371,17 +370,14 @@ interface ClientScoreRow {
           <article>
             <span>Client watchlist</span>
             <strong>{{ clientReliability.length }}</strong>
-            <small>Sorted by lowest reliability score</small>
           </article>
           <article>
             <span>Staff change risk</span>
             <strong>{{ staffRisk.length }}</strong>
-            <small>Repeated edit/cancel/reschedule signals</small>
           </article>
           <article>
             <span>Top reasons</span>
             <strong>{{ cancellationReasons.length }}</strong>
-            <small>Reason capture for coaching and follow-up</small>
           </article>
         </div>
       </section>

@@ -153,7 +153,6 @@ type MigrationRecoveryReport = {
         <div>
           <span class="eyebrow">Enterprise Data Migration OS</span>
           <h1>100X import command center</h1>
-          <p>Migrate legacy salon, POS, accounting, inventory and booking data into live modules through sandbox, validation, approval, import and rollback controls.</p>
         </div>
         <div class="score-card" [class.danger]="readinessScore() < 60" [class.warning]="readinessScore() >= 60 && readinessScore() < 85">
           <span>Go-live readiness</span>
@@ -186,7 +185,6 @@ type MigrationRecoveryReport = {
         <article>
           <span>Rollback cover</span>
           <strong>{{ onboarding()?.rollbackHistory || 0 }}</strong>
-          <small>Completed rollback batches</small>
         </article>
       </section>
 
@@ -225,7 +223,6 @@ type MigrationRecoveryReport = {
             <label class="file-drop">
               <span>Upload Excel / CSV / ZIP</span>
               <input #sourceFileInput type="file" accept=".xlsx,.xls,.csv,.zip" (change)="onFile($event)" />
-              <small>Preserves old IDs, created dates, invoice numbers and branch history.</small>
               <label class="inline-toggle" style="margin-top:8px">
                 <input type="checkbox" [ngModel]="largeUploadMode()" (ngModelChange)="largeUploadMode.set($event)" />
                 <span>Use Large Import Mode for 50K+ rows / large ZIP/XLSX</span>
@@ -726,10 +723,10 @@ type MigrationRecoveryReport = {
             <span class="status-pill" [class.danger]="dataQualityScore() < 60">{{ dataQualityScore() }}% quality</span>
           </div>
           <div class="control-strip compact">
-            <article><span>Mode</span><strong>{{ sandboxMode() ? 'Sandbox' : 'Live' }}</strong><small>Sandbox recommended first</small></article>
-            <article><span>Approval gate</span><strong>{{ importApprovalReady() ? 'Approved' : 'Blocked' }}</strong><small>Final import requires owner sign-off</small></article>
+            <article><span>Mode</span><strong>{{ sandboxMode() ? 'Sandbox' : 'Live' }}</strong></article>
+            <article><span>Approval gate</span><strong>{{ importApprovalReady() ? 'Approved' : 'Blocked' }}</strong></article>
             <article><span>Progress</span><strong>{{ migrationProgress() }}%</strong><small>{{ progressLabel() }}</small></article>
-            <article><span>PII preview</span><strong>{{ maskPreviewPii() ? 'Masked' : 'Visible' }}</strong><small>Phone/email protection</small></article>
+            <article><span>PII preview</span><strong>{{ maskPreviewPii() ? 'Masked' : 'Visible' }}</strong></article>
           </div>
           <div class="action-row">
             <button class="secondary-button" type="button" (click)="sandboxMode.set(!sandboxMode())">{{ sandboxMode() ? 'Switch to live mode' : 'Switch to sandbox mode' }}</button>
@@ -828,9 +825,9 @@ type MigrationRecoveryReport = {
             </div>
           </div>
           <div class="control-strip compact">
-            <article><span>Total</span><strong>{{ job.totalRows }}</strong><small>Rows</small></article>
-            <article><span>Imported</span><strong>{{ job.importedRows }}</strong><small>Live records</small></article>
-            <article><span>Errors</span><strong>{{ job.errorRows }}</strong><small>Blocked rows</small></article>
+            <article><span>Total</span><strong>{{ job.totalRows }}</strong></article>
+            <article><span>Imported</span><strong>{{ job.importedRows }}</strong></article>
+            <article><span>Errors</span><strong>{{ job.errorRows }}</strong></article>
             <article><span>Status</span><strong>{{ job.status }}</strong><small>{{ job.sourceSoftware }}</small></article>
           </div>
           <div class="table-wrap dense" *ngIf="job.rows?.length">
@@ -858,8 +855,8 @@ type MigrationRecoveryReport = {
             </div>
             <div class="recovery-grid">
               <article><span>Failed rows</span><strong>{{ recovery.summary.failedRows }}</strong><small>{{ recovery.summary.retryCandidates }} retry candidates</small></article>
-              <article><span>Warnings</span><strong>{{ recovery.summary.warningRows }}</strong><small>Manual review queue</small></article>
-              <article><span>Missing targets</span><strong>{{ recovery.summary.missingLiveTargets }}</strong><small>Live table proof</small></article>
+              <article><span>Warnings</span><strong>{{ recovery.summary.warningRows }}</strong></article>
+              <article><span>Missing targets</span><strong>{{ recovery.summary.missingLiveTargets }}</strong></article>
               <article><span>Rollback batches</span><strong>{{ recovery.rollbackPlan?.batches?.length || 0 }}</strong><small>{{ recovery.rollbackPlan?.recommended ? 'Rollback recommended' : 'Rollback optional' }}</small></article>
             </div>
             <div class="action-row">

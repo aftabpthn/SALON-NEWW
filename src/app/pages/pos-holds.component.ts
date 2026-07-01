@@ -13,7 +13,6 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
         <div>
           <span class="eyebrow">POS / held invoices</span>
           <h2>Hold invoice register</h2>
-          <p>Saved POS drafts before final invoice save. Open any hold to return to POS and continue billing.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/pos">Back to POS</a>
@@ -22,9 +21,9 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
       </div>
 
       <div class="metrics-grid">
-        <article class="metric-card"><span>Held invoices</span><strong>{{ holds().length }}</strong><small>Drafts waiting</small></article>
-        <article class="metric-card"><span>Total value</span><strong>{{ totalHeld() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Held invoice value</small></article>
-        <article class="metric-card"><span>Due value</span><strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Pending on held drafts</small></article>
+        <article class="metric-card"><span>Held invoices</span><strong>{{ holds().length }}</strong></article>
+        <article class="metric-card"><span>Total value</span><strong>{{ totalHeld() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Due value</span><strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
       </div>
 
       <section class="panel">

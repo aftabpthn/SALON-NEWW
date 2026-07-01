@@ -12,15 +12,14 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Level 17 · Product requirement document</span>
           <h2>Product contract for workflow, finance, customer intelligence and online booking</h2>
-          <p>The complete markdown PRD lives in docs/PRD_LEVEL_17_22.md and this page exposes the same product structure inside the app.</p>
         </div>
       </div>
 
       <div class="metrics-grid">
-        <aura-kpi-card tone="teal" target="/kpi-details/prd/roles"><span>Roles</span><strong>8</strong><small>SaaS, salon and customer roles</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/prd/journeys"><span>Journeys</span><strong>6</strong><small>Critical workflows</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/prd/new-pages"><span>New pages</span><strong>6</strong><small>Levels 17-22</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/prd/rules"><span>Rules</span><strong>9</strong><small>Business safeguards</small></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/prd/roles"><span>Roles</span><strong>8</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/prd/journeys"><span>Journeys</span><strong>6</strong></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/prd/new-pages"><span>New pages</span><strong>6</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/prd/rules"><span>Rules</span><strong>9</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

@@ -178,14 +178,12 @@ const hubConfigs: Record<string, HubConfig> = {
         @if (!marketplace.isAuthenticated()) {
           <section class="premium-card state-card">
             <h2>Login required</h2>
-            <p class="muted">This section uses private customer records. Log in to load your live AuraSalon data.</p>
             <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: config().route }">Log in</ion-button>
           </section>
         } @else {
           @if (marketplace.loading()) {
             <section class="premium-card state-card">
               <h2>Loading live data</h2>
-              <p class="muted">Fetching your customer records from the AuraSalon SaaS backend.</p>
             </section>
           }
 
@@ -201,17 +199,14 @@ const hubConfigs: Record<string, HubConfig> = {
             <article class="metric-card customer-metric premium-card">
               <span>Customer</span>
               <strong>{{ customerName() }}</strong>
-              <small>Loaded from your authenticated customer profile</small>
             </article>
             <article class="metric-card count-metric premium-card">
               <span>Bookings</span>
               <strong>{{ marketplace.bookings().length }}</strong>
-              <small>Returned by the customer bookings API</small>
             </article>
             <article class="metric-card count-metric premium-card">
               <span>Loyalty</span>
               <strong>{{ marketplace.customer()?.loyaltyPoints ?? 0 }} pts</strong>
-              <small>Returned by the customer profile API</small>
             </article>
           </section>
 
@@ -254,7 +249,6 @@ const hubConfigs: Record<string, HubConfig> = {
             <section class="premium-card action-card">
               <div>
                 <h2>Membership plans</h2>
-                <p class="muted">Plans are loaded from the SaaS backend. Purchases stay pending until payment is completed.</p>
               </div>
               <ion-button class="primary-gradient" (click)="loadPlans()">Load live plans</ion-button>
             </section>
@@ -276,7 +270,6 @@ const hubConfigs: Record<string, HubConfig> = {
             <section class="premium-card action-card">
               <div>
                 <h2>Purchase gift card</h2>
-                <p class="muted">Gift cards are created as pending payment records and become redeemable only after payment completion.</p>
               </div>
               <ion-button class="primary-gradient" (click)="purchaseGiftCard()">Enter amount</ion-button>
             </section>

@@ -267,7 +267,6 @@ interface PolicyRow {
         <div>
           <span class="eyebrow">Workforce Tools</span>
           <h2>Workforce Automation</h2>
-          <p>Queue, approvals, run history, alerts and agent controls for safe salon automation.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="loadAll()" [disabled]="loading()">Refresh</button>
@@ -321,19 +320,15 @@ interface PolicyRow {
 
             <div class="executive-snapshot-grid">
               <span>
-                <small>Risk exposure</small>
                 <strong>{{ executiveRiskCount() }}</strong>
               </span>
               <span>
-                <small>Value protected</small>
                 <strong>{{ formatCurrency(totalImpactValue()) }}</strong>
               </span>
               <span>
-                <small>Ready installs</small>
                 <strong>{{ marketplaceReadyCount() }}</strong>
               </span>
               <span>
-                <small>ROI</small>
                 <strong>{{ roiRatioLabel() }}</strong>
               </span>
             </div>
@@ -422,11 +417,9 @@ interface PolicyRow {
                   </td>
                   <td>
                     <strong>{{ row.pendingApprovals }}</strong>
-                    <small>pending</small>
                   </td>
                   <td>
                     <strong>{{ row.openAlerts }}</strong>
-                    <small>open</small>
                   </td>
                   <td>
                     <strong>{{ formatCurrency(row.costMonth) }}</strong>
@@ -434,7 +427,6 @@ interface PolicyRow {
                   </td>
                   <td>
                     <strong>{{ formatCurrency(row.kpiImpact) }}</strong>
-                    <small>projected</small>
                   </td>
                   <td>
                     <span>{{ formatDate(row.lastRunAt) }}</span>
@@ -810,22 +802,18 @@ interface PolicyRow {
               <article>
                 <span>Critical</span>
                 <strong>{{ alertCount('critical') }}</strong>
-                <small>immediate action</small>
               </article>
               <article>
                 <span>High risk</span>
                 <strong>{{ alertCount('high') }}</strong>
-                <small>owner review</small>
               </article>
               <article>
                 <span>Linked evidence</span>
                 <strong>{{ linkedAlertCount() }}</strong>
-                <small>run or agent attached</small>
               </article>
               <article>
                 <span>Average age</span>
                 <strong>{{ averageAlertAge() }}</strong>
-                <small>open alert queue</small>
               </article>
             </div>
 
@@ -883,19 +871,15 @@ interface PolicyRow {
 
                 <div class="incident-evidence-grid">
                   <span>
-                    <small>Agent</small>
                     <strong>{{ agentName(alert.agentId) }}</strong>
                   </span>
                   <span>
-                    <small>Opened</small>
                     <strong>{{ alertAge(alert) }}</strong>
                   </span>
                   <span>
-                    <small>SLA</small>
                     <strong>{{ alertSlaLabel(alert) }}</strong>
                   </span>
                   <span>
-                    <small>Status</small>
                     <strong>{{ alert.status || 'open' }}</strong>
                   </span>
                 </div>
@@ -908,7 +892,6 @@ interface PolicyRow {
                 </div>
 
                 <div class="incident-run-preview" *ngIf="alertLinkedRun(alert) as run">
-                  <small>Linked run</small>
                   <strong>{{ runSummary(run) }}</strong>
                   <span>{{ formatDate(run.startedAt) }} · {{ formatCurrency(run.estimatedCost || 0) }} · {{ formatNumber(run.totalTokens || 0) }} tokens</span>
                 </div>
@@ -949,17 +932,14 @@ interface PolicyRow {
               <article>
                 <span>Approval gated</span>
                 <strong>{{ policyApprovalCount() }}</strong>
-                <small>human review enabled</small>
               </article>
               <article>
                 <span>Auto allowed</span>
                 <strong>{{ policyAutoCount() }}</strong>
-                <small>low-risk only</small>
               </article>
               <article>
                 <span>Setup gaps</span>
                 <strong>{{ policyGapCount() }}</strong>
-                <small>provider or prompt missing</small>
               </article>
             </div>
 
@@ -1018,15 +998,12 @@ interface PolicyRow {
               <ng-container *ngIf="settingFor(agent.id) as setting">
                 <div class="policy-card-strip">
                   <span>
-                    <small>Effective gate</small>
                     <strong>{{ policyRowFor(agent).gate }}</strong>
                   </span>
                   <span>
-                    <small>Policy score</small>
                     <strong>{{ policyRowFor(agent).score }}%</strong>
                   </span>
                   <span>
-                    <small>Provider</small>
                     <strong>{{ policyRowFor(agent).providerReady ? 'Ready' : 'Setup needed' }}</strong>
                   </span>
                 </div>
@@ -1180,22 +1157,18 @@ interface PolicyRow {
                 <article>
                   <span>Ready</span>
                   <strong>{{ marketplaceReadyCount() }}</strong>
-                  <small>can install now</small>
                 </article>
                 <article>
                   <span>Installed</span>
                   <strong>{{ marketplaceInstalledCount() }}</strong>
-                  <small>active templates</small>
                 </article>
                 <article>
                   <span>High risk</span>
                   <strong>{{ marketplaceRiskCount() }}</strong>
-                  <small>needs owner gate</small>
                 </article>
                 <article>
                   <span>Projected value</span>
                   <strong>{{ formatCurrency(marketplaceProjectedValue()) }}</strong>
-                  <small>template estimate</small>
                 </article>
               </div>
 
@@ -1254,15 +1227,12 @@ interface PolicyRow {
 
                   <div class="template-value-strip">
                     <span>
-                      <small>Estimated value</small>
                       <strong>{{ templateImpactLabel(template) }}</strong>
                     </span>
                     <span>
-                      <small>Setup time</small>
                       <strong>{{ template.setupMinutes || 15 }}m</strong>
                     </span>
                     <span>
-                      <small>Provider</small>
                       <strong>{{ providerLabel(template.requiredProviderKey || template.providerKey || 'local_rules') }}</strong>
                     </span>
                   </div>
@@ -1327,19 +1297,15 @@ interface PolicyRow {
 
                 <div class="prompt-meta-grid">
                   <span>
-                    <small>Version</small>
                     <strong>v{{ prompt.version || 1 }}</strong>
                   </span>
                   <span>
-                    <small>Approval</small>
                     <strong>{{ prompt.approvalStatus || 'pending' }}</strong>
                   </span>
                   <span>
-                    <small>Risk</small>
                     <strong>{{ prompt.riskLevel || 'medium' }}</strong>
                   </span>
                   <span>
-                    <small>Created</small>
                     <strong>{{ formatDate(prompt.createdAt) }}</strong>
                   </span>
                 </div>
@@ -1353,22 +1319,18 @@ interface PolicyRow {
 
                 <div class="prompt-compare">
                   <div>
-                    <small>Active version</small>
                     <strong>{{ activePromptLabel(prompt.agentId) }}</strong>
                   </div>
                   <div>
-                    <small>Studio version</small>
                     <strong>v{{ prompt.version || 1 }} · {{ prompt.status || 'draft' }}</strong>
                   </div>
                 </div>
 
                 <div class="prompt-preview-grid">
                   <div>
-                    <small>Prompt</small>
                     <p>{{ promptSnippet(prompt.systemPrompt || prompt.promptText || prompt.userPrompt) }}</p>
                   </div>
                   <div>
-                    <small>Guardrails</small>
                     <p>{{ promptSnippet(prompt.guardrailsJson || 'Approval required for risky actions, tenant scoped output, no direct production writes without queue gate.') }}</p>
                   </div>
                 </div>
@@ -1467,15 +1429,12 @@ interface PolicyRow {
                 </div>
                 <div class="roi-agent-stats">
                   <span>
-                    <small>Runs</small>
                     <strong>{{ selectedAgentRuns().length }}</strong>
                   </span>
                   <span>
-                    <small>Spend</small>
                     <strong>{{ formatCurrency(selectedAgentSpend()) }}</strong>
                   </span>
                   <span>
-                    <small>Impact</small>
                     <strong>{{ formatCurrency(selectedAgentImpactValue()) }}</strong>
                   </span>
                 </div>

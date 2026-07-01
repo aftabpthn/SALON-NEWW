@@ -64,7 +64,7 @@ import { Subscription } from 'rxjs';
     </ng-container>
 
     <div *ngIf="!loading() && !d()" class="empty-state">
-      <span class="empty-icon">💰</span><strong>No revenue data</strong><small>Select filters to view revenue reports.</small>
+      <span class="empty-icon">💰</span><strong>No revenue data</strong>
     </div>
 
     <ng-template #skeleton>

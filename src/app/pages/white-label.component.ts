@@ -15,7 +15,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Level 15 · White-label SaaS</span>
           <h2>Custom branding, theme system, custom logo, custom domain and branch-specific branding</h2>
-          <p>Brand profiles, domains and branch overrides are persisted per tenant and resolved into one runtime theme.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>
@@ -23,10 +22,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/white-label/profiles"><span>Profiles</span><strong>{{ metrics.profiles }}</strong><small>Brand systems</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/white-label/custom-domains"><span>Custom domains</span><strong>{{ metrics.customDomains }}</strong><small>Verified mappings</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/white-label/branded-branches"><span>Branded branches</span><strong>{{ metrics.brandedBranches }}</strong><small>Branch overrides</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/white-label/default-profiles"><span>Default profiles</span><strong>{{ metrics.defaultProfiles }}</strong><small>Tenant fallback</small></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/white-label/profiles"><span>Profiles</span><strong>{{ metrics.profiles }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/white-label/custom-domains"><span>Custom domains</span><strong>{{ metrics.customDomains }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/white-label/branded-branches"><span>Branded branches</span><strong>{{ metrics.brandedBranches }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/white-label/default-profiles"><span>Default profiles</span><strong>{{ metrics.defaultProfiles }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

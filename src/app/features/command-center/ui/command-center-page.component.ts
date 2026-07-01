@@ -11,7 +11,6 @@ import { CommandCenterModule } from '../domain/command-center.models';
     <section class="command-center-page">
       <header class="cc-hero">
         <div>
-          <p class="eyebrow">AI-native command center</p>
           <h1>{{ store.config().title }}</h1>
           <p>{{ store.config().subtitle }}</p>
         </div>

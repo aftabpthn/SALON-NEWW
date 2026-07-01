@@ -13,7 +13,6 @@ import { StaffOsAttendanceCategory, StaffOsAttendanceMaster, StaffOsAttendanceSl
     <section class="category-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Employee Masters</p>
           <h1>Attendance Category</h1>
         </div>
         <div class="topbar-actions">

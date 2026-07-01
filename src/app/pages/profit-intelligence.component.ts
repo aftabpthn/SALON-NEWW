@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="page-title">
         <div>
           <h1>Profit Intelligence</h1>
-          <p>Finance &gt; P&amp;L foundation with revenue, COGS, staff cost, expenses and net profit</p>
         </div>
         <form [formGroup]="filters" (ngSubmit)="load()">
           <label><span>From</span><input type="date" formControlName="from" /></label>
@@ -29,12 +28,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article>
           <span>Revenue</span>
           <strong>{{ paise(metrics.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Invoice booked revenue</small>
         </article>
         <article>
           <span>Product Cost</span>
           <strong>{{ paise(metrics.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>COGS / product consume</small>
         </article>
         <article>
           <span>Gross Profit</span>
@@ -44,12 +41,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article>
           <span>Staff Cost</span>
           <strong>{{ paise(metrics.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Payroll, payout or commission</small>
         </article>
         <article>
           <span>Operating Expenses</span>
           <strong>{{ paise(metrics.operatingExpensePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Rent, utilities, marketing</small>
         </article>
         <article class="net-card">
           <span>Net Profit</span>
@@ -62,22 +57,18 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article>
           <span>Today's Revenue</span>
           <strong>{{ paise(kpis.todayRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Live invoice revenue</small>
         </article>
         <article>
           <span>Today's Profit</span>
           <strong>{{ paise(kpis.todayProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>After COGS, staff and expenses</small>
         </article>
         <article>
           <span>This Month Profit</span>
           <strong>{{ paise(kpis.monthProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Month to date net profit</small>
         </article>
         <article>
           <span>Gross / Net Margin</span>
           <strong>{{ percent(kpis.grossMarginBps) }} / {{ percent(kpis.netMarginBps) }}</strong>
-          <small>Current filter margin</small>
         </article>
         <article>
           <span>Top Service</span>
@@ -125,7 +116,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel twin-panel">
           <header>
             <div>
-              <p class="eyebrow">Profit Digital Twin</p>
               <h2>What-if simulation</h2>
             </div>
             <span>{{ twin.name }}</span>
@@ -144,7 +134,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel twin-result">
           <header>
             <div>
-              <p class="eyebrow">Before vs after</p>
               <h2>Profit impact</h2>
             </div>
             <span>{{ percent(twin.netMarginBps) }} net margin</span>
@@ -162,7 +151,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel">
           <header>
             <div>
-              <p class="eyebrow">Recommended scenario</p>
               <h2>{{ twin.recommendedScenario?.name }}</h2>
             </div>
           </header>
@@ -183,7 +171,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel booking-panel">
           <header>
             <div>
-              <p class="eyebrow">Margin-Aware Booking</p>
               <h2>Profit ranked slots</h2>
             </div>
             <span>{{ booking.sourceHealth?.appointments || 0 }} appointment signals</span>
@@ -213,7 +200,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel pricing-panel">
           <header>
             <div>
-              <p class="eyebrow">AI Pricing Autopilot</p>
               <h2>Service price recommendations</h2>
             </div>
             <span>{{ percent(pricing.targetMarginBps) }} target margin</span>
@@ -243,7 +229,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel wastage-panel">
           <header>
             <div>
-              <p class="eyebrow">Wastage Radar</p>
               <h2>Recipe variance & product overuse</h2>
             </div>
             <span>{{ variance.sourceHealth?.drafts || 0 }} consume drafts</span>
@@ -274,7 +259,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel leak-panel">
           <header>
             <div>
-              <p class="eyebrow">Profit Leak Detection</p>
               <h2>Daily leakage alert center</h2>
             </div>
             <span>{{ leaks.length || 0 }} active signals</span>
@@ -303,7 +287,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel action-panel">
           <header>
             <div>
-              <p class="eyebrow">Autonomous Profit Action Queue</p>
               <h2>AI suggestions ready for execution</h2>
             </div>
             <span>{{ actionQueue().length || 0 }} open actions</span>
@@ -337,7 +320,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel governance-rules-panel">
           <header>
             <div>
-              <p class="eyebrow">Profit Governance &amp; Margin Guard</p>
               <h2>Governance rules</h2>
             </div>
             <span>{{ governance.rulesActive || 0 }} active</span>
@@ -364,7 +346,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel margin-guard-panel">
           <header>
             <div>
-              <p class="eyebrow">Margin-Safe Discount Simulator</p>
               <h2>Pre-invoice guardrail</h2>
             </div>
             <span>{{ governance.blockedToday || 0 }} blocked today</span>
@@ -390,7 +371,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel governance-decisions-panel">
           <header>
             <div>
-              <p class="eyebrow">Governance Decisions</p>
               <h2>Recent audit trail</h2>
             </div>
             <span>{{ governance.auditCount || 0 }} decisions</span>
@@ -417,7 +397,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel pos-guard-panel">
           <header>
             <div>
-              <p class="eyebrow">POS Margin Guard</p>
               <h2>Negative margin prevention</h2>
             </div>
             <span>Pre-save check</span>
@@ -435,7 +414,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel pos-result-panel" *ngIf="posMarginDecision() as decision">
           <header>
             <div>
-              <p class="eyebrow">POS decision</p>
               <h2>{{ decision.blocked ? 'Blocked' : decision.requiresApproval ? 'Approval required' : 'Allowed' }}</h2>
             </div>
             <span>{{ percent(decision.marginBps) }} margin</span>
@@ -459,7 +437,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel copilot-panel">
           <header>
             <div>
-              <p class="eyebrow">Profit Copilot</p>
               <h2>Owner Q&amp;A</h2>
             </div>
             <span>Rule-based</span>
@@ -493,7 +470,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel board-panel" *ngIf="report.autoBoardReport as board">
           <header>
             <div>
-              <p class="eyebrow">Auto Board Report</p>
               <h2>Monthly owner preview</h2>
             </div>
             <span>{{ report.period?.from }} to {{ report.period?.to }}</span>
@@ -525,7 +501,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel customer-score-panel">
           <header>
             <div>
-              <p class="eyebrow">Customer Profit Score</p>
               <h2>Profit tier intelligence</h2>
             </div>
             <span>{{ report.customerProfitScore?.length || 0 }} customers</span>
@@ -553,7 +528,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel liability-panel">
           <header>
             <div>
-              <p class="eyebrow">Membership Liability Risk</p>
               <h2>Future redemption exposure</h2>
             </div>
             <span>{{ report.membershipRisk?.length || 0 }} plans</span>
@@ -584,7 +558,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel analytics-card">
           <header>
             <div>
-              <p class="eyebrow">Enterprise analytics</p>
               <h2>Trend & forecast</h2>
             </div>
             <span>{{ analytics.periodGrain }}</span>
@@ -616,7 +589,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel">
           <header>
             <div>
-              <p class="eyebrow">Profit trend</p>
               <h2>Recent P&amp;L movement</h2>
             </div>
           </header>
@@ -633,7 +605,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel">
           <header>
             <div>
-              <p class="eyebrow">Revenue heatmap</p>
               <h2>Best revenue windows</h2>
             </div>
           </header>
@@ -650,7 +621,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel">
           <header>
             <div>
-              <p class="eyebrow">Alerts & suggestions</p>
               <h2>AI profit signals</h2>
             </div>
           </header>
@@ -669,7 +639,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel">
           <header>
             <div>
-              <p class="eyebrow">Income mix</p>
               <h2>Revenue sources</h2>
             </div>
             <span>{{ report.sourceHealth?.invoices || 0 }} invoices</span>
@@ -686,7 +655,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel">
           <header>
             <div>
-              <p class="eyebrow">Expense control</p>
               <h2>Top operating lines</h2>
             </div>
             <span>{{ report.sourceHealth?.expenses || 0 }} rows</span>
@@ -703,7 +671,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="panel source-panel">
           <header>
             <div>
-              <p class="eyebrow">Data health</p>
               <h2>Calculation sources</h2>
             </div>
             <span>{{ report.period?.from }} to {{ report.period?.to }}</span>
@@ -724,7 +691,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Service profit</p>
               <h2>Service wise margin</h2>
             </div>
           </header>
@@ -748,7 +714,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Staff profit</p>
               <h2>Staff wise profitability</h2>
             </div>
           </header>
@@ -773,7 +738,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Branch P&amp;L</p>
               <h2>Branch wise profit</h2>
             </div>
           </header>
@@ -798,7 +762,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Category profit</p>
               <h2>Category wise margin</h2>
             </div>
           </header>
@@ -825,7 +788,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Customer profit</p>
               <h2>Customer profitability</h2>
             </div>
           </header>
@@ -851,7 +813,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Membership profit</p>
               <h2>Membership value</h2>
             </div>
           </header>
@@ -877,7 +838,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article class="table-panel">
           <header>
             <div>
-              <p class="eyebrow">Package profit</p>
               <h2>Package value</h2>
             </div>
           </header>

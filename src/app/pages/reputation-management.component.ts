@@ -46,7 +46,6 @@ interface SegmentRow {
         <div class="hero-copy">
           <span class="eyebrow">Reputation</span>
           <h2>Reviews command center</h2>
-          <p>Monitor client sentiment, catch low-rating risks early, and keep AI reply drafts ready for every public review channel.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="load()" [disabled]="loading">Refresh</button>

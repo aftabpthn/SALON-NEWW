@@ -226,9 +226,7 @@ const emptyRecords: Record<ClientMasterKind, ClientMasterRecord[]> = {
     <section class="client-masters-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Client CRM Masters</p>
           <h1>Client Masters</h1>
-          <p class="lead">Flexi-style client master setup for categories, sources, preferences, consultation forms and feedback definitions.</p>
         </div>
         <div class="topbar-actions">
           <a class="secondary" routerLink="/clients">Client CRM</a>

@@ -191,7 +191,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
         <div>
           <span class="eyebrow">Staff Enterprise OS</span>
           <h1>Workforce Center</h1>
-          <p>Live staff metrics from attendance, bookings, invoices, commission and payroll signals.</p>
         </div>
         <nav class="header-actions" aria-label="Staff enterprise navigation">
           <a routerLink="/staff" class="ghost-button">Staff</a>
@@ -321,7 +320,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
                 <span>{{ row.estimatedMinutes }} estimated minutes</span>
               </div>
               <div>
-                <small>Profit/min</small>
                 <strong>{{ row.profitPerMinute | currency: 'INR':'symbol':'1.1-1' }}</strong>
               </div>
               <span class="badge" [ngClass]="riskClass(row.riskLevel)">{{ row.riskLevel }}</span>

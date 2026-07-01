@@ -72,7 +72,6 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
           <div>
             <span class="eyebrow">Setup / Calendar</span>
             <h1>Calendar settings</h1>
-            <p>Easily adjust the time, color, and appointment settings on your calendar.</p>
           </div>
           <button class="primary-button" type="button" (click)="save()">Save</button>
         </header>
@@ -82,14 +81,12 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
         <section class="settings-section time-section">
           <div class="section-intro">
             <h2>Calendar Time settings</h2>
-            <p>Specify time specific settings for your business.</p>
           </div>
 
           <div class="time-controls">
             <label class="switch-card">
               <span>
                 <strong>Overlap Time Slot</strong>
-                <small>Allow appointments to overlap in the same time slot</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.overlapTimeSlot" />
               <i aria-hidden="true"></i>
@@ -97,7 +94,6 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
             <label class="switch-card">
               <span>
                 <strong>Previous Time Slot</strong>
-                <small>Show past time slots on the calendar view</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.previousTimeSlot" />
               <i aria-hidden="true"></i>
@@ -129,7 +125,6 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
         <section class="settings-section">
           <div class="section-intro">
             <h2>Calendar Color settings</h2>
-            <p>Specify color specific settings for your business.</p>
           </div>
 
           <div class="color-table-wrap">
@@ -166,14 +161,12 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
         <section class="settings-section appointment-section">
           <div class="section-intro">
             <h2>Appointment settings</h2>
-            <p>Appointment settings for your business.</p>
           </div>
 
           <div class="appointment-grid">
             <label class="switch-card compact">
               <span>
                 <strong>Room Number Option</strong>
-                <small>Show room numbers on appointments</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.roomNumberOption" />
               <i aria-hidden="true"></i>
@@ -181,7 +174,6 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
             <label class="switch-card compact">
               <span>
                 <strong>Staff Calendar</strong>
-                <small>Show the staff calendar view</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.staffCalendar" />
               <i aria-hidden="true"></i>

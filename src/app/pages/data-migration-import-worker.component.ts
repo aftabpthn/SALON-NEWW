@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>Import Worker</h1>
-          <p>Run import jobs, monitor progress, handle errors</p>
         </div>
         <div class="score-card" *ngIf="store.largeJob()">
           <span>Job status</span>

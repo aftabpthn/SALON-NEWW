@@ -137,7 +137,6 @@ type PlanLifecycleDialog = {
         <button type="button" [class.active]="membershipListFilter() === 'renewalRisk' && activeTab() === 'active'" (click)="openMembershipKpi('renewalRisk')">
           <span>Renewal risk</span>
           <strong>{{ report().expiringSoon?.length || 0 }}</strong>
-          <small>Expiring in 30 days</small>
         </button>
       </section>
 
@@ -150,17 +149,14 @@ type PlanLifecycleDialog = {
         <article class="metric-card">
           <span>Membership revenue</span>
           <strong>{{ (report().metrics?.soldRevenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Sold and renewed</small>
         </article>
         <article class="metric-card">
           <span>Redeemed discount</span>
           <strong>{{ (report().metrics?.redeemedDiscount || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Invoice snapshot based</small>
         </article>
         <article class="metric-card">
           <span>Renewal risk</span>
           <strong>{{ report().expiringSoon?.length || 0 }}</strong>
-          <small>Expiring in 30 days</small>
         </article>
       </section>
 
@@ -169,7 +165,6 @@ type PlanLifecycleDialog = {
           <div>
             <span class="eyebrow">Today focus</span>
             <h3>{{ report().expiringSoon?.length || 0 }} renewal follow-ups</h3>
-            <p>Manage expiring plans, POS eligibility and renewal WhatsApp queue in one place.</p>
           </div>
           <div class="overview-actions">
             <a class="primary-button" routerLink="/pos">Sell membership in POS</a>
@@ -193,13 +188,11 @@ type PlanLifecycleDialog = {
         <article class="overview-card">
           <span class="eyebrow">Membership Wallet</span>
           <h3>{{ selectedClientBenefitsLabel() }}</h3>
-          <p>Wallet, prepaid credit, family sharing and package eligibility stay connected to POS billing.</p>
         </article>
 
         <article class="overview-card">
           <span class="eyebrow">Active packages</span>
           <h3>{{ report().metrics?.creditsRemaining || 0 }} credits</h3>
-          <p>Service package, visit-pack and combo balances are tracked from membership wallet snapshots.</p>
         </article>
       </section>
 
@@ -207,26 +200,20 @@ type PlanLifecycleDialog = {
         <button class="floating-add" type="button" *ngIf="planWorkspaceView() === 'plans'" (click)="openPlanDrawer()" aria-label="Add membership plan">+</button>
         <header class="plans-title">
           <h1>Plans</h1>
-          <p>
-            Membership plans, service packages and gift cards ek hi page se manage karo. Neeche card click karne par uski live information open hogi.
-          </p>
         </header>
 
         <div class="plan-switch-grid" aria-label="Plan workspace selector">
           <button type="button" [class.active]="planWorkspaceView() === 'plans'" (click)="planWorkspaceView.set('plans')">
             <span>Membership plans</span>
             <strong>{{ membershipPlans().length }}</strong>
-            <small>Discount aur prepaid credit plans</small>
           </button>
           <button type="button" [class.active]="planWorkspaceView() === 'packages'" (click)="planWorkspaceView.set('packages')">
             <span>Service packages</span>
             <strong>{{ packageRecords().length }}</strong>
-            <small>3+1, 4+1 package definitions</small>
           </button>
           <button type="button" [class.active]="planWorkspaceView() === 'giftcards'" (click)="planWorkspaceView.set('giftcards')">
             <span>Gift cards</span>
             <strong>{{ giftCards().length }}</strong>
-            <small>Balance aur expiry ledger</small>
           </button>
         </div>
 
@@ -371,7 +358,6 @@ type PlanLifecycleDialog = {
             <button class="icon-button" type="button" (click)="closePlanDrawer()">×</button>
             <h2>{{ editingPlanId() ? 'Update Plan' : 'Add New Plan' }}</h2>
           </div>
-          <p class="drawer-help">Create normal discount memberships or prepaid value-credit plans. POS me sale hone ke baad client membership ledger live update hoga.</p>
           <form [formGroup]="planForm" (ngSubmit)="savePlan()">
             <label class="field">
               <span>Membership type</span>
@@ -668,10 +654,10 @@ type PlanLifecycleDialog = {
         </div>
 
         <section class="member-count-strip compact-count-strip">
-          <article><span>Due today</span><strong>{{ autoRenewSummary().dueToday || 0 }}</strong><small>Needs manual review</small></article>
-          <article><span>Due in 7 days</span><strong>{{ autoRenewSummary().dueIn7Days || 0 }}</strong><small>Upcoming renewal window</small></article>
-          <article><span>Failed payment</span><strong>{{ autoRenewSummary().failedPayment || 0 }}</strong><small>Membership not extended</small></article>
-          <article><span>Missing method</span><strong>{{ autoRenewSummary().paymentMethodMissing || 0 }}</strong><small>Reminder required</small></article>
+          <article><span>Due today</span><strong>{{ autoRenewSummary().dueToday || 0 }}</strong></article>
+          <article><span>Due in 7 days</span><strong>{{ autoRenewSummary().dueIn7Days || 0 }}</strong></article>
+          <article><span>Failed payment</span><strong>{{ autoRenewSummary().failedPayment || 0 }}</strong></article>
+          <article><span>Missing method</span><strong>{{ autoRenewSummary().paymentMethodMissing || 0 }}</strong></article>
         </section>
 
         <div class="quick-grid auto-renew-grid" *ngIf="autoRenewQueue().length; else noAutoRenewQueue">
@@ -753,9 +739,9 @@ type PlanLifecycleDialog = {
         </div>
 
         <section class="member-count-strip compact-count-strip">
-          <article><span>Sale revenue</span><strong>{{ commissionMetric('saleRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Membership sale commission base</small></article>
-          <article><span>Renewal revenue</span><strong>{{ commissionMetric('renewalRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Renewal commission base</small></article>
-          <article><span>Upgrade revenue</span><strong>{{ commissionMetric('upgradeRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Upgrade commission base</small></article>
+          <article><span>Sale revenue</span><strong>{{ commissionMetric('saleRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article><span>Renewal revenue</span><strong>{{ commissionMetric('renewalRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article><span>Upgrade revenue</span><strong>{{ commissionMetric('upgradeRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article><span>Commission preview</span><strong>{{ commissionMetric('commissionPreview') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ commissionReport().metrics?.['doubleCountGuardedRows'] || 0 }} duplicate guarded</small></article>
         </section>
 
@@ -854,10 +840,10 @@ type PlanLifecycleDialog = {
         </div>
 
         <section class="member-count-strip compact-count-strip">
-          <article><span>Critical</span><strong>{{ riskMetric('critical') }}</strong><small>Immediate owner review</small></article>
-          <article><span>High</span><strong>{{ riskMetric('high') }}</strong><small>Manager investigation</small></article>
-          <article><span>Pending review</span><strong>{{ riskMetric('pending') }}</strong><small>Risk signals open</small></article>
-          <article><span>Reviewed</span><strong>{{ riskMetric('reviewed') }}</strong><small>Audit logged</small></article>
+          <article><span>Critical</span><strong>{{ riskMetric('critical') }}</strong></article>
+          <article><span>High</span><strong>{{ riskMetric('high') }}</strong></article>
+          <article><span>Pending review</span><strong>{{ riskMetric('pending') }}</strong></article>
+          <article><span>Reviewed</span><strong>{{ riskMetric('reviewed') }}</strong></article>
         </section>
 
         <div class="quick-grid risk-grid" *ngIf="filteredRiskSignals().length; else noMembershipRisk">
@@ -1008,14 +994,14 @@ type PlanLifecycleDialog = {
         </section>
 
         <section class="member-count-strip compact-count-strip">
-          <article role="button" tabindex="0" (click)="setReportTab('activeMembers')" (keydown.enter)="setReportTab('activeMembers')"><span>Active members</span><strong>{{ reportMetric('activeMembers') }}</strong><small>Live active ledger</small></article>
-          <article role="button" tabindex="0" (click)="setReportTab('expiringSoon')" (keydown.enter)="setReportTab('expiringSoon')"><span>Expiring soon</span><strong>{{ reportMetric('expiringSoon') }}</strong><small>30-day renewal queue</small></article>
-          <article role="button" tabindex="0" (click)="setReportTab('renewalRevenue')" (keydown.enter)="setReportTab('renewalRevenue')"><span>Renewal revenue</span><strong>{{ reportMetric('renewalRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Filtered renewals</small></article>
-          <article role="button" tabindex="0" (click)="setReportTab('creditLiability')" (keydown.enter)="setReportTab('creditLiability')"><span>Credit liability</span><strong>{{ reportMetric('creditLiability') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Unused credit value</small></article>
-          <article role="button" tabindex="0" (click)="setReportTab('discountLeakage')" (keydown.enter)="setReportTab('discountLeakage')"><span>Discount leakage</span><strong>{{ reportMetric('discountLeakage') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Membership discount audit</small></article>
+          <article role="button" tabindex="0" (click)="setReportTab('activeMembers')" (keydown.enter)="setReportTab('activeMembers')"><span>Active members</span><strong>{{ reportMetric('activeMembers') }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('expiringSoon')" (keydown.enter)="setReportTab('expiringSoon')"><span>Expiring soon</span><strong>{{ reportMetric('expiringSoon') }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('renewalRevenue')" (keydown.enter)="setReportTab('renewalRevenue')"><span>Renewal revenue</span><strong>{{ reportMetric('renewalRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('creditLiability')" (keydown.enter)="setReportTab('creditLiability')"><span>Credit liability</span><strong>{{ reportMetric('creditLiability') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('discountLeakage')" (keydown.enter)="setReportTab('discountLeakage')"><span>Discount leakage</span><strong>{{ reportMetric('discountLeakage') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article role="button" tabindex="0" (click)="setReportTab('membershipRedeem')" (keydown.enter)="setReportTab('membershipRedeem')"><span>Membership redeem</span><strong>{{ reportMetric('totalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ reportMetric('redeemCount') }} redemptions</small></article>
           <article role="button" tabindex="0" (click)="setReportTab('membershipSalesByCustomer')" (keydown.enter)="setReportTab('membershipSalesByCustomer')"><span>Customer sales</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ reportMetric('membershipSalesTotalCount') }} sale rows</small></article>
-          <article role="button" tabindex="0" (click)="setReportTab('actionQueue')" (keydown.enter)="setReportTab('actionQueue')"><span>Action queue</span><strong>{{ reportMetric('actionQueue') }}</strong><small>Renewal, wallet and plan tasks</small></article>
+          <article role="button" tabindex="0" (click)="setReportTab('actionQueue')" (keydown.enter)="setReportTab('actionQueue')"><span>Action queue</span><strong>{{ reportMetric('actionQueue') }}</strong></article>
         </section>
 
         <nav class="report-section-tabs" aria-label="Membership report sections">
@@ -1175,14 +1161,14 @@ type PlanLifecycleDialog = {
               <span class="badge">{{ reportSet('membershipSalesByCustomer').length }} rows</span>
             </div>
             <section class="member-count-strip compact-count-strip">
-              <article><span>Total Count</span><strong>{{ reportMetric('membershipSalesTotalCount') }}</strong><small>Filtered sale rows</small></article>
-              <article><span>Total Offer Price</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Sale + renewal value</small></article>
-              <article><span>Total Ewallet</span><strong>{{ reportMetric('membershipSalesTotalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Issued wallet value</small></article>
-              <article><span>Pending Ewallet</span><strong>{{ reportMetric('membershipSalesPendingEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Current liability</small></article>
-              <article><span>Total Redeemed</span><strong>{{ reportMetric('membershipSalesTotalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Redeemed from ledger</small></article>
-              <article><span>Renewal Count</span><strong>{{ reportMetric('membershipSalesRenewalCount') }}</strong><small>Renewal rows</small></article>
-              <article><span>Active Memberships</span><strong>{{ reportMetric('membershipSalesActiveMemberships') }}</strong><small>Not expired</small></article>
-              <article><span>Expired Memberships</span><strong>{{ reportMetric('membershipSalesExpiredMemberships') }}</strong><small>Expired rows</small></article>
+              <article><span>Total Count</span><strong>{{ reportMetric('membershipSalesTotalCount') }}</strong></article>
+              <article><span>Total Offer Price</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Total Ewallet</span><strong>{{ reportMetric('membershipSalesTotalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Pending Ewallet</span><strong>{{ reportMetric('membershipSalesPendingEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Total Redeemed</span><strong>{{ reportMetric('membershipSalesTotalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Renewal Count</span><strong>{{ reportMetric('membershipSalesRenewalCount') }}</strong></article>
+              <article><span>Active Memberships</span><strong>{{ reportMetric('membershipSalesActiveMemberships') }}</strong></article>
+              <article><span>Expired Memberships</span><strong>{{ reportMetric('membershipSalesExpiredMemberships') }}</strong></article>
             </section>
             <div class="table-wrap compact-table" *ngIf="reportSet('membershipSalesByCustomer').length; else noMembershipSalesByCustomer">
               <table><thead><tr><th>Name</th><th>Contact</th><th>Membership / Plan</th><th>Plan Type</th><th>Sale Type</th><th>Offer Price</th><th>Paid</th><th>Due</th><th>Total Ewallet</th><th>Pending Ewallet</th><th>Redeemed</th><th>Staff</th><th>Invoice No</th><th>Branch</th><th>Expiry</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
@@ -1223,12 +1209,12 @@ type PlanLifecycleDialog = {
               <span class="badge">{{ reportSet('membershipRedeem').length }} rows</span>
             </div>
             <section class="member-count-strip compact-count-strip">
-              <article><span>Total Membership</span><strong>{{ reportMetric('totalMembership') }}</strong><small>Filtered memberships</small></article>
-              <article><span>Total Ewallet</span><strong>{{ reportMetric('totalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Wallet liability</small></article>
-              <article><span>Total Redeemed</span><strong>{{ reportMetric('totalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Ledger + snapshot total</small></article>
-              <article><span>Redeem Count</span><strong>{{ reportMetric('redeemCount') }}</strong><small>Redemption events</small></article>
-              <article><span>Active Wallet Clients</span><strong>{{ reportMetric('clientsWithActiveWallet') }}</strong><small>Balance above zero</small></article>
-              <article><span>Last Redeemed Today</span><strong>{{ reportMetric('lastRedeemedToday') }}</strong><small>Same-day recovery</small></article>
+              <article><span>Total Membership</span><strong>{{ reportMetric('totalMembership') }}</strong></article>
+              <article><span>Total Ewallet</span><strong>{{ reportMetric('totalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Total Redeemed</span><strong>{{ reportMetric('totalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Redeem Count</span><strong>{{ reportMetric('redeemCount') }}</strong></article>
+              <article><span>Active Wallet Clients</span><strong>{{ reportMetric('clientsWithActiveWallet') }}</strong></article>
+              <article><span>Last Redeemed Today</span><strong>{{ reportMetric('lastRedeemedToday') }}</strong></article>
             </section>
             <div class="table-wrap compact-table" *ngIf="reportSet('membershipRedeem').length; else noRedeemReport">
               <table><thead><tr><th>Name</th><th>Contact</th><th>Membership / Plan</th><th>Ewallet</th><th>Last redeemed</th><th>Date</th><th>Time</th><th>Invoice / POS</th><th>Branch</th><th>Action</th></tr></thead>
@@ -1325,12 +1311,12 @@ type PlanLifecycleDialog = {
         </section>
 
         <section class="member-count-strip compact-count-strip rewards-kpis">
-          <article><span>Reward clients</span><strong>{{ rewardMetric('totalRewardClients') }}</strong><small>Clients with ledger</small></article>
-          <article><span>Points earned</span><strong>{{ rewardMetric('totalPointsEarned') }}</strong><small>Gross loyalty issued</small></article>
-          <article><span>Points redeemed</span><strong>{{ rewardMetric('totalPointsRedeemed') }}</strong><small>Used by clients</small></article>
-          <article><span>Reward revenue</span><strong>{{ rewardMetric('revenueFromRewardUsers') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Sales from reward users</small></article>
-          <article><span>Repeat rate</span><strong>{{ rewardMetric('repeatVisitRate') }}%</strong><small>Repeat reward clients</small></article>
-          <article><span>Abuse alerts</span><strong>{{ rewardAbuseRows().length }}</strong><small>Needs audit</small></article>
+          <article><span>Reward clients</span><strong>{{ rewardMetric('totalRewardClients') }}</strong></article>
+          <article><span>Points earned</span><strong>{{ rewardMetric('totalPointsEarned') }}</strong></article>
+          <article><span>Points redeemed</span><strong>{{ rewardMetric('totalPointsRedeemed') }}</strong></article>
+          <article><span>Reward revenue</span><strong>{{ rewardMetric('revenueFromRewardUsers') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article><span>Repeat rate</span><strong>{{ rewardMetric('repeatVisitRate') }}%</strong></article>
+          <article><span>Abuse alerts</span><strong>{{ rewardAbuseRows().length }}</strong></article>
         </section>
 
         <nav class="report-section-tabs" aria-label="Reward report sections">

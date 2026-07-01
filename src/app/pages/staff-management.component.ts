@@ -38,7 +38,6 @@ type StaffDirectoryRow = ApiRecord & {
         <div class="staff-title-block">
           <span class="eyebrow">Smart staff management</span>
           <h2>Commission, attendance, shifts, performance, incentives and payroll</h2>
-          <p>Staff metrics calculate from saved sales, appointments, shifts and attendance records.</p>
         </div>
 
         <form class="staff-filter-bar" [formGroup]="filterForm" (ngSubmit)="load()">
@@ -86,12 +85,10 @@ type StaffDirectoryRow = ApiRecord & {
           <aura-kpi-card tone="green" target="/kpi-details/staff/incentives">
             <span>Incentives</span>
             <strong>{{ summary.metrics.totalIncentives | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Dynamic bonus engine</small>
           </aura-kpi-card>
           <aura-kpi-card tone="blue" target="/kpi-details/staff/average-score">
             <span>Average score</span>
             <strong>{{ summary.metrics.averageScore | number: '1.0-1' }}</strong>
-            <small>Productivity ranking</small>
           </aura-kpi-card>
           <aura-kpi-card tone="violet" target="/kpi-details/staff/present-days">
             <span>Present days</span>
@@ -101,7 +98,6 @@ type StaffDirectoryRow = ApiRecord & {
           <aura-kpi-card tone="rose" target="/kpi-details/staff/planned-shifts">
             <span>Planned shifts</span>
             <strong>{{ summary.metrics.scheduledShifts }}</strong>
-            <small>Shift planner</small>
           </aura-kpi-card>
         </div>
 

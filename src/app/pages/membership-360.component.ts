@@ -19,7 +19,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
             Client membership profile, payments, lifecycle, invoices, staff attribution, audit and WhatsApp reminders.
           </p>
           <ng-template #planHeroCopy>
-            <p>Plan performance, sold clients, revenue, discount liability and invoice snapshots.</p>
           </ng-template>
         </div>
         <div class="hero-actions">
@@ -32,10 +31,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <ng-container *ngIf="isMembershipProfile(); else plan360View">
         <section class="stats-grid" *ngIf="metrics() as metric">
-          <article class="metric-card"><span>Timeline</span><strong>{{ metric.timelineEvents || 0 }}</strong><small>Ledger, audit and reminders</small></article>
-          <article class="metric-card"><span>Payments</span><strong>{{ metric.payments || 0 }}</strong><small>Sold, renewed, upgraded</small></article>
-          <article class="metric-card"><span>Invoices</span><strong>{{ metric.invoices || 0 }}</strong><small>Linked billing records</small></article>
-          <article class="metric-card"><span>Risk signals</span><strong>{{ metric.riskSignals || 0 }}</strong><small>Needs review</small></article>
+          <article class="metric-card"><span>Timeline</span><strong>{{ metric.timelineEvents || 0 }}</strong></article>
+          <article class="metric-card"><span>Payments</span><strong>{{ metric.payments || 0 }}</strong></article>
+          <article class="metric-card"><span>Invoices</span><strong>{{ metric.invoices || 0 }}</strong></article>
+          <article class="metric-card"><span>Risk signals</span><strong>{{ metric.riskSignals || 0 }}</strong></article>
         </section>
 
         <div class="two-grid">
@@ -216,10 +215,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <ng-template #plan360View>
         <section class="stats-grid" *ngIf="metrics() as metric">
-          <article class="metric-card"><span>Sold clients</span><strong>{{ metric.soldClients || 0 }}</strong><small>Unique clients</small></article>
-          <article class="metric-card"><span>Active</span><strong>{{ metric.active || 0 }}</strong><small>Currently valid</small></article>
-          <article class="metric-card"><span>Revenue</span><strong>{{ (metric.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Sold, renewed, upgraded</small></article>
-          <article class="metric-card"><span>Renewal risk</span><strong>{{ metric.renewalRisk || 0 }}</strong><small>Expiring soon</small></article>
+          <article class="metric-card"><span>Sold clients</span><strong>{{ metric.soldClients || 0 }}</strong></article>
+          <article class="metric-card"><span>Active</span><strong>{{ metric.active || 0 }}</strong></article>
+          <article class="metric-card"><span>Revenue</span><strong>{{ (metric.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Renewal risk</span><strong>{{ metric.renewalRisk || 0 }}</strong></article>
         </section>
 
         <div class="two-grid" *ngIf="plan() as planData">

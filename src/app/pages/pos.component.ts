@@ -155,14 +155,12 @@ type PackageClientNotice = {
         <article class="client-crm-tile">
           <span>E-wallet Amt</span>
           <strong>{{ Number(client.walletBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Available wallet balance</small>
         </article>
         <article class="client-crm-tile">
           <span>Unpaid Amt</span>
           <strong [class.due-amount]="Number(client.unpaidBalance || 0) > 0">
             {{ Number(client.unpaidBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}
           </strong>
-          <small>Pending invoice balance</small>
         </article>
         <ng-container *ngIf="selectedClientMembership() as membership; else noClientMembershipSnapshot">
           <article class="client-crm-tile">
@@ -283,7 +281,6 @@ type PackageClientNotice = {
             <div class="branch-context-card">
               <span>Header branch</span>
               <strong>{{ currentBranchName() }}</strong>
-              <small>POS billing is locked to the top header branch.</small>
             </div>
             <section
               class="package-billing-alert"
@@ -353,7 +350,6 @@ type PackageClientNotice = {
             <label class="field billing-date-field">
               <span>Invoice date</span>
               <input type="date" formControlName="invoiceDate" [attr.max]="invoiceDateMax" />
-              <small>Select a billing date for back-dated invoices.</small>
             </label>
             <label class="field smart-search-field pos-floating-search staff-search-field">
               <span>Staff</span>
@@ -891,7 +887,6 @@ type PackageClientNotice = {
             <div class="unpaid-receive-copy">
               <span class="eyebrow">Balance choice</span>
               <strong>{{ roundOffDueAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Keep this balance unpaid or adjust it with round off.</small>
               <small *ngIf="roundOffPreviewLabel()">{{ roundOffPreviewLabel() }}</small>
             </div>
             <div class="client-search-actions round-off-actions">
@@ -907,7 +902,6 @@ type PackageClientNotice = {
             <div class="unpaid-receive-copy">
               <span class="eyebrow">Receive old balance</span>
               <strong>{{ selectedClientUnpaidBalance | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Clear pending dues from previous invoices before or with this bill.</small>
             </div>
             <label class="field">
               <span>Amount</span>
@@ -945,7 +939,6 @@ type PackageClientNotice = {
             <div class="settlement-preview-copy">
               <span class="eyebrow">Final settlement preview</span>
               <strong>Review payment split before saving</strong>
-              <small>Advance and counter collection will be saved separately on the invoice.</small>
             </div>
             <div class="settlement-preview-metrics">
               <article>

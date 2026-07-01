@@ -62,7 +62,6 @@ const payrollFlow = [
     <section class="masters-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Staff Operating System</p>
           <h1>Employee Masters</h1>
         </div>
         <div class="topbar-actions">
@@ -145,7 +144,6 @@ const payrollFlow = [
       <section class="payroll-flow" *ngIf="activeSection() === 'All' || activeSection() === 'Payroll'">
         <div class="flow-head">
           <div>
-            <p class="eyebrow">Payroll setup merged</p>
             <h2>Salary workspace flow</h2>
           </div>
           <a routerLink="/staff-os/salary-generate">Open Salary Generate</a>

@@ -3,7 +3,6 @@
     <div>
       <span class="eyebrow">Owner command center</span>
       <h1>Executive Business Dashboard</h1>
-      <p>Sales, profit, operations and customer signals in one premium view.</p>
     </div>
     <div class="header-actions">
       <select [ngModel]="range()" (ngModelChange)="setRange($event)">
@@ -43,7 +42,6 @@
       <div class="priority-intro">
         <span class="eyebrow">Priority board</span>
         <h2>What the owner checks first</h2>
-        <p>Cash, profit, customers, stock and branch pulse are kept above the fold.</p>
       </div>
       <a *ngFor="let card of priorityCards()" class="priority-card" [ngClass]="'tone-' + card.tone" [routerLink]="card.route">
         <span>{{ card.label }}</span>
@@ -173,12 +171,10 @@
               <div>
                 <span>Taxable value</span>
                 <strong>{{ currency(record(dashboard.salonCritical['gstReports'])['taxableValue']) }}</strong>
-                <small>GSTR-1 source</small>
               </div>
               <div>
                 <span>GST amount</span>
                 <strong>{{ currency(record(dashboard.salonCritical['gstReports'])['gstAmount']) }}</strong>
-                <small>CGST + SGST</small>
               </div>
               <div>
                 <span>Refund rate</span>

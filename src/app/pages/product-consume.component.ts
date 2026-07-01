@@ -91,10 +91,10 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
         </div>
 
         <div class="consume-kpi-strip">
-          <article><span>Draft pending</span><strong>{{ draftCount() }}</strong><small>review before stock minus</small></article>
-          <article><span>Confirmed</span><strong>{{ confirmedCount() }}</strong><small>stock ledger posted</small></article>
-          <article><span>Expected cost</span><strong>{{ money(totalExpected()) }}</strong><small>recipe based</small></article>
-          <article><span>Actual cost</span><strong>{{ money(totalActual()) }}</strong><small>edited consume value</small></article>
+          <article><span>Draft pending</span><strong>{{ draftCount() }}</strong></article>
+          <article><span>Confirmed</span><strong>{{ confirmedCount() }}</strong></article>
+          <article><span>Expected cost</span><strong>{{ money(totalExpected()) }}</strong></article>
+          <article><span>Actual cost</span><strong>{{ money(totalActual()) }}</strong></article>
         </div>
 
         <div class="zenoti-table-scroll">
@@ -153,14 +153,13 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             <span class="eyebrow">Owner report</span>
             <h3>Backbar bulk control</h3>
           </div>
-          <small>Open containers, adjustments, alerts and usage cost.</small>
         </div>
         <div class="owner-metrics">
-          <article><span>Open</span><strong>{{ report['summary']?.openContainers || 0 }}</strong><small>in-use containers</small></article>
-          <article><span>Paused</span><strong>{{ report['summary']?.pausedContainers || 0 }}</strong><small>manager override</small></article>
-          <article><span>Adjustments</span><strong>{{ report['summary']?.adjustmentEntries || 0 }}</strong><small>waste/spill/expired</small></article>
-          <article><span>Alerts</span><strong>{{ report['summary']?.openAlerts || 0 }}</strong><small>needs review</small></article>
-          <article><span>Usage cost</span><strong>{{ money(report['summary']?.usageCost || 0) }}</strong><small>client + adjustment</small></article>
+          <article><span>Open</span><strong>{{ report['summary']?.openContainers || 0 }}</strong></article>
+          <article><span>Paused</span><strong>{{ report['summary']?.pausedContainers || 0 }}</strong></article>
+          <article><span>Adjustments</span><strong>{{ report['summary']?.adjustmentEntries || 0 }}</strong></article>
+          <article><span>Alerts</span><strong>{{ report['summary']?.openAlerts || 0 }}</strong></article>
+          <article><span>Usage cost</span><strong>{{ money(report['summary']?.usageCost || 0) }}</strong></article>
         </div>
       </section>
 
@@ -180,10 +179,10 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
         </div>
         <div class="owner-metrics">
           <article><span>Usage cost</span><strong>{{ money(dashboard['summary']?.usageCost || 0) }}</strong><small>{{ dashboard['period'] || 'daily' }}</small></article>
-          <article><span>Exceptions</span><strong>{{ money(dashboard['summary']?.exceptionCost || 0) }}</strong><small>waste/spill/adjust</small></article>
-          <article><span>Alerts</span><strong>{{ dashboard['summary']?.advancedAlerts || 0 }}</strong><small>risk signals</small></article>
-          <article><span>Approvals</span><strong>{{ dashboard['summary']?.pendingApprovals || 0 }}</strong><small>pending queue</small></article>
-          <article><span>Actual profit</span><strong>{{ money(dashboard['summary']?.actualProfit || 0) }}</strong><small>after product cost</small></article>
+          <article><span>Exceptions</span><strong>{{ money(dashboard['summary']?.exceptionCost || 0) }}</strong></article>
+          <article><span>Alerts</span><strong>{{ dashboard['summary']?.advancedAlerts || 0 }}</strong></article>
+          <article><span>Approvals</span><strong>{{ dashboard['summary']?.pendingApprovals || 0 }}</strong></article>
+          <article><span>Actual profit</span><strong>{{ money(dashboard['summary']?.actualProfit || 0) }}</strong></article>
         </div>
         <div class="dashboard-layout">
           <div class="dashboard-feed">
@@ -226,7 +225,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             <span class="eyebrow">Control ledger reports</span>
             <h3>Every ml / gram report center</h3>
           </div>
-          <small>Product, staff, client, service, waste, alert and approval reports.</small>
         </div>
         <div class="report-filters">
           <label><span>Branch</span><input [(ngModel)]="ledgerFilters.branchId" placeholder="Branch ID"></label>
@@ -260,12 +258,11 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
               <span class="eyebrow">Product 360</span>
               <h3>{{ view['productName'] || view['product']?.name }}</h3>
             </div>
-            <small>Stock, containers, client usage, staff, wastage, expiry, profit and action queue.</small>
           </div>
           <div class="owner-metrics">
             <article><span>Sealed</span><strong>{{ view['summary']?.sealedStock || 0 }}</strong><small>{{ view['stockUnit'] || 'pcs' }}</small></article>
-            <article><span>Open</span><strong>{{ view['summary']?.openContainers || 0 }}</strong><small>containers</small></article>
-            <article><span>Finished</span><strong>{{ view['summary']?.finishedContainers || 0 }}</strong><small>history</small></article>
+            <article><span>Open</span><strong>{{ view['summary']?.openContainers || 0 }}</strong></article>
+            <article><span>Finished</span><strong>{{ view['summary']?.finishedContainers || 0 }}</strong></article>
             <article><span>Usage cost</span><strong>{{ money(view['summary']?.usageCost || 0) }}</strong><small>{{ view['summary']?.totalUsedText || '0' }}</small></article>
             <article><span>Profit</span><strong>{{ money(view['profitSummary']?.actualProfit || 0) }}</strong><small>{{ view['profitSummary']?.profitMarginPct || 0 }}%</small></article>
           </div>
@@ -327,40 +324,40 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
           </div>
         </div>
         <div class="owner-metrics">
-          <article><span>Products</span><strong>{{ report['summary']?.products || 0 }}</strong><small>tracked</small></article>
-          <article><span>Staff</span><strong>{{ report['summary']?.staff || 0 }}</strong><small>accountability</small></article>
-          <article><span>Clients</span><strong>{{ report['summary']?.clients || 0 }}</strong><small>history linked</small></article>
-          <article><span>Usage cost</span><strong>{{ money(report['summary']?.usageCost || 0) }}</strong><small>client + exceptions</small></article>
-          <article><span>Waste cost</span><strong>{{ money(report['summary']?.exceptionCost || 0) }}</strong><small>waste/adjustment</small></article>
+          <article><span>Products</span><strong>{{ report['summary']?.products || 0 }}</strong></article>
+          <article><span>Staff</span><strong>{{ report['summary']?.staff || 0 }}</strong></article>
+          <article><span>Clients</span><strong>{{ report['summary']?.clients || 0 }}</strong></article>
+          <article><span>Usage cost</span><strong>{{ money(report['summary']?.usageCost || 0) }}</strong></article>
+          <article><span>Waste cost</span><strong>{{ money(report['summary']?.exceptionCost || 0) }}</strong></article>
         </div>
         <div class="owner-metrics">
-          <article><span>Variance</span><strong>{{ report['summary']?.varianceRows || 0 }}</strong><small>expected vs actual</small></article>
-          <article><span>Open-age risk</span><strong>{{ report['summary']?.containerRisks || 0 }}</strong><small>old/low/expiry</small></article>
-          <article><span>Leakage risk</span><strong>{{ report['summary']?.leakageRisks || 0 }}</strong><small>stock mismatch</small></article>
-          <article><span>Approvals</span><strong>{{ report['summary']?.pendingApprovals || 0 }}</strong><small>pending</small></article>
-          <article><span>Alerts</span><strong>{{ report['summary']?.alerts || 0 }}</strong><small>open</small></article>
+          <article><span>Variance</span><strong>{{ report['summary']?.varianceRows || 0 }}</strong></article>
+          <article><span>Open-age risk</span><strong>{{ report['summary']?.containerRisks || 0 }}</strong></article>
+          <article><span>Leakage risk</span><strong>{{ report['summary']?.leakageRisks || 0 }}</strong></article>
+          <article><span>Approvals</span><strong>{{ report['summary']?.pendingApprovals || 0 }}</strong></article>
+          <article><span>Alerts</span><strong>{{ report['summary']?.alerts || 0 }}</strong></article>
         </div>
         <div class="owner-metrics">
-          <article><span>Pending consume</span><strong>{{ report['summary']?.pendingConsumes || 0 }}</strong><small>invoice gap</small></article>
-          <article><span>Reason gaps</span><strong>{{ report['summary']?.reasonComplianceIssues || 0 }}</strong><small>audit missing</small></article>
-          <article><span>Categories</span><strong>{{ report['summary']?.usageCategories || 0 }}</strong><small>client/waste split</small></article>
-          <article><span>Efficiency rows</span><strong>{{ report['summary']?.containerEfficiencyRows || 0 }}</strong><small>container ROI</small></article>
-          <article><span>Control score</span><strong>{{ report['summary']?.productControlScores || 0 }}</strong><small>product risk</small></article>
+          <article><span>Pending consume</span><strong>{{ report['summary']?.pendingConsumes || 0 }}</strong></article>
+          <article><span>Reason gaps</span><strong>{{ report['summary']?.reasonComplianceIssues || 0 }}</strong></article>
+          <article><span>Categories</span><strong>{{ report['summary']?.usageCategories || 0 }}</strong></article>
+          <article><span>Efficiency rows</span><strong>{{ report['summary']?.containerEfficiencyRows || 0 }}</strong></article>
+          <article><span>Control score</span><strong>{{ report['summary']?.productControlScores || 0 }}</strong></article>
         </div>
         <div class="owner-metrics">
-          <article><span>Daily trend</span><strong>{{ report['summary']?.dailyTrendRows || 0 }}</strong><small>days measured</small></article>
-          <article><span>Weekly trend</span><strong>{{ report['summary']?.weeklyTrendRows || 0 }}</strong><small>weeks measured</small></article>
-          <article><span>SLA breach</span><strong>{{ report['summary']?.approvalSlaBreaches || 0 }}</strong><small>approval aging</small></article>
-          <article><span>Stock recon</span><strong>{{ report['summary']?.stockReconciliationRows || 0 }}</strong><small>seal/open check</small></article>
-          <article><span>Recipe compliance</span><strong>{{ report['summary']?.serviceRecipeComplianceRows || 0 }}</strong><small>service control</small></article>
+          <article><span>Daily trend</span><strong>{{ report['summary']?.dailyTrendRows || 0 }}</strong></article>
+          <article><span>Weekly trend</span><strong>{{ report['summary']?.weeklyTrendRows || 0 }}</strong></article>
+          <article><span>SLA breach</span><strong>{{ report['summary']?.approvalSlaBreaches || 0 }}</strong></article>
+          <article><span>Stock recon</span><strong>{{ report['summary']?.stockReconciliationRows || 0 }}</strong></article>
+          <article><span>Recipe compliance</span><strong>{{ report['summary']?.serviceRecipeComplianceRows || 0 }}</strong></article>
         </div>
         <div class="owner-metrics">
-          <article><span>Forecast burn</span><strong>{{ report['summary']?.forecastBurnRows || 0 }}</strong><small>next 30 days</small></article>
-          <article><span>Anomalies</span><strong>{{ report['summary']?.usageAnomalies || 0 }}</strong><small>spike/waste</small></article>
-          <article><span>Expiry priority</span><strong>{{ report['summary']?.expiryPriorityRows || 0 }}</strong><small>FEFO control</small></article>
-          <article><span>Cost drift</span><strong>{{ report['summary']?.costDriftRows || 0 }}</strong><small>unit variance</small></article>
-          <article><span>Staff waste hits</span><strong>{{ report['summary']?.staffWastageRepeats || 0 }}</strong><small>owner review</small></article>
-          <article><span>Manager actions</span><strong>{{ report['summary']?.managerActions || 0 }}</strong><small>to review</small></article>
+          <article><span>Forecast burn</span><strong>{{ report['summary']?.forecastBurnRows || 0 }}</strong></article>
+          <article><span>Anomalies</span><strong>{{ report['summary']?.usageAnomalies || 0 }}</strong></article>
+          <article><span>Expiry priority</span><strong>{{ report['summary']?.expiryPriorityRows || 0 }}</strong></article>
+          <article><span>Cost drift</span><strong>{{ report['summary']?.costDriftRows || 0 }}</strong></article>
+          <article><span>Staff waste hits</span><strong>{{ report['summary']?.staffWastageRepeats || 0 }}</strong></article>
+          <article><span>Manager actions</span><strong>{{ report['summary']?.managerActions || 0 }}</strong></article>
         </div>
         <div class="report-grid">
           <div class="report-table">
@@ -707,7 +704,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             <span class="eyebrow">Staff usage audit</span>
             <h3>Product consume accountability</h3>
           </div>
-          <small>Confirmed invoice consume lines plus backbar exceptions.</small>
         </div>
         <div class="audit-filters">
           <label><span>Branch</span><input [(ngModel)]="auditFilters.branchId" placeholder="Branch ID"></label>
@@ -723,11 +719,11 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
           <button type="button" class="ghost" (click)="loadStaffUsageAudit()">Refresh audit</button>
         </div>
         <div class="owner-metrics">
-          <article><span>Staff</span><strong>{{ audit['summary']?.staffCount || 0 }}</strong><small>with usage</small></article>
-          <article><span>Consume lines</span><strong>{{ audit['summary']?.totalProductLines || 0 }}</strong><small>confirmed invoices</small></article>
-          <article><span>Usage value</span><strong>{{ money(audit['summary']?.totalUsageCost || 0) }}</strong><small>product cost</small></article>
-          <article><span>Adjustments</span><strong>{{ audit['summary']?.adjustmentCount || 0 }}</strong><small>waste/spill/manual</small></article>
-          <article><span>Exceptions</span><strong>{{ audit['summary']?.exceptionCount || 0 }}</strong><small>owner review</small></article>
+          <article><span>Staff</span><strong>{{ audit['summary']?.staffCount || 0 }}</strong></article>
+          <article><span>Consume lines</span><strong>{{ audit['summary']?.totalProductLines || 0 }}</strong></article>
+          <article><span>Usage value</span><strong>{{ money(audit['summary']?.totalUsageCost || 0) }}</strong></article>
+          <article><span>Adjustments</span><strong>{{ audit['summary']?.adjustmentCount || 0 }}</strong></article>
+          <article><span>Exceptions</span><strong>{{ audit['summary']?.exceptionCount || 0 }}</strong></article>
         </div>
         <div class="audit-layout">
           <div class="audit-table" *ngIf="staffAuditRows().length; else noStaffAudit">
@@ -743,7 +739,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             </div>
           </div>
           <ng-template #noStaffAudit>
-            <p class="ledger-empty">Confirmed consume ke baad staff-wise product usage yahan dikhega.</p>
           </ng-template>
           <div class="audit-feed">
             <h4>Recent usage</h4>
@@ -848,7 +843,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
                 <span class="eyebrow">Backbar control</span>
                 <h3>Open container ledger</h3>
               </div>
-              <small>Tube, bottle, jar aur can pehle zero honge, phir next container open hoga.</small>
             </div>
             <div class="container-scan">
               <div>
@@ -930,7 +924,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
                 </div>
               </div>
               <ng-template #noLedgerHistory>
-                <p class="ledger-empty">Confirm consume ke baad client-wise container history yahan dikhegi.</p>
               </ng-template>
             </article>
           </section>

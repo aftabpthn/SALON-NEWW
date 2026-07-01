@@ -13,16 +13,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Device Sync Health</h2>
-          <p>Track branch tablets, POS terminals and mobile devices from offline queue and cache activity.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="metrics-grid" *ngIf="status()?.metrics as metrics">
-        <article class="metric-card"><span>Devices</span><strong>{{ metrics.devices || 0 }}</strong><small>Known offline-capable devices</small></article>
-        <article class="metric-card"><span>Ready</span><strong>{{ metrics.ready || 0 }}</strong><small>Cache and sync clear</small></article>
-        <article class="metric-card"><span>Pending</span><strong>{{ metrics.pending || 0 }}</strong><small>Queue retry needed</small></article>
-        <article class="metric-card"><span>Blocked</span><strong>{{ metrics.blocked || 0 }}</strong><small>Conflict review needed</small></article>
+        <article class="metric-card"><span>Devices</span><strong>{{ metrics.devices || 0 }}</strong></article>
+        <article class="metric-card"><span>Ready</span><strong>{{ metrics.ready || 0 }}</strong></article>
+        <article class="metric-card"><span>Pending</span><strong>{{ metrics.pending || 0 }}</strong></article>
+        <article class="metric-card"><span>Blocked</span><strong>{{ metrics.blocked || 0 }}</strong></article>
       </div>
       <section class="panel">
         <div class="section-title">

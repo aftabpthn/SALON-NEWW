@@ -79,7 +79,6 @@ const workspaceSummary = [
         <div>
           <span>Staff OS</span>
           <h1>Staff Salary Workspace</h1>
-          <p>All live pages needed for salary generation are connected in one place.</p>
         </div>
         <a routerLink="/staff-os/salary-generate">Open Salary Generate</a>
       </header>
@@ -113,7 +112,6 @@ const workspaceSummary = [
           <div>
             <span>Offline staff sync</span>
             <strong>{{ mobileConflicts().length }}</strong>
-            <small>Open mobile conflicts needing manager decision</small>
           </div>
           <a routerLink="/staff-os/mobile-preview">Open mobile</a>
         </article>
@@ -121,7 +119,6 @@ const workspaceSummary = [
           <div>
             <span>Payroll control</span>
             <strong>{{ advancedReadiness() }}%</strong>
-            <small>Compliance, risk and offline sync visibility</small>
           </div>
           <button type="button" (click)="loadAdvanced()">Refresh</button>
         </article>

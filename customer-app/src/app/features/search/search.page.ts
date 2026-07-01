@@ -155,7 +155,6 @@ interface ProfessionalResult {
                     <div class="range-label-row">
                       <span>Within <strong>{{ draftRadiusKm() }} km</strong></span>
                       @if (!location()) {
-                        <small class="range-location-hint">Enable location to filter by distance</small>
                       }
                     </div>
                     <input type="range" min="3" max="50" step="1" [value]="draftRadiusKm()" [disabled]="!location()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
@@ -242,7 +241,6 @@ interface ProfessionalResult {
               <section class="aura-map-card premium-card" [class.fullscreen-map]="mapFullscreen()" aria-label="Live salon map">
                 <div class="map-copy">
                   <div>
-                    <p class="eyebrow">Live map</p>
                     <h2>{{ mapPins().length }} mapped choices</h2>
                   </div>
                   <div class="map-actions">
@@ -338,7 +336,7 @@ interface ProfessionalResult {
             }
 
             @if (marketplace.loading()) {
-              <section class="empty premium-card"><h2>Searching live marketplace</h2><p class="muted">Fetching current business results.</p></section>
+              <section class="empty premium-card"><h2>Searching live marketplace</h2></section>
             }
             @if (marketplace.error()) {
               <section class="empty premium-card error"><h2>Search failed</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="executeSearch()">Retry</ion-button></section>
@@ -367,7 +365,6 @@ interface ProfessionalResult {
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No professionals yet</h2>
-                    <p class="muted">Try changing filters, search terms, or location.</p>
                     <ion-button class="primary-gradient" (click)="reset()">Reset search</ion-button>
                   </section>
                 }
@@ -384,7 +381,6 @@ interface ProfessionalResult {
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No matches yet</h2>
-                    <p class="muted">Try searching by salon name, service, area, or remove one of the filters.</p>
                     <ion-button class="primary-gradient" (click)="reset()">Reset search</ion-button>
                   </section>
                 }

@@ -223,7 +223,6 @@ const RESOURCE_GROUPS = [
         <div>
           <span class="eyebrow">Owner command · User management</span>
           <h2>Advanced users, roles and rights control</h2>
-          <p>Owner can manage who enters the SaaS, which branches they can access, and exactly which modules are available through the role rights matrix.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="newUser()">New user</button>
@@ -235,12 +234,12 @@ const RESOURCE_GROUPS = [
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="um-kpis">
-        <article><span>Total users</span><strong>{{ metrics().users || 0 }}</strong><small class="um-muted">Tenant accounts</small></article>
-        <article><span>Active</span><strong>{{ metrics().activeUsers || 0 }}</strong><small class="um-muted">Can sign in</small></article>
-        <article><span>Owners/Admins</span><strong>{{ metrics().ownerUsers || 0 }}</strong><small class="um-muted">Full control</small></article>
-        <article><span>Locked</span><strong>{{ metrics().lockedUsers || 0 }}</strong><small class="um-muted">Needs review</small></article>
-        <article><span>Roles</span><strong>{{ roles().length }}</strong><small class="um-muted">System + custom</small></article>
-        <article><span>Modules</span><strong>{{ resourceCount() }}</strong><small class="um-muted">Rights surface</small></article>
+        <article><span>Total users</span><strong>{{ metrics().users || 0 }}</strong></article>
+        <article><span>Active</span><strong>{{ metrics().activeUsers || 0 }}</strong></article>
+        <article><span>Owners/Admins</span><strong>{{ metrics().ownerUsers || 0 }}</strong></article>
+        <article><span>Locked</span><strong>{{ metrics().lockedUsers || 0 }}</strong></article>
+        <article><span>Roles</span><strong>{{ roles().length }}</strong></article>
+        <article><span>Modules</span><strong>{{ resourceCount() }}</strong></article>
       </div>
 
       <section class="um-shell">

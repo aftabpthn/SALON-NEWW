@@ -8,7 +8,6 @@ import { Component, Input } from '@angular/core';
   template: `
     <section class="billing-panel">
       <h3>Tax breakdown</h3>
-      <p>CGST + SGST / IGST export-ready calculation.</p>
       <p>Total tax: {{ taxTotal | currency:'INR' }}</p>
     </section>
   `

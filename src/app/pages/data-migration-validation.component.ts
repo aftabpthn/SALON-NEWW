@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>Validation &amp; Reconciliation</h1>
-          <p>Reconcile records, verify accuracy</p>
         </div>
       </header>
 

@@ -232,7 +232,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
             </article>
             <article class="panel advisor">
               <h2>What this means</h2>
-              <p class="muted small">Numbers ko plain action me badla — sabse zaroori sabse upar.</p>
               <div class="insight" *ngFor="let i of insights()" [attr.data-sev]="i.severity">
                 <strong>{{ i.title }}</strong><span>{{ i.text }}</span>
               </div>
@@ -567,7 +566,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
           <section class="split ledger-master-grid">
             <article class="panel">
               <div class="panel-head"><h2>Auto ledger grouping</h2><span class="muted small">Tally-style master engine</span></div>
-              <p class="muted small">Type a ledger name. The system will suggest group, side, hint and confidence. Manual override is also available.</p>
               <div class="form-col">
                 <label><span>Ledger name</span><input placeholder="e.g. Salary, Furniture, Cash at Bank" [ngModel]="ledgerDraftName()" (ngModelChange)="onLedgerDraftName($event)" /></label>
                 <label><span>Suggested group</span>
@@ -691,7 +689,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
               <div class="panel-head">
                 <div>
                   <h2>Manual live entry</h2>
-                  <p class="muted small">Rent, salary, opening balance aur custom journal post hote hi Balance Sheet refresh hoti hai.</p>
                 </div>
                 <button class="ghost" type="button" [disabled]="busy()" (click)="reopenSelectedPeriod()">Unlock {{ asOfDate().slice(0, 7) }}</button>
               </div>
@@ -742,7 +739,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
               <div class="panel-head">
                 <div>
                   <h2>Add fixed asset</h2>
-                  <p class="muted small">Asset save karte hi Dr Fixed Assets / Cr Cash-Bank-Payable journal post hota hai.</p>
                 </div>
               </div>
               <div class="manual-grid">
@@ -777,7 +773,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
           <section class="split" *ngIf="costs() as c">
             <article class="panel">
               <h2>Break-even</h2>
-              <p class="muted small">Minimum monthly revenue needed to cover costs.</p>
               <div class="metric"><span>Break-even revenue</span><strong>{{ c.breakEvenRevenue === null ? '—' : fmt(c.breakEvenRevenue) }}</strong></div>
               <div class="metric"><span>Break-even clients / month</span><strong>{{ c.breakEvenClients ?? '—' }}</strong></div>
               <div class="metric"><span>Margin of safety</span><strong>{{ c.marginOfSafetyPct === null ? '—' : (c.marginOfSafetyPct + '%') }}</strong></div>
@@ -813,7 +808,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
         <ng-container *ngSwitchCase="'simulator'">
           <section class="panel">
             <div class="panel-head"><h2>Profit simulator</h2><button class="ghost" type="button" (click)="resetSim()">Reset</button></div>
-            <p class="muted small">Run a "what-if" on today's numbers. Nothing is saved; this is only a preview.</p>
             <div class="sliders">
               <label class="sl"><span>Price uplift <b>{{ simPrice() }}%</b></span><input type="range" min="-30" max="50" [ngModel]="simPrice()" (ngModelChange)="simPrice.set(+$event)" /></label>
               <label class="sl"><span>Footfall change <b>{{ simVolume() }}%</b></span><input type="range" min="-50" max="100" [ngModel]="simVolume()" (ngModelChange)="simVolume.set(+$event)" /></label>
@@ -843,7 +837,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
         <ng-container *ngSwitchCase="'drilldown'">
           <section class="panel">
             <div class="panel-head"><h2>Tally Prime style drill down</h2><span class="muted small">Group → Ledger → Voucher</span></div>
-            <p class="muted small">Click any group. Clicking a ledger opens original postings in the ledger tab.</p>
             <div class="drill-tree" *ngIf="drillTree() as tree">
               <ng-container *ngFor="let n of tree">
                 <button type="button" class="drill-row" [style.paddingLeft.px]="n.level * 18 + 12" (click)="onDrill(n)">
@@ -879,7 +872,6 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
             <article class="panel">
               <h2>Asset funding mix</h2>
               <div class="donut" [style.background]="donutGradient()"><span>{{ executiveDashboard()?.equitySharePct }}%</span></div>
-              <p class="muted small">Center number equity funding share hai. High equity share matlab risk kam.</p>
             </article>
           </section>
         </ng-container>

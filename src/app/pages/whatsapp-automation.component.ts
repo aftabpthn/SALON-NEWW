@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <div class="page-heading">
         <div>
           <h1>WhatsApp automation engine</h1>
-          <p>WhatsApp &gt; Auto replies, reminders, broadcasts, lead qualification and human handoff</p>
         </div>
         <label class="search-field">
           <span>Search threads</span>
@@ -24,14 +23,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metric-strip" *ngIf="summary() as summary">
-        <article><span>Open threads</span><strong>{{ summary.openThreads }}</strong><small>Active WhatsApp conversations</small></article>
-        <article><span>Human handoffs</span><strong>{{ summary.activeHandoffs }}</strong><small>Needs front-desk attention</small></article>
-        <article><span>Hot leads</span><strong>{{ summary.hotLeads }}</strong><small>Lead score 70+</small></article>
-        <article><span>Auto replies</span><strong>{{ summary.autoRepliesToday }}</strong><small>Sent today</small></article>
-        <article><span>Broadcasts</span><strong>{{ summary.broadcastsToday }}</strong><small>Campaign messages today</small></article>
-        <article><span>Outbound queue</span><strong>{{ summary.pendingOutbound }}</strong><small>Queued WhatsApp messages</small></article>
-        <article><span>Rules active</span><strong>{{ summary.rulesActive }}</strong><small>Automation rules</small></article>
-        <article><span>Threads stored</span><strong>{{ threads().length }}</strong><small>Persisted conversations</small></article>
+        <article><span>Open threads</span><strong>{{ summary.openThreads }}</strong></article>
+        <article><span>Human handoffs</span><strong>{{ summary.activeHandoffs }}</strong></article>
+        <article><span>Hot leads</span><strong>{{ summary.hotLeads }}</strong></article>
+        <article><span>Auto replies</span><strong>{{ summary.autoRepliesToday }}</strong></article>
+        <article><span>Broadcasts</span><strong>{{ summary.broadcastsToday }}</strong></article>
+        <article><span>Outbound queue</span><strong>{{ summary.pendingOutbound }}</strong></article>
+        <article><span>Rules active</span><strong>{{ summary.rulesActive }}</strong></article>
+        <article><span>Threads stored</span><strong>{{ threads().length }}</strong></article>
       </div>
 
       <div class="ai-layout" *ngIf="!loading()">

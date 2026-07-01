@@ -30,7 +30,6 @@ type StaffModuleGroup = {
         <div>
           <span class="eyebrow">Staff command links</span>
           <h2>Connected modules</h2>
-          <p>Real staff data links across Employee Masters, Attendance, Leave, Shift, Payroll, Commission, Appointment, POS, Reports and Dashboard.</p>
         </div>
         <a class="ghost-button" routerLink="/staff">Back to staff directory</a>
       </section>
@@ -55,22 +54,18 @@ type StaffModuleGroup = {
           <article>
             <span>Active staff</span>
             <strong>{{ summary.metrics.staffCount }}</strong>
-            <small>Employee master directory</small>
           </article>
           <article>
             <span>Bookings</span>
             <strong>{{ countFor('appointments') }}</strong>
-            <small>Appointment handoff</small>
           </article>
           <article>
             <span>Sales</span>
             <strong>{{ summary.metrics.totalRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>POS staff attribution</small>
           </article>
           <article>
             <span>Payroll rows</span>
             <strong>{{ countFor('payroll') }}</strong>
-            <small>Payroll preview</small>
           </article>
           <article>
             <span>Commission</span>

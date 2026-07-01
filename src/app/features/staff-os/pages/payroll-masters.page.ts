@@ -28,7 +28,6 @@ type PenaltyPreviewRow = {
     <section class="definition-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Employee Masters</p>
           <h1>{{ kind === 'fine' ? 'Fines / Penalty Definition' : 'Allowance / Deduction Master' }}</h1>
         </div>
         <div class="topbar-actions">
@@ -118,7 +117,6 @@ type PenaltyPreviewRow = {
       <section class="live-panel" *ngIf="kind === 'fine'">
         <div class="live-head">
           <div>
-            <p class="eyebrow">Live Rule Breaks</p>
             <h2>Salary deduction monitor</h2>
           </div>
           <div class="topbar-actions">
@@ -600,7 +598,6 @@ export class AllowanceDeductionPage {}
     <section class="payroll-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Employee Masters</p>
           <h1>Payroll Salary Structure</h1>
         </div>
         <div class="topbar-actions">

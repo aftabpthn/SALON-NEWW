@@ -27,7 +27,6 @@ type StaffSelfDashboard = {
       <section class="page-title">
         <div>
           <h1>My Work</h1>
-          <p>Staff &gt; Live appointments and own work report</p>
         </div>
         <strong>{{ staffName() }}</strong>
       </section>
@@ -60,16 +59,15 @@ type StaffSelfDashboard = {
 
       <ng-container *ngIf="dashboard() as data">
         <section class="metrics">
-          <article><span>Live now</span><strong>{{ data.summary.liveAppointments || 0 }}</strong><small>active bookings</small></article>
-          <article><span>Today</span><strong>{{ data.summary.todayAppointments || 0 }}</strong><small>appointments</small></article>
-          <article><span>Completed</span><strong>{{ data.summary.completedAppointments || 0 }}</strong><small>services done</small></article>
+          <article><span>Live now</span><strong>{{ data.summary.liveAppointments || 0 }}</strong></article>
+          <article><span>Today</span><strong>{{ data.summary.todayAppointments || 0 }}</strong></article>
+          <article><span>Completed</span><strong>{{ data.summary.completedAppointments || 0 }}</strong></article>
           <article><span>Sales</span><strong>{{ data.summary.revenue || 0 | currency:'INR':'symbol-narrow':'1.0-0' }}</strong><small>{{ data.summary.salesCount || 0 }} bills</small></article>
         </section>
 
         <section class="register-panel">
           <header class="register-heading">
             <div>
-              <p class="eyebrow">Live appointments</p>
               <h2>Today queue</h2>
             </div>
             <span>{{ data.range.date }}</span>
@@ -96,7 +94,6 @@ type StaffSelfDashboard = {
         <section class="register-panel">
           <header class="register-heading">
             <div>
-              <p class="eyebrow">Own work report</p>
               <h2>Completed work</h2>
             </div>
             <span>{{ data.workReport.length }} rows</span>
@@ -122,7 +119,6 @@ type StaffSelfDashboard = {
         <section class="register-panel">
           <header class="register-heading">
             <div>
-              <p class="eyebrow">All appointments</p>
               <h2>Staff-only booking history</h2>
             </div>
             <span>{{ data.appointments.length }} bookings</span>

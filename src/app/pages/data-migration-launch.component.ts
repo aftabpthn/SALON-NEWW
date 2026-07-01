@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>Launch Migration</h1>
-          <p>Select source and resources, upload data, configure mapping</p>
         </div>
       </header>
 

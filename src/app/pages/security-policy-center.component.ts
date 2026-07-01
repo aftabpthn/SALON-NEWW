@@ -22,11 +22,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <div class="metric-strip">
-        <article><span>Device trust</span><strong>{{ enabledLabel('deviceTrustEnabled') }}</strong><small>Known browser/device layer</small></article>
-        <article><span>PIN re-auth</span><strong>{{ enabledLabel('securityPinRequiredForRefund') }}</strong><small>Manager action protection</small></article>
-        <article><span>Export guard</span><strong>{{ enabledLabel('exportProtectionEnabled') }}</strong><small>Download/export monitoring</small></article>
+        <article><span>Device trust</span><strong>{{ enabledLabel('deviceTrustEnabled') }}</strong></article>
+        <article><span>PIN re-auth</span><strong>{{ enabledLabel('securityPinRequiredForRefund') }}</strong></article>
+        <article><span>Export guard</span><strong>{{ enabledLabel('exportProtectionEnabled') }}</strong></article>
         <article><span>Risk score</span><strong>{{ latestRisk()?.riskScore ?? 0 }}</strong><small>{{ latestRisk()?.riskLevel || 'No signal' }}</small></article>
-        <article><span>Access devices</span><strong>{{ managedDevices().devices?.length || 0 }}</strong><small>Device control</small></article>
+        <article><span>Access devices</span><strong>{{ managedDevices().devices?.length || 0 }}</strong></article>
         <article><span>Compliance</span><strong>{{ complianceReadiness()?.score || 0 }}%</strong><small>{{ complianceReadiness()?.status || 'Not checked' }}</small></article>
       </div>
 
@@ -34,7 +34,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>SOC2 / ISO Readiness</h2>
-            <p>Enterprise-sale evidence for 2FA, SSO, encryption-at-rest readiness and immutable audit controls.</p>
           </div>
           <div class="inline-row">
             <button class="ghost-button" type="button" (click)="loadComplianceReadiness()">Refresh readiness</button>
@@ -43,7 +42,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
         <div class="quick-grid" *ngIf="complianceReadiness() as readiness">
           <article class="action-card score-card">
-            <small>Compliance score</small>
             <strong>{{ readiness.score || 0 }}%</strong>
             <span>{{ readiness.status }} · {{ readiness.scoreBreakdown?.ready || 0 }} ready / {{ readiness.scoreBreakdown?.total || 0 }} controls</span>
           </article>
@@ -54,12 +52,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span class="badge">{{ control.status }}</span>
           </article>
           <article class="action-card">
-            <small>Immutable evidence hash</small>
             <strong>{{ readiness.evidence?.immutableAuditHash?.slice(0, 16) || '-' }}</strong>
             <span>{{ readiness.evidence?.evidenceRows || 0 }} audit rows sampled for chain evidence.</span>
           </article>
           <article class="action-card">
-            <small>Export protection</small>
             <strong>{{ readiness.evidence?.exportProtectionReady ? 'Ready' : 'Gap' }}</strong>
             <span>Evidence bundle: {{ readiness.evidence?.exportBundleId || '-' }}</span>
           </article>
@@ -73,7 +69,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
         <div class="evidence-export" *ngIf="evidenceExport() as evidence">
           <div>
-            <small>Audit evidence export</small>
             <strong>{{ evidence.bundleId }}</strong>
             <span>{{ evidence.framework?.join(', ') }} · {{ evidence.generatedAt | date: 'short' }}</span>
           </div>
@@ -85,7 +80,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Policy controls</h2>
-            <p>Changes apply tenant-wide unless branch scope is active.</p>
           </div>
           <button class="primary-button" type="button" (click)="savePolicies()">Save policies</button>
         </div>
@@ -120,7 +114,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Manage Access & Devices</h2>
-            <p>Review active devices/sessions, sign out one device, or sign out all devices for a user.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadNetflixPack()">Refresh access</button>
         </div>
@@ -149,18 +142,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Subscription Guard + Anti Sharing</h2>
-            <p>Premium modules can lock on expired plans, and multi-device/branch account sharing can be flagged.</p>
           </div>
           <button class="ghost-button" type="button" (click)="evaluateAccountSharing()">Evaluate sharing</button>
         </div>
         <div class="quick-grid">
           <article class="action-card">
-            <small>Subscription Guard</small>
             <strong>{{ subscriptionEvents().length || 0 }} events</strong>
             <span>Reports/export/AI premium paths are guarded when subscription status is expired or suspended.</span>
           </article>
           <article class="action-card">
-            <small>Anti Account Sharing</small>
             <strong>{{ sharingEvents().length || 0 }} signals</strong>
             <span>Flags same account across many devices or branches.</span>
           </article>
@@ -171,7 +161,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Fraud Warning Center</h2>
-            <p>Client-visible safety messaging for OTP, password, payment links and phishing risk.</p>
           </div>
           <button class="primary-button" type="button" (click)="saveFraudWarning()">Add warning</button>
         </div>
@@ -193,7 +182,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Responsible Disclosure / Bug Report</h2>
-            <p>Professional channel for reporting security issues without public disclosure.</p>
           </div>
           <button class="primary-button" type="button" (click)="createDisclosureReport()">Submit report</button>
         </div>
@@ -223,37 +211,31 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Zenoti-Style Enterprise Pack</h2>
-            <p>SSO readiness, privileged sessions, API governance, payment guard and privacy request controls.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadZenotiPack()">Refresh pack</button>
         </div>
         <div class="quick-grid">
           <article class="action-card">
-            <small>SSO Readiness</small>
             <strong>{{ ssoSettings().length || 0 }} settings</strong>
             <span>SAML/OIDC provider policy placeholder for owner/admin roles.</span>
             <button class="ghost-button mini" type="button" (click)="saveSsoSetting()">Save draft</button>
           </article>
           <article class="action-card">
-            <small>Privileged Session</small>
             <strong>{{ privilegedSessions().length || 0 }} sessions</strong>
             <span>Temporary elevated-action window for sensitive admin work.</span>
             <button class="ghost-button mini" type="button" (click)="startPrivilegedSession()">Start 15 min</button>
           </article>
           <article class="action-card">
-            <small>API Governance</small>
             <strong>{{ apiClients().length || 0 }} clients</strong>
             <span>Register API clients with hashed tokens and revocation support.</span>
             <button class="ghost-button mini" type="button" (click)="createApiClient()">Create client</button>
           </article>
           <article class="action-card">
-            <small>Payment Guard</small>
             <strong>{{ paymentGuardEvents().length || 0 }} events</strong>
             <span>Track payment data access and suspicious refund/payment events.</span>
             <button class="ghost-button mini" type="button" (click)="recordPaymentGuard()">Record event</button>
           </article>
           <article class="action-card">
-            <small>Privacy Governance</small>
             <strong>{{ privacyRequests().length || 0 }} requests</strong>
             <span>Track access/export/delete privacy requests for clients.</span>
             <button class="ghost-button mini" type="button" (click)="createPrivacyRequest()">Create request</button>
@@ -265,7 +247,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Risk Scoring Engine</h2>
-            <p>Evaluates current session against device, IP, alert and sensitive-route signals.</p>
           </div>
           <button class="ghost-button" type="button" (click)="evaluateRisk()">Evaluate now</button>
         </div>
@@ -290,7 +271,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Sensitive Action Approval</h2>
-            <p>Create approval queue entries for refunds, exports, high discounts and admin overrides.</p>
           </div>
           <button class="primary-button" type="button" (click)="createApproval()">Create request</button>
         </div>
@@ -323,7 +303,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>IP Access Rules</h2>
-            <p>Watch or deny suspicious IPs without changing the main blocklist flow.</p>
           </div>
           <button class="primary-button" type="button" (click)="createAccessRule()">Add rule</button>
         </div>
@@ -354,7 +333,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Data Masking Policy</h2>
-            <p>Define fields that should be partially or fully masked for restricted roles.</p>
           </div>
           <button class="primary-button" type="button" (click)="saveMask()">Save mask</button>
         </div>
@@ -395,7 +373,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="section-title">
           <div>
             <h2>Device Trust Layer</h2>
-            <p>Observe current browser/device, then trust or revoke devices after review.</p>
           </div>
           <button class="ghost-button" type="button" (click)="observeDevice()">Observe this device</button>
         </div>

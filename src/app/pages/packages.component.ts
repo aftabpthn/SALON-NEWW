@@ -141,7 +141,6 @@ type RedemptionLine = {
             <button class="icon-button" type="button" (click)="resetForm()">×</button>
             <h2>{{ form.id ? 'Update Package' : 'Add New Package' }}</h2>
           </div>
-          <p class="drawer-help">Generate diverse packages by including names, offer prices, and the number of services and sessions associated with each package.</p>
 
           <input class="drawer-input" [(ngModel)]="form.name" placeholder="Package Name" />
           <select class="drawer-input" [ngModel]="serviceToAdd" (ngModelChange)="addServiceLine($event)">

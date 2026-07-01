@@ -54,7 +54,6 @@ const DEFAULT_FIELDS: ClientCustomField[] = [
           <div>
             <span class="eyebrow">Setup / Clients</span>
             <h1>Clients - Custom Form</h1>
-            <p>This is where you can create custom forms. You can specify the information you need from your customers to maintain records for a particular client.</p>
           </div>
           <div class="hero-actions">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -70,7 +69,6 @@ const DEFAULT_FIELDS: ClientCustomField[] = [
         <section class="settings-section">
           <div class="section-intro">
             <h2>Client form fields</h2>
-            <p>Control which fields appear in client records and online booking.</p>
           </div>
 
           <div class="form-table-wrap">

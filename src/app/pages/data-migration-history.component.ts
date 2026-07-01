@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>History &amp; Rollback</h1>
-          <p>View past migrations and recovery options</p>
         </div>
         <div class="score-card">
           <span>Jobs</span>

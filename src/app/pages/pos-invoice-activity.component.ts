@@ -241,7 +241,6 @@ interface InvoiceActivityRow {
         <div>
           <span class="eyebrow">POS / invoice activity</span>
           <h2>Invoice Audit Center</h2>
-          <p>Edited, deleted, restored and payment-updated invoice activity with smart risk detection.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/pos/invoices">Back to invoices</a>
@@ -261,32 +260,26 @@ interface InvoiceActivityRow {
         <article class="metric-card blue">
           <span>Edited invoices</span>
           <strong>{{ count('edited') }}</strong>
-          <small>Corrected invoice records</small>
         </article>
         <article class="metric-card red">
           <span>Deleted invoices</span>
           <strong>{{ count('deleted') }}</strong>
-          <small>Soft-deleted invoice records</small>
         </article>
         <article class="metric-card amber">
           <span>Payment updates</span>
           <strong>{{ count('payment_updated') }}</strong>
-          <small>Paid, due or mode changes</small>
         </article>
         <article class="metric-card teal">
           <span>Restored invoices</span>
           <strong>{{ count('restored') }}</strong>
-          <small>Recovered into live register</small>
         </article>
         <article class="metric-card amber">
           <span>Pending approvals</span>
           <strong>{{ pendingApprovalCount() }}</strong>
-          <small>Manager decision required</small>
         </article>
         <article class="metric-card red">
           <span>High-risk activities</span>
           <strong>{{ highRiskCount() }}</strong>
-          <small>Review recommended</small>
         </article>
       </div>
 
@@ -415,17 +408,14 @@ interface InvoiceActivityRow {
               <article>
                 <span>Edit/delete</span>
                 <strong>{{ report.summary?.edits || 0 }} / {{ report.summary?.deletions || 0 }}</strong>
-                <small>Daily correction control</small>
               </article>
               <article>
                 <span>Restored</span>
                 <strong>{{ report.summary?.restorations || 0 }}</strong>
-                <small>Recovered invoices</small>
               </article>
               <article>
                 <span>Payments</span>
                 <strong>{{ report.summary?.paymentUpdates || 0 }}</strong>
-                <small>Cash, card and UPI adjustments</small>
               </article>
               <article>
                 <span>Risk</span>
@@ -804,12 +794,10 @@ interface InvoiceActivityRow {
               <article>
                 <span>Original total</span>
                 <strong>{{ currency(selected.financeImpact.originalTotal) }}</strong>
-                <small>Before activity</small>
               </article>
               <article>
                 <span>Updated total</span>
                 <strong>{{ currency(selected.financeImpact.updatedTotal) }}</strong>
-                <small>After activity</small>
               </article>
               <article>
                 <span>Amount difference</span>
@@ -824,12 +812,10 @@ interface InvoiceActivityRow {
               <article>
                 <span>GST difference</span>
                 <strong>{{ signedCurrency(selected.financeImpact.gstDifference) }}</strong>
-                <small>Tax impact</small>
               </article>
               <article>
                 <span>Due difference</span>
                 <strong>{{ signedCurrency(selected.financeImpact.dueDifference) }}</strong>
-                <small>Client unpaid balance impact</small>
               </article>
               <article>
                 <span>Wallet impact</span>
@@ -839,7 +825,6 @@ interface InvoiceActivityRow {
               <article class="span-2">
                 <span>Stock impact</span>
                 <strong>{{ selected.financeImpact.stockImpact }}</strong>
-                <small>Inventory audit signal</small>
               </article>
             </div>
           </section>
@@ -881,7 +866,6 @@ interface InvoiceActivityRow {
               <article>
                 <span>Action time</span>
                 <strong>{{ formatDateTime(selected.auditTimestamp || selected.actionTime) }}</strong>
-                <small>Immutable audit event</small>
               </article>
               <article>
                 <span>Branch</span>

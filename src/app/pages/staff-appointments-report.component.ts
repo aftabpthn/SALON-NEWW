@@ -23,7 +23,6 @@ type StaffAppointmentsReport = {
         <div>
           <span class="eyebrow">Reports / Appointments</span>
           <h2>Appointment Booked By Staff</h2>
-          <p>Staff-wise appointment count, appointment price and completion quality for the selected date range.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
@@ -45,7 +44,6 @@ type StaffAppointmentsReport = {
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="runReport()">Run Report</button>
       </section>
@@ -57,17 +55,14 @@ type StaffAppointmentsReport = {
           <article class="metric-card">
             <span>Staff</span>
             <strong>{{ numberValue(data.summary.staffCount) }}</strong>
-            <small>All staff in branch</small>
           </article>
           <article class="metric-card">
             <span>Appointment Count</span>
             <strong>{{ numberValue(data.summary.totalAppointments) }}</strong>
-            <small>Booked appointments</small>
           </article>
           <article class="metric-card">
             <span>Appointment Price</span>
             <strong>{{ data.summary.appointmentPrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Sale or service-price total</small>
           </article>
           <article class="metric-card">
             <span>Active Staff</span>

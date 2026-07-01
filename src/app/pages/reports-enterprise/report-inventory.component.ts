@@ -64,7 +64,7 @@ import { Subscription } from 'rxjs';
     </ng-container>
 
     <div *ngIf="!loading() && !data()" class="empty-state">
-      <span class="empty-icon">📦</span><strong>No inventory data</strong><small>Select filters to view inventory reports.</small>
+      <span class="empty-icon">📦</span><strong>No inventory data</strong>
     </div>
 
     <ng-template #skeleton>

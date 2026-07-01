@@ -75,7 +75,6 @@ type MoneyFlowCheck = {
         <div class="hero-copy">
           <span class="eyebrow">Core Money Flow</span>
           <h1>100% readiness control</h1>
-          <p class="sub">POS sale se balance sheet tak har money event ka invoice, payment, ledger, day-close aur GL proof yahan track hota hai.</p>
         </div>
         <div class="hero-actions">
           <input type="date" [ngModel]="asOfDate()" (ngModelChange)="asOfDate.set($event); load()" />

@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>Migration Assistant</h1>
-          <p>Guided step-by-step walkthrough</p>
         </div>
       </header>
 

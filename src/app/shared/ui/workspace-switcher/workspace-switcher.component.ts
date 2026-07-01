@@ -37,7 +37,6 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
         <button class="wsw-btn" type="button" [class.is-open]="panel() === 'branch'" (click)="toggle('branch')" title="Switch branch">
           <span class="wsw-btn-icon" aria-hidden="true">⌂</span>
           <span class="wsw-btn-copy">
-            <small>Branch</small>
             <strong>{{ branchLabel() }}</strong>
           </span>
           <span class="wsw-chevron" aria-hidden="true">▾</span>

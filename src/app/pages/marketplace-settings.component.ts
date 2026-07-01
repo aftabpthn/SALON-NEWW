@@ -99,7 +99,6 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <div>
             <span class="eyebrow">Setup / Reviews</span>
             <h1>Review & Marketplace Reputation Control</h1>
-            <p>Control how reviews are collected, where strong ratings are routed, and how low ratings are recovered.</p>
           </div>
           <div class="hero-actions">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -111,7 +110,6 @@ const DEFAULT_SUMMARY: ReputationSummary = {
 
         <p class="state success" *ngIf="message()">{{ message() }}</p>
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
-        <p class="phase-note">Next phase will connect appointment-complete triggers, Google redirects, complaint tickets, and owner notifications. This page stores the control policy only.</p>
 
         <section class="dashboard-grid" aria-label="Reputation Dashboard">
           <article>
@@ -144,20 +142,19 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Review Channels</h2>
-              <p>Enable the review destinations the salon wants to use.</p>
             </div>
             <label class="switch-card">
-              <span><strong>Internal Reviews</strong><small>Collect private salon feedback.</small></span>
+              <span><strong>Internal Reviews</strong></span>
               <input type="checkbox" [(ngModel)]="settings.internalReviews" />
               <i aria-hidden="true"></i>
             </label>
             <label class="switch-card">
-              <span><strong>Marketplace Reviews</strong><small>Use the marketplace profile review flow.</small></span>
+              <span><strong>Marketplace Reviews</strong></span>
               <input type="checkbox" [(ngModel)]="settings.marketplaceReviews" />
               <i aria-hidden="true"></i>
             </label>
             <label class="switch-card">
-              <span><strong>Google Reviews</strong><small>Route happy clients to Google review link.</small></span>
+              <span><strong>Google Reviews</strong></span>
               <input type="checkbox" [(ngModel)]="settings.googleReviews" />
               <i aria-hidden="true"></i>
             </label>
@@ -166,10 +163,9 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Auto Review Request</h2>
-              <p>Send review links after appointment completion.</p>
             </div>
             <label class="switch-card">
-              <span><strong>Auto request enabled</strong><small>Prepare automatic review requests after service completion.</small></span>
+              <span><strong>Auto request enabled</strong></span>
               <input type="checkbox" [(ngModel)]="settings.autoRequestEnabled" />
               <i aria-hidden="true"></i>
             </label>
@@ -191,7 +187,6 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Rating Rules</h2>
-              <p>Route good ratings outward and low ratings into recovery.</p>
             </div>
             <div class="form-grid two">
               <label class="field">
@@ -222,20 +217,19 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Tracking & Alerts</h2>
-              <p>Track review quality by staff and service, and notify owners on low ratings.</p>
             </div>
             <label class="switch-card">
-              <span><strong>Negative Review Alert</strong><small>Owner notification for low rating cases.</small></span>
+              <span><strong>Negative Review Alert</strong></span>
               <input type="checkbox" [(ngModel)]="settings.ownerLowRatingAlert" />
               <i aria-hidden="true"></i>
             </label>
             <label class="switch-card">
-              <span><strong>Staff Review Tracking</strong><small>Track rating by staff member.</small></span>
+              <span><strong>Staff Review Tracking</strong></span>
               <input type="checkbox" [(ngModel)]="settings.staffReviewTracking" />
               <i aria-hidden="true"></i>
             </label>
             <label class="switch-card">
-              <span><strong>Service Review Tracking</strong><small>Track rating by service category.</small></span>
+              <span><strong>Service Review Tracking</strong></span>
               <input type="checkbox" [(ngModel)]="settings.serviceReviewTracking" />
               <i aria-hidden="true"></i>
             </label>
@@ -244,10 +238,9 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <article class="settings-section wide">
             <div class="section-intro">
               <h2>Marketplace Visibility</h2>
-              <p>Control public review display and profile links.</p>
             </div>
             <label class="switch-card">
-              <span><strong>Show reviews on online booking/profile</strong><small>Use approved ratings on customer-facing surfaces.</small></span>
+              <span><strong>Show reviews on online booking/profile</strong></span>
               <input type="checkbox" [(ngModel)]="settings.showReviewsOnBookingProfile" />
               <i aria-hidden="true"></i>
             </label>
@@ -266,7 +259,6 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           <article class="settings-section wide">
             <div class="section-intro">
               <h2>Reply Templates</h2>
-              <p>Reusable replies for review response and complaint recovery.</p>
             </div>
             <div class="form-grid three">
               <label class="field">

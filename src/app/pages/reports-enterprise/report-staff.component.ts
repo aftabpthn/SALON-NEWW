@@ -47,7 +47,7 @@ import { Subscription } from 'rxjs';
     </ng-container>
 
     <div *ngIf="!loading() && !d()" class="empty-state">
-      <span class="empty-icon">⭐</span><strong>No staff data</strong><small>Select filters to view staff performance.</small>
+      <span class="empty-icon">⭐</span><strong>No staff data</strong>
     </div>
 
     <ng-template #skeleton>

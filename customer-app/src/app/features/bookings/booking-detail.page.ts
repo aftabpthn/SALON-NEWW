@@ -17,7 +17,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
     <ion-content>
       @if (booking(); as booking) {
         <main class="page-narrow detail-page">
-          <p class="eyebrow">Booking detail</p>
           <h1 class="page-title">{{ booking.serviceName }}</h1>
           <section class="hero-card premium-card">
             <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
@@ -45,7 +44,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       } @else {
         <main class="page-narrow detail-page">
           @if (marketplace.loading()) {
-            <section class="premium-card hero-card"><h1>Loading booking</h1><p class="muted">Fetching booking detail from your account.</p></section>
+            <section class="premium-card hero-card"><h1>Loading booking</h1></section>
           } @else {
             <section class="premium-card hero-card"><h1>Booking unavailable</h1><p class="muted">{{ marketplace.error() || "This booking could not be loaded." }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
           }

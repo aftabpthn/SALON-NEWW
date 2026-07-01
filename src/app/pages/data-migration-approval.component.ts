@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>Approval Workflow</h1>
-          <p>Submit and approve migration batches</p>
         </div>
         <div class="score-card">
           <span>Approvals</span>

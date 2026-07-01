@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>AI Mapping Studio</h1>
-          <p>Review &amp; refine auto-mapped fields</p>
         </div>
         <div class="score-card" [class.warning]="store.mappingCoverage() < 80">
           <span>Coverage</span>

@@ -207,7 +207,6 @@ const STATUS_TONES: Record<string, string> = {
           <div>
             <span class="eyebrow">Front-desk follow-up</span>
             <strong>{{ adjustedDueFollowUpCount() }} adjusted + due booking(s) pending</strong>
-            <small>Advance is adjusted; counter collection is still pending.</small>
           </div>
           <button class="ghost-button mini" type="button" (click)="openDepositFollowUpReport()">Open deposit report</button>
         </section>
@@ -232,17 +231,16 @@ const STATUS_TONES: Record<string, string> = {
         </section>
 
         <section class="summary-strip">
-          <article><span>Booked</span><strong>{{ pageAppointmentCount() }}</strong><small>on page</small></article>
-          <article class="pending-summary-card"><span>Pending</span><strong>{{ pendingAppointmentCount() }}</strong><small>live open</small></article>
-          <article><span>Arrived</span><strong>{{ summaryValue('arrived') }}</strong><small>front desk</small></article>
-          <article><span>In service</span><strong>{{ summaryValue('inService') }}</strong><small>chair busy</small></article>
-          <article><span>Completed</span><strong>{{ summaryValue('completed') }}</strong><small>ready to bill</small></article>
+          <article><span>Booked</span><strong>{{ pageAppointmentCount() }}</strong></article>
+          <article class="pending-summary-card"><span>Pending</span><strong>{{ pendingAppointmentCount() }}</strong></article>
+          <article><span>Arrived</span><strong>{{ summaryValue('arrived') }}</strong></article>
+          <article><span>In service</span><strong>{{ summaryValue('inService') }}</strong></article>
+          <article><span>Completed</span><strong>{{ summaryValue('completed') }}</strong></article>
           <button class="waitlist-summary-action" type="button" (click)="openWaitlistEntry()">
             <span>Waitlist</span>
             <strong>{{ summaryValue('waitlist') }}</strong>
-            <small>+ Add client entry</small>
           </button>
-          <article><span>Revenue</span><strong>{{ money(summaryValue('revenue')) }}</strong><small>planned value</small></article>
+          <article><span>Revenue</span><strong>{{ money(summaryValue('revenue')) }}</strong></article>
         </section>
 
         <section class="scheduler-view-toolbar" aria-label="Calendar view controls">
@@ -515,7 +513,7 @@ const STATUS_TONES: Record<string, string> = {
             (keydown.enter)="openAiSlotPilot()"
             (keydown.space)="openAiSlotPilot(); $event.preventDefault()"
           >
-            <div class="panel-head"><span class="eyebrow">Slot suggestions</span><strong>Best safe slots</strong><small>Open</small></div>
+            <div class="panel-head"><span class="eyebrow">Slot suggestions</span><strong>Best safe slots</strong></div>
             <p>{{ smartSlots().length }} safe slot suggestions ready</p>
           </article>
           <article
@@ -528,7 +526,6 @@ const STATUS_TONES: Record<string, string> = {
             (keydown.space)="openOperationsPulse(); $event.preventDefault()"
           >
             <div class="panel-head"><span class="eyebrow">Waitlist</span><strong>Demand queue</strong><small>{{ waitlist().length }}</small></div>
-            <p>Open floating view for waiting clients and quick action.</p>
           </article>
           <article
             class="ops-panel ops-launch pulse"
@@ -592,9 +589,9 @@ const STATUS_TONES: Record<string, string> = {
             <div class="panel-head"><span class="eyebrow">Operations pulse</span><strong>Risk radar</strong></div>
             <div class="pulse-grid expanded">
               <div><span>Capacity</span><strong>{{ summaryValue('capacityPct') }}%</strong><small>{{ summaryValue('bookedMinutes') }} of {{ summaryValue('plannedMinutes') }} min</small></div>
-              <div><span>Conflicts</span><strong>{{ summaryValue('conflicts') }}</strong><small>staff/chair overlaps</small></div>
-              <div><span>Blocked</span><strong>{{ summaryValue('blockedTimes') }}</strong><small>staff unavailable slots</small></div>
-              <div><span>No-show</span><strong>{{ summaryValue('noShow') }}</strong><small>recovery queue</small></div>
+              <div><span>Conflicts</span><strong>{{ summaryValue('conflicts') }}</strong></div>
+              <div><span>Blocked</span><strong>{{ summaryValue('blockedTimes') }}</strong></div>
+              <div><span>No-show</span><strong>{{ summaryValue('noShow') }}</strong></div>
             </div>
           </section>
 
@@ -660,7 +657,6 @@ const STATUS_TONES: Record<string, string> = {
             <div class="service-line-head">
               <div>
                 <strong>Previous services</strong>
-                <small>Review the client's previous services and last charged price.</small>
               </div>
               <button class="ghost-button mini" type="button" (click)="refreshPreviousServices()" [disabled]="clientServiceHistoryLoading()">
                 {{ clientServiceHistoryLoading() ? 'Loading' : 'Refresh' }}

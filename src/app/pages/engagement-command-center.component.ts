@@ -69,7 +69,6 @@ interface EngagementDetail extends ApiRecord {
       <div class="zenoti-page-heading">
         <div>
           <h1>Engagement Command Center</h1>
-          <p>Engagement &gt; Unified inbox, reviews, SLA, recovery and audit ledger</p>
         </div>
         <label class="zenoti-search">
           <span>Search engagement</span>
@@ -104,7 +103,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">Lead Pipeline</span>
             <h3>Lead Intelligence</h3>
-            <p>Source, lead score, follow-up, owner, conversion revenue and missed accountability in one report.</p>
           </div>
           <div class="reports-actions">
             <button class="ghost-button" type="button" (click)="loadLeadReport()" [disabled]="leadLoading()">Refresh</button>
@@ -188,16 +186,16 @@ interface EngagementDetail extends ApiRecord {
         <div class="state info" *ngIf="leadNotice()">{{ leadNotice() }}</div>
 
         <section class="reports-kpis" *ngIf="leadReport() as report">
-          <article><small>Total leads</small><strong>{{ report.summary?.totalLeads || 0 }}</strong></article>
-          <article><small>Hot leads</small><strong>{{ report.summary?.hotLeads || 0 }}</strong></article>
-          <article><small>Pending follow-up</small><strong>{{ report.summary?.pendingFollowUps || 0 }}</strong></article>
-          <article><small>Won leads</small><strong>{{ report.summary?.wonLeads || 0 }}</strong></article>
-          <article><small>Lost leads</small><strong>{{ report.summary?.lostLeads || 0 }}</strong></article>
-          <article><small>Conversion rate</small><strong>{{ report.summary?.conversionRate || 0 }}%</strong></article>
-          <article><small>Lead revenue</small><strong>{{ reportCurrency(report.summary?.revenueFromLeads) }}</strong></article>
-          <article><small>Avg response</small><strong>{{ minutesLabel(report.summary?.averageResponseMinutes) }}</strong></article>
-          <article><small>Overdue</small><strong>{{ report.summary?.overdueFollowUps || 0 }}</strong></article>
-          <article><small>Top source</small><strong>{{ report.summary?.topLeadSource || '-' }}</strong></article>
+          <article><strong>{{ report.summary?.totalLeads || 0 }}</strong></article>
+          <article><strong>{{ report.summary?.hotLeads || 0 }}</strong></article>
+          <article><strong>{{ report.summary?.pendingFollowUps || 0 }}</strong></article>
+          <article><strong>{{ report.summary?.wonLeads || 0 }}</strong></article>
+          <article><strong>{{ report.summary?.lostLeads || 0 }}</strong></article>
+          <article><strong>{{ report.summary?.conversionRate || 0 }}%</strong></article>
+          <article><strong>{{ reportCurrency(report.summary?.revenueFromLeads) }}</strong></article>
+          <article><strong>{{ minutesLabel(report.summary?.averageResponseMinutes) }}</strong></article>
+          <article><strong>{{ report.summary?.overdueFollowUps || 0 }}</strong></article>
+          <article><strong>{{ report.summary?.topLeadSource || '-' }}</strong></article>
         </section>
 
         <section class="lead-table-wrap">
@@ -255,7 +253,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">WhatsApp operations</span>
             <h3>Engagement action queue</h3>
-            <p>Approval queue, quiet-hours blocks, delivery status and conversion follow-ups from live engagement data.</p>
           </div>
           <button class="ghost-button mini" type="button" (click)="loadManagerActions()">Refresh queue</button>
         </div>
@@ -442,12 +439,12 @@ interface EngagementDetail extends ApiRecord {
             <section class="client-card">
               <span class="eyebrow">Membership, package, wallet, due</span>
               <div class="info-grid">
-                <div><small>Membership</small><strong>{{ client360()?.membership?.summaryText || 'None' }}</strong></div>
-                <div><small>Package</small><strong>{{ client360()?.package?.summaryText || 'None' }}</strong></div>
-                <div><small>Wallet</small><strong>₹{{ client360()?.wallet?.balance || 0 }}</strong></div>
-                <div><small>Loyalty</small><strong>{{ client360()?.loyalty?.points || 0 }}</strong></div>
-                <div><small>Due</small><strong>₹{{ client360()?.balance?.dueAmount || 0 }}</strong></div>
-                <div><small>Membership credits</small><strong>{{ client360()?.membership?.activeMembership?.creditsAfter ?? 0 }}</strong></div>
+                <div><strong>{{ client360()?.membership?.summaryText || 'None' }}</strong></div>
+                <div><strong>{{ client360()?.package?.summaryText || 'None' }}</strong></div>
+                <div><strong>₹{{ client360()?.wallet?.balance || 0 }}</strong></div>
+                <div><strong>{{ client360()?.loyalty?.points || 0 }}</strong></div>
+                <div><strong>₹{{ client360()?.balance?.dueAmount || 0 }}</strong></div>
+                <div><strong>{{ client360()?.membership?.activeMembership?.creditsAfter ?? 0 }}</strong></div>
               </div>
             </section>
 
@@ -486,10 +483,10 @@ interface EngagementDetail extends ApiRecord {
             <section class="client-card">
               <span class="eyebrow">Preferences</span>
               <div class="info-grid">
-                <div><small>Preferred staff</small><strong>{{ listLabels(preferredStaff(), 'name') || 'None' }}</strong></div>
-                <div><small>Preferred services</small><strong>{{ listLabels(preferredServices(), 'name') || 'None' }}</strong></div>
-                <div><small>Allergies</small><strong>{{ allergiesText() || 'None captured' }}</strong></div>
-                <div><small>Channel</small><strong>{{ clientProfile()?.preferredChannel || 'Not set' }}</strong></div>
+                <div><strong>{{ listLabels(preferredStaff(), 'name') || 'None' }}</strong></div>
+                <div><strong>{{ listLabels(preferredServices(), 'name') || 'None' }}</strong></div>
+                <div><strong>{{ allergiesText() || 'None captured' }}</strong></div>
+                <div><strong>{{ clientProfile()?.preferredChannel || 'Not set' }}</strong></div>
               </div>
             </section>
 
@@ -626,10 +623,10 @@ interface EngagementDetail extends ApiRecord {
         <section class="drawer-section review-box">
           <span class="eyebrow">Review & book</span>
           <div class="info-grid">
-            <div><small>Service</small><strong>{{ bookingServiceName() }}</strong></div>
-            <div><small>Slot</small><strong>{{ selectedBookingSlot()?.startAt ? (selectedBookingSlot()?.startAt | date:'short') : 'Not selected' }}</strong></div>
-            <div><small>Due warning</small><strong>{{ bookingSlotPreview()?.dueAmountWarning || 'None' }}</strong></div>
-            <div><small>Open appointments</small><strong>{{ bookingSlotPreview()?.openAppointmentsCount || 0 }}</strong></div>
+            <div><strong>{{ bookingServiceName() }}</strong></div>
+            <div><strong>{{ selectedBookingSlot()?.startAt ? (selectedBookingSlot()?.startAt | date:'short') : 'Not selected' }}</strong></div>
+            <div><strong>{{ bookingSlotPreview()?.dueAmountWarning || 'None' }}</strong></div>
+            <div><strong>{{ bookingSlotPreview()?.openAppointmentsCount || 0 }}</strong></div>
           </div>
           <button class="primary-button" type="button" (click)="createEngagementBooking()" [disabled]="bookingSaving() || !selectedBookingSlot()">
             {{ bookingSaving() ? 'Booking...' : 'Review & book' }}
@@ -643,7 +640,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">Recovery Opportunities</span>
             <h3>Revenue recovery board</h3>
-            <p>Abandoned bookings, missed calls, no-shows, expiries, dues, inactive clients and review risks.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeRecoveryDrawer()" aria-label="Close recovery board">x</button>
         </header>
@@ -661,15 +657,12 @@ interface EngagementDetail extends ApiRecord {
 
         <section class="recovery-kpis">
           <article>
-            <small>Open</small>
             <strong>{{ recoveryOpenCount() }}</strong>
           </article>
           <article>
-            <small>High priority</small>
             <strong>{{ recoveryHighPriorityCount() }}</strong>
           </article>
           <article>
-            <small>Revenue value</small>
             <strong>₹{{ recoveryRevenueValue() }}</strong>
           </article>
         </section>
@@ -684,10 +677,10 @@ interface EngagementDetail extends ApiRecord {
               <span [class]="'priority-pill ' + (opportunity.priority || 'normal')">{{ opportunity.priority || 'normal' }}</span>
             </div>
             <div class="info-grid">
-              <div><small>Revenue value</small><strong>₹{{ opportunity.revenueValue || opportunity.expectedValue || 0 }}</strong></div>
-              <div><small>Client</small><strong>{{ opportunity.client?.name || opportunity.clientName || opportunity.clientId || '-' }}</strong></div>
-              <div><small>Assigned staff</small><strong>{{ opportunity.assignedStaffName || opportunity.assignedTo || 'Unassigned' }}</strong></div>
-              <div><small>Due date</small><strong>{{ opportunity.dueAt ? (opportunity.dueAt | date:'short') : '-' }}</strong></div>
+              <div><strong>₹{{ opportunity.revenueValue || opportunity.expectedValue || 0 }}</strong></div>
+              <div><strong>{{ opportunity.client?.name || opportunity.clientName || opportunity.clientId || '-' }}</strong></div>
+              <div><strong>{{ opportunity.assignedStaffName || opportunity.assignedTo || 'Unassigned' }}</strong></div>
+              <div><strong>{{ opportunity.dueAt ? (opportunity.dueAt | date:'short') : '-' }}</strong></div>
             </div>
             <p class="recovery-reason">{{ opportunity.reason || 'Recovery reason not captured.' }}</p>
             <p class="suggested-message">{{ opportunity.suggestedMessage || opportunity.suggestedAction || 'Suggested message will appear after detection.' }}</p>
@@ -713,7 +706,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">AI Risk & Next Best Action</span>
             <h3>Client engagement risk signals</h3>
-            <p>Angry clients, repeated cancellations, dues, expiries, no-shows, opt-outs, failed payments and abandoned bookings.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeRiskDrawer()" aria-label="Close risk signals">x</button>
         </header>
@@ -752,19 +744,15 @@ interface EngagementDetail extends ApiRecord {
 
         <section class="risk-kpis">
           <article>
-            <small>Open risks</small>
             <strong>{{ riskOpenCount() }}</strong>
           </article>
           <article>
-            <small>High/Critical</small>
             <strong>{{ riskHighCount() }}</strong>
           </article>
           <article>
-            <small>Unreviewed</small>
             <strong>{{ riskUnreviewedCount() }}</strong>
           </article>
           <article>
-            <small>Avg score</small>
             <strong>{{ riskAverageScore() }}</strong>
           </article>
         </section>
@@ -779,10 +767,10 @@ interface EngagementDetail extends ApiRecord {
               <span [class]="'risk-pill ' + (signal.riskLevel || signal.risk_level || 'low')">{{ signal.riskLevel || signal.risk_level || 'low' }}</span>
             </div>
             <div class="info-grid">
-              <div><small>Score</small><strong>{{ riskScoreText(signal) }}</strong></div>
-              <div><small>Client</small><strong>{{ signal.client?.name || signal.clientName || signal.clientId || '-' }}</strong></div>
-              <div><small>Staff</small><strong>{{ signal.staff?.name || signal.staffName || signal.staffId || '-' }}</strong></div>
-              <div><small>Review</small><strong>{{ signal.reviewStatus || signal.review_status || 'unreviewed' }}</strong></div>
+              <div><strong>{{ riskScoreText(signal) }}</strong></div>
+              <div><strong>{{ signal.client?.name || signal.clientName || signal.clientId || '-' }}</strong></div>
+              <div><strong>{{ signal.staff?.name || signal.staffName || signal.staffId || '-' }}</strong></div>
+              <div><strong>{{ signal.reviewStatus || signal.review_status || 'unreviewed' }}</strong></div>
             </div>
             <p class="risk-reason">{{ riskReason(signal) }}</p>
             <p class="suggested-message">{{ signal.suggestedAction || signal.suggested_action || 'Suggested action will appear after detection.' }}</p>
@@ -813,7 +801,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">SLA & Staff Accountability</span>
             <h3>Manager response board</h3>
-            <p>Thread ownership, overdue follow-ups, first response, resolution time and staff recovery accountability.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeSlaDrawer()" aria-label="Close SLA board">x</button>
         </header>
@@ -823,19 +810,15 @@ interface EngagementDetail extends ApiRecord {
 
         <section class="sla-kpis">
           <article>
-            <small>Overdue queue</small>
             <strong>{{ slaOverdue().length }}</strong>
           </article>
           <article>
-            <small>Unresolved</small>
             <strong>{{ slaReport()?.summary?.unresolvedConversations || 0 }}</strong>
           </article>
           <article>
-            <small>Avg first response</small>
             <strong>{{ minutesLabel(slaReport()?.summary?.avgFirstResponseMinutes) }}</strong>
           </article>
           <article>
-            <small>Conversions by staff</small>
             <strong>{{ slaReport()?.summary?.conversions || 0 }}</strong>
           </article>
         </section>
@@ -873,10 +856,10 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">Manager View</span>
             <h4>Escalated and unresolved conversations</h4>
             <div class="info-grid">
-              <div><small>Escalated</small><strong>{{ managerView()?.escalatedThreads?.length || 0 }}</strong></div>
-              <div><small>Open conversations</small><strong>{{ managerView()?.unresolvedConversations?.length || 0 }}</strong></div>
-              <div><small>Overdue follow-ups</small><strong>{{ slaReport()?.summary?.overdueFollowUps || 0 }}</strong></div>
-              <div><small>Abandoned recovery</small><strong>{{ slaReport()?.summary?.abandonedRecovery || 0 }}</strong></div>
+              <div><strong>{{ managerView()?.escalatedThreads?.length || 0 }}</strong></div>
+              <div><strong>{{ managerView()?.unresolvedConversations?.length || 0 }}</strong></div>
+              <div><strong>{{ slaReport()?.summary?.overdueFollowUps || 0 }}</strong></div>
+              <div><strong>{{ slaReport()?.summary?.abandonedRecovery || 0 }}</strong></div>
             </div>
           </article>
         </section>
@@ -917,7 +900,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">Reports & Analytics</span>
             <h3>Engagement performance center</h3>
-            <p>Conversation volume, channel delivery, SLA, staff accountability, recovery revenue, AI acceptance and template performance.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeReportsDrawer()" aria-label="Close engagement reports">x</button>
         </header>
@@ -1014,27 +996,21 @@ interface EngagementDetail extends ApiRecord {
 
         <section class="reports-kpis" *ngIf="reportData() as report">
           <article>
-            <small>Conversation volume</small>
             <strong>{{ report.summary?.conversationVolume || 0 }}</strong>
           </article>
           <article>
-            <small>Channel messages</small>
             <strong>{{ report.summary?.totalMessages || 0 }}</strong>
           </article>
           <article>
-            <small>Avg response</small>
             <strong>{{ report.responseTime?.avgFirstResponseLabel || minutesLabel(report.summary?.avgFirstResponseMinutes) }}</strong>
           </article>
           <article>
-            <small>SLA breach</small>
             <strong>{{ report.summary?.slaBreaches || 0 }}</strong>
           </article>
           <article>
-            <small>Recovery revenue</small>
             <strong>{{ reportCurrency(report.summary?.recoveryRevenue) }}</strong>
           </article>
           <article>
-            <small>AI acceptance</small>
             <strong>{{ report.summary?.aiSuggestionAcceptanceRate || 0 }}%</strong>
           </article>
         </section>
@@ -1062,10 +1038,10 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">Response Time & SLA</span>
             <h4>First response and breach control</h4>
             <div class="info-grid">
-              <div><small>Avg first response</small><strong>{{ report.responseTime?.avgFirstResponseLabel || '0m' }}</strong></div>
-              <div><small>SLA breach open</small><strong>{{ report.slaBreach?.open || 0 }}</strong></div>
-              <div><small>SLA breach resolved</small><strong>{{ report.slaBreach?.resolved || 0 }}</strong></div>
-              <div><small>Samples</small><strong>{{ report.responseTime?.rows?.length || 0 }}</strong></div>
+              <div><strong>{{ report.responseTime?.avgFirstResponseLabel || '0m' }}</strong></div>
+              <div><strong>{{ report.slaBreach?.open || 0 }}</strong></div>
+              <div><strong>{{ report.slaBreach?.resolved || 0 }}</strong></div>
+              <div><strong>{{ report.responseTime?.rows?.length || 0 }}</strong></div>
             </div>
           </article>
 
@@ -1091,10 +1067,10 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">Recovery Revenue</span>
             <h4>Opportunity pipeline and converted value</h4>
             <div class="info-grid">
-              <div><small>Converted revenue</small><strong>{{ reportCurrency(report.recoveryRevenue?.totalRevenue) }}</strong></div>
-              <div><small>Expected pipeline</small><strong>{{ reportCurrency(report.recoveryRevenue?.expectedPipeline) }}</strong></div>
-              <div><small>Recovered</small><strong>{{ report.recoveryRevenue?.converted || 0 }}</strong></div>
-              <div><small>Abandoned conversion</small><strong>{{ report.abandonedAppointmentConversion?.conversionRate || 0 }}%</strong></div>
+              <div><strong>{{ reportCurrency(report.recoveryRevenue?.totalRevenue) }}</strong></div>
+              <div><strong>{{ reportCurrency(report.recoveryRevenue?.expectedPipeline) }}</strong></div>
+              <div><strong>{{ report.recoveryRevenue?.converted || 0 }}</strong></div>
+              <div><strong>{{ report.abandonedAppointmentConversion?.conversionRate || 0 }}%</strong></div>
             </div>
           </article>
 
@@ -1102,10 +1078,10 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">Membership / Package / Payment Recovery</span>
             <h4>Expiry and due-balance recovery performance</h4>
             <div class="info-grid">
-              <div><small>Membership expiry</small><strong>{{ report.membershipPackageExpiryRecovery?.membership || 0 }}</strong></div>
-              <div><small>Package expiry</small><strong>{{ report.membershipPackageExpiryRecovery?.package || 0 }}</strong></div>
-              <div><small>Payment due</small><strong>{{ report.paymentDueRecovery?.total || 0 }}</strong></div>
-              <div><small>Payment recovered</small><strong>{{ reportCurrency(report.paymentDueRecovery?.revenue) }}</strong></div>
+              <div><strong>{{ report.membershipPackageExpiryRecovery?.membership || 0 }}</strong></div>
+              <div><strong>{{ report.membershipPackageExpiryRecovery?.package || 0 }}</strong></div>
+              <div><strong>{{ report.paymentDueRecovery?.total || 0 }}</strong></div>
+              <div><strong>{{ reportCurrency(report.paymentDueRecovery?.revenue) }}</strong></div>
             </div>
           </article>
 
@@ -1113,10 +1089,10 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">Review Response Performance</span>
             <h4>Review recovery and approval coverage</h4>
             <div class="info-grid">
-              <div><small>Total reviews</small><strong>{{ report.reviewResponsePerformance?.totalReviews || 0 }}</strong></div>
-              <div><small>Negative reviews</small><strong>{{ report.reviewResponsePerformance?.negativeReviews || 0 }}</strong></div>
-              <div><small>Approved responses</small><strong>{{ report.reviewResponsePerformance?.approvedResponses || 0 }}</strong></div>
-              <div><small>Provider pending</small><strong>{{ report.reviewResponsePerformance?.providerMissing || 0 }}</strong></div>
+              <div><strong>{{ report.reviewResponsePerformance?.totalReviews || 0 }}</strong></div>
+              <div><strong>{{ report.reviewResponsePerformance?.negativeReviews || 0 }}</strong></div>
+              <div><strong>{{ report.reviewResponsePerformance?.approvedResponses || 0 }}</strong></div>
+              <div><strong>{{ report.reviewResponsePerformance?.providerMissing || 0 }}</strong></div>
             </div>
           </article>
 
@@ -1124,10 +1100,10 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">AI Suggestion Acceptance</span>
             <h4>Draft approval and rejection trend</h4>
             <div class="info-grid">
-              <div><small>Suggestions</small><strong>{{ report.aiSuggestionAcceptance?.suggestions || 0 }}</strong></div>
-              <div><small>Approved</small><strong>{{ report.aiSuggestionAcceptance?.approved || 0 }}</strong></div>
-              <div><small>Rejected</small><strong>{{ report.aiSuggestionAcceptance?.rejected || 0 }}</strong></div>
-              <div><small>Acceptance</small><strong>{{ report.aiSuggestionAcceptance?.acceptanceRate || 0 }}%</strong></div>
+              <div><strong>{{ report.aiSuggestionAcceptance?.suggestions || 0 }}</strong></div>
+              <div><strong>{{ report.aiSuggestionAcceptance?.approved || 0 }}</strong></div>
+              <div><strong>{{ report.aiSuggestionAcceptance?.rejected || 0 }}</strong></div>
+              <div><strong>{{ report.aiSuggestionAcceptance?.acceptanceRate || 0 }}%</strong></div>
             </div>
           </article>
 
@@ -1152,9 +1128,9 @@ interface EngagementDetail extends ApiRecord {
             <span class="eyebrow">WhatsApp Delivery</span>
             <h4>Provider status placeholder</h4>
             <div class="info-grid">
-              <div><small>Configured</small><strong>{{ report.whatsappDeliveryStatus?.configured ? 'Yes' : 'No' }}</strong></div>
-              <div><small>Delivered</small><strong>{{ report.whatsappDeliveryStatus?.delivered || 0 }}</strong></div>
-              <div><small>Pending</small><strong>{{ report.whatsappDeliveryStatus?.pending || 0 }}</strong></div>
+              <div><strong>{{ report.whatsappDeliveryStatus?.configured ? 'Yes' : 'No' }}</strong></div>
+              <div><strong>{{ report.whatsappDeliveryStatus?.delivered || 0 }}</strong></div>
+              <div><strong>{{ report.whatsappDeliveryStatus?.pending || 0 }}</strong></div>
               <div><small>Failed/blocked</small><strong>{{ (report.whatsappDeliveryStatus?.failed || 0) + (report.whatsappDeliveryStatus?.blocked || 0) }}</strong></div>
             </div>
             <p class="suggested-message">{{ report.whatsappDeliveryStatus?.note }}</p>
@@ -1168,7 +1144,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">Provider Readiness</span>
             <h3>Communication provider adapters</h3>
-            <p>WhatsApp Cloud API, Gupshup, Interakt, Twilio, SMTP, SMS and call placeholders stay disabled until configured. Sends remain pending unless a real adapter is ready.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeProviderDrawer()" aria-label="Close provider readiness">x</button>
         </header>
@@ -1178,27 +1153,21 @@ interface EngagementDetail extends ApiRecord {
 
         <section class="reports-kpis" *ngIf="providerReadiness() as readiness">
           <article>
-            <small>Providers</small>
             <strong>{{ readiness.summary?.providers || 0 }}</strong>
           </article>
           <article>
-            <small>Active configs</small>
             <strong>{{ readiness.summary?.activeConfigs || 0 }}</strong>
           </article>
           <article>
-            <small>Public config ready</small>
             <strong>{{ readiness.summary?.configuredPublicDetails || 0 }}</strong>
           </article>
           <article>
-            <small>Direct send ready</small>
             <strong>{{ readiness.summary?.directSendReady || 0 }}</strong>
           </article>
           <article>
-            <small>Pending only</small>
             <strong>{{ readiness.summary?.pendingSendOnly || 0 }}</strong>
           </article>
           <article>
-            <small>Default safety</small>
             <strong>{{ readiness.summary?.disabledByDefault ? 'On' : 'Review' }}</strong>
           </article>
         </section>
@@ -1248,10 +1217,10 @@ interface EngagementDetail extends ApiRecord {
               </span>
             </div>
             <div class="info-grid">
-              <div><small>Status</small><strong>{{ provider.status || 'inactive' }}</strong></div>
-              <div><small>Sender</small><strong>{{ provider.senderId || '-' }}</strong></div>
-              <div><small>Namespace</small><strong>{{ provider.templateNamespace || '-' }}</strong></div>
-              <div><small>Last verified</small><strong>{{ provider.lastVerifiedAt ? (provider.lastVerifiedAt | date:'short') : '-' }}</strong></div>
+              <div><strong>{{ provider.status || 'inactive' }}</strong></div>
+              <div><strong>{{ provider.senderId || '-' }}</strong></div>
+              <div><strong>{{ provider.templateNamespace || '-' }}</strong></div>
+              <div><strong>{{ provider.lastVerifiedAt ? (provider.lastVerifiedAt | date:'short') : '-' }}</strong></div>
             </div>
             <p class="suggested-message">{{ provider.note }}</p>
             <div class="composer-footer">
@@ -1268,7 +1237,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">Communication Audit Ledger</span>
             <h3>Immutable engagement audit</h3>
-            <p>Thread, draft, template, approval, send, assignment, recovery, booking, review and AI summary activity.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeAuditDrawer()" aria-label="Close audit ledger">x</button>
         </header>
@@ -1313,7 +1281,6 @@ interface EngagementDetail extends ApiRecord {
           <div>
             <span class="eyebrow">Review Response Center</span>
             <h3>Approve-safe review replies</h3>
-            <p>AI draft, edit, approve and store/post responses with audit trail.</p>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeReviewDrawer()" aria-label="Close review response center">x</button>
         </header>
@@ -1358,10 +1325,10 @@ interface EngagementDetail extends ApiRecord {
                 <span [class]="'risk-pill ' + (review.riskLevel || 'low')">{{ review.riskLevel || 'low' }}</span>
               </div>
               <div class="info-grid">
-                <div><small>Review rating</small><strong>{{ review.rating || 0 }} / {{ review.ratingMax || 5 }}</strong></div>
-                <div><small>Review date</small><strong>{{ review.reviewDate | date: 'mediumDate' }}</strong></div>
-                <div><small>Client</small><strong>{{ review.client?.name || review.reviewerName || '-' }}</strong></div>
-                <div><small>Service/staff</small><strong>{{ review.serviceStaffLabel || '-' }}</strong></div>
+                <div><strong>{{ review.rating || 0 }} / {{ review.ratingMax || 5 }}</strong></div>
+                <div><strong>{{ review.reviewDate | date: 'mediumDate' }}</strong></div>
+                <div><strong>{{ review.client?.name || review.reviewerName || '-' }}</strong></div>
+                <div><strong>{{ review.serviceStaffLabel || '-' }}</strong></div>
               </div>
               <p class="review-text-block">{{ review.reviewText || 'No review text captured.' }}</p>
             </section>
@@ -1504,7 +1471,6 @@ interface EngagementDetail extends ApiRecord {
         <section class="client-card no-client">
           <span class="eyebrow">No client selected</span>
           <h3>Thread is not linked to a client</h3>
-          <p>Client 360, wallet, appointment history and AI guest summary will appear after a client-linked thread is selected.</p>
         </section>
       </ng-template>
     </section>

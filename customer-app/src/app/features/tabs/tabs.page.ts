@@ -13,9 +13,7 @@ import { AuthService } from "../../core/auth.service";
       <section class="biometric-gate" aria-label="Biometric verification required">
         <div class="biometric-panel">
           <span class="gate-icon"><ion-icon name="finger-print-outline"></ion-icon></span>
-          <p class="eyebrow">Device security</p>
           <h1>Verify to open Aura Shine</h1>
-          <p>Your account is still signed in. Biometric Login is enabled for this device, so verify once to continue.</p>
           @if (auth.error()) {
             <p class="gate-error">{{ auth.error() }}</p>
           }
@@ -32,7 +30,6 @@ import { AuthService } from "../../core/auth.service";
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span class="brand-copy">
           <strong>Aura Shine</strong>
-          <small>Customer booking</small>
         </span>
       </a>
       <div class="nav-links">

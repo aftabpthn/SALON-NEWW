@@ -15,7 +15,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Level 26 · Deployment ready</span>
           <h2>Docker, environment config, production build, backend start, database backup and deployment guide</h2>
-          <p>Deployment preflight and backups are persisted as tenant-scoped operational events.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -27,9 +26,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/deployment/ready-items"><span>Ready items</span><strong>{{ metrics.readyItems }}/{{ metrics.checklistItems }}</strong><small>Deployment checklist</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/deployment/events"><span>Events</span><strong>{{ metrics.events }}</strong><small>Deployment records</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/deployment/backups"><span>Backups</span><strong>{{ metrics.backups }}</strong><small>Database snapshots</small></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/deployment/ready-items"><span>Ready items</span><strong>{{ metrics.readyItems }}/{{ metrics.checklistItems }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/deployment/events"><span>Events</span><strong>{{ metrics.events }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/deployment/backups"><span>Backups</span><strong>{{ metrics.backups }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

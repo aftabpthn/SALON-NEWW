@@ -20,7 +20,6 @@ const scopes: Array<{ value: StaffOsCategoryScope; label: string }> = [
     <section class="category-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Staff Operating System</p>
           <h1>Category Master</h1>
           <span>Employee category master for Add Staff onboarding. Role permissions stay separate.</span>
         </div>

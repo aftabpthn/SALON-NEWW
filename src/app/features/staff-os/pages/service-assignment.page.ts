@@ -12,7 +12,6 @@ import { StaffOsBranch, StaffOsServiceAssignment, StaffOsServiceOption, StaffOsS
     <section class="assign-page">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Employee Masters</p>
           <h1>Employees Wise Services Assign</h1>
         </div>
         <div class="topbar-actions">
@@ -34,7 +33,6 @@ import { StaffOsBranch, StaffOsServiceAssignment, StaffOsServiceOption, StaffOsS
       <section class="employee-section">
         <div class="section-header">
           <div>
-            <p class="eyebrow">Step 1</p>
             <h2>Select Employee</h2>
           </div>
           <div class="toggles">
@@ -80,14 +78,12 @@ import { StaffOsBranch, StaffOsServiceAssignment, StaffOsServiceOption, StaffOsS
       <section class="services-section">
         <div class="section-header">
           <div>
-            <p class="eyebrow">Step 2</p>
             <h2>Assign Services</h2>
           </div>
           <label class="hide-toggle"><input type="checkbox" [checked]="hideRecord()" (change)="hideRecord.set($any($event.target).checked)" /> Hide this assignment</label>
         </div>
 
         <div class="selected-band">
-          <p class="eyebrow">Selected Employee</p>
           <h2>{{ selectedStaff()?.fullName || '—' }}</h2>
           <span class="staff-id" *ngIf="selectedStaff()">{{ selectedStaff()?.branchId }} · {{ selectedStaff()?.staffCategoryName || selectedStaff()?.designation || selectedStaff()?.roleId }}</span>
         </div>

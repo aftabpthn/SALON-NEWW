@@ -84,11 +84,11 @@ type ProductConsumeDraftRow = {
 
       <ng-container *ngIf="!loading()">
         <div class="metrics-grid">
-          <a class="metric-card" routerLink="/pos/invoices" [class.active-filter-card]="isAllView()"><span>Invoices</span><strong>{{ rows().length }}</strong><small>Saved invoices</small></a>
-          <article class="metric-card"><span>Total billed</span><strong>{{ billedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Invoice grand total</small></article>
-          <article class="metric-card"><span>Collected</span><strong>{{ paidTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Cash, UPI, card and modes</small></article>
-          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }" [class.active-filter-card]="isReceivedDueView()"><span>Received due</span><strong>{{ receivedDueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Old balance collected</small></a>
-          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'due' }" [class.active-filter-card]="isDueView()"><span>Due</span><strong>{{ dueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Pending balance</small></a>
+          <a class="metric-card" routerLink="/pos/invoices" [class.active-filter-card]="isAllView()"><span>Invoices</span><strong>{{ rows().length }}</strong></a>
+          <article class="metric-card"><span>Total billed</span><strong>{{ billedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Collected</span><strong>{{ paidTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }" [class.active-filter-card]="isReceivedDueView()"><span>Received due</span><strong>{{ receivedDueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></a>
+          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'due' }" [class.active-filter-card]="isDueView()"><span>Due</span><strong>{{ dueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></a>
           <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'wallet' }" [class.active-filter-card]="isWalletView()"><span>Wallet</span><strong>{{ walletTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ walletClientCount() }} clients with balance</small></a>
         </div>
 
@@ -97,7 +97,6 @@ type ProductConsumeDraftRow = {
             <div>
               <span class="eyebrow">Billing / POS control</span>
               <h2>Payment truth, GST, margin and fraud checks</h2>
-              <p>Invoice lifecycle ke saath settlement, deposit adjustment, GST report, margin view, fraud flags aur inventory/profit linkage ek jagah.</p>
             </div>
             <a class="ghost-button mini" routerLink="/pos/invoice-activity">Audit trail</a>
           </div>
@@ -115,7 +114,6 @@ type ProductConsumeDraftRow = {
             <a class="billing-control-card" routerLink="/reports/invoices">
               <span>GST reports</span>
               <strong>{{ gstCollectedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>GSTR/HSN report center linked</small>
             </a>
             <a class="billing-control-card" routerLink="/inventory/financial">
               <span>Margin view</span>
@@ -130,7 +128,6 @@ type ProductConsumeDraftRow = {
             <a class="billing-control-card" routerLink="/inventory/product-consume" [class.warn]="consumePendingCount() > 0">
               <span>Inventory/profit</span>
               <strong>{{ consumePendingCount() }}</strong>
-              <small>Product consume drafts pending for profit truth</small>
             </a>
           </div>
         </section>
@@ -640,12 +637,10 @@ type ProductConsumeDraftRow = {
               <article class="settlement-card">
                 <span>Booking advance adjusted</span>
                 <strong>{{ bookingAdvanceAdjustedAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                <small>This amount was adjusted from booking. Do not collect it again at the counter.</small>
               </article>
               <article class="settlement-card">
                 <span>Counter payment collected</span>
                 <strong>{{ counterPaymentCollectedAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                <small>Amount received so far through counter or normal invoice settlement.</small>
               </article>
               <article class="settlement-card" [class.is-due]="remainingCounterPaymentAmount(invoice) > 0">
                 <span>Remaining counter payment</span>

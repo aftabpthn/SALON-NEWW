@@ -74,7 +74,6 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           <div>
             <span class="eyebrow">Setup / Point of Sale</span>
             <h1>Tax Settings</h1>
-            <p>Setup default taxes for your business. Defaults can still be overridden on individual products and services.</p>
           </div>
           <div class="hero-actions">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -89,7 +88,6 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
         <section class="settings-section profile-section">
           <div class="section-intro">
             <h2>Country & Tax Profile</h2>
-            <p>Choose the branch tax country and then edit local tax details as needed.</p>
           </div>
           <div class="form-grid three">
             <label class="field">
@@ -117,7 +115,6 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
             <label class="switch-card compact">
               <span>
                 <strong>Tax editable on POS</strong>
-                <small>Allow billing staff to override tax while invoicing.</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.taxEditableOnPos" />
               <i aria-hidden="true"></i>
@@ -129,12 +126,10 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Service Tax</h2>
-              <p>Default service tax used for new services and POS service billing.</p>
             </div>
             <label class="switch-card">
               <span>
                 <strong>Service Tax</strong>
-                <small>Apply tax on service sales.</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.serviceTaxEnabled" />
               <i aria-hidden="true"></i>
@@ -157,12 +152,10 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Product Tax</h2>
-              <p>Default product tax used for new products and retail billing.</p>
             </div>
             <label class="switch-card">
               <span>
                 <strong>Product tax applicable</strong>
-                <small>Apply tax on product sales.</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.productTaxApplicable" />
               <i aria-hidden="true"></i>
@@ -185,7 +178,6 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Bill Settings</h2>
-              <p>Add a custom tax/compliance label on printed invoices.</p>
             </div>
             <div class="form-grid two">
               <label class="field">
@@ -202,12 +194,10 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           <article class="settings-section">
             <div class="section-intro">
               <h2>Debit / Credit Fees</h2>
-              <p>Configure optional extra charges on card payments.</p>
             </div>
             <label class="switch-card">
               <span>
                 <strong>Debit/Credit Fees</strong>
-                <small>Apply extra charges on card payments.</small>
               </span>
               <input type="checkbox" [(ngModel)]="settings.debitCreditFeesEnabled" />
               <i aria-hidden="true"></i>
@@ -228,7 +218,6 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
         <section class="settings-section preview-section">
           <div class="section-intro">
             <h2>Invoice Preview</h2>
-            <p>Preview how default service and product tax settings affect a sample invoice.</p>
           </div>
           <div class="preview-grid">
             <article>
@@ -252,21 +241,18 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
         <section class="settings-section apply-section">
           <div class="section-intro">
             <h2>Apply Defaults</h2>
-            <p>Choose how saved tax settings should be used. Existing records are not changed in this phase.</p>
           </div>
           <div class="apply-options">
             <label class="radio-card">
               <input type="radio" name="defaultApplyMode" value="newOnly" [(ngModel)]="settings.defaultApplyMode" />
               <span>
                 <strong>Use for new services/products</strong>
-                <small>Only new items will use these defaults.</small>
               </span>
             </label>
             <label class="radio-card">
               <input type="radio" name="defaultApplyMode" value="existingLater" [(ngModel)]="settings.defaultApplyMode" />
               <span>
                 <strong>Apply to existing services/products later</strong>
-                <small>Keep a preview-style setting for a later bulk update workflow.</small>
               </span>
             </label>
           </div>

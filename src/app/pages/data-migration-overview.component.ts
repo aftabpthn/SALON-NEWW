@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <span class="eyebrow">Enterprise Data Migration OS</span>
           <h1>100X import command center</h1>
-          <p>Migrate legacy salon, POS, accounting, inventory and booking data into live modules through sandbox, validation, approval, import and rollback controls.</p>
         </div>
         <div class="score-card" [class.danger]="store.readinessScore() < 60" [class.warning]="store.readinessScore() >= 60 && store.readinessScore() < 85">
           <span>Go-live readiness</span>
@@ -46,7 +45,6 @@ import { DataMigrationStore } from './data-migration.store';
         <article>
           <span>Rollback cover</span>
           <strong>{{ store.onboarding()?.rollbackHistory || 0 }}</strong>
-          <small>Completed rollback batches</small>
         </article>
       </section>
 

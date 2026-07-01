@@ -17,7 +17,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
         <div>
           <span class="eyebrow">Level 22 · Online booking website</span>
           <h2>{{ context()?.branding?.brandName || 'Book your salon appointment' }}</h2>
-          <p>Select service, staff and slot. The confirmation creates a real appointment and queues booking confirmation messaging.</p>
         </div>
         <a class="ghost-button" routerLink="/dashboard">Admin console</a>
       </section>
@@ -86,8 +85,8 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <div class="metrics-grid" *ngIf="context()?.paymentReady as payment">
         <aura-kpi-card tone="teal" target="/kpi-details/booking-portal/online-payment"><span>Online payment</span><strong>{{ payment.onlinePayment ? 'Ready' : 'Disabled' }}</strong><small>{{ payment.captureMode }}</small></aura-kpi-card>
         <aura-kpi-card tone="blue" target="/kpi-details/booking-portal/payment-modes"><span>Payment modes</span><strong>{{ payment.modes.length }}</strong><small>{{ payment.modes.join(', ') }}</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/booking-portal/services"><span>Services</span><strong>{{ services().length }}</strong><small>Available catalog</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/booking-portal/staff"><span>Staff</span><strong>{{ staffForBranch().length }}</strong><small>Branch-ready team</small></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/booking-portal/services"><span>Services</span><strong>{{ services().length }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/booking-portal/staff"><span>Staff</span><strong>{{ staffForBranch().length }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

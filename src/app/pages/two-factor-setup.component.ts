@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Enterprise Security Shield</span>
           <h2>Two-Factor Authentication</h2>
-          <p>Owner and admin accounts can require an authenticator code or one-time recovery code after password sign-in.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>

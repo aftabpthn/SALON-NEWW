@@ -21,7 +21,6 @@ type PublicReviewRequest = {
   template: `
     <main class="feedback-page">
       <section class="panel">
-        <p class="eyebrow">Aura Salon Feedback</p>
         <h1>{{ request()?.submitted ? 'Feedback received' : 'How was your visit?' }}</h1>
         <p class="lead" *ngIf="request() as item">
           {{ item.customerName || 'Guest' }} · {{ item.branchName || 'Aura Salon' }}

@@ -42,7 +42,6 @@
     <article class="metric-card">
       <span>Live offers</span>
       <strong>{{ summary()?.live || 0 }}</strong>
-      <small>currently in live stage</small>
     </article>
     <article class="metric-card">
       <span>Net ROI revenue</span>
@@ -52,7 +51,6 @@
     <article class="metric-card" [ngClass]="scoreClass(summary()?.averageScore)">
       <span>Average ROI score</span>
       <strong>{{ summary()?.averageScore || 0 }}</strong>
-      <small>0-100 explainable score</small>
     </article>
   </section>
 

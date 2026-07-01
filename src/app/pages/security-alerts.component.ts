@@ -21,12 +21,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <div class="metric-strip">
-        <article><span>Open</span><strong>{{ summary().open || 0 }}</strong><small>Needs review</small></article>
-        <article><span>Critical</span><strong>{{ summary().critical || 0 }}</strong><small>Immediate attention</small></article>
-        <article><span>Warning</span><strong>{{ summary().warning || 0 }}</strong><small>Suspicious activity</small></article>
-        <article><span>Resolved</span><strong>{{ summary().resolved || 0 }}</strong><small>Closed items</small></article>
-        <article><span>Total loaded</span><strong>{{ alerts().length }}</strong><small>Current queue</small></article>
-        <article><span>Active defense</span><strong>On</strong><small>Alert + block ready</small></article>
+        <article><span>Open</span><strong>{{ summary().open || 0 }}</strong></article>
+        <article><span>Critical</span><strong>{{ summary().critical || 0 }}</strong></article>
+        <article><span>Warning</span><strong>{{ summary().warning || 0 }}</strong></article>
+        <article><span>Resolved</span><strong>{{ summary().resolved || 0 }}</strong></article>
+        <article><span>Total loaded</span><strong>{{ alerts().length }}</strong></article>
+        <article><span>Active defense</span><strong>On</strong></article>
       </div>
 
       <section class="panel">

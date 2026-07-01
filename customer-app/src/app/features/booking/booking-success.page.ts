@@ -37,9 +37,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </section>
         } @else {
           <section class="success-card premium-card">
-            <p class="eyebrow">Booking status</p>
             <h1>No booking loaded</h1>
-            <p class="muted">The booking API did not return a confirmation in this session.</p>
             <ion-button expand="block" class="primary-gradient" routerLink="/tabs/bookings">View bookings</ion-button>
           </section>
         }

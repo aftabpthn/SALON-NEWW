@@ -54,12 +54,10 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         <article class="metric-card teal">
           <span>Staff count</span>
           <strong>{{ data.metrics?.staffCount || staff().length }}</strong>
-          <small>Current scope</small>
         </article>
         <article class="metric-card amber">
           <span>Revenue</span>
           <strong>{{ (data.metrics?.totalRevenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>Saved sales only</small>
         </article>
         <article class="metric-card green">
           <span>Commission</span>
@@ -69,7 +67,6 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         <article class="metric-card blue">
           <span>Average score</span>
           <strong>{{ (data.metrics?.averageScore || 0) | number: '1.0-1' }}</strong>
-          <small>Performance index</small>
         </article>
       </div>
 
@@ -106,32 +103,26 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
             <article>
               <span>Best staff</span>
               <strong>{{ aiRecommendedCount() }}</strong>
-              <small>Booking-ready recommendations</small>
             </article>
             <article>
               <span>Burnout warnings</span>
               <strong>{{ aiBurnoutCount() }}</strong>
-              <small>High or medium workload risk</small>
             </article>
             <article>
               <span>Absent recovery</span>
               <strong>{{ aiRecoveryCount() }}</strong>
-              <small>Needs backup planning</small>
             </article>
             <article>
               <span>Workload balance</span>
               <strong>{{ aiBalancedCount() }}</strong>
-              <small>Balanced staff in scope</small>
             </article>
             <article>
               <span>Target recovery</span>
               <strong>{{ aiTargetGapTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Revenue gap to recover</small>
             </article>
             <article>
               <span>Low utilization</span>
               <strong>{{ aiLowUtilizationCount() }}</strong>
-              <small>Can receive walk-ins/rebooking</small>
             </article>
           </div>
           <div class="table-wrap tall-table">

@@ -52,7 +52,7 @@ import { Subscription } from 'rxjs';
     </ng-container>
 
     <div *ngIf="!loading() && !d()" class="empty-state">
-      <span class="empty-icon">🏢</span><strong>Multi-branch is disabled</strong><small>Enable multi-branch in settings to view branch comparison.</small>
+      <span class="empty-icon">🏢</span><strong>Multi-branch is disabled</strong>
     </div>
 
     <ng-template #skeleton>

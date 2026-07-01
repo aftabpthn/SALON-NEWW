@@ -17,7 +17,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="page-heading">
           <div>
             <h1>Marketing automation</h1>
-            <p>Marketing &gt; Campaign generation, segmentation and reusable templates</p>
           </div>
           <label class="search-field">
             <span>Search campaigns</span>
@@ -26,12 +25,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <div class="metric-strip">
-          <article><span>Campaigns</span><strong>{{ summary.metrics.campaigns }}</strong><small>Saved campaigns</small></article>
-          <article><span>Workflows</span><strong>{{ summary.metrics.activeWorkflows }}</strong><small>Active retargeting</small></article>
-          <article><span>WhatsApp sequences</span><strong>{{ summary.metrics.whatsappSequences }}</strong><small>Automation journeys</small></article>
-          <article><span>Email templates</span><strong>{{ summary.metrics.emailTemplates }}</strong><small>Reusable templates</small></article>
-          <article><span>AI generations</span><strong>{{ summary.metrics.generatedIdeas }}</strong><small>Persisted outputs</small></article>
-          <article><span>Audience</span><strong>{{ summary.metrics.estimatedAudience }}</strong><small>Segment reach</small></article>
+          <article><span>Campaigns</span><strong>{{ summary.metrics.campaigns }}</strong></article>
+          <article><span>Workflows</span><strong>{{ summary.metrics.activeWorkflows }}</strong></article>
+          <article><span>WhatsApp sequences</span><strong>{{ summary.metrics.whatsappSequences }}</strong></article>
+          <article><span>Email templates</span><strong>{{ summary.metrics.emailTemplates }}</strong></article>
+          <article><span>AI generations</span><strong>{{ summary.metrics.generatedIdeas }}</strong></article>
+          <article><span>Audience</span><strong>{{ summary.metrics.estimatedAudience }}</strong></article>
         </div>
 
         <section class="workdesk">
@@ -40,7 +39,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <span>Marketing operations</span>
               <h2>Single compact work desk</h2>
             </div>
-            <small>Choose one task instead of scrolling through every form.</small>
           </div>
           <div class="desk-tabs">
             <button type="button" [class.active]="activeTab() === 'segment'" (click)="setActiveTab('segment')">Segment</button>

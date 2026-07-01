@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">AI Rank Bot</span>
           <h2>AI Growth Agency OS</h2>
-          <p>Google, Instagram, Facebook, WhatsApp, local SEO, campaign ROI, publishing approvals and competitor watch in one live workspace.</p>
           <div class="hero-badges">
             <span>Level 1-15 live</span>
             <span>tenant-safe</span>
@@ -37,14 +36,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <div class="metrics-grid" *ngIf="dashboard() as board">
-        <article class="metric-card"><span>Clients</span><strong>{{ board.metrics?.clients || 0 }}</strong><small>agency accounts</small></article>
-        <article class="metric-card"><span>Open tasks</span><strong>{{ board.metrics?.openTasks || 0 }}</strong><small>execution queue</small></article>
-        <article class="metric-card"><span>Keywords</span><strong>{{ board.metrics?.trackedKeywords || 0 }}</strong><small>rank tracker</small></article>
-        <article class="metric-card"><span>Content</span><strong>{{ board.metrics?.contentFactoryItems || 0 }}</strong><small>draft factory</small></article>
-        <article class="metric-card"><span>Copilot</span><strong>{{ board.metrics?.copilotChats || 0 }}</strong><small>saved answers</small></article>
+        <article class="metric-card"><span>Clients</span><strong>{{ board.metrics?.clients || 0 }}</strong></article>
+        <article class="metric-card"><span>Open tasks</span><strong>{{ board.metrics?.openTasks || 0 }}</strong></article>
+        <article class="metric-card"><span>Keywords</span><strong>{{ board.metrics?.trackedKeywords || 0 }}</strong></article>
+        <article class="metric-card"><span>Content</span><strong>{{ board.metrics?.contentFactoryItems || 0 }}</strong></article>
+        <article class="metric-card"><span>Copilot</span><strong>{{ board.metrics?.copilotChats || 0 }}</strong></article>
         <article class="metric-card"><span>Profit</span><strong>₹{{ board.metrics?.campaignProfit || 0 }}</strong><small>{{ board.metrics?.campaignRoiPercent || 0 }}% ROI</small></article>
-        <article class="metric-card"><span>SEO pages</span><strong>{{ board.metrics?.seoPages || 0 }}</strong><small>draft landing pages</small></article>
-        <article class="metric-card"><span>Alerts</span><strong>{{ board.metrics?.competitorAlerts || 0 }}</strong><small>competitor watch</small></article>
+        <article class="metric-card"><span>SEO pages</span><strong>{{ board.metrics?.seoPages || 0 }}</strong></article>
+        <article class="metric-card"><span>Alerts</span><strong>{{ board.metrics?.competitorAlerts || 0 }}</strong></article>
       </div>
 
       <section class="panel command-panel" *ngIf="commandCenter() as command">
@@ -56,8 +55,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <span class="badge">{{ command.metrics?.approvalRequired || 0 }} approvals</span>
         </div>
         <div class="summary-grid">
-          <article><span>Recommendations</span><strong>{{ command.metrics?.openRecommendations || 0 }}</strong><small>priority queue</small></article>
-          <article><span>Social leads</span><strong>{{ command.metrics?.socialLeads || 0 }}</strong><small>source tracking</small></article>
+          <article><span>Recommendations</span><strong>{{ command.metrics?.openRecommendations || 0 }}</strong></article>
+          <article><span>Social leads</span><strong>{{ command.metrics?.socialLeads || 0 }}</strong></article>
           <article><span>Campaign profit</span><strong>₹{{ command.metrics?.campaignProfit || 0 }}</strong><small>{{ command.metrics?.campaignRoiPercent || 0 }}% ROI</small></article>
           <article><span>Weak keywords</span><strong>{{ command.seoRankBot?.weakKeywords?.length || 0 }}</strong><small>{{ command.seoRankBot?.nextAction }}</small></article>
         </div>
@@ -297,11 +296,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <div class="summary-grid">
             <article><span>Rank score</span><strong>{{ audit.plan?.rankReadinessScore || audit.score }}</strong><small>{{ audit.plan?.scoreLabel || 'Ready' }}</small></article>
-            <article><span>Tasks</span><strong>{{ audit.workspace?.tasks?.length || 0 }}</strong><small>saved execution rows</small></article>
-            <article><span>Campaign rows</span><strong>{{ audit.workspace?.campaignProfit?.length || 0 }}</strong><small>ROI tracked</small></article>
-            <article><span>Planner</span><strong>{{ audit.workspace?.publishingPlanner?.length || 0 }}</strong><small>scheduled drafts</small></article>
-            <article><span>SEO pages</span><strong>{{ audit.workspace?.seoPages?.length || 0 }}</strong><small>website drafts</small></article>
-            <article><span>Alerts</span><strong>{{ audit.workspace?.competitorAlerts?.length || 0 }}</strong><small>watch signals</small></article>
+            <article><span>Tasks</span><strong>{{ audit.workspace?.tasks?.length || 0 }}</strong></article>
+            <article><span>Campaign rows</span><strong>{{ audit.workspace?.campaignProfit?.length || 0 }}</strong></article>
+            <article><span>Planner</span><strong>{{ audit.workspace?.publishingPlanner?.length || 0 }}</strong></article>
+            <article><span>SEO pages</span><strong>{{ audit.workspace?.seoPages?.length || 0 }}</strong></article>
+            <article><span>Alerts</span><strong>{{ audit.workspace?.competitorAlerts?.length || 0 }}</strong></article>
           </div>
 
           <div class="link-check-grid">
@@ -469,7 +468,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <article *ngFor="let customer of dhandaCustomers(audit)">
                   <strong>{{ customer.name }}</strong>
                   <span>{{ customer.phone }}</span>
-                  <small>review request eligible</small>
                 </article>
               </div>
               <div class="empty-state" *ngIf="!dhandaCustomers(audit).length">Lead/customer attribution is pending. Customer report will appear after campaign ROI or attribution events are added.</div>
@@ -528,7 +526,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </div>
               <div class="chart-grid">
                 <article class="chart-card" *ngFor="let chart of dhandaCharts(audit)">
-                  <div><strong>{{ chart.title }}</strong><small>Last 6 Months</small></div>
+                  <div><strong>{{ chart.title }}</strong></div>
                   <div class="line-chart"><span *ngFor="let point of chart.points" [style.height.%]="point"></span></div>
                   <p>{{ chart.insight }}</p>
                 </article>
@@ -570,7 +568,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article><span>Google spend</span><strong>₹{{ adsCommandSummary(audit).googleSpend }}</strong><small>{{ adsCommandSummary(audit).googleConversions }} conversions · ROAS {{ adsCommandSummary(audit).googleRoas }}x</small></article>
             <article><span>Meta spend</span><strong>₹{{ adsCommandSummary(audit).metaSpend }}</strong><small>{{ adsCommandSummary(audit).metaLeads }} leads · CTR {{ adsCommandSummary(audit).metaCtr }}%</small></article>
             <article><span>Health score</span><strong>{{ adsCommandSummary(audit).healthScore }}</strong><small>{{ adsCommandSummary(audit).healthLabel }}</small></article>
-            <article><span>Guardrails</span><strong>{{ riskGuardrails(audit).length }}</strong><small>spend, approval and publish checks</small></article>
+            <article><span>Guardrails</span><strong>{{ riskGuardrails(audit).length }}</strong></article>
           </div>
 
           <div class="ads-grid two-col">
@@ -763,8 +761,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="summary-grid ai-os-kpi-grid">
             <article><span>Executive profit</span><strong>₹{{ executiveCommandCenter(audit).profit }}</strong><small>{{ executiveCommandCenter(audit).profitLabel }}</small></article>
             <article><span>Waste risk</span><strong>{{ executiveCommandCenter(audit).wasteRisk }}</strong><small>{{ executiveCommandCenter(audit).wasteLabel }}</small></article>
-            <article><span>Next action</span><strong>{{ executiveCommandCenter(audit).nextAction }}</strong><small>owner command</small></article>
-            <article><span>Approval gate</span><strong>{{ autonomousAgentPlan(audit).approvalRequired ? 'ON' : 'OFF' }}</strong><small>auto-publish blocked</small></article>
+            <article><span>Next action</span><strong>{{ executiveCommandCenter(audit).nextAction }}</strong></article>
+            <article><span>Approval gate</span><strong>{{ autonomousAgentPlan(audit).approvalRequired ? 'ON' : 'OFF' }}</strong></article>
           </div>
 
           <div class="ads-grid two-col">
@@ -775,7 +773,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="ads-grid">
             <article class="ads-card"><header><h4>3. Forecast simulator</h4><span>budget se estimated leads, bookings and revenue</span></header><form class="form-grid mini-form"><label class="field"><span>Budget</span><input type="number" [formControl]="forecastBudget" /></label><label class="field"><span>Expected CPA</span><input type="number" [formControl]="forecastCpa" /></label><label class="field"><span>Booking rate %</span><input type="number" [formControl]="forecastBookingRate" /></label><label class="field"><span>Avg invoice</span><input type="number" [formControl]="forecastAverageInvoice" /></label></form><div class="funnel-row"><article *ngFor="let item of forecastSimulator()"><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.note }}</small></article></div></article>
             <article class="ads-card"><header><h4>4. Customer journey map</h4><span>ad click → WhatsApp → appointment → invoice → repeat</span></header><div class="journey-map"><article *ngFor="let stage of customerJourneyMap(audit)"><strong>{{ stage.stage }}</strong><span>{{ stage.owner }}</span><small>{{ stage.kpi }}</small></article></div></article>
-            <article class="ads-card"><header><h4>5. LTV / CAC dashboard</h4><span>customer lifetime value vs acquisition cost</span></header><div class="summary-grid mini-kpis"><article><span>CAC</span><strong>₹{{ ltvCacDashboard(audit).cac }}</strong><small>cost per acquired customer</small></article><article><span>LTV</span><strong>₹{{ ltvCacDashboard(audit).ltv }}</strong><small>estimated lifetime value</small></article><article><span>LTV:CAC</span><strong>{{ ltvCacDashboard(audit).ratio }}x</strong><small>{{ ltvCacDashboard(audit).label }}</small></article></div></article>
+            <article class="ads-card"><header><h4>5. LTV / CAC dashboard</h4><span>customer lifetime value vs acquisition cost</span></header><div class="summary-grid mini-kpis"><article><span>CAC</span><strong>₹{{ ltvCacDashboard(audit).cac }}</strong></article><article><span>LTV</span><strong>₹{{ ltvCacDashboard(audit).ltv }}</strong></article><article><span>LTV:CAC</span><strong>{{ ltvCacDashboard(audit).ratio }}x</strong><small>{{ ltvCacDashboard(audit).label }}</small></article></div></article>
           </div>
 
           <div class="ads-grid two-col">
@@ -812,14 +810,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 1 — CEO Command Center -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 1</span><strong>CEO Command Center</strong><small>Business health, AI briefing, predictive revenue and cash flow</small></div>
+            <div class="tier-head"><span>Tier 1</span><strong>CEO Command Center</strong></div>
             <div class="summary-grid ceo-score-grid">
               <article class="health-score"><span>Business Health Score</span><strong>{{ businessHealthScore(audit).score }}/100</strong><small>{{ businessHealthScore(audit).label }}</small></article>
-              <article><span>Revenue</span><strong>₹{{ businessHealthScore(audit).revenue }}</strong><small>sales momentum</small></article>
-              <article><span>Profit</span><strong>₹{{ businessHealthScore(audit).profit }}</strong><small>after estimated spend</small></article>
-              <article><span>Staff productivity</span><strong>{{ businessHealthScore(audit).staffProductivity }}%</strong><small>attendance + output</small></article>
-              <article><span>Customer retention</span><strong>{{ businessHealthScore(audit).retention }}%</strong><small>repeat customer signal</small></article>
-              <article><span>Marketing ROI</span><strong>{{ businessHealthScore(audit).marketingRoi }}x</strong><small>ads to revenue</small></article>
+              <article><span>Revenue</span><strong>₹{{ businessHealthScore(audit).revenue }}</strong></article>
+              <article><span>Profit</span><strong>₹{{ businessHealthScore(audit).profit }}</strong></article>
+              <article><span>Staff productivity</span><strong>{{ businessHealthScore(audit).staffProductivity }}%</strong></article>
+              <article><span>Customer retention</span><strong>{{ businessHealthScore(audit).retention }}%</strong></article>
+              <article><span>Marketing ROI</span><strong>{{ businessHealthScore(audit).marketingRoi }}x</strong></article>
             </div>
             <div class="ads-grid three-col">
               <article class="ads-card"><header><h4>Daily Briefing</h4><span>today, issues and next actions</span></header><div class="status-list"><article><strong>Today</strong><span>{{ dailyAiBriefing(audit).today }}</span></article><article class="warn"><strong>Issues</strong><span>{{ dailyAiBriefing(audit).bad }}</span></article><article><strong>Next action</strong><span>{{ dailyAiBriefing(audit).action }}</span></article></div></article>
@@ -830,7 +828,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 2 — AI Workforce -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 2</span><strong>AI Workforce</strong><small>Marketing, Sales, Operations, Finance and HR managers</small></div>
+            <div class="tier-head"><span>Tier 2</span><strong>AI Workforce</strong></div>
             <div class="ads-grid five-col">
               <article class="ads-card" *ngFor="let worker of aiWorkforceManagers(audit)"><header><h4>{{ worker.role }}</h4><span>{{ worker.focus }}</span></header><strong>{{ worker.recommendation }}</strong><small>{{ worker.action }}</small></article>
             </div>
@@ -838,7 +836,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 3 — Customer Intelligence -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 3</span><strong>Customer Intelligence</strong><small>Customer 360, churn, upsell, VIP and birthday automation</small></div>
+            <div class="tier-head"><span>Tier 3</span><strong>Customer Intelligence</strong></div>
             <div class="ads-grid two-col">
               <article class="ads-card"><header><h4>Customer 360 Profile</h4><span>visits, services, spend, membership, reviews</span></header><div class="table-wrap compact"><table><thead><tr><th>Customer</th><th>Visits</th><th>Services</th><th>Spend</th><th>Membership</th><th>Reviews</th></tr></thead><tbody><tr *ngFor="let customer of customer360Profiles(audit)"><td>{{ customer.name }}</td><td>{{ customer.visits }}</td><td>{{ customer.services }}</td><td>₹{{ customer.spend }}</td><td>{{ customer.membership }}</td><td>{{ customer.reviews }}</td></tr></tbody></table></div></article>
               <article class="ads-card"><header><h4>Churn Prediction</h4><span>kaun customer chhodne wala hai</span></header><div class="health-list"><article *ngFor="let row of churnPredictions(audit)" [class.warn]="row.risk !== 'low'"><strong>{{ row.customer }}</strong><span>{{ row.reason }}</span><small>{{ row.risk }} risk</small></article></div></article>
@@ -852,7 +850,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 4 — Franchise Ready -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 4</span><strong>Franchise Ready</strong><small>multi-branch dashboard, ranking, comparison, regional view and royalty</small></div>
+            <div class="tier-head"><span>Tier 4</span><strong>Franchise Ready</strong></div>
             <div class="ads-grid two-col">
               <article class="ads-card"><header><h4>Multi-Branch Dashboard</h4><span>branch performance overview</span></header><div class="table-wrap compact"><table><thead><tr><th>Branch</th><th>Revenue</th><th>Profit</th><th>Rating</th><th>Rank</th></tr></thead><tbody><tr *ngFor="let branch of branchDashboard(audit)"><td>{{ branch.branch }}</td><td>₹{{ branch.revenue }}</td><td>₹{{ branch.profit }}</td><td>{{ branch.rating }}</td><td>#{{ branch.rank }}</td></tr></tbody></table></div></article>
               <article class="ads-card"><header><h4>Branch Comparison + Regional Manager View</h4><span>best/worst branch and required actions</span></header><div class="status-list"><article *ngFor="let row of branchComparison(audit)" [class.warn]="row.status !== 'healthy'"><strong>{{ row.metric }}</strong><span>{{ row.detail }}</span><small>{{ row.status }}</small></article></div></article>
@@ -862,7 +860,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 5 — Reputation & Local SEO -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 5</span><strong>Reputation & Local SEO</strong><small>review hub, reply AI, negative alerts, heatmap and rank gap</small></div>
+            <div class="tier-head"><span>Tier 5</span><strong>Reputation & Local SEO</strong></div>
             <div class="ads-grid three-col">
               <article class="ads-card"><header><h4>Review Management Hub</h4><span>Google Reviews + Facebook Reviews</span></header><div class="table-wrap compact"><table><thead><tr><th>Source</th><th>Rating</th><th>Review</th><th>Status</th></tr></thead><tbody><tr *ngFor="let row of reviewHub(audit)"><td>{{ row.source }}</td><td>{{ row.rating }}</td><td>{{ row.review }}</td><td>{{ row.status }}</td></tr></tbody></table></div></article>
               <article class="ads-card"><header><h4>Review Reply AI + Negative Alert</h4><span>AI response and escalation</span></header><div class="health-list"><article *ngFor="let row of reviewReplyAi(audit)" [class.warn]="row.alert"><strong>{{ row.customer }}</strong><span>{{ row.reply }}</span><small>{{ row.alert ? 'negative alert' : 'ready reply' }}</small></article></div></article>
@@ -872,7 +870,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 6 — Enterprise Security -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 6</span><strong>Enterprise Security</strong><small>RBAC, audit trail, sensitive approvals, exports and monitoring</small></div>
+            <div class="tier-head"><span>Tier 6</span><strong>Enterprise Security</strong></div>
             <div class="ads-grid three-col">
               <article class="ads-card"><header><h4>Role-Based Access Control</h4><span>Owner, Manager, Staff, Agency, Client</span></header><div class="table-wrap compact"><table><thead><tr><th>Role</th><th>Access</th><th>Restriction</th></tr></thead><tbody><tr *ngFor="let role of enterpriseRoles()"><td>{{ role.role }}</td><td>{{ role.access }}</td><td>{{ role.restriction }}</td></tr></tbody></table></div></article>
               <article class="ads-card"><header><h4>Audit Trail + Activity Monitoring</h4><span>every sensitive action tracked</span></header><div class="status-list"><article *ngFor="let row of enterpriseAuditTrail(audit)"><strong>{{ row.actor }}</strong><span>{{ row.action }}</span><small>{{ row.time }}</small></article></div></article>
@@ -882,7 +880,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 7 — Automation Builder -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 7</span><strong>No-Code Automation Builder</strong><small>event triggers, scheduled automations and approval workflows</small></div>
+            <div class="tier-head"><span>Tier 7</span><strong>No-Code Automation Builder</strong></div>
             <div class="ads-grid two-col">
               <article class="ads-card"><header><h4>Workflow Builder</h4><span>new lead → WhatsApp → reminder → booking → invoice</span></header><div class="journey-map workflow-map"><article *ngFor="let step of workflowBuilderSteps()"><strong>{{ step.step }}</strong><span>{{ step.action }}</span><small>{{ step.owner }}</small></article></div></article>
               <article class="ads-card"><header><h4>Event Triggers + Scheduled Automations + Approval Workflows</h4><span>automation rules with human approval gates</span></header><div class="table-wrap compact"><table><thead><tr><th>Trigger</th><th>Schedule</th><th>Approval</th><th>Status</th></tr></thead><tbody><tr *ngFor="let row of automationRules(audit)"><td>{{ row.trigger }}</td><td>{{ row.schedule }}</td><td>{{ row.approval }}</td><td>{{ row.status }}</td></tr></tbody></table></div></article>
@@ -891,7 +889,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <!-- Tier 8 — AI Command Center -->
           <div class="tier-block">
-            <div class="tier-head"><span>Tier 8</span><strong>AI Command Center</strong><small>ask anything, natural language reports, executive chat, copilot and decision assistant</small></div>
+            <div class="tier-head"><span>Tier 8</span><strong>AI Command Center</strong></div>
             <div class="ads-grid two-col">
               <article class="ads-card executive-card"><header><h4>Ask Anything About Business</h4><span>last month profit, best campaign, best staff</span></header><textarea class="ai-input" [formControl]="businessCommandQuestion" rows="3" placeholder="Last month profit kyu gira?"></textarea><button class="primary-button full" type="button" (click)="askBusinessCommand(audit)">Ask Business Copilot</button><div class="ai-answer" *ngIf="businessCommandAnswer() as answer"><strong>{{ answer.title }}</strong><p>{{ answer.answer }}</p><small>{{ answer.decision }}</small></div></article>
               <article class="ads-card"><header><h4>Natural Language Reports + Executive AI Chat + Decision Assistant</h4><span>business insight in owner language</span></header><ul class="ai-actions"><li *ngFor="let insight of naturalLanguageReports(audit)">{{ insight }}</li></ul><div class="guardrail-note">Business Copilot rule: financial, budget, staff or customer-sensitive actions require owner approval before execution.</div></article>

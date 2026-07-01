@@ -45,13 +45,13 @@ import { Subscription } from 'rxjs';
         </div>
         <div class="alert-card">
           <span>⚠️</span>
-          <div><strong>{{ d()?.atRisk }} clients may churn</strong><small>These clients have not visited in 60-90 days. Consider re-engagement campaigns.</small></div>
+          <div><strong>{{ d()?.atRisk }} clients may churn</strong></div>
         </div>
       </section>
     </ng-container>
 
     <div *ngIf="!loading() && !d()" class="empty-state">
-      <span class="empty-icon">👤</span><strong>No client data</strong><small>Select filters to view client insights.</small>
+      <span class="empty-icon">👤</span><strong>No client data</strong>
     </div>
 
     <ng-template #skeleton>

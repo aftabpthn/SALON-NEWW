@@ -24,9 +24,7 @@ interface HelpItem {
       <main class="page-narrow help-page">
         <section class="help-hero premium-card">
           <span><ion-icon name="help-circle-outline"></ion-icon></span>
-          <p class="eyebrow">Help center</p>
           <h1>How can we help?</h1>
-          <p class="muted">Fast answers for bookings, payments, cancellations, refunds and customer account support.</p>
         </section>
 
         <section class="quick-grid" aria-label="Support categories">
@@ -41,9 +39,7 @@ interface HelpItem {
 
         <section class="premium-card contact-card">
           <div>
-            <p class="eyebrow">Contact support</p>
             <h2>Need human help?</h2>
-            <p class="muted">Start with your booking detail for fastest handoff. Live chat will connect here when support chat APIs are enabled.</p>
           </div>
           <div class="contact-actions">
             <ion-button class="primary-gradient" routerLink="/tabs/bookings">
@@ -60,7 +56,6 @@ interface HelpItem {
         <section class="faq-list" aria-label="Frequently asked questions">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">FAQs</p>
               <h2 class="section-title">{{ activeLabel() }}</h2>
             </div>
           </div>

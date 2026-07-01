@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Offline Billing Protection</h2>
-          <p>Queue offline bills with duplicate, payment, cash session and final sync safeguards visible before submission.</p>
         </div>
         <button class="ghost-button" type="button" (click)="loadLists()">Refresh lists</button>
       </div>

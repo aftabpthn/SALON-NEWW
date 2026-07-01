@@ -42,7 +42,6 @@ interface ConsultationChatMessage {
               <ion-icon name="sparkles-outline"></ion-icon>
             </div>
             <div class="chat-title">
-              <p class="eyebrow">Powered by AuraShine</p>
               <h1>Aura Consult</h1>
               <span>{{ areaLabel() }} · {{ matchedBusinesses().length }} salons in context · {{ consultationPhotos().length }} photo{{ consultationPhotos().length === 1 ? "" : "s" }}</span>
             </div>

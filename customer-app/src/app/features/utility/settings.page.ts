@@ -15,7 +15,6 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     <ion-header class="ion-no-border"><ion-toolbar><ion-buttons slot="start"><ion-back-button defaultHref="/tabs/profile"></ion-back-button></ion-buttons></ion-toolbar></ion-header>
     <ion-content>
       <main class="page-narrow settings-page">
-        <p class="eyebrow">Settings</p>
         <h1 class="page-title">Preferences</h1>
         @if (marketplace.customer(); as customer) {
           <section class="premium-card identity-card">
@@ -33,7 +32,6 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
         <section class="premium-card setting-row"><div><strong>Loyalty alerts</strong><span>Rewards, points, and membership updates</span></div><ion-toggle [(ngModel)]="preferences.loyalty" (ionChange)="save()" aria-label="Loyalty alerts"></ion-toggle></section>
 
         <section class="section-heading">
-          <p class="eyebrow">Security</p>
           <h2>Device security</h2>
         </section>
 
@@ -51,7 +49,6 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
               <strong>Biometric Login</strong>
               <span>Optional Face ID, Touch ID, or fingerprint check when opening this device.</span>
               @if (!auth.biometricSupported()) {
-                <small>Not supported by this browser or device.</small>
               }
             </div>
           </div>

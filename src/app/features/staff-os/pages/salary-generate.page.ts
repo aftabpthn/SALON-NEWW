@@ -85,7 +85,6 @@ type SalaryRow = {
         <div>
           <span class="eyebrow">Staff OS / Payroll</span>
           <h1>Salary Generate</h1>
-          <p>Payroll preview with attendance, OT, commission, tips, deductions and staff summaries.</p>
         </div>
         <div class="hero-actions">
           <button type="button" routerLink="/staff-os/payroll-rules">Payroll Rules</button>
@@ -130,7 +129,7 @@ type SalaryRow = {
 
       <section class="cards">
         <article><span>Total staff</span><strong>{{ summary().staff }}</strong></article>
-        <article><span>Invoice sales</span><strong>{{ money(summary().invoiceSales) }}</strong><small>live POS invoice value</small></article>
+        <article><span>Invoice sales</span><strong>{{ money(summary().invoiceSales) }}</strong></article>
         <article><span>Gross salary</span><strong>{{ money(summary().gross) }}</strong></article>
         <article><span>Service sales</span><strong>{{ money(summary().serviceSales) }}</strong><small>commission {{ money(summary().serviceCommission) }}</small></article>
         <article><span>Product sales</span><strong>{{ money(summary().productSales) }}</strong><small>commission {{ money(summary().productCommission) }}</small></article>

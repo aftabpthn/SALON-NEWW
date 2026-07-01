@@ -21,7 +21,6 @@ import { Component, EventEmitter, Output, signal } from '@angular/core';
         (input)="code.set($any($event.target).value)"
         (keydown.enter)="submit()"
       />
-      <small>Keyboard wedge scanners work here. Press Enter to resolve.</small>
     </label>
   `
 })

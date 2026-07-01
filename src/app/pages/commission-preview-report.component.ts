@@ -15,7 +15,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Reports / Commission preview</span>
           <h2>Commission Calculation Preview</h2>
-          <p>Preview staff payouts from POS item attribution before creating any payroll or commission run.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/reports/staff-sales">Staff sales</a>
@@ -36,7 +35,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch only from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="load()">Apply filters</button>
       </section>
@@ -58,12 +56,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <article class="metric-card">
             <span>Staff covered</span>
             <strong>{{ data.totals?.staffCount || 0 }}</strong>
-            <small>Includes item-level and fallback staff</small>
           </article>
           <article class="metric-card">
             <span>Target bonus</span>
             <strong>{{ data.totals?.targetBonus || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Preview only, not posted</small>
           </article>
         </div>
 

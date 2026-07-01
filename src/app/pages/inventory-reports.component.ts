@@ -46,7 +46,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <section class="panel product-inout-panel" *ngIf="activeTab() === 'product-in-out'">
         <div class="section-title">
-          <div><span class="eyebrow">Retail stock movement</span><h2>Product IN/OUT Retail</h2><p>Salonist se advance: stock, sales, COGS, margin, FIFO, reorder aur alert ek report me.</p></div>
+          <div><span class="eyebrow">Retail stock movement</span><h2>Product IN/OUT Retail</h2></div>
           <div class="hero-actions">
             <button class="ghost-button" type="button" (click)="exportProductInOutCsv()">Export CSV</button>
             <button class="ghost-button" type="button" (click)="exportProductInOutOwnerPdf()">Owner PDF</button>
@@ -87,14 +87,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </p>
 
         <section class="report-kpis product-inout-kpis" *ngIf="productInOutReport()?.summary as summary">
-          <article class="metric-card teal"><span>Total Product</span><strong>{{ summary.totalProduct || 0 }}</strong><small>filtered retail rows</small></article>
-          <article class="metric-card blue"><span>Total Sales Count</span><strong>{{ summary.totalSalesCount || 0 }}</strong><small>retail sold qty</small></article>
-          <article class="metric-card amber"><span>Total In Hand</span><strong>{{ summary.totalInHand || 0 }}</strong><small>current stock</small></article>
-          <article class="metric-card teal"><span>Revenue</span><strong>{{ summary.revenue | currency:'INR':'symbol':'1.0-0' }}</strong><small>retail sale</small></article>
-          <article class="metric-card amber"><span>COGS</span><strong>{{ summary.cogs | currency:'INR':'symbol':'1.0-0' }}</strong><small>stock cost</small></article>
-          <article class="metric-card blue"><span>Gross Margin</span><strong>{{ summary.grossMargin | currency:'INR':'symbol':'1.0-0' }}</strong><small>after COGS</small></article>
-          <article class="metric-card red"><span>Negative Stock</span><strong>{{ summary.negativeStockCount || 0 }}</strong><small>urgent correction</small></article>
-          <article class="metric-card purple"><span>Reorder</span><strong>{{ summary.reorderCount || 0 }}</strong><small>purchase action</small></article>
+          <article class="metric-card teal"><span>Total Product</span><strong>{{ summary.totalProduct || 0 }}</strong></article>
+          <article class="metric-card blue"><span>Total Sales Count</span><strong>{{ summary.totalSalesCount || 0 }}</strong></article>
+          <article class="metric-card amber"><span>Total In Hand</span><strong>{{ summary.totalInHand || 0 }}</strong></article>
+          <article class="metric-card teal"><span>Revenue</span><strong>{{ summary.revenue | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card amber"><span>COGS</span><strong>{{ summary.cogs | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card blue"><span>Gross Margin</span><strong>{{ summary.grossMargin | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card red"><span>Negative Stock</span><strong>{{ summary.negativeStockCount || 0 }}</strong></article>
+          <article class="metric-card purple"><span>Reorder</span><strong>{{ summary.reorderCount || 0 }}</strong></article>
         </section>
 
         <div class="movement-strip">

@@ -15,7 +15,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Advanced analytics engine</span>
           <h2>Forecasting, productivity, retention, churn, heatmaps and branch reports</h2>
-          <p>Analytics runs calculate from persisted appointments, sales, invoices, clients, memberships, staff, inventory and WhatsApp leads.</p>
         </div>
         <div class="form-actions">
           <button class="ghost-button" type="button" (click)="createSchedule()">Schedule digest</button>
@@ -112,7 +111,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <aura-kpi-card tone="slate" target="/kpi-details/analytics/funnel-paid">
             <span>Funnel paid</span>
             <strong>{{ funnelStage('Paid')?.conversionFromLead || 0 }}%</strong>
-            <small>From lead to paid invoice</small>
           </aura-kpi-card>
           <aura-kpi-card tone="rose" target="/kpi-details/analytics/branches">
             <span>Branches</span>

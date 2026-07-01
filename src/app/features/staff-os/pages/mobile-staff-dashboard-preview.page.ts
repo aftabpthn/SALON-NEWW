@@ -14,7 +14,6 @@ import { StaffOsSectionComponent } from '../ui/staff-os-section.component';
         <div>
           <span class="eyebrow">Staff mobile app</span>
           <h2>Mobile Staff Dashboard</h2>
-          <p>Offline snapshot, device sync status and conflict visibility for staff tablets and phones.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>
@@ -31,12 +30,10 @@ import { StaffOsSectionComponent } from '../ui/staff-os-section.component';
             <article class="action-card">
               <strong>{{ mobileDashboard()?.['today']?.['attendance']?.length || 0 }} attendance events</strong>
               <span>{{ mobileDashboard()?.['today']?.['schedules']?.length || 0 }} shifts · {{ mobileDashboard()?.['today']?.['tasks']?.length || 0 }} tasks</span>
-              <small>Staff mobile today API se live roster, attendance aur task snapshot.</small>
             </article>
             <article class="action-card">
               <strong>{{ mobileDashboard()?.['targets']?.length || 0 }} targets</strong>
               <span>{{ mobileDashboard()?.['payroll']?.length || 0 }} payroll rows visible by role</span>
-              <small>Staff-facing payroll/target data role permission ke hisaab se dikhta hai.</small>
             </article>
           </div>
         </section>
@@ -74,7 +71,6 @@ import { StaffOsSectionComponent } from '../ui/staff-os-section.component';
             <article class="action-card" *ngIf="!conflicts().length">
               <strong>No staff mobile conflicts</strong>
               <span>Offline staff mutations are clear or not synced yet.</span>
-              <small>Clock-in, leave and task sync conflicts will show here.</small>
             </article>
           </div>
         </section>

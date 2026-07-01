@@ -273,7 +273,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
         <div>
           <span class="eyebrow">POS / Day close</span>
           <h2>Cash Drawer Tally</h2>
-          <p>Open the drawer day, count notes and coins blind, reconcile bank settlements and close the shift.</p>
         </div>
         <div class="hero-actions">
           <input type="date" [(ngModel)]="businessDate" />
@@ -344,10 +343,10 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
 
             <section class="metric-grid" *ngIf="cashWorkspace() === 'overview'">
               <article><span>Status</span><strong>{{ active.status }}</strong><small>{{ active.businessDate }}</small></article>
-              <article *ngIf="!isBlind(active)"><span>Expected cash</span><strong>{{ money(active.expectedCashPaise) }}</strong><small>Opening + cash invoices - payout</small></article>
-              <article><span>Counted cash</span><strong>{{ money(countedTotal()) }}</strong><small>Notes and coins entered</small></article>
-              <article *ngIf="!isBlind(active)"><span>Variance</span><strong [class.warn]="(active.variancePaise || 0) !== 0">{{ money(active.variancePaise) }}</strong><small>Zero required unless manager override</small></article>
-              <article *ngIf="isBlind(active)"><span>Blind close</span><strong>{{ active.blindResult?.matched ? 'Matched' : active.blindResult?.managerApprovalRequired ? 'Approval' : 'Counting' }}</strong><small>Expected and variance hidden for cashier</small></article>
+              <article *ngIf="!isBlind(active)"><span>Expected cash</span><strong>{{ money(active.expectedCashPaise) }}</strong></article>
+              <article><span>Counted cash</span><strong>{{ money(countedTotal()) }}</strong></article>
+              <article *ngIf="!isBlind(active)"><span>Variance</span><strong [class.warn]="(active.variancePaise || 0) !== 0">{{ money(active.variancePaise) }}</strong></article>
+              <article *ngIf="isBlind(active)"><span>Blind close</span><strong>{{ active.blindResult?.matched ? 'Matched' : active.blindResult?.managerApprovalRequired ? 'Approval' : 'Counting' }}</strong></article>
             </section>
 
             <div class="workspace" *ngIf="cashWorkspace() === 'cashCount' || cashWorkspace() === 'operations' || cashWorkspace() === 'collections'">
@@ -683,7 +682,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
           <div>
             <span class="eyebrow">Float control</span>
             <h3>Next-day change float</h3>
-            <p>Suggested float keeps change-ready denominations and moves excess cash/large notes to safe.</p>
           </div>
           <div class="report-metrics" *ngIf="floatSuggestion() as suggestion">
             <span>Keep float <strong>{{ money(suggestion.suggestedFloatPaise) }}</strong></span>
@@ -732,7 +730,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
                 <div>
                   <span class="eyebrow">Day open</span>
                   <h3>Start cash drawer session</h3>
-                  <p>Opening balance is stored in paise in backend. Previous close is prefilled when available.</p>
                 </div>
                 <label class="field">
                   <span>Opening balance</span>

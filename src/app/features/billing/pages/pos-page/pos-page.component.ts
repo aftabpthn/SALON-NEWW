@@ -36,7 +36,6 @@ import { BillingRepository } from '../../data/billing.repository';
       <header class="billing-panel status-row">
         <div>
           <h1>Enterprise POS Billing</h1>
-          <p>Draft autosave, barcode input, split payment, refund/void guards, print and WhatsApp-ready invoice flow.</p>
         </div>
         <span class="badge" [class.offline]="!offline.online()">{{ offline.badge() }}</span>
       </header>

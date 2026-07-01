@@ -67,7 +67,6 @@ interface SupplierCommandRow {
         <div class="zenoti-heading">
           <div>
             <h1>Supplier command register</h1>
-            <p>Inventory > Supplier command</p>
           </div>
           <button class="primary-button" type="button" (click)="showForm.set(true)">Add supplier</button>
         </div>

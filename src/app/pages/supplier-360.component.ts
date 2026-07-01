@@ -15,7 +15,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Inventory / Supplier 360</span>
           <h2>{{ supplier()?.name || 'Supplier details' }}</h2>
-          <p>Full supplier profile with linked products, PO, GRN, price, payment, GSTIN, mapping and WhatsApp ordering history.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/suppliers">Back to suppliers</a>
@@ -27,14 +26,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <ng-container *ngIf="supplier() as vendor">
         <section class="supplier-kpis">
-          <article class="metric-card teal"><span>Supplier score</span><strong>{{ supplierScore() | number: '1.0-0' }}</strong><small>Reliability and expiry quality</small></article>
+          <article class="metric-card teal"><span>Supplier score</span><strong>{{ supplierScore() | number: '1.0-0' }}</strong></article>
           <article class="metric-card blue"><span>Total purchase</span><strong>{{ purchaseValue() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ purchaseTransactions().length }} purchase entries</small></article>
           <article class="metric-card amber"><span>Open PO</span><strong>{{ openPurchaseOrders().length }}</strong><small>{{ pendingRecommendations().length }} reorder signals</small></article>
-          <article class="metric-card red"><span>Quality issues</span><strong>{{ qualityIssues().length }}</strong><small>Expiry, waste or stockout risk</small></article>
+          <article class="metric-card red"><span>Quality issues</span><strong>{{ qualityIssues().length }}</strong></article>
           <article class="metric-card green"><span>GRN reliability</span><strong>{{ grnReliabilityScore() | number: '1.0-0' }}</strong><small>{{ receivedPurchaseOrders().length }} received PO</small></article>
-          <article class="metric-card violet"><span>PO variance</span><strong>{{ poVarianceRows().length }}</strong><small>Damage, short, rate or GST changes</small></article>
+          <article class="metric-card violet"><span>PO variance</span><strong>{{ poVarianceRows().length }}</strong></article>
           <article class="metric-card amber"><span>Payable watch</span><strong>{{ outstandingValue() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ creditDaysOverdue() }} credit day(s) overdue</small></article>
-          <article class="metric-card blue"><span>WhatsApp log</span><strong>{{ supplierWhatsappLogs().length }}</strong><small>Supplier order drafts</small></article>
+          <article class="metric-card blue"><span>WhatsApp log</span><strong>{{ supplierWhatsappLogs().length }}</strong></article>
         </section>
 
         <div class="supplier-layout">

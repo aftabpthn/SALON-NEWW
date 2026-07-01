@@ -15,7 +15,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Level 24 · Audit and compliance</span>
           <h2>Booking, billing, client deletion, payment, discount and login history with actor tracking</h2>
-          <p>Every tracked action stores actor, role, target, IP, user agent, details and timestamp.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>
@@ -23,12 +22,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/compliance/tracked-events"><span>Tracked events</span><strong>{{ metrics.trackedEvents }}</strong><small>Audit log rows</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/compliance/bookings-created"><span>Bookings created</span><strong>{{ metrics.bookingCreates }}</strong><small>Who created booking</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/compliance/bills-edited"><span>Bills edited</span><strong>{{ metrics.billEdits }}</strong><small>Invoice changes</small></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/compliance/clients-deleted"><span>Clients deleted</span><strong>{{ metrics.clientDeletes }}</strong><small>Deletion trail</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/compliance/payment-changes"><span>Payment changes</span><strong>{{ metrics.paymentChanges }}</strong><small>Payment/refund activity</small></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/compliance/logins"><span>Logins</span><strong>{{ metrics.logins }}</strong><small>Login history</small></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/compliance/tracked-events"><span>Tracked events</span><strong>{{ metrics.trackedEvents }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/compliance/bookings-created"><span>Bookings created</span><strong>{{ metrics.bookingCreates }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/compliance/bills-edited"><span>Bills edited</span><strong>{{ metrics.billEdits }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="red" target="/kpi-details/compliance/clients-deleted"><span>Clients deleted</span><strong>{{ metrics.clientDeletes }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/compliance/payment-changes"><span>Payment changes</span><strong>{{ metrics.paymentChanges }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="violet" target="/kpi-details/compliance/logins"><span>Logins</span><strong>{{ metrics.logins }}</strong></aura-kpi-card>
       </div>
 
       <section class="form-panel">

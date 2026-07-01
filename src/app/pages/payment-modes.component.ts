@@ -14,7 +14,6 @@ import { PosPaymentMode, PosSettingsService } from '../core/pos-settings.service
         <div>
           <span class="eyebrow">POS setup</span>
           <h2>Payment modes</h2>
-          <p>Add salon payment modes once and they appear inside POS invoice payment collection.</p>
         </div>
         <a class="ghost-button" routerLink="/pos">Back to POS</a>
       </div>

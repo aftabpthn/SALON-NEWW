@@ -15,7 +15,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Inventory / Product 360</span>
           <h2>{{ product()?.name || 'Product intelligence' }}</h2>
-          <p>Current stock, branch stock, batch expiry, purchase history, POS sale history, service usage, margin and reorder risk in one place.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/inventory">Back to inventory</a>
@@ -28,7 +27,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <ng-container *ngIf="product() as item">
         <section class="product-kpis">
           <article class="metric-card teal"><span>Current stock</span><strong>{{ item.stock || 0 }}</strong><small>Reorder at {{ item.lowStockThreshold || 0 }}</small></article>
-          <article class="metric-card amber"><span>Stock value</span><strong>{{ stockValue(item) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Cash locked in this SKU</small></article>
+          <article class="metric-card amber"><span>Stock value</span><strong>{{ stockValue(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card blue"><span>Gross margin</span><strong>{{ margin(item) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ marginPercent(item) | number: '1.0-0' }}% on sale price</small></article>
           <article class="metric-card red"><span>Expiry risk</span><strong>{{ expiringBatches().length }}</strong><small>{{ nearestExpiry(item.id) }}</small></article>
         </section>

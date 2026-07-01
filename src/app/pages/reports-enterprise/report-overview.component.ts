@@ -80,7 +80,6 @@ import { Subscription } from 'rxjs';
     <div *ngIf="!loading() && !revenueTrend()" class="empty-state">
       <span class="empty-icon">📊</span>
       <strong>No data yet</strong>
-      <small>Select a date range to view business overview.</small>
     </div>
 
     <ng-template #overviewSkeleton>

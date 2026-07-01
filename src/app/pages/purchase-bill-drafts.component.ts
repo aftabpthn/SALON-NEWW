@@ -36,12 +36,12 @@ type UploadFile = {
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="draft-kpis">
-        <article class="metric-card teal"><span>Drafts</span><strong>{{ draftCounts().draft }}</strong><small>Awaiting review</small></article>
-        <article class="metric-card amber"><span>Open lines</span><strong>{{ draftCounts().openLines }}</strong><small>Need receiving check</small></article>
-        <article class="metric-card blue"><span>Confirm-ready</span><strong>{{ draftCounts().confirmReady }}</strong><small>Validation status ready</small></article>
-        <article class="metric-card red"><span>Review value</span><strong>{{ draftCounts().draftValue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open bill amount</small></article>
-        <article class="metric-card violet"><span>New products</span><strong>{{ draftCounts().newProducts }}</strong><small>Need category/type check</small></article>
-        <article class="metric-card dark"><span>Confirmed</span><strong>{{ draftCounts().confirmed }}</strong><small>Stock received safely</small></article>
+        <article class="metric-card teal"><span>Drafts</span><strong>{{ draftCounts().draft }}</strong></article>
+        <article class="metric-card amber"><span>Open lines</span><strong>{{ draftCounts().openLines }}</strong></article>
+        <article class="metric-card blue"><span>Confirm-ready</span><strong>{{ draftCounts().confirmReady }}</strong></article>
+        <article class="metric-card red"><span>Review value</span><strong>{{ draftCounts().draftValue | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card violet"><span>New products</span><strong>{{ draftCounts().newProducts }}</strong></article>
+        <article class="metric-card dark"><span>Confirmed</span><strong>{{ draftCounts().confirmed }}</strong></article>
       </section>
 
       <div class="draft-workbench">
@@ -135,7 +135,6 @@ type UploadFile = {
           <article class="command-card">
             <span>Review gates</span>
             <strong>{{ activeSummary().readyChecks }}/4</strong>
-            <small>Supplier, header, products and totals</small>
           </article>
           <article class="command-card">
             <span>Match coverage</span>
@@ -235,7 +234,6 @@ type UploadFile = {
             <article>
               <span>Pricing</span>
               <strong>{{ activeSummary().pricedLines }}</strong>
-              <small>Cost/tax lines with value</small>
             </article>
           </div>
 

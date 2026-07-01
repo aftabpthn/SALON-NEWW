@@ -14,16 +14,13 @@ import { MarketplaceService } from "../../core/marketplace.service";
       <main class="page-narrow summary-page">
         <section class="summary-hero premium-card">
           <span class="hero-icon"><ion-icon name="checkmark-done-outline"></ion-icon></span>
-          <p class="eyebrow">Confirmation summary</p>
           <h1>Review your appointment</h1>
-          <p class="muted">All booking details are pulled from the live customer booking response before confirmation.</p>
         </section>
 
         @if (booking(); as booking) {
           <section class="premium-card summary-card">
             <div class="summary-heading">
               <div>
-                <p class="eyebrow">Booking</p>
                 <h2>{{ booking.businessName }}</h2>
                 <p class="muted">{{ booking.serviceName }} with {{ booking.staffName || "Any available professional" }}</p>
               </div>
@@ -45,7 +42,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <div><span>Service price</span><strong>{{ money(servicePricePaise()) }}</strong></div>
             <div><span>Estimated taxes</span><strong>{{ taxLabel() }}</strong></div>
             <div class="total-row"><span>Estimated total</span><strong>{{ money(totalPaise()) }}</strong></div>
-            <p class="muted">Final taxes, discounts, and online payment status come from the invoice/payment backend after the booking is processed.</p>
           </section>
 
           <section class="premium-card policy-card">
@@ -70,7 +66,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
         } @else {
           <section class="premium-card empty-state">
             <h2>No booking loaded</h2>
-            <p class="muted">Create a booking from a business profile to review a full confirmation summary.</p>
             <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
           </section>
         }

@@ -14,19 +14,17 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <div>
             <span>Live offers</span>
             <h1>Current marketplace promotions</h1>
-            <p>Explore live customer offers from eligible businesses.</p>
           </div>
           <ion-button fill="light" routerLink="/tabs/search">Find offers</ion-button>
         </section>
 
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Exclusive offers</p>
             <h2 class="section-title">Save on your next appointment</h2>
           </div>
         </div>
         @if (marketplace.loading()) {
-          <section class="state-card premium-card"><h2>Loading offers</h2><p class="muted">Fetching live marketplace promotions.</p></section>
+          <section class="state-card premium-card"><h2>Loading offers</h2></section>
         }
         @if (marketplace.error()) {
           <section class="state-card premium-card error"><h2>Could not load offers</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
@@ -35,7 +33,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           @for (business of offerBusinesses(); track business.id) {
             <aura-business-card [business]="business"></aura-business-card>
           } @empty {
-            <section class="state-card premium-card"><h2>No offers available</h2><p class="muted">The offers API returned no current promotions.</p></section>
+            <section class="state-card premium-card"><h2>No offers available</h2></section>
           }
         </div>
       </main>

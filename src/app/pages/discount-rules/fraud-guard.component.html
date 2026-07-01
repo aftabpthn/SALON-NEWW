@@ -26,12 +26,10 @@
     <article class="metric-card">
       <span>Avg risk</span>
       <strong>{{ summary()?.averageRiskScore || 0 }}</strong>
-      <small>score out of 100</small>
     </article>
     <article class="metric-card">
       <span>At-risk discount</span>
       <strong>{{ formatMoney(summary()?.totalAtRiskDiscountPaise) }}</strong>
-      <small>from available evidence</small>
     </article>
   </section>
 

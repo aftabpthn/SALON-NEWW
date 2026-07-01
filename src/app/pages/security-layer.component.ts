@@ -21,12 +21,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <div class="metric-strip" *ngIf="summary()?.metrics as metrics">
-        <article><span>Audit logs</span><strong>{{ metrics.auditLogs }}</strong><small>Persisted events</small></article>
-        <article><span>Active sessions</span><strong>{{ metrics.activeSessions }}</strong><small>Session management</small></article>
-        <article><span>Backups</span><strong>{{ metrics.backups }}</strong><small>SQLite snapshots</small></article>
-        <article><span>Permissions</span><strong>{{ metrics.permissions }}</strong><small>Role grants</small></article>
-        <article><span>Secrets</span><strong>{{ metrics.encryptedSecrets }}</strong><small>AES vault entries</small></article>
-        <article><span>Risk score</span><strong>{{ metrics.riskScore }}</strong><small>Denied + activity signals</small></article>
+        <article><span>Audit logs</span><strong>{{ metrics.auditLogs }}</strong></article>
+        <article><span>Active sessions</span><strong>{{ metrics.activeSessions }}</strong></article>
+        <article><span>Backups</span><strong>{{ metrics.backups }}</strong></article>
+        <article><span>Permissions</span><strong>{{ metrics.permissions }}</strong></article>
+        <article><span>Secrets</span><strong>{{ metrics.encryptedSecrets }}</strong></article>
+        <article><span>Risk score</span><strong>{{ metrics.riskScore }}</strong></article>
       </div>
 
       <div class="workdesk">

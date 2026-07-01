@@ -73,9 +73,7 @@ interface ConsultationChatMessage {
       <main class="page home-page">
         <section class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">Beauty and wellness marketplace</p>
             <h1 class="page-title">Find and book your next self-care visit</h1>
-            <p class="muted">Browse friendly local salons, spas, barbers, nail studios and skin clinics with simple booking and clear prices.</p>
             <div class="search-panel">
               <div class="home-search-wrap">
                 <ion-searchbar
@@ -124,7 +122,6 @@ interface ConsultationChatMessage {
               <small>{{ consultationResponse()?.mode === "openai" ? "ChatGPT AI live" : "Smart local guide" }}</small>
             </div>
             <h2>Show photos, chat, and get the right salon plan</h2>
-            <p class="consultation-copy">Ask for hair, skin, nails, spa, barber or bridal help. Aura checks your photos, location, live salons, services, prices and next steps.</p>
 
             <div class="consultation-goals" aria-label="Consultation goals">
               @for (goal of consultationGoals; track goal) {
@@ -222,9 +219,7 @@ interface ConsultationChatMessage {
 
         <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
           <article class="welcome-card">
-            <p class="eyebrow">Aura Shine customer</p>
             <h2>{{ greeting() }}</h2>
-            <p>Book faster, track real appointments, and keep your AuraSalon profile in sync with the SaaS backend.</p>
             <div class="welcome-actions">
               <ion-button class="primary-gradient" routerLink="/tabs/search">
                 <ion-icon name="search-outline" slot="start"></ion-icon>
@@ -252,7 +247,6 @@ interface ConsultationChatMessage {
         @if (!searchActive() && recentlyVisited().length) {
           <div class="section-heading priority-heading">
             <div>
-              <p class="eyebrow">Recently visited</p>
               <h2 class="section-title">Book again faster</h2>
             </div>
           </div>
@@ -272,7 +266,6 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
           <div class="section-heading priority-heading">
             <div>
-              <p class="eyebrow">Picked for you</p>
               <h2 class="section-title">Recommendations</h2>
             </div>
             <a routerLink="/tabs/search">Explore all</a>
@@ -281,7 +274,7 @@ interface ConsultationChatMessage {
             @for (business of recommendations(); track business.id) {
               <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
             } @empty {
-              <section class="state-card premium-card"><h2>No recommendations yet</h2><p class="muted">Browse or book a salon and we will personalize this space.</p></section>
+              <section class="state-card premium-card"><h2>No recommendations yet</h2></section>
             }
           </div>
         }
@@ -289,7 +282,6 @@ interface ConsultationChatMessage {
         @if (!searchActive() && recentlyViewed().length) {
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Recently viewed</p>
               <h2 class="section-title">Continue where you left off</h2>
             </div>
           </div>
@@ -323,7 +315,6 @@ interface ConsultationChatMessage {
         @if (searchActive()) {
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Search results</p>
               <h2 class="section-title">{{ homeResults().length }} places for "{{ activeQuery() }}"</h2>
             </div>
             <button class="section-link clear-search" type="button" (click)="clearSearch()">Clear</button>
@@ -332,7 +323,7 @@ interface ConsultationChatMessage {
             @for (business of homeResults(); track business.id) {
               <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
             } @empty {
-              <section class="state-card premium-card"><h2>No places found</h2><p class="muted">Try salon name, service, staff, area, or city.</p></section>
+              <section class="state-card premium-card"><h2>No places found</h2></section>
             }
           </div>
         }
@@ -340,7 +331,6 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
         <div class="section-heading">
           <div>
-            <p class="eyebrow">More to explore</p>
             <h2 class="section-title">Recommended businesses</h2>
           </div>
           <a routerLink="/tabs/search">See all</a>
@@ -349,7 +339,7 @@ interface ConsultationChatMessage {
           @for (business of recommendedMore(); track business.id) {
             <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
           } @empty {
-            <section class="state-card premium-card"><h2>No businesses found</h2><p class="muted">Try a different search or check the marketplace API.</p></section>
+            <section class="state-card premium-card"><h2>No businesses found</h2></section>
           }
         </div>
         }
@@ -357,7 +347,6 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Fast slots</p>
             <h2 class="section-title">Nearby businesses</h2>
           </div>
           <a routerLink="/tabs/search">View map</a>
@@ -366,7 +355,7 @@ interface ConsultationChatMessage {
           @for (business of nearby(); track business.id) {
             <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
           } @empty {
-            <section class="state-card premium-card"><h2>No nearby businesses yet</h2><p class="muted">Location-aware results will appear once the API returns businesses.</p></section>
+            <section class="state-card premium-card"><h2>No nearby businesses yet</h2></section>
           }
         </div>
         }
@@ -374,7 +363,6 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Popular now</p>
             <h2 class="section-title">Services customers love</h2>
           </div>
         </div>
@@ -386,7 +374,7 @@ interface ConsultationChatMessage {
               <strong>{{ item.price }}</strong>
             </a>
           } @empty {
-            <section class="state-card premium-card"><h2>No services published yet</h2><p class="muted">Popular services will appear when businesses publish services through the backend.</p></section>
+            <section class="state-card premium-card"><h2>No services published yet</h2></section>
           }
         </div>
         }

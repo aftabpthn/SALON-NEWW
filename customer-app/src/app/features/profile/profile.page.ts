@@ -17,7 +17,6 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <section class="profile-card premium-card">
             <div class="avatar">{{ (marketplace.customer()?.name || "?").charAt(0) }}</div>
             <div>
-              <p class="eyebrow">Your account</p>
               <h1>{{ marketplace.customer()?.name || "Loading profile" }}</h1>
               <p class="muted">{{ marketplace.customer()?.email || "No email saved" }} · {{ marketplace.customer()?.phone || "No phone saved" }}</p>
             </div>
@@ -30,16 +29,14 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <section class="profile-card premium-card">
             <div class="avatar">?</div>
             <div>
-              <p class="eyebrow">Login required</p>
               <h1>Sign in to manage your account</h1>
-              <p class="muted">Your profile, bookings, and saved places require a real customer session.</p>
               <ion-button class="primary-gradient" routerLink="/login">Login</ion-button>
             </div>
           </section>
         }
 
         @if (marketplace.loading()) {
-          <section class="status-card premium-card"><strong>Loading profile</strong><p class="muted">Fetching your customer account.</p></section>
+          <section class="status-card premium-card"><strong>Loading profile</strong></section>
         }
         @if (marketplace.error()) {
           <section class="status-card premium-card error"><strong>Profile unavailable</strong><p>{{ marketplace.error() }}</p></section>
@@ -77,7 +74,6 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <section class="profile-editor premium-card">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Profile details</p>
                 <h2>Edit customer profile</h2>
               </div>
               <ion-button size="small" class="primary-gradient" (click)="saveProfile()" [disabled]="marketplace.loading()">
@@ -140,7 +136,6 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <section class="profile-editor premium-card">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Notifications</p>
                 <h2>Preferences</h2>
               </div>
             </div>
@@ -157,7 +152,6 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <section class="profile-editor premium-card">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Security</p>
                 <h2>Change password</h2>
               </div>
             </div>
@@ -186,11 +180,9 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <section class="profile-editor danger-card premium-card">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Permanent delete</p>
                 <h2>Delete account</h2>
               </div>
             </div>
-            <p class="muted">This anonymizes your customer profile and keeps booking/invoice history only where required for audit and legal records.</p>
             <ion-list>
               <ion-item lines="none">
                 <ion-icon name="trash-outline" slot="start"></ion-icon>

@@ -84,7 +84,6 @@ type OutgoingFundEntry = ApiRecord & {
         <div>
           <span class="eyebrow">Transactions / Funds</span>
           <h2>Outgoing Funds Entry</h2>
-          <p>Enter cash, bank, expense, salary, advance, loan and purchase payment vouchers with editable line items.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/transactions/outgoing-funds-report">Saved Page</a>
@@ -99,14 +98,14 @@ type OutgoingFundEntry = ApiRecord & {
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
       <section class="metric-grid" *ngIf="!loading() && !error()">
-        <article><span>Total outgoing</span><strong>{{ money(totalOutgoing()) }}</strong><small>Visible transaction entries</small></article>
-        <article><span>Draft entries</span><strong>{{ draftCount() }}</strong><small>Not posted yet</small></article>
-        <article><span>Posted entries</span><strong>{{ postedCount() }}</strong><small>Ready for ledger review</small></article>
-        <article><span>Balance Sheet link</span><strong>{{ linkedCount() }}/{{ postableCount() }}</strong><small>Queued or posted to GL outbox</small></article>
-        <article><span>Salon categories</span><strong>{{ categoryCount() }}</strong><small>Covered in visible rows</small></article>
-        <article><span>Operating outgoing</span><strong>{{ money(operatingOutgoing()) }}</strong><small>Expense impact</small></article>
-        <article><span>Balance Sheet only</span><strong>{{ money(balanceSheetOnlyOutgoing()) }}</strong><small>Asset, liability or owner movement</small></article>
-        <article><span>Review rows</span><strong>{{ reviewLineCount() }}</strong><small>Needs better category naming</small></article>
+        <article><span>Total outgoing</span><strong>{{ money(totalOutgoing()) }}</strong></article>
+        <article><span>Draft entries</span><strong>{{ draftCount() }}</strong></article>
+        <article><span>Posted entries</span><strong>{{ postedCount() }}</strong></article>
+        <article><span>Balance Sheet link</span><strong>{{ linkedCount() }}/{{ postableCount() }}</strong></article>
+        <article><span>Salon categories</span><strong>{{ categoryCount() }}</strong></article>
+        <article><span>Operating outgoing</span><strong>{{ money(operatingOutgoing()) }}</strong></article>
+        <article><span>Balance Sheet only</span><strong>{{ money(balanceSheetOnlyOutgoing()) }}</strong></article>
+        <article><span>Review rows</span><strong>{{ reviewLineCount() }}</strong></article>
       </section>
 
       <div class="outgoing-layout" *ngIf="!loading() && !error()">

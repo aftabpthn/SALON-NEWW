@@ -133,7 +133,6 @@ type WalletLedgerRow = ApiRecord & {
         <div>
           <span class="eyebrow">Reports / Financial summary</span>
           <h2>Financial Summary</h2>
-          <p>Month-wise sales, collection, pending balance, discounts, taxes, expenses, tips and payment mode reconciliation.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/reports">Reports</a>
@@ -250,7 +249,6 @@ type WalletLedgerRow = ApiRecord & {
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="load()">Go</button>
       </section>
@@ -380,27 +378,22 @@ type WalletLedgerRow = ApiRecord & {
           <article>
             <span>Paid</span>
             <strong>{{ totalFor('paid') | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Received amount</small>
           </article>
           <article>
             <span>Balance</span>
             <strong>{{ totalFor('balance') | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Pending collection</small>
           </article>
           <article>
             <span>Taxes</span>
             <strong>{{ totalFor('taxes') | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>GST / tax</small>
           </article>
           <article>
             <span>Expenses</span>
             <strong>{{ totalFor('expenses') | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Finance entries</small>
           </article>
           <article>
             <span>Net Cashflow</span>
             <strong>{{ netCashflow() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Paid less expenses</small>
           </article>
         </div>
 
@@ -446,17 +439,14 @@ type WalletLedgerRow = ApiRecord & {
             <article>
               <span>Collection rate</span>
               <strong>{{ collectionRate() }}%</strong>
-              <small>Paid against total sales</small>
             </article>
             <article>
               <span>Discount leakage</span>
               <strong>{{ discountRate() }}%</strong>
-              <small>Discounts against total sales</small>
             </article>
             <article>
               <span>Top mode</span>
               <strong>{{ topPaymentMode() }}</strong>
-              <small>Highest collected mode</small>
             </article>
             <article>
               <span>Pending risk</span>
@@ -555,18 +545,18 @@ type WalletLedgerRow = ApiRecord & {
           </div>
 
           <div class="daily-sheet-kpis">
-            <article><span>Total bills</span><strong>{{ dailySheetSummary().totalBills }}</strong><small>Invoice count</small></article>
-            <article><span>Bill average</span><strong>{{ dailySheetSummary().billAverage | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net sale / bills</small></article>
-            <article><span>Gross sale</span><strong>{{ dailySheetSummary().grossSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discounts</small></article>
-            <article><span>Net sale</span><strong>{{ dailySheetSummary().netSale | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Final billed</small></article>
-            <article><span>Total received</span><strong>{{ dailySheetSummary().totalReceived | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Payment collections</small></article>
-            <article><span>Pending / unpaid</span><strong>{{ dailySheetSummary().pendingUnpaid | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Balance open</small></article>
-            <article><span>Discount</span><strong>{{ dailySheetSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Manual + line discount</small></article>
-            <article><span>Coupon discount</span><strong>{{ dailySheetSummary().couponDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Coupon leakage</small></article>
-            <article><span>Membership discount</span><strong>{{ dailySheetSummary().membershipDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Membership benefits</small></article>
-            <article><span>GST / tax</span><strong>{{ dailySheetSummary().gstTax | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tax collected</small></article>
-            <article><span>Expenses</span><strong>{{ dailySheetSummary().expenses | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Finance expense rows</small></article>
-            <article><span>Staff tips</span><strong>{{ dailySheetSummary().staffTips | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Tips on invoices</small></article>
+            <article><span>Total bills</span><strong>{{ dailySheetSummary().totalBills }}</strong></article>
+            <article><span>Bill average</span><strong>{{ dailySheetSummary().billAverage | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Gross sale</span><strong>{{ dailySheetSummary().grossSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Net sale</span><strong>{{ dailySheetSummary().netSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Total received</span><strong>{{ dailySheetSummary().totalReceived | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Pending / unpaid</span><strong>{{ dailySheetSummary().pendingUnpaid | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Discount</span><strong>{{ dailySheetSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Coupon discount</span><strong>{{ dailySheetSummary().couponDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Membership discount</span><strong>{{ dailySheetSummary().membershipDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>GST / tax</span><strong>{{ dailySheetSummary().gstTax | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Expenses</span><strong>{{ dailySheetSummary().expenses | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Staff tips</span><strong>{{ dailySheetSummary().staffTips | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           </div>
 
           <div class="daily-sheet-grid">
@@ -656,11 +646,11 @@ type WalletLedgerRow = ApiRecord & {
           <div class="daily-sheet-kpis">
             <article><span>Best revenue day</span><strong>{{ dailyRevenueKpis()['bestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['bestRevenueValue'] | currency: 'INR':'symbol':'1.0-0' }}</small></article>
             <article><span>Lowest revenue day</span><strong>{{ dailyRevenueKpis()['lowestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['lowestRevenueValue'] | currency: 'INR':'symbol':'1.0-0' }}</small></article>
-            <article><span>Average daily sale</span><strong>{{ dailyRevenueKpis()['averageDailySale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Net sale / active day</small></article>
+            <article><span>Average daily sale</span><strong>{{ dailyRevenueKpis()['averageDailySale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
             <article><span>Growth vs previous period</span><strong>{{ dailyRevenueKpis()['growthRate'] | number:'1.1-1' }}%</strong><small>{{ dailyRevenueKpis()['growthLabel'] }}</small></article>
             <article><span>Pending due trend</span><strong>{{ dailyRevenueKpis()['pendingDueTrend'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ dailyRevenueKpis()['pendingDueLabel'] }}</small></article>
-            <article><span>Discount leakage %</span><strong>{{ dailyRevenueKpis()['discountLeakageRate'] | number:'1.1-1' }}%</strong><small>Discount / gross sale</small></article>
-            <article><span>Collection rate %</span><strong>{{ dailyRevenueKpis()['collectionRate'] | number:'1.1-1' }}%</strong><small>Received / net sale</small></article>
+            <article><span>Discount leakage %</span><strong>{{ dailyRevenueKpis()['discountLeakageRate'] | number:'1.1-1' }}%</strong></article>
+            <article><span>Collection rate %</span><strong>{{ dailyRevenueKpis()['collectionRate'] | number:'1.1-1' }}%</strong></article>
           </div>
 
           <div class="daily-revenue-charts">
@@ -858,9 +848,9 @@ type WalletLedgerRow = ApiRecord & {
             <article><span>Non-member clients count</span><strong>{{ memberSalesSummary()['nonMemberClients'] }}</strong><small>{{ memberSalesSummary()['nonMemberVisits'] }} visits</small></article>
             <article><span>Member revenue</span><strong>{{ memberSalesSummary()['memberRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ memberSalesSummary()['memberRevenueShare'] | number:'1.1-1' }}% share</small></article>
             <article><span>Non-member revenue</span><strong>{{ memberSalesSummary()['nonMemberRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ memberSalesSummary()['nonMemberRevenueShare'] | number:'1.1-1' }}% share</small></article>
-            <article><span>Paid amount</span><strong>{{ memberSalesSummary()['paidAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Total collected</small></article>
-            <article><span>Pending amount</span><strong>{{ memberSalesSummary()['pendingAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Open balance</small></article>
-            <article><span>Collection rate %</span><strong>{{ memberSalesSummary()['collectionRate'] | number:'1.1-1' }}%</strong><small>Paid / sale</small></article>
+            <article><span>Paid amount</span><strong>{{ memberSalesSummary()['paidAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Pending amount</span><strong>{{ memberSalesSummary()['pendingAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Collection rate %</span><strong>{{ memberSalesSummary()['collectionRate'] | number:'1.1-1' }}%</strong></article>
           </div>
 
           <div class="member-sales-grid">
@@ -1008,18 +998,18 @@ type WalletLedgerRow = ApiRecord & {
           </div>
 
           <div class="daily-sheet-kpis sales-tax-kpis">
-            <article><span>Total bills</span><strong>{{ salesTaxSummary()['totalBills'] }}</strong><small>Deleted/void excluded</small></article>
-            <article><span>Gross sale</span><strong>{{ salesTaxSummary()['grossSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Before discounts</small></article>
-            <article><span>Net sale</span><strong>{{ salesTaxSummary()['netSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Invoice total</small></article>
-            <article><span>Taxable amount</span><strong>{{ salesTaxSummary()['taxableAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST base</small></article>
-            <article><span>Total GST</span><strong>{{ salesTaxSummary()['totalGst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>CGST + SGST + IGST</small></article>
-            <article><span>CGST</span><strong>{{ salesTaxSummary()['cgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Central tax</small></article>
-            <article><span>SGST</span><strong>{{ salesTaxSummary()['sgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>State tax</small></article>
-            <article><span>IGST</span><strong>{{ salesTaxSummary()['igst'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Interstate tax</small></article>
-            <article><span>Coupon discount</span><strong>{{ salesTaxSummary()['couponDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Coupon leakage</small></article>
-            <article><span>Membership discount</span><strong>{{ salesTaxSummary()['membershipDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Loyalty benefit</small></article>
-            <article><span>Tax-exempt sale</span><strong>{{ salesTaxSummary()['taxExemptSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Zero GST taxable rows</small></article>
-            <article><span>GST mismatch count</span><strong>{{ salesTaxSummary()['gstMismatchCount'] }}</strong><small>Needs accountant review</small></article>
+            <article><span>Total bills</span><strong>{{ salesTaxSummary()['totalBills'] }}</strong></article>
+            <article><span>Gross sale</span><strong>{{ salesTaxSummary()['grossSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Net sale</span><strong>{{ salesTaxSummary()['netSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Taxable amount</span><strong>{{ salesTaxSummary()['taxableAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Total GST</span><strong>{{ salesTaxSummary()['totalGst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>CGST</span><strong>{{ salesTaxSummary()['cgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>SGST</span><strong>{{ salesTaxSummary()['sgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>IGST</span><strong>{{ salesTaxSummary()['igst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Coupon discount</span><strong>{{ salesTaxSummary()['couponDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Membership discount</span><strong>{{ salesTaxSummary()['membershipDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Tax-exempt sale</span><strong>{{ salesTaxSummary()['taxExemptSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>GST mismatch count</span><strong>{{ salesTaxSummary()['gstMismatchCount'] }}</strong></article>
           </div>
 
           <div class="sales-tax-grid">

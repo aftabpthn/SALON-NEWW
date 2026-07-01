@@ -65,7 +65,6 @@ type ReportRow = {
         <div>
           <span class="eyebrow">Transactions / Funds</span>
           <h2>Outgoing Funds Saved Entries</h2>
-          <p>Saved vouchers appear here date-wise and row-wise.</p>
         </div>
         <div class="actions">
           <a class="button primary" routerLink="/transactions/outgoing-funds">New Entry</a>

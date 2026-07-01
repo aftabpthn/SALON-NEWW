@@ -16,9 +16,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
               <span>Customer booking</span>
             </div>
           </div>
-          <p class="eyebrow">Aura Booking</p>
           <h1>Book your beauty day in a few easy taps.</h1>
-          <p class="muted">Find trusted salons, spas, stylists, and wellness experts near you with clear slots and simple booking.</p>
           <ion-button expand="block" size="large" class="primary-gradient" routerLink="/login">Get started</ion-button>
           <ion-button expand="block" fill="clear" routerLink="/tabs/home">Explore as guest</ion-button>
         </section>

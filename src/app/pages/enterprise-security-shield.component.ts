@@ -25,12 +25,12 @@ type ShieldLayer = {
       </div>
 
       <div class="metric-strip">
-        <article><span>Protection model</span><strong>{{ layers.length }}</strong><small>Security layers</small></article>
-        <article><span>Active layers</span><strong>{{ activeLayerCount }}</strong><small>Currently enforced</small></article>
-        <article><span>Response mode</span><strong>Auto</strong><small>Alert + block</small></article>
-        <article><span>Audit trail</span><strong>On</strong><small>Existing security logs</small></article>
-        <article><span>Recovery</span><strong>Ready</strong><small>Backup controls</small></article>
-        <article><span>Policy center</span><strong>Live</strong><small>Owner/admin control</small></article>
+        <article><span>Protection model</span><strong>{{ layers.length }}</strong></article>
+        <article><span>Active layers</span><strong>{{ activeLayerCount }}</strong></article>
+        <article><span>Response mode</span><strong>Auto</strong></article>
+        <article><span>Audit trail</span><strong>On</strong></article>
+        <article><span>Recovery</span><strong>Ready</strong></article>
+        <article><span>Policy center</span><strong>Live</strong></article>
       </div>
 
       <section class="panel">

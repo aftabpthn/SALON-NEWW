@@ -37,7 +37,6 @@ type PanelId = 'notifications' | 'profile' | null;
           <div class="hdr-notif-empty">
             <span class="hdr-notif-emoji" aria-hidden="true">✓</span>
             <strong>You're all caught up</strong>
-            <small>New alerts, confirmations and tasks appear here in real time.</small>
           </div>
           <a class="hdr-menu-foot" routerLink="/notification-center" (click)="closeAll()">
             Open Notification Center →

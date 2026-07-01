@@ -21,7 +21,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <section class="booking-hero premium-card">
             <img [src]="business.coverImage || 'assets/icons/icon.svg'" [alt]="business.businessName" />
             <div>
-              <p class="eyebrow">Booking</p>
               <h1 class="page-title">Complete your appointment</h1>
               <p class="muted">{{ business.businessName }} · {{ business.area }} · Star {{ business.ratingAverage }}</p>
             </div>
@@ -42,7 +41,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
           @if (step() === 1) {
             <section class="panel">
-              <div class="section-heading"><div><p class="eyebrow">Step 1</p><h2 class="section-title">Select service or bundle</h2></div></div>
+              <div class="section-heading"><div><h2 class="section-title">Select service or bundle</h2></div></div>
               <div class="service-list">
                 @for (service of business.services; track service.id) {
                   <button class="service-choice premium-card" [class.selected]="selectedServiceId() === service.id" (click)="setService(service.id)">
@@ -54,7 +53,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     @if (service.popular) { <span class="offer-pill">Popular</span> }
                   </button>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No services available</h2><p class="muted">This business has not published customer-bookable services yet.</p></section>
+                  <section class="state-card premium-card"><h2>No services available</h2></section>
                 }
               </div>
             </section>
@@ -62,7 +61,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
           @if (step() === 2) {
             <section class="panel">
-              <div class="section-heading"><div><p class="eyebrow">Step 2</p><h2 class="section-title">Choose staff</h2></div></div>
+              <div class="section-heading"><div><h2 class="section-title">Choose staff</h2></div></div>
               <div class="staff-list">
                 <button class="staff-choice premium-card" [class.selected]="selectedStaffId() === null" (click)="setStaff(null)">
                   <div class="any-avatar"><ion-icon name="sparkles-outline"></ion-icon></div>
@@ -82,7 +81,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
           @if (step() === 3) {
             <section class="panel">
-              <div class="section-heading"><div><p class="eyebrow">Step 3</p><h2 class="section-title">Pick date, time or waitlist</h2></div></div>
+              <div class="section-heading"><div><h2 class="section-title">Pick date, time or waitlist</h2></div></div>
               <article class="selected-staff-card premium-card">
                 <div class="any-avatar"><ion-icon name="person-outline"></ion-icon></div>
                 <div>
@@ -92,7 +91,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 </div>
               </article>
               @if (marketplace.loading()) {
-                <section class="state-card premium-card"><h2>Loading availability</h2><p class="muted">Fetching live slots from the business calendar.</p></section>
+                <section class="state-card premium-card"><h2>Loading availability</h2></section>
               }
               <div class="date-row">
                 @for (date of availabilityDays(); track date.date) {
@@ -101,7 +100,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     <span>{{ date.label }}</span>
                   </button>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No slots available</h2><p class="muted">The API returned no availability dates for this service.</p></section>
+                  <section class="state-card premium-card"><h2>No slots available</h2></section>
                 }
               </div>
               <div class="slot-sections">
@@ -117,7 +116,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     </div>
                   </section>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No time slots</h2><p class="muted">The API returned no bookable slots for this selection.</p></section>
+                  <section class="state-card premium-card"><h2>No time slots</h2></section>
                 }
               </div>
             </section>
@@ -126,9 +125,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           @if (step() === 4) {
             <section class="panel confirm-grid">
               <article class="premium-card confirm-card">
-                <p class="eyebrow">Step 4</p>
                 <h2>Confirm your booking</h2>
-                <p class="muted">The appointment will be created only after the backend confirms the selected slot.</p>
                 <dl>
                   <div><dt>Business</dt><dd>{{ business.businessName }}</dd></div>
                   <div><dt>Service</dt><dd>{{ selectedService()?.name || "Not selected" }}</dd></div>
@@ -141,10 +138,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 <ion-icon name="checkmark-circle-outline"></ion-icon>
                 @if (marketplace.isAuthenticated()) {
                   <h3>Ready to book</h3>
-                  <p>Your signed-in AuraSalon account will receive the booking confirmation and appointment history.</p>
                 } @else {
                   <h3>Sign in to reserve</h3>
-                  <p>You can browse as guest, but login or sign up is required before we reserve this slot.</p>
                 }
               </article>
             </section>
@@ -169,7 +164,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       } @else {
         <main class="page-narrow">
           @if (marketplace.loading()) {
-            <section class="state-card premium-card"><h1>Loading booking flow</h1><p class="muted">Fetching live services and staff.</p></section>
+            <section class="state-card premium-card"><h1>Loading booking flow</h1></section>
           } @else {
             <section class="state-card premium-card error"><h1>Booking unavailable</h1><p>{{ marketplace.error() || "The business could not be loaded." }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
           }

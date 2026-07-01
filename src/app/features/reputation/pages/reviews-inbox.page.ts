@@ -19,7 +19,6 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
         <div>
           <span class="eyebrow">Reviews</span>
           <h2>Inbox</h2>
-          <p>Filter, triage, assign, resolve and prepare approval-safe replies for every visible review.</p>
         </div>
         <div class="heading-actions">
           <button class="ghost-button" type="button" (click)="load()" [disabled]="loading">Refresh</button>

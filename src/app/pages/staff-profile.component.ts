@@ -64,7 +64,7 @@ type RosterView = 'day' | 'week' | 'month';
           <article class="metric-card amber"><span>Attendance</span><strong>{{ profile.metrics.attendanceScore || 0 }}%</strong><small>{{ profile.attendance.length }} record(s)</small></article>
           <article class="metric-card violet"><span>Payroll net</span><strong>{{ profile.metrics.payrollNet | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ profile.payrollComponents.length }} payroll row(s)</small></article>
           <article class="metric-card blue"><span>Skill matrix</span><strong>{{ profile.skills.length }}</strong><small>{{ eligibleServiceCount(profile) }} eligible service(s)</small></article>
-          <article class="metric-card red"><span>Conflicts</span><strong>{{ profile.conflicts.length }}</strong><small>Shift, leave, branch checks</small></article>
+          <article class="metric-card red"><span>Conflicts</span><strong>{{ profile.conflicts.length }}</strong></article>
         </div>
 
         <section class="panel">
@@ -78,7 +78,7 @@ type RosterView = 'day' | 'week' | 'month';
           <div class="employee-profile-grid">
             <article><span>Employee code</span><strong>{{ profile.staff.employeeCode || profile.staff.id }}</strong><small>{{ profile.staff.messageName || profile.staff.name }} in appointment messages</small></article>
             <article><span>Contact</span><strong>{{ profile.staff.phone || 'No phone' }}</strong><small>{{ profile.staff.email || 'No email' }}</small></article>
-            <article><span>Branches</span><strong>{{ branchNames(profile.staff) }}</strong><small>Multi-branch assignment</small></article>
+            <article><span>Branches</span><strong>{{ branchNames(profile.staff) }}</strong></article>
             <article><span>Permissions</span><strong>{{ asArray(profile.staff.permissions).length }}</strong><small>{{ asArray(profile.staff.permissions).join(', ') || 'Role defaults' }}</small></article>
             <article><span>Break / offs</span><strong>{{ breakLabel(profile.staff) }}</strong><small>{{ asArray(profile.staff.weeklyOffs).join(', ') || 'Weekly off not set' }}</small></article>
           </div>
@@ -122,9 +122,6 @@ type RosterView = 'day' | 'week' | 'month';
             <div><span class="eyebrow">Services</span><h2>Per-employee service assignment, pricing and online booking</h2></div>
             <button class="primary-button" type="button" (click)="saveServiceMatrix()" [disabled]="saving()">Save service matrix</button>
           </div>
-          <p class="info-strip">
-            Use Service Assignment to restrict who can perform a service. Available Online controls whether this staff appears on the booking site for that service.
-          </p>
           <div class="table-wrap service-matrix-wrap">
             <table>
               <thead>
@@ -384,7 +381,7 @@ type RosterView = 'day' | 'week' | 'month';
         <section class="panel" *ngIf="tab() === 'optimizer'">
           <div class="section-title"><div><span class="eyebrow">Staff optimizer</span><h2>Best staff, burnout, recovery and workload plan</h2></div></div>
           <div class="quick-grid">
-            <article class="action-card"><strong>Best for booking</strong><span>{{ profile.optimizer.bestForBooking }}</span><small>Based on utilization, rating and conflicts.</small></article>
+            <article class="action-card"><strong>Best for booking</strong><span>{{ profile.optimizer.bestForBooking }}</span></article>
             <article class="action-card"><strong>Burnout risk</strong><span>{{ profile.optimizer.burnoutRisk }}</span><small>{{ profile.optimizer.workloadBalance }}</small></article>
             <article class="action-card"><strong>Absent recovery</strong><span>{{ profile.optimizer.absentRecoveryPlan }}</span></article>
             <article class="action-card"><strong>Target recovery</strong><span>{{ profile.optimizer.targetRecovery | currency: 'INR':'symbol':'1.0-0' }}</span></article>

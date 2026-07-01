@@ -23,7 +23,6 @@ type CompletedPackagesReport = {
         <div>
           <span class="eyebrow">Reports / Packages</span>
           <h2>Completed Packages</h2>
-          <p>Fully redeemed package service credits with client, package, invoice and expiry context.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
@@ -65,22 +64,18 @@ type CompletedPackagesReport = {
           <article class="metric-card">
             <span>Total completed services</span>
             <strong>{{ numberValue(data.summary.totalCompletedServices) }}</strong>
-            <small>Fully redeemed service qty</small>
           </article>
           <article class="metric-card">
             <span>Total service amount</span>
             <strong>{{ data.summary.totalServiceAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Completed package service value</small>
           </article>
           <article class="metric-card">
             <span>Completed package count</span>
             <strong>{{ data.summary.completedPackageCount || 0 }}</strong>
-            <small>Packages with completed services</small>
           </article>
           <article class="metric-card">
             <span>Redeemed quantity</span>
             <strong>{{ numberValue(data.summary.redeemedQty) }}</strong>
-            <small>Consumed credits</small>
           </article>
         </section>
 

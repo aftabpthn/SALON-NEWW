@@ -15,7 +15,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div>
           <span class="eyebrow">Level 19 · Automation workflow engine</span>
           <h2>Trigger, condition, action, delay and WhatsApp/SMS/Email execution</h2>
-          <p>Example flow is functional: if client inactive 30 days, send an offer and persist workflow run plus notifications.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="runDue()" [disabled]="!definitions().length">Run due workflows</button>
@@ -26,10 +25,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/workflow/workflows"><span>Workflows</span><strong>{{ metrics.workflows }}</strong><small>Total definitions</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/workflow/active"><span>Active</span><strong>{{ metrics.active }}</strong><small>Runnable workflows</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/workflow/runs"><span>Runs</span><strong>{{ metrics.runs }}</strong><small>Execution history</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/workflow/messages"><span>Messages</span><strong>{{ metrics.messagesSent }}</strong><small>Notifications created</small></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/workflow/workflows"><span>Workflows</span><strong>{{ metrics.workflows }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/workflow/active"><span>Active</span><strong>{{ metrics.active }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/workflow/runs"><span>Runs</span><strong>{{ metrics.runs }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/workflow/messages"><span>Messages</span><strong>{{ metrics.messagesSent }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

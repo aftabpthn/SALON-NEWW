@@ -69,7 +69,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <section>
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Gallery</p>
                   <h2 class="section-title">Inside the studio</h2>
                 </div>
               </div>
@@ -77,7 +76,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 @for (image of business().galleryImages; track image) {
                   <img [src]="image" [alt]="business().businessName + ' gallery image'" loading="lazy" />
                 } @empty {
-                  <section class="state-card premium-card"><h2>No gallery available</h2><p class="muted">This business has not published gallery images yet.</p></section>
+                  <section class="state-card premium-card"><h2>No gallery available</h2></section>
                 }
               </div>
             </section>
@@ -85,7 +84,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <section>
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Services</p>
                   <h2 class="section-title">{{ business().services.length }} services available</h2>
                 </div>
               </div>
@@ -103,7 +101,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business().slug, 'book']" [queryParams]="{ serviceId: service.id }">Select</ion-button>
                   </article>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No services available</h2><p class="muted">This business has not published customer-bookable services yet.</p></section>
+                  <section class="state-card premium-card"><h2>No services available</h2></section>
                 }
               </div>
             </section>
@@ -111,7 +109,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <section>
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Team</p>
                   <h2 class="section-title">Choose your professional</h2>
                 </div>
               </div>
@@ -126,7 +123,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="['/business', business().slug, 'book']">Book with {{ staff.name.split(' ')[0] }}</ion-button>
                   </article>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No staff available</h2><p class="muted">Bookable staff will appear when the backend publishes staff availability.</p></section>
+                  <section class="state-card premium-card"><h2>No staff available</h2></section>
                 }
               </div>
             </section>
@@ -134,7 +131,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <section class="review-section">
               <div class="section-heading">
                 <div>
-                  <p class="eyebrow">Reviews</p>
                   <h2 class="section-title">Loved by customers</h2>
                 </div>
               </div>
@@ -147,7 +143,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     <small>{{ review.dateLabel }}</small>
                   </article>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No reviews yet</h2><p class="muted">Approved customer reviews will appear here.</p></section>
+                  <section class="state-card premium-card"><h2>No reviews yet</h2></section>
                 }
               </div>
             </section>
@@ -181,7 +177,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 @if (business().phone || business().appointmentNumber || business().mobileNumber) {
                   <p><ion-icon name="call-outline"></ion-icon>{{ business().appointmentNumber || business().mobileNumber || business().phone }}</p>
                 } @else {
-                  <p class="muted">Contact number will appear after the business publishes it.</p>
                 }
                 @if (business().websiteUrl) {
                   <p><ion-icon name="navigate-outline"></ion-icon>{{ business().websiteUrl }}</p>
@@ -229,7 +224,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       } @else {
         <main class="page-narrow">
           @if (marketplace.loading()) {
-            <section class="premium-card state-card"><h1>Loading business</h1><p class="muted">Fetching the live business profile.</p></section>
+            <section class="premium-card state-card"><h1>Loading business</h1></section>
           } @else {
             <section class="premium-card state-card error"><h1>Business unavailable</h1><p>{{ marketplace.error() || "The business profile could not be loaded." }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
           }

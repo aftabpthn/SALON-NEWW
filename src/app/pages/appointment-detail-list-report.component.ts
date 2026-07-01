@@ -23,7 +23,6 @@ type AppointmentDetailReport = {
         <div>
           <span class="eyebrow">Reports / Appointments</span>
           <h2>Detail Appointment List</h2>
-          <p>Salonist-style appointment register with mode, service, staff, status and price in one report.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
@@ -67,7 +66,6 @@ type AppointmentDetailReport = {
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="runReport()">Run Report</button>
       </section>

@@ -13,7 +13,6 @@ import { DataMigrationStore } from './data-migration.store';
         <div>
           <button class="back-btn" (click)="back()">← Back to Dashboard</button>
           <h1>Go-Live Checklist</h1>
-          <p>Final checks before switching to live data</p>
         </div>
         <div class="score-card" [class.danger]="store.readinessScore() < 60" [class.warning]="store.readinessScore() >= 60 && store.readinessScore() < 85">
           <span>Readiness</span>
@@ -44,7 +43,6 @@ import { DataMigrationStore } from './data-migration.store';
           <input type="checkbox" [checked]="store.sandboxMode()" (change)="onSandboxChange($event)" />
           <span>Sandbox mode</span>
         </label>
-        <small style="color:#64748b;">Toggle off for live import</small>
       </section>
 
       <section class="gate-section">

@@ -14,9 +14,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         <section class="wishlist-hero premium-card">
           <div class="hero-icon"><ion-icon name="heart"></ion-icon></div>
           <div>
-            <p class="eyebrow">Wishlist</p>
             <h1>Saved salons</h1>
-            <p class="muted">Your favorite salons and spas stay synced to your AuraSalon customer profile.</p>
           </div>
           <ion-button class="primary-gradient" routerLink="/tabs/search">
             <ion-icon name="search-outline" slot="start"></ion-icon>
@@ -27,14 +25,12 @@ import { MarketplaceService } from "../../core/marketplace.service";
         @if (!marketplace.isAuthenticated()) {
           <section class="state-card premium-card">
             <h2>Login to use wishlist</h2>
-            <p class="muted">Saved salons are private to your customer account.</p>
             <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/wishlist' }">Login</ion-button>
           </section>
         } @else {
           @if (marketplace.loading()) {
             <section class="state-card premium-card">
               <h2>Loading wishlist</h2>
-              <p class="muted">Fetching your saved salons from the backend.</p>
             </section>
           }
 
@@ -50,12 +46,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <article class="summary-card premium-card">
               <span>Saved</span>
               <strong>{{ savedCount() }}</strong>
-              <small>Synced with customer profile</small>
             </article>
             <article class="summary-card premium-card">
               <span>Ready to book</span>
               <strong>{{ bookableCount() }}</strong>
-              <small>Online booking enabled salons</small>
             </article>
           </section>
 
@@ -84,7 +78,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             } @empty {
               <section class="state-card premium-card">
                 <h2>No saved salons yet</h2>
-                <p class="muted">Tap the heart on any salon card to add it here.</p>
                 <ion-button class="primary-gradient" routerLink="/tabs/search">Find salons</ion-button>
               </section>
             }

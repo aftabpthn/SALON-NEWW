@@ -15,7 +15,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="page-head-l">
           <span class="eye">Reports & analytics</span>
           <h1>Enterprise report command center</h1>
-          <p>Track revenue, bookings, clients, staff, inventory, payments and business growth.</p>
         </div>
         <div class="page-head-r">
           <div class="ph-branch">
@@ -241,10 +240,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <span>Booking status</span>
               </div>
               <div class="snap-body snap-stats">
-                <div class="snap-stat"><span class="dot" style="background:#4f46e5"></span><strong>{{ r.bookings.booked || 0 }}</strong><small>Booked</small></div>
-                <div class="snap-stat"><span class="dot" style="background:#059669"></span><strong>{{ r.bookings.completed || 0 }}</strong><small>Done</small></div>
-                <div class="snap-stat"><span class="dot" style="background:#d97706"></span><strong>{{ r.bookings.noShow || 0 }}</strong><small>No-show</small></div>
-                <div class="snap-stat"><span class="dot" style="background:#ef4444"></span><strong>{{ r.bookings.cancelled || 0 }}</strong><small>Cancelled</small></div>
+                <div class="snap-stat"><span class="dot" style="background:#4f46e5"></span><strong>{{ r.bookings.booked || 0 }}</strong></div>
+                <div class="snap-stat"><span class="dot" style="background:#059669"></span><strong>{{ r.bookings.completed || 0 }}</strong></div>
+                <div class="snap-stat"><span class="dot" style="background:#d97706"></span><strong>{{ r.bookings.noShow || 0 }}</strong></div>
+                <div class="snap-stat"><span class="dot" style="background:#ef4444"></span><strong>{{ r.bookings.cancelled || 0 }}</strong></div>
               </div>
             </div>
             <!-- Client pulse -->

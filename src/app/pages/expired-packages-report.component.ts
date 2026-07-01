@@ -23,7 +23,6 @@ type ExpiredPackagesReport = {
         <div>
           <span class="eyebrow">Reports / Packages</span>
           <h2>Expired Packages</h2>
-          <p>Expired package sales with package value, service count and pending service balance.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
@@ -45,7 +44,6 @@ type ExpiredPackagesReport = {
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="runReport()">Run Report</button>
       </section>
@@ -57,22 +55,18 @@ type ExpiredPackagesReport = {
           <article class="metric-card">
             <span>Total Packages</span>
             <strong>{{ data.summary.totalPackages || 0 }}</strong>
-            <small>Expired package rows</small>
           </article>
           <article class="metric-card">
             <span>Packages Amount</span>
             <strong>{{ data.summary.packagesAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Total expired package value</small>
           </article>
           <article class="metric-card">
             <span>Total Services</span>
             <strong>{{ numberValue(data.summary.totalServices) }}</strong>
-            <small>Sold service credits</small>
           </article>
           <article class="metric-card">
             <span>Pending Services</span>
             <strong>{{ numberValue(data.summary.pendingServices) }}</strong>
-            <small>Unused credits after expiry</small>
           </article>
         </section>
 

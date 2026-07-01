@@ -15,7 +15,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Reports / Staff sales</span>
           <h2>Staff Sales Report</h2>
-          <p>POS line-item attribution for services, products, memberships, packages and gift cards.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/reports">Reports</a>
@@ -115,7 +114,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch only from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="load()">Apply filters</button>
       </section>
@@ -132,47 +130,38 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <article class="metric-card">
             <span>Service sales</span>
             <strong>{{ data.totals?.serviceRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Performed revenue</small>
           </article>
           <article class="metric-card">
             <span>Product sales</span>
             <strong>{{ data.totals?.productRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Retail seller revenue</small>
           </article>
           <article class="metric-card">
             <span>Membership + package</span>
             <strong>{{ membershipPackageRevenue(data) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Plan and package selling</small>
           </article>
           <article class="metric-card">
             <span>Gift card sales</span>
             <strong>{{ data.totals?.giftCardRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Gift card attribution</small>
           </article>
           <article class="metric-card">
             <span>Total clients</span>
             <strong>{{ data.totals?.clientsCount || 0 }}</strong>
-            <small>Staff-linked clients</small>
           </article>
           <article class="metric-card">
             <span>Total invoices</span>
             <strong>{{ data.totals?.invoiceCount || 0 }}</strong>
-            <small>Attributed bills</small>
           </article>
           <article class="metric-card">
             <span>Average bill</span>
             <strong>{{ data.totals?.averageBill || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Revenue / invoices</small>
           </article>
           <article class="metric-card">
             <span>Pending due</span>
             <strong>{{ data.totals?.pendingDue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Collection accountability</small>
           </article>
           <article class="metric-card">
             <span>Discount given</span>
             <strong>{{ data.totals?.discountGiven || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Leakage watch</small>
           </article>
           <article class="metric-card">
             <span>Staff tips</span>
@@ -182,7 +171,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <article class="metric-card">
             <span>Estimated commission</span>
             <strong>{{ data.totals?.estimatedCommission || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Preview basis</small>
           </article>
         </div>
 
@@ -318,12 +306,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article class="metric-card">
               <span>Gross service sale</span>
               <strong>{{ data.totals?.grossServiceSale || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Before discount</small>
             </article>
             <article class="metric-card">
               <span>Final service sale</span>
               <strong>{{ data.totals?.finalServiceSale || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>After discount</small>
             </article>
             <article class="metric-card">
               <span>Discount amount</span>
@@ -333,7 +319,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article class="metric-card">
               <span>Share before discount</span>
               <strong>{{ data.totals?.staffServiceShareBeforeDiscount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Staff attribution</small>
             </article>
             <article class="metric-card">
               <span>Share after discount</span>
@@ -468,32 +453,26 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article class="metric-card">
               <span>Product sales</span>
               <strong>{{ productStats().productRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Retail seller revenue</small>
             </article>
             <article class="metric-card">
               <span>Product units</span>
               <strong>{{ productStats().productCount }}</strong>
-              <small>Sold quantity</small>
             </article>
             <article class="metric-card">
               <span>Staff selling products</span>
               <strong>{{ productStats().staffCount }}</strong>
-              <small>Non-zero product rows</small>
             </article>
             <article class="metric-card">
               <span>Product SKUs</span>
               <strong>{{ productStats().skuCount }}</strong>
-              <small>Unique product rows</small>
             </article>
             <article class="metric-card">
               <span>Missing cost</span>
               <strong>{{ productStats().missingCostCount }}</strong>
-              <small>Needs COGS setup</small>
             </article>
             <article class="metric-card">
               <span>Product commission</span>
               <strong>{{ productStats().estimatedCommission | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Preview basis</small>
             </article>
           </div>
           <div class="report-info-strip">

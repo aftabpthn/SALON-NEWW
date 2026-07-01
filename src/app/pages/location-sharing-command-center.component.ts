@@ -30,7 +30,6 @@ type LocationSharingOverview = {
         <div>
           <span class="eyebrow">Multi-Branch / Governance</span>
           <h2>Location Sharing Command Center</h2>
-          <p>Policy-first control for sharing customers, packages, memberships, products, services, vendors and staff across branches.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/branches">Branches</a>
@@ -41,9 +40,9 @@ type LocationSharingOverview = {
 
       <section class="metric-strip" *ngIf="overview() as data">
         <article><span>Enabled Modules</span><strong>{{ data.summary.enabledModules || 0 }}</strong><small>{{ data.modules.length || 0 }} governed modules</small></article>
-        <article><span>Branch Rules</span><strong>{{ data.summary.rules || 0 }}</strong><small>source to target policies</small></article>
-        <article><span>Open Conflicts</span><strong>{{ data.summary.openConflicts || 0 }}</strong><small>duplicate or mismatch signals</small></article>
-        <article><span>Pending Approvals</span><strong>{{ data.summary.pendingApprovals || 0 }}</strong><small>owner action queue</small></article>
+        <article><span>Branch Rules</span><strong>{{ data.summary.rules || 0 }}</strong></article>
+        <article><span>Open Conflicts</span><strong>{{ data.summary.openConflicts || 0 }}</strong></article>
+        <article><span>Pending Approvals</span><strong>{{ data.summary.pendingApprovals || 0 }}</strong></article>
         <article><span>Sync Health</span><strong>{{ data.reports.summary?.syncHealth || 'healthy' }}</strong><small>{{ data.reports.summary?.failedSyncCount || 0 }} failed events</small></article>
       </section>
 
@@ -58,7 +57,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Sharing Settings</h3>
-            <p>Tenant-wide module switches. Risky modes keep owner approval enabled by default.</p>
           </div>
           <button class="primary-button" type="button" (click)="saveSettings()">Save Settings</button>
         </div>
@@ -89,7 +87,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Branch Matrix</h3>
-            <p>Choose exactly which source branch can share which module with which target branch.</p>
           </div>
           <button class="primary-button" type="button" (click)="saveRule()">Save Rule</button>
         </div>
@@ -127,7 +124,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Conflict Center</h3>
-            <p>Duplicate customers, service price mismatch, product catalog mismatch and vendor mismatch signals.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadConflicts()">Scan Conflicts</button>
         </div>
@@ -155,7 +151,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Approval Queue</h3>
-            <p>Owner approval for risky cross-branch sharing, redemption, edit and conflict merge decisions.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadApprovals()">Refresh Queue</button>
         </div>
@@ -184,7 +179,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Sync Logs</h3>
-            <p>Policy-first sync status, pending changes and failed event monitoring.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadEvents()">Refresh Logs</button>
         </div>
@@ -217,7 +211,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Audit Trail</h3>
-            <p>Who changed what, when, source branch, target branch and status.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadEvents()">Refresh Audit</button>
         </div>
@@ -235,7 +228,6 @@ type LocationSharingOverview = {
         <div class="section-title">
           <div>
             <h3>Reports</h3>
-            <p>Cross-branch customer movement, membership redemption, package usage and sync health.</p>
           </div>
           <button class="ghost-button" type="button" (click)="loadReports()">Refresh Reports</button>
         </div>

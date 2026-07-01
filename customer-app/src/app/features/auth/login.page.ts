@@ -20,7 +20,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         <section class="auth-card">
           <div class="brand-mark"><ion-icon name="sparkles-outline"></ion-icon></div>
           <h1>AuraSalon for customers</h1>
-          <p class="subtitle">Create an account or log in to book and manage your appointments</p>
 
           @if (notice) {
             <p class="notice-text">{{ notice }}</p>
@@ -37,7 +36,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
                   <ion-input id="choiceEmail" type="email" inputmode="email" autocomplete="email" placeholder="" [(ngModel)]="email" name="choiceEmail"></ion-input>
                 </ion-item>
               </ion-list>
-              <p class="helper">We'll send you a verification code</p>
               <ion-button type="submit" expand="block" size="large" class="dark-continue-button" [disabled]="auth.loading()">Continue</ion-button>
             </form>
             <div class="divider"><span></span><strong>OR</strong><span></span></div>
@@ -78,7 +76,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
                   <ion-input id="email" type="email" inputmode="email" autocomplete="email" placeholder="" [(ngModel)]="email" name="email"></ion-input>
                 </ion-item>
               </ion-list>
-              <p class="helper">We'll send you a verification code</p>
               <ion-button type="submit" expand="block" size="large" class="primary-gradient" [disabled]="auth.loading()">Continue</ion-button>
               <ion-button type="button" expand="block" fill="clear" (click)="step = 'choices'">Back to login options</ion-button>
             </form>
@@ -100,7 +97,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
           @if (step === "completeProfile") {
             <form (submit)="completeRequiredProfile($event)" class="auth-form">
-              <p class="step-copy">Complete these details once. Mobile verification is required before your AuraSalon account opens.</p>
               <ion-list>
                 <ion-item lines="none">
                   <ion-icon name="person-outline" slot="start"></ion-icon>
@@ -130,7 +126,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
               } @else if (completionPhoneOtpSent) {
                 <p class="helper">Enter the OTP sent to {{ completionFullPhone() }}.</p>
               } @else {
-                <p class="helper">Submit once to send OTP. Verify the OTP to finish login.</p>
               }
               @if (completionPhoneOtpSent && !completionPhoneVerified) {
                 <label class="field-label" for="completionPhoneOtp">Mobile OTP</label>
@@ -190,7 +185,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
             </form>
           }
 
-          <p class="terms"><ion-icon name="shield-checkmark-outline"></ion-icon> By continuing, you agree to AuraSalon booking terms and privacy settings.</p>
         </section>
 
         <div id="customer-phone-recaptcha" class="recaptcha-host" aria-hidden="true"></div>
@@ -200,7 +194,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
           <section class="mobile-modal" role="dialog" aria-modal="true" aria-labelledby="mobileLoginTitle">
             <div class="modal-head">
               <div>
-                <p class="modal-eyebrow">Secure mobile login</p>
                 <h2 id="mobileLoginTitle">Continue with mobile</h2>
               </div>
               <ion-button type="button" fill="clear" class="modal-close" aria-label="Close mobile login" (click)="closeMobileModal()">
@@ -217,7 +210,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
             @if (mobileStage === "number") {
               <form class="auth-form" (submit)="sendMobileOtp($event)">
-                <p class="step-copy">Enter your India mobile number. Firebase will send a real SMS OTP.</p>
                 <div class="phone-grid modal-phone-grid">
                   <label>
                     <span class="field-label">Country</span>
@@ -236,7 +228,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
                   {{ mobileOtpCooldownCountdown > 0 ? "Try again in " + mobileOtpCooldownCountdown + "s" : auth.loading() ? "Sending OTP..." : "Send OTP" }}
                 </ion-button>
                 @if (!auth.firebaseConfigured()) {
-                  <p class="helper">Firebase is not configured for this deployment.</p>
                 }
               </form>
             } @else {

@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Offline Resilience</span>
           <h2>Offline Risk Alerts</h2>
-          <p>Operational warnings for stale cache, high queue load, failed sync, missing device activity and high offline billing exposure.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>

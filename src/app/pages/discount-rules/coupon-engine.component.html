@@ -21,7 +21,6 @@
     <article class="metric-card">
       <span>Redemptions</span>
       <strong>{{ analytics()?.summary?.redemptions || 0 }}</strong>
-      <small>coupon usage rows</small>
     </article>
     <article class="metric-card">
       <span>Net revenue</span>
@@ -31,7 +30,6 @@
     <article class="metric-card">
       <span>Discount given</span>
       <strong>{{ formatMoney(analytics()?.summary?.totalDiscountPaise) }}</strong>
-      <small>integer paise tracked</small>
     </article>
   </section>
 

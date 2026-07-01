@@ -170,7 +170,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
         <div>
           <span class="eyebrow">AuraShine full suite</span>
           <h2>All Apps</h2>
-          <p>One place for salon CRM, booking, POS, inventory, staff, finance, WhatsApp and admin tools.</p>
         </div>
         <div class="header-actions">
           <a class="ghost-button" routerLink="/dashboard/executive">Executive</a>

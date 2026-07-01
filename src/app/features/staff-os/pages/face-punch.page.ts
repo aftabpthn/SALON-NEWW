@@ -17,7 +17,6 @@ type PunchType = 'in' | 'out';
         <div>
           <span class="eyebrow">Attendance / Mobile biometric</span>
           <h1>Face Punch</h1>
-          <p>Staff mobile camera se punch in/out karega. Shift duration ke baad extra time OT preview me calculate hota hai.</p>
         </div>
         <button class="primary" type="button" (click)="openCamera()" [disabled]="cameraOn()">Start camera</button>
       </header>

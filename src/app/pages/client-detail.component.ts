@@ -220,7 +220,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <article class="metric-card teal">
             <span>Wallet balance</span>
             <strong>{{ walletBalance(client) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Live client wallet credit</small>
           </article>
           <article class="metric-card red">
             <span>Unpaid balance</span>
@@ -329,12 +328,10 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <article>
                   <span>Top service</span>
                   <strong>{{ topServiceLabel() }}</strong>
-                  <small>Based on saved sales</small>
                 </article>
                 <article>
                   <span>Preferred staff</span>
                   <strong>{{ preferredStaffLabel() }}</strong>
-                  <small>From profile or history</small>
                 </article>
               </section>
 

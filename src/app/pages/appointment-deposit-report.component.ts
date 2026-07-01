@@ -23,7 +23,6 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
         <div>
           <span class="eyebrow">Appointment Deposits</span>
           <h2>Advance Payment Report</h2>
-          <p>Track 20% advance links for high-value services like Botox, Keratin and Highlights before staff time is confirmed.</p>
         </div>
         <div class="action-row">
           <button class="ghost-button mini" type="button" *ngIf="adjustedDuePendingCount() > 0" (click)="focusAdjustedDueFollowUp()">
@@ -57,10 +56,10 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
 
       <section class="metrics-grid">
         <article class="metric-card"><span>Links</span><strong>{{ filteredRows().length }}</strong><small>{{ settlementFilterLabel() }}</small></article>
-        <article class="metric-card"><span>Total advance</span><strong>{{ (stats().totalAmount || 0) | currency:'INR':'symbol':'1.0-0' }}</strong><small>all links</small></article>
-        <article class="metric-card"><span>Advance adjusted</span><strong>{{ filteredAdvanceAdjustedTotal() | currency:'INR':'symbol':'1.0-0' }}</strong><small>moved into invoices</small></article>
-        <article class="metric-card"><span>Counter paid</span><strong>{{ filteredCounterPaidTotal() | currency:'INR':'symbol':'1.0-0' }}</strong><small>collected at checkout</small></article>
-        <article class="metric-card"><span>Counter due</span><strong>{{ filteredCounterDueTotal() | currency:'INR':'symbol':'1.0-0' }}</strong><small>still to collect</small></article>
+        <article class="metric-card"><span>Total advance</span><strong>{{ (stats().totalAmount || 0) | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Advance adjusted</span><strong>{{ filteredAdvanceAdjustedTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Counter paid</span><strong>{{ filteredCounterPaidTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Counter due</span><strong>{{ filteredCounterDueTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
       <section class="panel">

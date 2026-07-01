@@ -58,7 +58,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     >
       <header class="topbar" *ngIf="section === 'workspace'">
         <div>
-          <p class="eyebrow">Staff Operating System</p>
           <h1>{{ title }}</h1>
         </div>
         <div class="topbar-actions">
@@ -80,7 +79,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       <section class="staff-control-room" *ngIf="false" aria-label="Staff owner control room">
         <div class="control-heading">
           <div>
-            <p class="eyebrow">Owner control room</p>
             <h2>Attendance, payroll, commission and risk in one place</h2>
           </div>
           <div class="control-filters">
@@ -159,7 +157,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <article><span>Total staff</span><strong>{{ staffDirectoryRows().length }}</strong><small>{{ activeStaffForAttendance().length }} active for attendance</small></article>
                 <article><span>Present today</span><strong>{{ attendanceRows().length }}</strong><small>{{ attendanceDate() }}</small></article>
                 <article><span>Salary rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong><small>{{ store.payrollStructures().length }} salary structures</small></article>
-                <article><span>Commission rows</span><strong>{{ store.performance().rows.length }}</strong><small>from staff performance</small></article>
+                <article><span>Commission rows</span><strong>{{ store.performance().rows.length }}</strong></article>
               </section>
               <div class="workspace-actions">
                 <a routerLink="/staff-os/employee-masters">Employee Masters</a>
@@ -208,9 +206,9 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             <article *ngSwitchCase="'attendance'" class="workspace-detail-body">
               <section class="attendance-stats">
                 <article><span>Attendance</span><strong>{{ attendanceSummary()['attendanceEvents'] || attendanceRows().length || 0 }}</strong><small>{{ attendanceDate() }}</small></article>
-                <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong><small>active / total</small></article>
+                <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong></article>
                 <article><span>Queue</span><strong>{{ attendanceSummary()['queuedEvents'] || 0 }}</strong><small>{{ attendanceSummary()['failedEvents'] || 0 }} failed</small></article>
-                <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong><small>review required</small></article>
+                <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong></article>
               </section>
               <form class="staff-form camera-form manual-form workspace-manual-form" [formGroup]="manualAttendanceForm" (ngSubmit)="submitManualAttendance()">
                 <label class="field">
@@ -261,10 +259,10 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
             <article *ngSwitchCase="'salary'" class="workspace-detail-body">
               <section class="workspace-kpi-grid">
-                <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong><small>staff profile attendance & salary tab</small></article>
-                <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong><small>payroll salary structure</small></article>
-                <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong><small>attendance payroll preview</small></article>
-                <article><span>Risks</span><strong>{{ store.attendanceRisks().length }}</strong><small>salary hold signals</small></article>
+                <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong></article>
+                <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong></article>
+                <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong></article>
+                <article><span>Risks</span><strong>{{ store.attendanceRisks().length }}</strong></article>
               </section>
               <div class="workspace-actions">
                 <a routerLink="/staff-os/payroll-salary-structure">Salary Structure</a>
@@ -349,10 +347,10 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
             <article *ngSwitchCase="'commission'" class="workspace-detail-body">
               <section class="workspace-kpi-grid">
-                <article><span>Incentive rules</span><strong>{{ commissionRuleCount() }}</strong><small>service/product/membership</small></article>
-                <article><span>Performance rows</span><strong>{{ store.performance().rows.length }}</strong><small>commission source</small></article>
-                <article><span>Tracked revenue</span><strong>{{ store.performance().summary.revenue | currency:'INR':'symbol-narrow':'1.0-0' }}</strong><small>staff assigned sales</small></article>
-                <article><span>Avg score</span><strong>{{ store.performance().summary.avgScore | number:'1.0-0' }}</strong><small>productivity score</small></article>
+                <article><span>Incentive rules</span><strong>{{ commissionRuleCount() }}</strong></article>
+                <article><span>Performance rows</span><strong>{{ store.performance().rows.length }}</strong></article>
+                <article><span>Tracked revenue</span><strong>{{ store.performance().summary.revenue | currency:'INR':'symbol-narrow':'1.0-0' }}</strong></article>
+                <article><span>Avg score</span><strong>{{ store.performance().summary.avgScore | number:'1.0-0' }}</strong></article>
               </section>
               <div class="workspace-actions">
                 <a routerLink="/staff-os/commission-dashboard">Commission Dashboard</a>
@@ -417,10 +415,10 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
             <article *ngSwitchCase="'tasks'" class="workspace-detail-body">
               <section class="workspace-kpi-grid">
-                <article><span>Tasks</span><strong>{{ store.tasks().length }}</strong><small>open staff actions</small></article>
-                <article><span>Risks</span><strong>{{ actionableRisks().length }}</strong><small>medium/high staff score</small></article>
-                <article><span>Attendance risks</span><strong>{{ store.attendanceRisks().length }}</strong><small>payroll/attendance review</small></article>
-                <article><span>Training</span><strong>{{ store.performance().rows.length }}</strong><small>performance rows</small></article>
+                <article><span>Tasks</span><strong>{{ store.tasks().length }}</strong></article>
+                <article><span>Risks</span><strong>{{ actionableRisks().length }}</strong></article>
+                <article><span>Attendance risks</span><strong>{{ store.attendanceRisks().length }}</strong></article>
+                <article><span>Training</span><strong>{{ store.performance().rows.length }}</strong></article>
               </section>
               <div class="workspace-actions">
                 <a routerLink="/staff-os/task-board">Task Board</a>
@@ -463,10 +461,10 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             </div>
 
             <div class="staff-register-kpis" *ngIf="isStaffRegisterSection()">
-              <article><span>Total staff</span><strong>{{ staffDirectoryRows().length }}</strong><small>employee master records</small></article>
-              <article><span>Active</span><strong>{{ activeStaffForAttendance().length }}</strong><small>attendance ready</small></article>
-              <article><span>Inactive</span><strong>{{ inactiveStaffCount() }}</strong><small>paused / archived</small></article>
-              <article><span>Login linked</span><strong>{{ loginLinkedCount() }}</strong><small>staff app access</small></article>
+              <article><span>Total staff</span><strong>{{ staffDirectoryRows().length }}</strong></article>
+              <article><span>Active</span><strong>{{ activeStaffForAttendance().length }}</strong></article>
+              <article><span>Inactive</span><strong>{{ inactiveStaffCount() }}</strong></article>
+              <article><span>Login linked</span><strong>{{ loginLinkedCount() }}</strong></article>
             </div>
 
             <div class="staff-list-toolbar" *ngIf="isStaffRegisterSection()">
@@ -569,7 +567,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         <aside class="drawer">
           <header class="drawer-header">
             <div>
-              <p class="editor-breadcrumb">Employee &gt; Manage Employees &gt; New employee</p>
               <div class="editor-title-row">
                 <h2>Add Employee</h2>
                 <span class="status-pill">Active</span>
@@ -709,7 +706,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <div>
                   <span class="eyebrow">Salary setup</span>
                   <strong>{{ staffForm.get('basicSalary')?.value || 0 | currency:'INR':'symbol-narrow':'1.0-0' }} basic salary</strong>
-                  <small>Salary Add Employee ke andar hi set hogi. Save Employee ke saath payroll profile save hota hai.</small>
                 </div>
                 <div class="salary-quick-meta">
                   <article>
@@ -976,7 +972,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <aside class="subdrawer">
                   <header class="drawer-header">
                     <div>
-                      <p class="eyebrow">Advanced incentive rules</p>
                       <h2>Commission, target slabs and payroll handoff</h2>
                       <span>Rules save into this staff employee master profile for payroll and commission preview.</span>
                     </div>
@@ -1128,7 +1123,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <div>
                   <span class="eyebrow">Attendance & salary</span>
                   <strong>Salary yahin employee profile ke saath save hoti hai.</strong>
-                  <small>Basic salary, payment mode, statutory numbers and attendance payroll flags payroll generate mein use honge.</small>
                 </div>
                 <a class="refresh" routerLink="/staff-os/payroll-salary-structure">Salary Structure</a>
               </section>
@@ -1358,13 +1352,13 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
           </div>
         </div>
         <div class="attendance-stats">
-          <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong><small>active / total</small></article>
-          <article><span>Gateway</span><strong>{{ attendanceSummary()['onlineGateways'] || 0 }}/{{ attendanceSummary()['gateways'] || 0 }}</strong><small>Windows sync agents</small></article>
+          <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong></article>
+          <article><span>Gateway</span><strong>{{ attendanceSummary()['onlineGateways'] || 0 }}/{{ attendanceSummary()['gateways'] || 0 }}</strong></article>
           <article><span>Attendance</span><strong>{{ attendanceSummary()['attendanceEvents'] || 0 }}</strong><small>{{ attendanceDate() }}</small></article>
-          <article><span>Camera</span><strong>{{ attendanceSummary()['cameraCaptures'] || 0 }}</strong><small>verified captures</small></article>
+          <article><span>Camera</span><strong>{{ attendanceSummary()['cameraCaptures'] || 0 }}</strong></article>
           <article><span>Consent</span><strong>{{ attendanceSummary()['consentGranted'] || 0 }}</strong><small>{{ attendanceSummary()['consentPending'] || 0 }} pending</small></article>
           <article><span>Queue</span><strong>{{ attendanceSummary()['queuedEvents'] || 0 }}</strong><small>{{ attendanceSummary()['failedEvents'] || 0 }} failed</small></article>
-          <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong><small>review required</small></article>
+          <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong></article>
           <article><span>Payroll</span><strong>{{ attendanceSummary()['payrollPreviewRows'] || 0 }}</strong><small>{{ attendanceSummary()['ownerAlerts'] || 0 }} owner alerts</small></article>
         </div>
         <div class="attendance-live-strip">
@@ -1404,7 +1398,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       <section class="panel attendance-exception-panel" *ngIf="section === 'attendance-dashboard'">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Owner queue</p>
             <h2>Attendance Exceptions</h2>
           </div>
           <div class="attendance-controls">
@@ -1755,7 +1748,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       <section class="panel attendance-register-panel" *ngIf="section === 'attendance-dashboard'">
         <div class="panel-heading attendance-register-heading">
           <div>
-            <p class="eyebrow">Attendance register</p>
             <h2>Live Attendance Evidence</h2>
           </div>
           <span>{{ attendanceRows().length }} attendance rows</span>
@@ -1798,7 +1790,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       <section class="panel roster-register-panel" *ngIf="section === 'roster-calendar'">
         <div class="panel-heading roster-register-heading">
           <div>
-            <p class="eyebrow">Roster register</p>
             <h2>Roster And Attendance</h2>
           </div>
           <div class="staff-register-actions">
@@ -1809,9 +1800,9 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
 
         <div class="roster-kpi-strip">
-          <article><span>Roster shifts</span><strong>{{ store.schedules().length }}</strong><small>live schedule rows</small></article>
-          <article><span>Available staff</span><strong>{{ activeStaffForRoster().length }}</strong><small>not hidden from roster</small></article>
-          <article><span>Shift templates</span><strong>{{ rosterShiftOptions().length }}</strong><small>branch setup</small></article>
+          <article><span>Roster shifts</span><strong>{{ store.schedules().length }}</strong></article>
+          <article><span>Available staff</span><strong>{{ activeStaffForRoster().length }}</strong></article>
+          <article><span>Shift templates</span><strong>{{ rosterShiftOptions().length }}</strong></article>
           <article><span>Today attendance</span><strong>{{ attendanceRows().length }}</strong><small>{{ attendanceDate() }}</small></article>
         </div>
 
@@ -1997,7 +1988,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       <section class="panel payroll-register-panel" *ngIf="section === 'payroll-dashboard'">
         <div class="panel-heading payroll-register-heading">
           <div>
-            <p class="eyebrow">Payroll register</p>
             <h2>Salary And Payroll Control</h2>
           </div>
           <div class="staff-register-actions">
@@ -2010,10 +2000,10 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
 
         <div class="payroll-kpi-strip">
-          <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong><small>staff salary setup</small></article>
-          <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong><small>payroll rules</small></article>
-          <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong><small>attendance payroll</small></article>
-          <article><span>Risk signals</span><strong>{{ store.attendanceRisks().length }}</strong><small>hold / mismatch</small></article>
+          <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong></article>
+          <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong></article>
+          <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong></article>
+          <article><span>Risk signals</span><strong>{{ store.attendanceRisks().length }}</strong></article>
         </div>
 
         <div class="payroll-register-scroll">

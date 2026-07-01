@@ -24,7 +24,6 @@ type PreferencesResponse = {
         <div>
           <span class="eyebrow">Message command center</span>
           <h1>Message Template Studio</h1>
-          <p>Notification settings, SMS, WhatsApp, email templates and sent-message history in one workspace.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/message-logs">Message History</a>
@@ -42,11 +41,11 @@ type PreferencesResponse = {
       </nav>
 
       <section class="kpi-grid">
-        <article><span>Total templates</span><strong>{{ summary.totalTemplates || 0 }}</strong><small>SMS + WhatsApp + Email</small></article>
-        <article><span>SMS</span><strong>{{ summary.smsTemplates || 0 }}</strong><small>Text templates</small></article>
-        <article><span>WhatsApp</span><strong>{{ summary.whatsappTemplates || 0 }}</strong><small>Provider template mapped</small></article>
-        <article><span>Email</span><strong>{{ summary.emailTemplates || 0 }}</strong><small>Email templates</small></article>
-        <article><span>Enabled</span><strong>{{ summary.enabledTemplates || 0 }}</strong><small>Active automation settings</small></article>
+        <article><span>Total templates</span><strong>{{ summary.totalTemplates || 0 }}</strong></article>
+        <article><span>SMS</span><strong>{{ summary.smsTemplates || 0 }}</strong></article>
+        <article><span>WhatsApp</span><strong>{{ summary.whatsappTemplates || 0 }}</strong></article>
+        <article><span>Email</span><strong>{{ summary.emailTemplates || 0 }}</strong></article>
+        <article><span>Enabled</span><strong>{{ summary.enabledTemplates || 0 }}</strong></article>
       </section>
 
       <section *ngIf="activeTab === 'settings'" class="settings-panel">
@@ -173,7 +172,6 @@ type PreferencesResponse = {
         <div>
           <span class="eyebrow">Message ledger</span>
           <h2>Message History</h2>
-          <p>All SMS, WhatsApp, email, invoice notifications, staff notifications and engagement messages continue to live in the existing Message History page.</p>
         </div>
         <a class="primary-button" routerLink="/message-logs">Open Message History</a>
       </section>

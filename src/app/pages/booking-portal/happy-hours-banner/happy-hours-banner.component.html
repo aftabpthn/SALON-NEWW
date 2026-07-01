@@ -30,7 +30,6 @@
 </div>
 
 <div class="hh-upcoming" *ngIf="!isActive && upcomingOffers.length">
-  <p class="hh-upcoming-title">Upcoming Happy Hours</p>
   <div class="hh-upcoming-item" *ngFor="let day of upcomingOffers">
     <span class="day-label">{{ day.dayName | titlecase }} {{ day.date }}</span>
     <span class="offer-label" *ngFor="let offer of day.offers">

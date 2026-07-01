@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Enterprise Security Shield</span>
           <h2>Security Blocklist</h2>
-          <p>Review active IP/user blocks created by automatic active defense, and unblock after investigation.</p>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
       </div>

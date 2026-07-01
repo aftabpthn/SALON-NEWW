@@ -38,15 +38,14 @@ import { ComplianceRouteMeta } from '../domain/compliance.models';
       <ng-container *ngIf="!store.loading()">
         <section class="metrics-grid">
           <article><span>Compliance score</span><strong>{{ store.dashboard()?.complianceScore ?? 0 }}%</strong><small>{{ store.scoreLabel() }}</small></article>
-          <article><span>Financial year</span><strong>{{ store.dashboard()?.fy || '-' }}</strong><small>active statutory year</small></article>
-          <article><span>Modules</span><strong>{{ moduleCards().length }}</strong><small>tracked controls</small></article>
-          <article><span>Deadlines</span><strong>{{ (store.dashboard()?.upcomingDeadlines ?? []).length }}</strong><small>upcoming filings</small></article>
+          <article><span>Financial year</span><strong>{{ store.dashboard()?.fy || '-' }}</strong></article>
+          <article><span>Modules</span><strong>{{ moduleCards().length }}</strong></article>
+          <article><span>Deadlines</span><strong>{{ (store.dashboard()?.upcomingDeadlines ?? []).length }}</strong></article>
         </section>
 
         <section class="workdesk">
           <header class="desk-heading">
             <div>
-              <p class="eyebrow">Compliance operations</p>
               <h2>Single compact work desk</h2>
             </div>
             <span>Choose one statutory task instead of scrolling every form.</span>
@@ -80,7 +79,6 @@ import { ComplianceRouteMeta } from '../domain/compliance.models';
         <section class="register-panel">
           <div class="register-heading">
             <div>
-              <p class="eyebrow">Statutory module register</p>
               <h2>{{ meta().module | uppercase }} control center</h2>
             </div>
             <button type="button">{{ meta().primaryAction }}</button>
@@ -109,7 +107,6 @@ import { ComplianceRouteMeta } from '../domain/compliance.models';
         <section class="register-panel">
           <div class="register-heading">
             <div>
-              <p class="eyebrow">Filing calendar</p>
               <h2>Upcoming deadlines</h2>
             </div>
             <span>FY {{ store.dashboard()?.fy }}</span>

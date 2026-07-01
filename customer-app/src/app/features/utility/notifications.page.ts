@@ -21,7 +21,6 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
       <main class="page-narrow notification-page">
         <section class="notification-hero premium-card">
           <div>
-            <p class="eyebrow">Notifications</p>
             <h1>Customer inbox</h1>
             <p class="muted">{{ unreadCount() }} unread updates from bookings, payments, offers, and account activity.</p>
           </div>
@@ -86,7 +85,6 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
             <section class="premium-card empty-state">
               <ion-icon name="notifications-outline"></ion-icon>
               <h2>No notifications here</h2>
-              <p class="muted">Booking reminders, payment updates, offers and account alerts will appear here.</p>
               <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
             </section>
           }

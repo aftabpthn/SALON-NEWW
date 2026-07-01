@@ -18,7 +18,6 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
         <div class="share-copy">
           <span class="eyebrow">Online booking link</span>
           <h1>{{ activeBusinessName() }}</h1>
-          <p>Customer app ka live business page yahan se preview, open aur copy kar sakte ho. Yehi link clients ko bhejna hai.</p>
           <div class="outlet-meta">
             <span>{{ activeBranchCity() }}</span>
             <span>{{ activeBranchAddress() }}</span>
@@ -76,12 +75,10 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
         <article>
           <span>Client link</span>
           <strong>Ready</strong>
-          <small>Direct profile and booking flow</small>
         </article>
         <article>
           <span>Customer app</span>
           <strong>{{ customerAppBaseUrl() }}</strong>
-          <small>Set localStorage aura.customerAppBaseUrl to override</small>
         </article>
         <article>
           <span>Admin shortcut</span>

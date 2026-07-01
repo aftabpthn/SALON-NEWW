@@ -22,7 +22,6 @@ type ColumnDef = {
         <div>
           <span class="eyebrow">Reports / FlexiSalon import</span>
           <h2>Inward Revenue Report</h2>
-          <p>Import FlexiSalonERP Inward Revenues Excel files, keep legacy revenue separate from live POS, and analyze correct invoice totals without duplicate line counting.</p>
         </div>
         <div class="hero-actions">
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -36,7 +35,6 @@ type ColumnDef = {
         <div class="import-copy">
           <span class="eyebrow">Excel import</span>
           <h3>FlexiSalonERP Inward Revenues</h3>
-          <p>Expected format: title row on top, headers on row 4, data from row 5. Invoice totals are stored once per invoice and service/product rows stay available for drill-down.</p>
         </div>
         <label class="file-drop">
           <input type="file" accept=".xlsx,.xls" (change)="onFileSelected($event)" />
@@ -63,9 +61,9 @@ type ColumnDef = {
         </div>
         <div class="metrics-grid compact-metrics">
           <article class="metric-card"><span>Lines</span><strong>{{ previewData.lineCount || 0 }}</strong><small>{{ previewData.rowCount || 0 }} source rows</small></article>
-          <article class="metric-card"><span>Total</span><strong>{{ previewData.summary?.totalAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Unique invoice total</small></article>
-          <article class="metric-card"><span>Received</span><strong>{{ previewData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Cash, card, online, cheque</small></article>
-          <article class="metric-card"><span>Unpaid</span><strong>{{ previewData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Legacy unpaid value</small></article>
+          <article class="metric-card"><span>Total</span><strong>{{ previewData.summary?.totalAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Received</span><strong>{{ previewData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Unpaid</span><strong>{{ previewData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
         </div>
         <div class="table-wrap compact-table">
           <table>
@@ -139,12 +137,12 @@ type ColumnDef = {
 
       <ng-container *ngIf="report() as reportData">
         <div class="metrics-grid">
-          <article class="metric-card teal"><span>Invoices</span><strong>{{ reportData.summary?.invoiceCount || 0 }}</strong><small>Unique invoice count</small></article>
+          <article class="metric-card teal"><span>Invoices</span><strong>{{ reportData.summary?.invoiceCount || 0 }}</strong></article>
           <article class="metric-card"><span>Total business</span><strong>{{ reportData.summary?.totalAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>No duplicate line totals</small></article>
-          <article class="metric-card green"><span>Received</span><strong>{{ reportData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Collected amount</small></article>
-          <article class="metric-card red"><span>Unpaid</span><strong>{{ reportData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Pending from legacy report</small></article>
-          <article class="metric-card amber"><span>Balance paid</span><strong>{{ reportData.summary?.balancePaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Old balance collected</small></article>
-          <article class="metric-card blue"><span>GST</span><strong>{{ reportData.summary?.totalGstAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>CGST + SGST</small></article>
+          <article class="metric-card green"><span>Received</span><strong>{{ reportData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card red"><span>Unpaid</span><strong>{{ reportData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card amber"><span>Balance paid</span><strong>{{ reportData.summary?.balancePaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card blue"><span>GST</span><strong>{{ reportData.summary?.totalGstAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
         </div>
 
         <div class="dashboard-grid">

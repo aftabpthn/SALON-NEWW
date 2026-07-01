@@ -20,7 +20,6 @@ type MessageHistoryResponse = {
         <div>
           <span class="eyebrow">Automated messages</span>
           <h1>Message History</h1>
-          <p>All WhatsApp, SMS, email, invoice, engagement and staff notification logs in one place.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/whatsapp">WhatsApp</a>
@@ -78,14 +77,14 @@ type MessageHistoryResponse = {
       </section>
 
       <section class="kpi-grid">
-        <article><span>Total messages</span><strong>{{ metric('total') }}</strong><small>All matching logs</small></article>
-        <article><span>Outbound</span><strong>{{ metric('outbound') }}</strong><small>Client/staff sent</small></article>
-        <article><span>WhatsApp</span><strong>{{ metric('whatsapp') }}</strong><small>WA + Interakt logs</small></article>
-        <article><span>SMS</span><strong>{{ metric('sms') }}</strong><small>Text logs</small></article>
-        <article><span>Queued</span><strong>{{ metric('queued') }}</strong><small>Waiting/provider queued</small></article>
-        <article><span>Sent</span><strong>{{ metric('sent') }}</strong><small>Provider accepted</small></article>
-        <article><span>Delivered</span><strong>{{ metric('delivered') }}</strong><small>Delivery confirmed</small></article>
-        <article><span>Failed</span><strong>{{ metric('failed') }}</strong><small>Needs review</small></article>
+        <article><span>Total messages</span><strong>{{ metric('total') }}</strong></article>
+        <article><span>Outbound</span><strong>{{ metric('outbound') }}</strong></article>
+        <article><span>WhatsApp</span><strong>{{ metric('whatsapp') }}</strong></article>
+        <article><span>SMS</span><strong>{{ metric('sms') }}</strong></article>
+        <article><span>Queued</span><strong>{{ metric('queued') }}</strong></article>
+        <article><span>Sent</span><strong>{{ metric('sent') }}</strong></article>
+        <article><span>Delivered</span><strong>{{ metric('delivered') }}</strong></article>
+        <article><span>Failed</span><strong>{{ metric('failed') }}</strong></article>
       </section>
 
       <section class="source-strip">

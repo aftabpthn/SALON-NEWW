@@ -16,7 +16,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="hero-copy">
           <span class="eyebrow">Client CRM</span>
           <h2>Client list</h2>
-          <p>Manage client details, visits, wallet, notes, discounts and profile actions from one register.</p>
         </div>
         <div class="client-hero-actions">
           <button class="ghost-button" type="button" (click)="loadReports()" [disabled]="reportLoading()">Refresh reports</button>
@@ -28,52 +27,42 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('')">
           <span class="kpi-icon">CL</span>
           <strong>{{ totalClientsCount() }}</strong>
-          <small>Total Clients</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('')">
           <span class="kpi-icon">TV</span>
           <strong>{{ totalVisitsThisMonth() }}</strong>
-          <small>Total Visits This Month</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Old Client Visits')">
           <span class="kpi-icon">OV</span>
           <strong>{{ oldClientVisitsThisMonth() }}</strong>
-          <small>Old Client Visits This Month</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('New Client Visits')">
           <span class="kpi-icon">NV</span>
           <strong>{{ newClientVisitsThisMonth() }}</strong>
-          <small>New Client Visits This Month</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Male')">
           <span class="kpi-icon">M</span>
           <strong>{{ genderCount('male') }}</strong>
-          <small>Male Clients</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Female')">
           <span class="kpi-icon">F</span>
           <strong>{{ genderCount('female') }}</strong>
-          <small>Female Clients</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Membership')">
           <span class="kpi-icon">MB</span>
           <strong>{{ memberClientCount() }}</strong>
-          <small>Member Clients</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Non-member')">
           <span class="kpi-icon">NM</span>
           <strong>{{ nonMemberClientCount() }}</strong>
-          <small>Non-member Clients</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Unpaid Client')">
           <span class="kpi-icon">UP</span>
           <strong>{{ unpaidClientCount() }}</strong>
-          <small>Unpaid Clients</small>
         </button>
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('Wallet Client')">
           <span class="kpi-icon">WA</span>
           <strong>{{ walletClientCount() }}</strong>
-          <small>Wallet Clients</small>
         </button>
       </section>
 

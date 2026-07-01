@@ -14,7 +14,6 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
         <div>
           <span class="eyebrow">Staff OS / Payroll</span>
           <h2>Payroll History</h2>
-          <p>Generated salary runs, staff-wise net payout, statutory deductions, approval and paid status in one report.</p>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/staff-os/payroll-dashboard">Payroll Dashboard</a>
@@ -50,7 +49,6 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
         <div class="branch-context-card">
           <span>Header branch</span>
           <strong>{{ branchLabel() }}</strong>
-          <small>Change branch only from top header.</small>
         </div>
         <button class="primary-button" type="button" (click)="load()">Apply filters</button>
       </section>
@@ -67,12 +65,10 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
           <article class="metric-card">
             <span>Gross payroll</span>
             <strong>{{ data.summary?.grossAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
-            <small>Before deductions</small>
           </article>
           <article class="metric-card">
             <span>Deductions</span>
             <strong>{{ data.summary?.deductionAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
-            <small>PF, ESIC, TDS, PT and adjustments</small>
           </article>
           <article class="metric-card">
             <span>Net salary</span>

@@ -26,7 +26,6 @@ type WorkflowOption = {
         <div class="future-hero-copy">
           <span class="eyebrow">AI Innovation Command Center</span>
           <h2>Live connected future intelligence for growth, pricing, booking, inventory and front desk automation</h2>
-          <p>Every workflow below is wired to saved salon data. The page shows exactly which module feeds the AI, what action it can trigger next, and which routes are connected.</p>
           <div class="future-signal-row">
             <span>{{ metric('liveSources') }}/{{ sourceHealth().totalSources || 0 }} live data sources</span>
             <span>{{ metric('automationReady') }} connected workflows</span>
@@ -43,12 +42,12 @@ type WorkflowOption = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/future-features/live-sources"><span>Live sources</span><strong>{{ metrics.liveSources || 0 }}/{{ sourceHealth().totalSources || 0 }}</strong><small>CRM · POS · inventory · WhatsApp</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/future-features/automation-ready"><span>Connected workflows</span><strong>{{ metrics.automationReady || 0 }}</strong><small>Ready to run on saved data</small></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/future-features/innovation-runs"><span>Innovation runs</span><strong>{{ metrics.innovationRuns || 0 }}</strong><small>Persisted output history</small></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/future-features/no-show-risk"><span>No-show risk</span><strong>{{ metrics.noShowRisk || 0 }}</strong><small>High-risk booking signals</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/future-features/demand-index"><span>Demand index</span><strong>{{ metrics.demandIndex || 0 }}</strong><small>7-day forecast signal</small></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Monthly opportunity</small></aura-kpi-card>
+        <aura-kpi-card tone="teal" target="/kpi-details/future-features/live-sources"><span>Live sources</span><strong>{{ metrics.liveSources || 0 }}/{{ sourceHealth().totalSources || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="blue" target="/kpi-details/future-features/automation-ready"><span>Connected workflows</span><strong>{{ metrics.automationReady || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="amber" target="/kpi-details/future-features/innovation-runs"><span>Innovation runs</span><strong>{{ metrics.innovationRuns || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="red" target="/kpi-details/future-features/no-show-risk"><span>No-show risk</span><strong>{{ metrics.noShowRisk || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="green" target="/kpi-details/future-features/demand-index"><span>Demand index</span><strong>{{ metrics.demandIndex || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="violet" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
       </div>
 
       <div class="future-command-grid" *ngIf="!loading()">
