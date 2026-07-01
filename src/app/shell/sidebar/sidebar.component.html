@@ -6,7 +6,7 @@
   aria-label="Primary workspace navigation"
 >
   <div class="sidebar-rail" role="navigation" aria-label="Pinned modules">
-    <button class="workspace-chip" type="button" [title]="tenantScopeLabel" (click)="store.toggleMode()">
+    <button class="workspace-chip" type="button" [attr.aria-label]="tenantScopeLabel" [attr.data-label]="tenantScopeLabel" (click)="store.toggleMode()">
       <span>A</span>
     </button>
 
@@ -16,7 +16,7 @@
         [routerLink]="item.path"
         routerLinkActive="active"
         [attr.aria-label]="item.label"
-        [title]="item.label"
+        [attr.data-label]="item.label"
         (click)="navigate(item.path)"
       >
         <span>{{ item.icon }}</span>
@@ -24,8 +24,8 @@
     </nav>
 
     <div class="rail-footer">
-      <button type="button" title="Theme" (click)="store.cycleTheme()">T</button>
-      <button type="button" title="Logout" (click)="logout.emit()">Q</button>
+      <button type="button" aria-label="Theme" data-label="Theme" (click)="store.cycleTheme()">T</button>
+      <button type="button" aria-label="Logout" data-label="Logout" (click)="logout.emit()">Q</button>
     </div>
   </div>
 
@@ -39,7 +39,7 @@
         </span>
         <i aria-hidden="true">⌄</i>
       </button>
-      <button class="icon-action" type="button" title="Collapse sidebar" (click)="store.setMode('rail')">≡</button>
+      <button class="icon-action" type="button" aria-label="Collapse sidebar" data-label="Collapse sidebar" (click)="store.setMode('rail')">≡</button>
     </header>
 
     <div class="scope-grid">

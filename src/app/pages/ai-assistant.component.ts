@@ -28,8 +28,8 @@ type AiTool = {
         <div class="hero-orbit two"></div>
         <div class="hero-copy">
           <span class="eyebrow">Assistant</span>
-          <h2>Business Assistant</h2>
-          <p>Use saved salon data to prepare client, booking, POS, inventory, marketing and review actions.</p>
+          <h2>AI Business Assistant</h2>
+          <p>Run governed AI workflows across client CRM, bookings, POS, inventory, marketing and reviews without changing source operations.</p>
           <div class="hero-signal-row">
             <span>{{ tools.length }} live workflows</span>
             <span>{{ history().length }} saved interactions</span>
@@ -72,11 +72,12 @@ type AiTool = {
       <div class="ai-workspace-grid" *ngIf="!loading()">
         <div class="ai-left-stack">
         <section class="panel workflow-panel">
-          <div class="section-title">
+          <div class="section-title workflow-router-head">
             <div>
               <span class="eyebrow">Workflow router</span>
-              <h2>Choose a workflow</h2>
+              <h2>Open a workflow</h2>
             </div>
+            <span class="panel-count">{{ filteredTools().length }} shown</span>
           </div>
 
           <label class="ai-search">
@@ -100,11 +101,17 @@ type AiTool = {
               (click)="selectTool(tool.id)"
             >
               <span class="workflow-icon">{{ tool.icon }}</span>
-              <span>
-                <strong>{{ tool.title }}</strong>
+              <span class="workflow-copy">
+                <span class="workflow-card-topline">
+                  <strong>{{ tool.title }}</strong>
+                  <em>{{ tool.tier }}</em>
+                </span>
                 <small>{{ tool.description }}</small>
+                <span class="workflow-card-footer">
+                  <span>{{ tool.category }}</span>
+                  <b>{{ activeTool() === tool.id ? 'Opened' : 'Open workflow' }}</b>
+                </span>
               </span>
-              <em>{{ tool.tier }}</em>
             </button>
           </div>
         </section>
@@ -113,10 +120,13 @@ type AiTool = {
         <div class="ai-main-stack">
         <section class="panel command-panel">
           <div class="command-header">
-            <div>
-              <span class="eyebrow">{{ selectedTool()?.category }}</span>
-              <h2>{{ selectedTool()?.title }}</h2>
-              <p>{{ selectedTool()?.description }}</p>
+            <div class="command-title-row">
+              <span class="workflow-icon command-workflow-icon">{{ selectedTool()?.icon || 'AI' }}</span>
+              <div>
+                <span class="eyebrow">{{ selectedTool()?.category }}</span>
+                <h2>{{ selectedTool()?.title || 'Select workflow' }}</h2>
+                <p>{{ selectedTool()?.description }}</p>
+              </div>
             </div>
             <div class="task-badges">
               <span>{{ activeTaskKey() }}</span>
@@ -294,7 +304,7 @@ type AiTool = {
           <div class="section-title">
             <div>
               <span class="eyebrow">Governance rail</span>
-              <h2>Model, policy and cost</h2>
+              <h2>Governance rail</h2>
             </div>
           </div>
           <div class="governance-stack">
@@ -346,7 +356,7 @@ type AiTool = {
           <div class="section-title">
             <div>
               <span class="eyebrow">Action queue</span>
-              <h2>Drafts, suggestions and signals</h2>
+              <h2>Action queue</h2>
             </div>
           </div>
 
@@ -420,157 +430,156 @@ type AiTool = {
   styles: [`
     :host {
       display: block;
-      --ai-ink: #111827;
+      --ai-bg: #f6f8f9;
+      --ai-card: #ffffff;
+      --ai-card-soft: #f8fafc;
+      --ai-ink: #172033;
       --ai-muted: #64748b;
-      --ai-line: #dbe7e4;
-      --ai-teal: #0f766e;
-      --ai-green: #166534;
+      --ai-line: #e2e8f0;
+      --ai-primary: #0f766e;
+      --ai-primary-soft: rgba(15, 118, 110, 0.09);
       --ai-amber: #b7791f;
       --ai-red: #b42318;
-      --ai-surface: rgba(255, 255, 255, .88);
-      --ai-shadow: 0 24px 70px rgba(15, 23, 42, .10);
+      --ai-green: #15803d;
+      --ai-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
     }
 
     .ai-command-page {
-      color: var(--ai-ink);
-      display: grid;
-      grid-template-columns: minmax(300px, .82fr) minmax(520px, 1.42fr) minmax(300px, .76fr);
-      gap: 18px;
-      align-items: start;
-      max-width: 1760px;
+      width: min(100%, 1760px);
       margin: 0 auto;
-    }
-
-    .ai-command-page app-state,
-    .ai-hero,
-    .ai-kpi-grid,
-    .history-panel {
-      grid-column: 1 / -1;
+      padding: 4px 0 28px;
+      display: grid;
+      gap: 16px;
+      color: var(--ai-ink);
+      background: var(--ai-bg);
+      overflow-x: hidden;
     }
 
     .ai-hero,
     .panel,
     .ai-kpi {
       border: 1px solid var(--ai-line);
-      background: var(--ai-surface);
+      border-radius: 14px;
+      background: var(--ai-card);
       box-shadow: var(--ai-shadow);
     }
 
     .ai-hero {
       position: relative;
       overflow: hidden;
-      display: flex;
-      justify-content: space-between;
-      gap: 24px;
-      min-height: 210px;
-      padding: 28px;
-      border-radius: 26px;
-      background:
-        radial-gradient(circle at 8% 12%, rgba(15, 118, 110, .22), transparent 28%),
-        radial-gradient(circle at 88% 20%, rgba(183, 121, 31, .18), transparent 30%),
-        linear-gradient(135deg, #f8fffd, #f4f7ef 48%, #eef8f7);
+      min-height: 118px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      align-items: center;
+      gap: 18px;
+      padding: 20px 22px;
     }
 
+    .hero-orbit { display: none; }
+
     .hero-copy {
-      position: relative;
-      max-width: 850px;
-      z-index: 1;
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .eyebrow {
+      color: var(--ai-muted);
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .ai-hero h2,
+    .command-header h2,
+    .section-title h2 {
+      margin: 0;
+      color: var(--ai-ink);
+      letter-spacing: 0;
+      line-height: 1.15;
     }
 
     .ai-hero h2 {
-      max-width: 820px;
-      margin: 8px 0;
-      font-size: clamp(36px, 4.4vw, 64px);
-      line-height: .94;
-      letter-spacing: -0.055em;
+      font-size: clamp(1.55rem, 1.25rem + 1vw, 2.25rem);
+      font-weight: 850;
     }
-    .ai-hero p {
-      max-width: 720px;
+
+    .ai-hero p,
+    .command-header p {
+      max-width: 780px;
+      margin: 0;
       color: var(--ai-muted);
-      font-size: 17px;
-      font-weight: 750;
-      line-height: 1.55;
+      font-size: 0.92rem;
+      font-weight: 650;
+      line-height: 1.45;
     }
 
-    .hero-actions {
-      position: relative;
-      z-index: 1;
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .hero-signal-row,
+    .hero-actions,
+    .form-actions,
+    .section-title,
+    .command-header,
     .task-badges,
     .category-tabs,
     .result-metrics,
     .approval-checklist,
-    .queue-stack {
+    .queue-stack,
+    .hero-signal-row {
       display: flex;
-      gap: 10px;
       flex-wrap: wrap;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .hero-actions {
+      justify-content: flex-end;
+      align-items: center;
     }
 
     .hero-signal-row span,
     .task-badges span,
     .category-tabs button,
-    .safety-strip,
     .badge {
-      border: 1px solid color-mix(in srgb, var(--ai-teal) 22%, var(--ai-line));
-      background: rgba(255, 255, 255, .72);
-      color: #12433f;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--ai-line);
       border-radius: 999px;
-      padding: 8px 12px;
-      font-size: 12px;
-      font-weight: 900;
+      padding: 5px 9px;
+      color: var(--ai-muted);
+      background: var(--ai-card-soft);
+      font-size: 0.72rem;
+      font-weight: 850;
+      white-space: nowrap;
     }
 
-    .hero-orbit {
-      position: absolute;
-      border: 1px solid rgba(15, 118, 110, .16);
-      border-radius: 999px;
-      pointer-events: none;
+    .task-badges span:first-child,
+    .badge {
+      color: var(--ai-primary);
+      background: var(--ai-primary-soft);
+      border-color: rgba(15, 118, 110, 0.18);
     }
 
-    .hero-orbit.one {
-      width: 360px;
-      height: 360px;
-      right: -120px;
-      bottom: -170px;
-    }
-
-    .hero-orbit.two {
-      width: 170px;
-      height: 170px;
-      right: 210px;
-      top: -80px;
-      border-color: rgba(183, 121, 31, .20);
+    .task-badges .warn,
+    .warning-text,
+    .task-health-list .warn {
+      color: var(--ai-red);
     }
 
     .ai-kpi-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
+      gap: 10px;
     }
 
     .ai-kpi {
-      position: relative;
-      overflow: hidden;
-      padding: 18px;
-      border-radius: 22px;
-    }
-
-    .ai-kpi::after {
-      content: '';
-      position: absolute;
-      right: -34px;
-      bottom: -34px;
-      width: 110px;
-      height: 110px;
-      border-radius: 999px;
-      background: rgba(15, 118, 110, .10);
+      min-height: 96px;
+      display: grid;
+      align-content: center;
+      gap: 5px;
+      padding: 14px 16px;
+      border-left: 3px solid var(--ai-primary);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.055);
     }
 
     .ai-kpi span,
@@ -581,30 +590,33 @@ type AiTool = {
     .answer-card span,
     .result-metrics span,
     .approval-checklist small,
-    .raw-json summary {
+    .raw-json summary,
+    .registry-list small,
+    .registry-flags span {
       color: var(--ai-muted);
-      font-size: 12px;
-      font-weight: 850;
+      font-size: 0.75rem;
+      font-weight: 750;
+      line-height: 1.35;
     }
 
     .ai-kpi strong {
-      display: block;
-      margin: 7px 0;
-      font-size: 31px;
-      letter-spacing: -0.04em;
+      color: var(--ai-ink);
+      font-size: 1.55rem;
+      line-height: 1;
     }
 
     .ai-kpi small {
       color: var(--ai-muted);
-      font-weight: 750;
+      font-size: 0.76rem;
+      line-height: 1.32;
     }
 
     .ai-workspace-grid {
-      grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: minmax(300px, .82fr) minmax(520px, 1.42fr) minmax(300px, .76fr);
-      gap: 18px;
+      grid-template-columns: minmax(260px, 0.78fr) minmax(420px, 1.36fr) minmax(270px, 0.82fr);
+      gap: 14px;
       align-items: start;
+      min-width: 0;
     }
 
     .ai-left-stack,
@@ -612,55 +624,81 @@ type AiTool = {
     .ai-side-stack {
       min-width: 0;
       display: grid;
-      gap: 16px;
+      gap: 14px;
       align-content: start;
     }
+
     .panel {
-      border-radius: 26px;
-      padding: 18px;
+      min-width: 0;
+      padding: 16px;
     }
 
     .workflow-panel,
     .governance-panel {
       position: sticky;
-      top: 104px;
-      max-height: calc(100vh - 128px);
+      top: 82px;
+      max-height: calc(100vh - 100px);
       overflow: hidden;
     }
 
-    .workflow-panel {
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-
-    .governance-panel {
+    .governance-panel,
+    .workflow-list {
       overflow: auto;
     }
 
-    .command-panel,
-    .output-panel,
-    .queue-panel {
-      min-width: 0;
+    .section-title {
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .section-title h2 {
+      font-size: 1rem;
+      font-weight: 820;
+    }
+
+    .ai-search,
+    .field {
+      display: grid;
+      gap: 6px;
+      color: var(--ai-muted);
+      font-size: 0.76rem;
+      font-weight: 850;
     }
 
     .ai-search {
-      display: grid;
-      gap: 7px;
-      margin: 12px 0;
+      margin-bottom: 10px;
     }
 
-    .ai-search input {
+    .ai-search input,
+    .field input,
+    .field select,
+    .field textarea {
       width: 100%;
+      min-width: 0;
       border: 1px solid var(--ai-line);
-      border-radius: 16px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 10px 11px;
+      background: #fff;
+      color: var(--ai-ink);
       font: inherit;
-      font-weight: 750;
+      font-size: 0.86rem;
+      font-weight: 650;
+      outline: none;
+    }
+
+    .ai-search input:focus,
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      border-color: rgba(15, 118, 110, 0.45);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.09);
     }
 
     .category-tabs {
-      margin: 12px 0 14px;
+      margin-bottom: 10px;
+      max-height: 94px;
+      overflow: auto;
     }
 
     .category-tabs button {
@@ -668,301 +706,320 @@ type AiTool = {
     }
 
     .category-tabs button.active {
-      background: #0f766e;
       color: #fff;
-      border-color: #0f766e;
+      background: var(--ai-primary);
+      border-color: var(--ai-primary);
     }
 
     .category-tabs small {
       margin-left: 5px;
-      opacity: .75;
+      opacity: 0.75;
+    }
+
+    .panel-count {
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--ai-line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      color: var(--ai-muted);
+      background: var(--ai-card-soft);
+      font-size: 0.72rem;
+      font-weight: 850;
+      white-space: nowrap;
     }
 
     .workflow-list {
       display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
       gap: 10px;
-      flex: 1 1 auto;
-      min-height: 220px;
-      max-height: none;
-      overflow: auto;
+      max-height: calc(100vh - 285px);
       padding-right: 4px;
     }
 
     .workflow-card {
-      display: grid;
-      grid-template-columns: 42px minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
       width: 100%;
-      text-align: left;
+      min-height: 118px;
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr);
+      align-items: start;
+      gap: 10px;
       border: 1px solid var(--ai-line);
-      border-radius: 18px;
+      border-radius: 12px;
       padding: 12px;
-      background: #fff;
-      cursor: pointer;
       color: var(--ai-ink);
+      background: #fff;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.045);
+      transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+    }
+
+    .workflow-card:hover,
+    .workflow-card:focus-visible {
+      border-color: rgba(15, 118, 110, 0.45);
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+      outline: none;
+      transform: translateY(-1px);
     }
 
     .workflow-card.active {
-      border-color: #0f766e;
-      background: linear-gradient(135deg, rgba(15, 118, 110, .10), #fff);
-      box-shadow: 0 12px 35px rgba(15, 118, 110, .14);
+      border-color: rgba(15, 118, 110, 0.65);
+      background: #f7fffd;
+      box-shadow: inset 3px 0 0 var(--ai-primary), 0 10px 20px rgba(15, 118, 110, 0.1);
     }
 
     .workflow-card.disabled {
-      opacity: .55;
+      opacity: 0.58;
+    }
+
+    .workflow-copy {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .workflow-card-topline,
+    .workflow-card-footer {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
 
     .workflow-card strong,
     .workflow-card small {
       display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .workflow-card strong {
+      color: var(--ai-ink);
+      font-size: 0.88rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .workflow-card small {
+      display: -webkit-box;
+      min-height: 34px;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .workflow-card em {
-      color: var(--ai-teal);
-      font-size: 11px;
+      border-radius: 999px;
+      padding: 4px 7px;
+      color: var(--ai-primary);
+      background: var(--ai-primary-soft);
+      font-size: 0.62rem;
       font-style: normal;
-      font-weight: 950;
+      font-weight: 900;
       text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .workflow-card-footer span,
+    .workflow-card-footer b {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.72rem;
+      font-weight: 850;
+    }
+
+    .workflow-card-footer span {
+      color: var(--ai-muted);
+    }
+
+    .workflow-card-footer b {
+      color: var(--ai-primary);
     }
 
     .workflow-icon {
+      width: 38px;
+      height: 38px;
       display: grid;
       place-items: center;
-      width: 42px;
-      height: 42px;
-      border-radius: 14px;
-      background: #e9f8f5;
-      color: #0f766e;
+      border-radius: 10px;
+      color: var(--ai-primary);
+      background: var(--ai-primary-soft);
+      font-size: 0.72rem;
       font-weight: 950;
     }
 
     .command-header {
-      display: flex;
       justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 16px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .command-title-row {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .command-workflow-icon {
+      width: 44px;
+      height: 44px;
+      margin-top: 2px;
     }
 
     .command-header h2 {
-      margin: 4px 0;
-      font-size: clamp(28px, 4vw, 46px);
-      line-height: 1;
-      letter-spacing: -0.05em;
-    }
-
-    .command-header p {
-      color: var(--ai-muted);
-      font-weight: 750;
+      margin-top: 3px;
+      font-size: clamp(1.25rem, 1rem + 0.8vw, 1.8rem);
+      font-weight: 850;
     }
 
     .task-badges {
-      align-content: flex-start;
       justify-content: flex-end;
-      min-width: 230px;
-    }
-
-    .task-badges .warn,
-    .warning-text,
-    .task-health-list .warn {
-      color: var(--ai-red);
+      max-width: 360px;
     }
 
     .enterprise-form {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
+      gap: 10px;
     }
 
     .enterprise-form .full {
       grid-column: 1 / -1;
     }
 
-    .field {
-      display: grid;
-      gap: 7px;
-      color: var(--ai-muted);
-      font-size: 12px;
-      font-weight: 900;
-    }
-
-    .field input,
-    .field select,
     .field textarea {
-      width: 100%;
-      border: 1px solid var(--ai-line);
-      border-radius: 16px;
-      padding: 12px 13px;
-      background: #fff;
-      color: var(--ai-ink);
-      font: inherit;
-      font-weight: 750;
-    }
-
-    .field textarea {
-      min-height: 146px;
+      min-height: 122px;
       resize: vertical;
     }
 
     .safety-strip {
       display: grid;
-      border-radius: 18px;
-      background: linear-gradient(135deg, rgba(15, 118, 110, .10), rgba(183, 121, 31, .10));
+      gap: 4px;
+      border: 1px solid rgba(15, 118, 110, 0.18);
+      border-radius: 10px;
+      padding: 11px 12px;
+      background: var(--ai-primary-soft);
+      color: var(--ai-muted);
+      font-size: 0.76rem;
+    }
+
+    .safety-strip span {
+      color: var(--ai-primary);
+      font-weight: 900;
     }
 
     .safety-strip strong {
       color: var(--ai-ink);
+      font-size: 0.86rem;
+    }
+
+    .safety-strip small {
+      color: var(--ai-muted);
     }
 
     .form-actions {
-      display: flex;
       justify-content: flex-end;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .governance-stack,
-    .queue-stack {
-      display: grid;
-      gap: 10px;
-    }
-
-    .governance-stack article,
-    .queue-stack article,
-    .result-metrics article,
-    .approval-checklist article,
-    .answer-card,
-    .source-strip article,
-    .action-card,
-    .mini-feed div {
-      border: 1px solid var(--ai-line);
-      border-radius: 18px;
-      background: #fff;
-      padding: 14px;
-    }
-
-    .source-strip {
-      display: grid;
-      gap: 10px;
-    }
-
-    .source-strip article {
-      border-color: #cde7dd;
-      background: #f5fbf8;
-      display: grid;
-      gap: 4px;
-    }
-
-    .source-strip span {
-      color: #0f766e;
-      font-size: 11px;
-      font-weight: 900;
-      text-transform: uppercase;
-    }
-
-    .source-strip strong {
-      color: var(--ai-ink);
-      font-size: 13px;
-    }
-
-    .source-strip small {
-      color: var(--ai-muted);
-      line-height: 1.4;
-    }
-
-    .governance-stack strong,
-    .queue-stack strong,
-    .answer-card strong,
-    .result-metrics strong,
-    .approval-checklist strong,
-    .mini-feed strong {
-      display: block;
-      margin: 5px 0;
-    }
-
-    .task-health-list {
-      display: grid;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .task-health-list div {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      border-bottom: 1px dashed var(--ai-line);
-      padding-bottom: 8px;
-      font-size: 12px;
-      font-weight: 850;
-    }
-
-    .prompt-registry {
-      display: grid;
-      gap: 10px;
-      margin-top: 16px;
-      border-top: 1px solid var(--ai-line);
-      padding-top: 14px;
-    }
-
-    .registry-head,
-    .registry-list div {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
       align-items: center;
     }
 
-    .registry-flags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+    .ghost-button,
+    .dark-button,
+    .primary-button {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 0.82rem;
+      font-weight: 850;
+      white-space: nowrap;
     }
 
-    .registry-flags span {
-      border-radius: 999px;
-      background: #eef7f4;
-      color: #0f766e;
-      padding: 5px 8px;
-      font-size: 11px;
-      font-weight: 900;
+    .output-panel {
+      display: grid;
+      gap: 12px;
     }
 
-    .registry-list {
+    .ai-output {
+      display: grid;
+      gap: 12px;
+    }
+
+    .answer-card,
+    .source-strip article,
+    .result-metrics article,
+    .approval-checklist article,
+    .governance-stack article,
+    .queue-stack article,
+    .prompt-registry,
+    .mini-feed div,
+    .action-card,
+    .empty-command {
+      border: 1px solid var(--ai-line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    }
+
+    .answer-card {
+      display: grid;
+      gap: 7px;
+      padding: 14px;
+      border-left: 3px solid var(--ai-primary);
+    }
+
+    .answer-card strong {
+      color: var(--ai-ink);
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    .answer-card p {
+      margin: 0;
+      color: var(--ai-muted);
+      line-height: 1.45;
+    }
+
+    .source-strip,
+    .quick-grid,
+    .governance-stack,
+    .registry-list,
+    .mini-feed {
       display: grid;
       gap: 8px;
     }
 
-    .registry-list div {
-      border-bottom: 1px dashed var(--ai-line);
-      padding-bottom: 8px;
-      font-size: 12px;
-      font-weight: 850;
+    .source-strip {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     }
 
-    .registry-list small {
-      color: var(--ai-muted);
+    .source-strip article,
+    .result-metrics article,
+    .approval-checklist article,
+    .queue-stack article,
+    .governance-stack article,
+    .action-card {
+      padding: 11px 12px;
     }
 
-
-    .ai-output {
-      display: grid;
-      gap: 14px;
-    }
-
-    .answer-card {
-      background: linear-gradient(135deg, #10222b, #143b38);
-      color: #fff;
-    }
-
-    .answer-card span,
-    .answer-card p {
-      color: rgba(255, 255, 255, .76);
-    }
-
-    .answer-card strong {
-      font-size: 24px;
-      line-height: 1.2;
-      letter-spacing: -0.035em;
+    .source-strip strong,
+    .result-metrics strong,
+    .approval-checklist strong,
+    .queue-stack strong,
+    .governance-stack strong,
+    .mini-feed strong,
+    .action-card strong {
+      display: block;
+      color: var(--ai-ink);
+      font-size: 0.9rem;
+      line-height: 1.3;
     }
 
     .result-metrics {
@@ -970,23 +1027,10 @@ type AiTool = {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .quick-grid {
+    .result-metrics article {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .action-card strong,
-    .action-card span,
-    .action-card small {
-      display: block;
-    }
-
-    .action-card span,
-    .action-card small {
-      margin-top: 6px;
-      color: var(--ai-muted);
-      font-weight: 750;
+      gap: 4px;
+      min-height: 68px;
     }
 
     .approval-checklist {
@@ -996,95 +1040,302 @@ type AiTool = {
 
     .approval-checklist article {
       display: grid;
-      gap: 6px;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
     }
 
-    .approval-checklist span {
+    .approval-checklist article > span {
+      width: 24px;
+      height: 24px;
       display: grid;
       place-items: center;
-      width: 28px;
-      height: 28px;
-      border-radius: 10px;
-      background: #e9f8f5;
-      color: #0f766e;
-      font-weight: 950;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--ai-primary);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .approval-checklist small {
+      grid-column: 2;
+    }
+
+    .quick-grid {
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    }
+
+    .action-card {
+      display: grid;
+      gap: 5px;
+      min-height: 86px;
+      align-content: start;
+    }
+
+    .action-card span,
+    .action-card small {
+      color: var(--ai-muted);
+      font-size: 0.76rem;
+      line-height: 1.35;
     }
 
     .raw-json {
       border: 1px solid var(--ai-line);
-      border-radius: 18px;
-      padding: 12px;
-      background: #f8fafc;
+      border-radius: 10px;
+      background: var(--ai-card-soft);
+      overflow: hidden;
+    }
+
+    .raw-json summary {
+      cursor: pointer;
+      padding: 11px 12px;
     }
 
     .raw-json pre {
+      max-height: 260px;
+      margin: 0;
       overflow: auto;
-      max-height: 320px;
+      padding: 12px;
+      border-top: 1px solid var(--ai-line);
+      color: var(--ai-muted);
+      background: #fff;
+      font-size: 0.78rem;
       white-space: pre-wrap;
-      font-size: 12px;
     }
 
     .empty-command {
+      min-height: 180px;
       display: grid;
-      gap: 8px;
-      min-height: 220px;
-      place-content: center;
-      text-align: center;
-      border: 1px dashed var(--ai-line);
-      border-radius: 22px;
+      place-items: center;
+      gap: 6px;
+      padding: 24px;
       color: var(--ai-muted);
-      font-weight: 850;
+      text-align: center;
     }
 
+    .empty-command strong {
+      color: var(--ai-ink);
+      font-size: 1rem;
+    }
+
+    .governance-stack,
     .queue-stack {
       grid-template-columns: 1fr;
+      margin-bottom: 12px;
+    }
+
+    .governance-stack article,
+    .queue-stack article {
+      min-height: 70px;
+      display: grid;
+      gap: 4px;
+      align-content: center;
+      border-left: 3px solid var(--ai-primary);
+      box-shadow: none;
+    }
+
+    .task-health-list {
+      display: grid;
+      gap: 6px;
+      margin: 12px 0;
+    }
+
+    .task-health-list div,
+    .registry-list div {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--ai-line);
+    }
+
+    .task-health-list span,
+    .registry-list span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--ai-muted);
+      font-size: 0.76rem;
+      font-weight: 750;
+    }
+
+    .task-health-list strong,
+    .registry-list strong {
+      color: var(--ai-green);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+    }
+
+    .prompt-registry {
+      padding: 12px;
+    }
+
+    .registry-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .registry-flags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .registry-flags span {
+      border-radius: 999px;
+      padding: 5px 8px;
+      background: var(--ai-card-soft);
     }
 
     .mini-feed {
-      display: grid;
-      gap: 10px;
-      margin-top: 14px;
+      margin-top: 12px;
     }
 
-    .table-wrap table small {
-      display: block;
+    .mini-feed div {
+      display: grid;
+      gap: 4px;
+      padding: 10px 12px;
+    }
+
+    .history-panel .table-wrap {
+      width: 100%;
+      overflow: auto;
+      border: 1px solid var(--ai-line);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .history-panel table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    .history-panel th,
+    .history-panel td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--ai-line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.84rem;
+    }
+
+    .history-panel th {
       color: var(--ai-muted);
-      max-width: 650px;
+      background: var(--ai-card-soft);
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .history-panel td small {
+      display: block;
+      max-width: 520px;
+      margin-top: 3px;
+      color: var(--ai-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     @media (max-width: 1280px) {
-      .ai-command-page,
       .ai-workspace-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(240px, 0.82fr) minmax(0, 1.18fr);
       }
 
-      .ai-kpi-grid,
-      .result-metrics,
-      .quick-grid,
-      .approval-checklist {
-        grid-template-columns: 1fr;
+      .ai-side-stack {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
       }
 
       .workflow-panel,
       .governance-panel {
         position: static;
         max-height: none;
-        overflow: visible;
-      }
-    }
-    @media (max-width: 860px) {
-      .ai-hero,
-      .command-header {
-        flex-direction: column;
       }
 
-      .enterprise-form {
+      .workflow-list {
+        max-height: 560px;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .ai-hero,
+      .ai-workspace-grid,
+      .ai-side-stack {
         grid-template-columns: 1fr;
       }
 
       .hero-actions,
-      .task-badges {
+      .task-badges,
+      .form-actions {
         justify-content: flex-start;
+      }
+
+      .ai-kpi-grid,
+      .result-metrics,
+      .approval-checklist {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .enterprise-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .ai-command-page {
+        gap: 12px;
+      }
+
+      .ai-hero,
+      .panel {
+        padding: 14px;
+        border-radius: 12px;
+      }
+
+      .ai-kpi-grid,
+      .result-metrics,
+      .approval-checklist,
+      .enterprise-form,
+      .quick-grid,
+      .source-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .workflow-card {
+        grid-template-columns: 36px minmax(0, 1fr);
+        min-height: 112px;
+      }
+
+      .workflow-card-topline,
+      .workflow-card-footer {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .command-title-row {
+        grid-template-columns: 38px minmax(0, 1fr);
+      }
+
+      .command-workflow-icon {
+        width: 38px;
+        height: 38px;
+      }
+
+      .hero-actions a,
+      .hero-actions button,
+      .form-actions button {
+        width: 100%;
       }
     }
   `]

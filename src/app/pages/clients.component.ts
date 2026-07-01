@@ -215,7 +215,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td class="actions-cell right">
                   <button class="row-action-trigger" type="button" (click)="toggleRowAction(client.id, $event)" aria-label="Client actions">...</button>
                   <div class="row-action-menu" *ngIf="rowActionClientId() === clientId(client)" (click)="$event.stopPropagation()">
-                    <button type="button" (click)="openClient(client.id)">History</button>
+                    <button type="button" (click)="openClient(client.id)">View Details</button>
                     <button type="button" (click)="deleteClient(client, $event)" [disabled]="saving()">Delete</button>
                     <button type="button" (click)="blockClient(client, $event)" [disabled]="saving()">Block</button>
                     <button type="button" (click)="editClient(client, $event)" [disabled]="saving()">Edit</button>
@@ -985,15 +985,9 @@ export class ClientsComponent implements OnInit {
   readonly visibleColumnKeys = signal<string[]>([
     'name',
     'contact',
-    'gender',
-    'birthday',
-    'anniversary',
     'ewallet',
-    'notes',
     'firstVisit',
-    'spending',
-    'assignedDiscount',
-    'discountValidity'
+    'spending'
   ]);
   readonly selectedClientIds = signal<string[]>([]);
   readonly editingClientId = signal('');

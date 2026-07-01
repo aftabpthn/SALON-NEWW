@@ -125,6 +125,11 @@ type TimeSlot = {
   input: string;
 };
 
+type AppointmentDetailRow = {
+  label: string;
+  value: string;
+};
+
 type AppointmentCard = {
   appointment: ApiRecord;
   top: number;
@@ -133,6 +138,13 @@ type AppointmentCard = {
   clientName: string;
   serviceLabel: string;
   timeLabel: string;
+  detailRows: AppointmentDetailRow[];
+};
+
+type AppointmentHoverState = {
+  card: AppointmentCard;
+  x: number;
+  y: number;
 };
 
 type LaneBlock = {
@@ -150,12 +162,18 @@ type TimelineRow = {
   cards: AppointmentCard[];
 };
 
+type ScheduledStaffPrefs = {
+  order: string[];
+  hidden: string[];
+};
+
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 22 * 60;
 const ROW_HEIGHT = 44;
 const COMPACT_ROW_HEIGHT = 32;
-const STAFF_LIMIT = 15;
+const STAFF_LIMIT = 30;
 const CALENDAR_LAYOUT_STORAGE_KEY = 'aura.appointments.calendarLayout.v1';
+const SCHEDULED_STAFF_STORAGE_PREFIX = 'aura.appointments.scheduledStaff.v1';
 const CALENDAR_LAYOUT_OPTIONS: CalendarLayoutOption[] = [
   { value: 'grid', label: 'Staff Grid', description: 'Full drag calendar' },
   { value: 'compact-grid', label: 'Compact Grid', description: 'Dense staff view' },
@@ -241,10 +259,76 @@ const STATUS_TONES: Record<string, string> = {
                 <option value="30">30 mins</option>
               </select>
             </label>
-            <div class="calendar-layout-toggle" role="group" aria-label="Calendar layout">
-              <button type="button" *ngFor="let option of calendarLayoutOptions; trackBy: trackCalendarLayoutOption" [class.active]="calendarLayout() === option.value" [attr.aria-pressed]="calendarLayout() === option.value" [title]="option.description" (click)="setCalendarLayout(option.value)">
-                {{ option.label }}
+            <label class="view-control-field calendar-layout-field">
+              <span>View</span>
+              <select [value]="calendarLayout()" aria-label="Calendar layout" (change)="setCalendarLayout($any($event.target).value)">
+                <option *ngFor="let option of calendarLayoutOptions; trackBy: trackCalendarLayoutOption" [value]="option.value" [title]="option.description">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <div class="scheduled-staff-control">
+              <button
+                class="scheduled-staff-button"
+                type="button"
+                title="Scheduled staff"
+                aria-label="Scheduled staff"
+                [class.active]="staffPanelOpen()"
+                [attr.aria-expanded]="staffPanelOpen()"
+                (click)="toggleScheduledStaffPanel()"
+              >
+                <span aria-hidden="true">☷</span>
+                <small>{{ scheduledStaffVisibleCount() }}</small>
               </button>
+              <section class="scheduled-staff-panel" *ngIf="staffPanelOpen()" aria-label="Scheduled staff panel">
+                <header>
+                  <div>
+                    <h3>Scheduled Staff</h3>
+                    <span>{{ scheduledStaffVisibleCount() }} of {{ scheduledStaffRows().length }} visible</span>
+                  </div>
+                  <button type="button" aria-label="Close scheduled staff" (click)="cancelScheduledStaffPanel()">×</button>
+                </header>
+                <div class="scheduled-staff-list" *ngIf="scheduledStaffRows().length; else noScheduledStaff">
+                  <div
+                    class="scheduled-staff-row"
+                    *ngFor="let person of scheduledStaffRows(); trackBy: trackStaff"
+                    draggable="true"
+                    [class.dragging]="staffPanelDragId() === person.id"
+                    [class.hidden-staff]="isScheduledStaffHidden(person.id)"
+                    (dragstart)="beginScheduledStaffDrag(person.id, $event)"
+                    (dragover)="allowScheduledStaffDrop($event)"
+                    (drop)="dropScheduledStaff(person.id, $event)"
+                    (dragend)="endScheduledStaffDrag()"
+                  >
+                    <span class="scheduled-staff-handle" aria-hidden="true">⋮⋮</span>
+                    <label>
+                      <input
+                        type="checkbox"
+                        [checked]="!isScheduledStaffHidden(person.id)"
+                        [disabled]="!canToggleScheduledStaff(person.id)"
+                        (change)="toggleScheduledStaffVisibility(person.id, $any($event.target).checked)"
+                      />
+                      <span class="avatar">{{ initials(person.name) }}</span>
+                      <span class="scheduled-staff-copy">
+                        <strong>{{ person.name }}</strong>
+                        <small>{{ person.role || 'Staff' }}</small>
+                      </span>
+                    </label>
+                    <div class="scheduled-staff-row-actions" aria-label="Reorder staff">
+                      <button type="button" aria-label="Move staff up" (click)="moveScheduledStaffByOffset(person.id, -1)">↑</button>
+                      <button type="button" aria-label="Move staff down" (click)="moveScheduledStaffByOffset(person.id, 1)">↓</button>
+                    </div>
+                  </div>
+                </div>
+                <ng-template #noScheduledStaff>
+                  <p class="scheduled-staff-empty">No staff loaded for this branch.</p>
+                </ng-template>
+                <footer>
+                  <button type="button" class="ghost-button mini" (click)="resetScheduledStaffPanel()">Reset</button>
+                  <button type="button" class="ghost-button mini" (click)="cancelScheduledStaffPanel()">Cancel</button>
+                  <button type="button" class="primary-button mini" (click)="saveScheduledStaffPanel()">Save</button>
+                </footer>
+              </section>
             </div>
             <div class="staff-window-controls scheduler-staff-window" aria-label="Staff window">
               <button type="button" (click)="moveStaffWindow(-1)" [disabled]="staffOffset() === 0">Prev</button>
@@ -334,6 +418,11 @@ const STATUS_TONES: Record<string, string> = {
                 (dragstart)="beginDrag(card.appointment)"
                 (dragend)="clearDrag()"
                 (click)="openAppointment(card.appointment); $event.stopPropagation()"
+                (mouseenter)="showAppointmentDetails(card, $event)"
+                (mousemove)="moveAppointmentDetails($event)"
+                (mouseleave)="hideAppointmentDetails()"
+                (focus)="showAppointmentDetails(card, $event)"
+                (blur)="hideAppointmentDetails()"
               >
                 <strong>{{ card.timeLabel }}</strong>
                 <b>{{ card.clientName }}</b>
@@ -374,7 +463,7 @@ const STATUS_TONES: Record<string, string> = {
                   <div class="timeline-track">
                     <span class="timeline-marker" *ngFor="let slot of timelineScaleSlots(); trackBy: trackSlot" [style.left.%]="timelineLeftForMinute(slot.minute)"></span>
                     <span class="timeline-empty" *ngIf="!row.cards.length">No bookings</span>
-                    <button type="button" class="timeline-appointment" *ngFor="let card of row.cards; trackBy: trackCard" [ngClass]="statusTone(card.status)" [style.left.%]="timelineLeft(card)" [style.width.%]="timelineWidth(card)" (click)="openAppointment(card.appointment)">
+                    <button type="button" class="timeline-appointment" *ngFor="let card of row.cards; trackBy: trackCard" [ngClass]="statusTone(card.status)" [style.left.%]="timelineLeft(card)" [style.width.%]="timelineWidth(card)" (click)="openAppointment(card.appointment)" (mouseenter)="showAppointmentDetails(card, $event)" (mousemove)="moveAppointmentDetails($event)" (mouseleave)="hideAppointmentDetails()" (focus)="showAppointmentDetails(card, $event)" (blur)="hideAppointmentDetails()">
                       <strong>{{ card.timeLabel }}</strong>
                       <span>{{ card.clientName }}</span>
                       <small>{{ card.serviceLabel }}</small>
@@ -897,6 +986,16 @@ const STATUS_TONES: Record<string, string> = {
           </div>
         </ng-template>
       </aside>
+      <div class="appointment-detail-popover" *ngIf="hoveredAppointment() as hover" role="tooltip" [style.left.px]="hover.x" [style.top.px]="hover.y">
+        <div class="hover-title">
+          <strong>{{ hover.card.clientName }}</strong>
+          <small>{{ hover.card.timeLabel }}</small>
+        </div>
+        <div class="hover-row" *ngFor="let row of hover.card.detailRows; trackBy: trackAppointmentDetailRow">
+          <em>{{ row.label }}</em>
+          <b>{{ row.value }}</b>
+        </div>
+      </div>
 
       <div class="toast" *ngIf="notice()">
         <span>{{ notice() }}</span>
@@ -960,6 +1059,78 @@ const STATUS_TONES: Record<string, string> = {
     .scheduler-view-copy small { color: #64748b; font-weight: 800; }
     .scheduler-view-controls { justify-content: flex-end; }
     .view-control-field { min-width: 122px; }
+    .calendar-layout-field { min-width: 178px; }
+    .scheduled-staff-control { position: relative; display: flex; align-items: flex-end; }
+    .scheduled-staff-button {
+      position: relative;
+      width: 42px;
+      height: 42px;
+      border: 1px solid #cfe0dc;
+      border-radius: 999px;
+      background: #fff;
+      color: #4B1238;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, .08);
+      cursor: pointer;
+    }
+    .scheduled-staff-button:hover, .scheduled-staff-button.active { background: #4B1238; color: #fff; border-color: #4B1238; }
+    .scheduled-staff-button small {
+      position: absolute;
+      right: -5px;
+      top: -6px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #E8A7B8;
+      color: #4B1238;
+      border: 2px solid #fff;
+      font-size: 10px;
+      line-height: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .scheduled-staff-panel {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      z-index: 55;
+      width: min(340px, calc(100vw - 32px));
+      max-height: min(580px, calc(100vh - 170px));
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: #fff;
+      border: 1px solid #d8c9d2;
+      border-radius: 18px;
+      box-shadow: 0 24px 50px rgba(31, 41, 51, .18);
+      overflow: hidden;
+    }
+    .scheduled-staff-panel header, .scheduled-staff-panel footer { padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .scheduled-staff-panel header { border-bottom: 1px solid #E7DED6; }
+    .scheduled-staff-panel h3 { margin: 0; font-size: 20px; line-height: 1.1; color: #1F2933; }
+    .scheduled-staff-panel header span { color: #6B7280; font-size: 12px; font-weight: 800; }
+    .scheduled-staff-panel header button { width: 32px; height: 32px; border: 1px solid #E7DED6; border-radius: 999px; background: #FAF7F2; color: #4B1238; font-size: 20px; line-height: 1; cursor: pointer; }
+    .scheduled-staff-list { overflow: auto; padding: 8px 0; }
+    .scheduled-staff-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 14px; color: #1F2933; border-bottom: 1px solid rgba(231, 222, 214, .72); background: #fff; }
+    .scheduled-staff-row:last-child { border-bottom: 0; }
+    .scheduled-staff-row.dragging { opacity: .48; background: #FAF7F2; }
+    .scheduled-staff-row.hidden-staff { opacity: .62; }
+    .scheduled-staff-handle { color: #6B7280; font-weight: 900; cursor: grab; letter-spacing: -2px; }
+    .scheduled-staff-row label { min-width: 0; display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; font-size: 13px; color: #1F2933; }
+    .scheduled-staff-row input { width: 18px; height: 18px; min-height: 18px; accent-color: #4B1238; flex: 0 0 auto; }
+    .scheduled-staff-row .avatar { width: 30px; height: 30px; min-width: 30px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #F8E7EE; color: #4B1238; font-size: 11px; font-weight: 900; }
+    .scheduled-staff-copy { min-width: 0; display: grid; gap: 1px; }
+    .scheduled-staff-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .scheduled-staff-copy small { color: #6B7280; font-size: 11px; font-weight: 800; }
+    .scheduled-staff-row-actions { display: flex; gap: 4px; }
+    .scheduled-staff-row-actions button { width: 26px; height: 26px; border: 1px solid #E7DED6; border-radius: 999px; background: #FAF7F2; color: #4B1238; font-weight: 900; cursor: pointer; }
+    .scheduled-staff-panel footer { border-top: 1px solid #E7DED6; background: #FFFCF8; justify-content: flex-end; }
+    .scheduled-staff-empty { margin: 0; padding: 18px; color: #6B7280; font-weight: 800; }
     .view-control-field span { color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .view-control-field select { min-height: 38px; border-radius: 999px; padding: 7px 12px; }
     .calendar-layout-toggle { display: flex; gap: 4px; max-width: 100%; overflow-x: auto; padding: 4px; border: 1px solid #d5e2df; border-radius: 999px; background: #f8fafc; }
@@ -983,7 +1154,7 @@ const STATUS_TONES: Record<string, string> = {
     .scheduler-grid-shell { padding: 16px; border-radius: 16px; overflow: hidden; }
     .scheduler-grid {
       --time-width: 86px;
-      --staff-width: minmax(132px, 1fr);
+      --staff-width: minmax(184px, 1fr);
       position: relative;
       display: grid;
       grid-template-columns: var(--time-width) repeat(var(--staff-count), var(--staff-width));
@@ -993,15 +1164,16 @@ const STATUS_TONES: Record<string, string> = {
       border-radius: 14px;
       background: #f8fbfb;
     }
-    .scheduler-grid--compact { --staff-width: minmax(116px, 1fr); max-height: 640px; }
-    .time-head, .staff-head { position: sticky; top: 0; z-index: 6; min-height: 76px; background: #f8fbfb; border-bottom: 1px solid #d7e4e1; }
-    .scheduler-grid--compact .time-head, .scheduler-grid--compact .staff-head { min-height: 58px; }
+    .scheduler-grid--compact { --staff-width: minmax(172px, 1fr); max-height: 640px; }
+    .time-head, .staff-head { position: sticky; top: 0; z-index: 6; min-height: 92px; background: #f8fbfb; border-bottom: 1px solid #d7e4e1; }
+    .scheduler-grid--compact .time-head, .scheduler-grid--compact .staff-head { min-height: 84px; }
     .time-head { left: 0; z-index: 8; display: grid; place-items: center; font-weight: 900; color: #475569; text-transform: uppercase; }
-    .staff-head { display: flex; align-items: center; gap: 8px; padding: 10px; border-left: 1px solid #d7e4e1; }
-    .scheduler-grid--compact .staff-head { gap: 6px; padding: 7px; }
-    .staff-head strong { font-size: 12px; line-height: 1.1; display: block; }
-    .staff-head small { font-size: 11px; color: #64748b; }
-    .staff-menu-button { margin-left: auto; height: 28px; width: 28px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; cursor: pointer; font-weight: 900; }
+    .staff-head { display: grid; grid-template-columns: 30px minmax(0, 1fr) 28px; align-items: center; column-gap: 8px; row-gap: 2px; padding: 10px 9px; border-left: 1px solid #d7e4e1; }
+    .scheduler-grid--compact .staff-head { grid-template-columns: 26px minmax(0, 1fr) 26px; column-gap: 7px; padding: 8px; }
+    .staff-head > div { min-width: 0; display: grid; gap: 3px; }
+    .staff-head strong { max-width: 100%; font-size: 12px; line-height: 1.15; display: block; color: #1f2937; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
+    .staff-head small { max-width: 100%; font-size: 11px; line-height: 1.2; color: #64748b; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
+    .staff-menu-button { justify-self: end; height: 28px; width: 28px; min-width: 28px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; cursor: pointer; font-weight: 900; }
     .staff-menu-button:hover { border-color: #0f8f7f; color: #0f766e; background: #ecfdf5; }
     .avatar { height: 30px; width: 30px; border-radius: 50%; display: grid; place-items: center; background: #d9f99d; color: #115e59; font-size: 11px; font-weight: 900; flex: 0 0 auto; }
     .scheduler-grid--compact .avatar { height: 26px; width: 26px; font-size: 10px; }
@@ -1032,6 +1204,14 @@ const STATUS_TONES: Record<string, string> = {
     .appointment-card.green, .appointment-card.emerald { background: #bbf7d0 !important; border-color: #16a34a !important; border-left-color: #16a34a !important; }
     .appointment-card.red { background: #fecaca !important; border-color: #dc2626 !important; border-left-color: #dc2626 !important; }
     .appointment-card.slate { background: #e2e8f0 !important; border-color: #64748b !important; border-left-color: #64748b !important; }
+    .appointment-card:hover, .appointment-card:focus-visible, .timeline-appointment:hover, .timeline-appointment:focus-visible { z-index: 45 !important; }
+    .appointment-detail-popover { position: fixed; z-index: 140; width: min(340px, calc(100vw - 24px)); max-height: min(420px, calc(100vh - 24px)); overflow: auto; display: grid; gap: 8px; padding: 13px 14px; border: 1px solid #e7ded6; border-radius: 14px; background: #fff; color: #1f2933; box-shadow: 0 22px 55px rgba(31,41,51,.22); pointer-events: none; }
+    .appointment-detail-popover .hover-title { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding-bottom: 7px; border-bottom: 1px solid #f0e7df; }
+    .appointment-detail-popover .hover-title strong { color: #4b1238; font-size: 14px; line-height: 1.2; }
+    .appointment-detail-popover .hover-title small { color: #6b7280; font-size: 11px; font-weight: 900; white-space: nowrap; }
+    .appointment-detail-popover .hover-row { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; align-items: start; }
+    .appointment-detail-popover em { color: #6b7280; font-size: 11px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .appointment-detail-popover .hover-row b { margin: 0; color: #1f2933; font-size: 12px; font-weight: 900; line-height: 1.35; overflow-wrap: anywhere; }
     .resize-handle { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; background: rgba(15,23,42,.15); }
     .current-time-badge { position: absolute; left: 7px; z-index: 12; transform: translateY(-50%); border: 1px solid #ff2f2f; border-radius: 999px; background: #fff; color: #f02b2b; padding: 2px 7px; font-size: 11px; font-weight: 900; }
     .current-time-line { position: absolute; left: 0; right: 0; z-index: 3; height: 2px; background: #ff2f2f; box-shadow: 0 0 0 1px rgba(255,47,47,.1); pointer-events: none; }
@@ -1060,7 +1240,7 @@ const STATUS_TONES: Record<string, string> = {
     .timeline-marker { position: absolute; top: 0; bottom: 0; width: 1px; background: #e2e8f0; }
     .timeline-empty { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px; font-weight: 900; }
     .timeline-appointment { position: absolute; top: 7px; bottom: 7px; min-width: 76px; border: 1px solid #475569; border-radius: 8px; padding: 6px 8px; text-align: left; color: #172033; overflow: hidden; cursor: pointer; box-shadow: 0 10px 20px rgba(15,23,42,.1); }
-    .timeline-appointment strong, .timeline-appointment span, .timeline-appointment small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .timeline-appointment > strong, .timeline-appointment > span, .timeline-appointment > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .timeline-appointment strong { font-size: 11px; }
     .timeline-appointment span { font-size: 12px; font-weight: 900; margin-top: 2px; }
     .timeline-appointment small { font-size: 11px; }
@@ -1232,6 +1412,8 @@ const STATUS_TONES: Record<string, string> = {
       .timeline-scale, .timeline-row { grid-template-columns: 150px minmax(560px, 1fr); }
       .calendar-list-head, .calendar-list-row { grid-template-columns: 1fr; gap: 6px; }
       .summary-strip, .operations-grid, .service-line, .inline-form-grid, .two-col, .pulse-grid, .bill-layout { grid-template-columns: 1fr; }
+      .scheduled-staff-control { position: static; }
+      .scheduled-staff-panel { position: fixed; top: 96px; left: 12px; right: 12px; width: auto; max-height: calc(100vh - 118px); }
     }
   `]
 })
@@ -1281,6 +1463,12 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   readonly slotMinutes = signal(15);
   readonly statusFilter = signal('');
   readonly staffSearch = signal('');
+  readonly staffPanelOpen = signal(false);
+  readonly staffPanelOrder = signal<string[]>([]);
+  readonly hiddenStaffIds = signal<string[]>([]);
+  readonly savedStaffPanelOrder = signal<string[]>([]);
+  readonly savedHiddenStaffIds = signal<string[]>([]);
+  readonly staffPanelDragId = signal('');
   readonly drawer = signal<SchedulerDrawer>('');
   readonly blockMode = signal<BlockMode>('add');
   readonly selectedStaff = signal<StaffLane | null>(null);
@@ -1289,6 +1477,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   readonly schedulerActionMenu = signal<SchedulerActionMenu | null>(null);
   readonly now = signal(new Date());
   readonly hoverSlot = signal<{ staffName: string; label: string; top: number } | null>(null);
+  readonly hoveredAppointment = signal<AppointmentHoverState | null>(null);
   readonly bookingLines = signal<BookingLineDraft[]>([]);
   readonly bookingClientSearch = signal('');
   readonly bookingClientSearchActive = signal(false);
@@ -1365,7 +1554,12 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     return rows;
   });
 
-  readonly visibleStaff = computed(() => this.context()?.staff || []);
+  readonly scheduledStaffRows = computed(() => this.orderStaffRows(this.context()?.staff || [], this.staffPanelOrder()));
+  readonly visibleStaff = computed(() => {
+    const hidden = new Set(this.hiddenStaffIds());
+    return this.scheduledStaffRows().filter((person) => !hidden.has(person.id));
+  });
+  readonly scheduledStaffVisibleCount = computed(() => this.visibleStaff().length);
   readonly clients = computed(() => this.context()?.clients || []);
   readonly services = computed(() => this.context()?.services || []);
   readonly waitlist = computed(() => this.context()?.waitlist || []);
@@ -1393,8 +1587,10 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   readonly appointmentCardsByStaff = computed(() => {
     const map = new Map<string, AppointmentCard[]>();
+    const visibleStaffIds = new Set(this.visibleStaff().map((person) => person.id));
     for (const appointment of this.context()?.appointments || []) {
       const staffId = appointment.staffId || '';
+      if (visibleStaffIds.size && !visibleStaffIds.has(staffId)) continue;
       const card = this.appointmentCard(appointment);
       if (!map.has(staffId)) map.set(staffId, []);
       map.get(staffId)?.push(card);
@@ -1496,6 +1692,77 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     }
   }
 
+  private scheduledStaffStorageKey(context = this.context()): string {
+    const tenantId = this.state.selectedTenantId() || 'tenant_aura';
+    const branchId = context?.branchId || this.state.selectedBranchId() || 'all';
+    return `${SCHEDULED_STAFF_STORAGE_PREFIX}:${tenantId}:${branchId}`;
+  }
+
+  private syncScheduledStaffPrefs(context: SchedulerContext): void {
+    const source = this.staffPanelOpen()
+      ? { order: this.staffPanelOrder(), hidden: this.hiddenStaffIds() }
+      : this.readScheduledStaffPrefs(context);
+    const prefs = this.sanitizeScheduledStaffPrefs(source, context.staff || []);
+    if (!this.staffPanelOpen()) {
+      this.savedStaffPanelOrder.set(prefs.order);
+      this.savedHiddenStaffIds.set(prefs.hidden);
+    }
+    this.staffPanelOrder.set(prefs.order);
+    this.hiddenStaffIds.set(prefs.hidden);
+  }
+
+  private readScheduledStaffPrefs(context: SchedulerContext): ScheduledStaffPrefs {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return { order: [], hidden: [] };
+      const raw = window.localStorage.getItem(this.scheduledStaffStorageKey(context));
+      if (!raw) return { order: [], hidden: [] };
+      const parsed = JSON.parse(raw) as Partial<ScheduledStaffPrefs>;
+      return {
+        order: Array.isArray(parsed.order) ? parsed.order.map(String) : [],
+        hidden: Array.isArray(parsed.hidden) ? parsed.hidden.map(String) : []
+      };
+    } catch {
+      return { order: [], hidden: [] };
+    }
+  }
+
+  private sanitizeScheduledStaffPrefs(prefs: Partial<ScheduledStaffPrefs> | null | undefined, staff: StaffLane[]): ScheduledStaffPrefs {
+    const ids = staff.map((person) => person.id).filter(Boolean);
+    const valid = new Set(ids);
+    const order = this.uniqueStaffIds(prefs?.order || []).filter((id) => valid.has(id));
+    for (const id of ids) {
+      if (!order.includes(id)) order.push(id);
+    }
+    let hidden = this.uniqueStaffIds(prefs?.hidden || []).filter((id) => valid.has(id));
+    if (ids.length && hidden.length >= ids.length) {
+      hidden = hidden.filter((id) => id !== order[0]);
+    }
+    return { order, hidden };
+  }
+
+  private uniqueStaffIds(ids: string[]): string[] {
+    const seen = new Set<string>();
+    const rows: string[] = [];
+    for (const raw of ids) {
+      const id = String(raw || '').trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      rows.push(id);
+    }
+    return rows;
+  }
+
+  private orderStaffRows(staff: StaffLane[], order: string[]): StaffLane[] {
+    const byId = new Map(staff.map((person) => [person.id, person]));
+    return this.sanitizeScheduledStaffPrefs({ order, hidden: [] }, staff).order
+      .map((id) => byId.get(id))
+      .filter((person): person is StaffLane => Boolean(person));
+  }
+
+  private currentStaffOrderIds(): string[] {
+    return this.sanitizeScheduledStaffPrefs({ order: this.staffPanelOrder(), hidden: this.hiddenStaffIds() }, this.context()?.staff || []).order;
+  }
+
   private showNotice(message: string, autoHideMs = 3200): void {
     window.clearTimeout(this.noticeTimer);
     this.notice.set(message);
@@ -1530,6 +1797,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
         }))
       ]);
       this.context.set(context);
+      this.syncScheduledStaffPrefs(context);
       this.openRouteAppointmentIfNeeded(context?.appointments || []);
       const rows = Array.isArray(depositReport?.rows) ? depositReport.rows : [];
       this.adjustedDueFollowUpCount.set(rows.filter((row) => Number(row.advanceAdjusted || 0) > 0 && Number(row.counterDue || 0) > 0).length);
@@ -1578,8 +1846,148 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     this.load();
   }
 
+  showAppointmentDetails(card: AppointmentCard, event: MouseEvent | FocusEvent): void {
+    this.hoveredAppointment.set({ card, ...this.appointmentHoverPoint(event) });
+  }
+
+  moveAppointmentDetails(event: MouseEvent): void {
+    const current = this.hoveredAppointment();
+    if (!current) return;
+    this.hoveredAppointment.set({ ...current, ...this.appointmentHoverPoint(event) });
+  }
+
+  hideAppointmentDetails(): void {
+    this.hoveredAppointment.set(null);
+  }
+
+  private appointmentHoverPoint(event: MouseEvent | FocusEvent): { x: number; y: number } {
+    const width = 340;
+    const height = 360;
+    let x = 24;
+    let y = 24;
+    if (event instanceof MouseEvent) {
+      x = event.clientX + 16;
+      y = event.clientY + 16;
+    } else {
+      const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+      if (rect) {
+        x = rect.right + 12;
+        y = rect.top;
+      }
+    }
+    if (typeof window === 'undefined') return { x, y };
+    if (x + width > window.innerWidth - 12) x = Math.max(12, x - width - 32);
+    if (y + height > window.innerHeight - 12) y = Math.max(12, window.innerHeight - height - 12);
+    return { x: Math.max(12, x), y: Math.max(12, y) };
+  }
   setSlotMinutes(value: string): void {
     this.slotMinutes.set(Number(value) === 30 ? 30 : 15);
+  }
+
+  toggleScheduledStaffPanel(): void {
+    if (this.staffPanelOpen()) {
+      this.cancelScheduledStaffPanel();
+      return;
+    }
+    const context = this.context();
+    if (context) this.syncScheduledStaffPrefs(context);
+    this.staffPanelOpen.set(true);
+  }
+
+  cancelScheduledStaffPanel(): void {
+    const prefs = this.sanitizeScheduledStaffPrefs({ order: this.savedStaffPanelOrder(), hidden: this.savedHiddenStaffIds() }, this.context()?.staff || []);
+    this.staffPanelOrder.set(prefs.order);
+    this.hiddenStaffIds.set(prefs.hidden);
+    this.staffPanelDragId.set('');
+    this.staffPanelOpen.set(false);
+  }
+
+  saveScheduledStaffPanel(): void {
+    const prefs = this.sanitizeScheduledStaffPrefs({ order: this.staffPanelOrder(), hidden: this.hiddenStaffIds() }, this.context()?.staff || []);
+    this.staffPanelOrder.set(prefs.order);
+    this.hiddenStaffIds.set(prefs.hidden);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(this.scheduledStaffStorageKey(), JSON.stringify(prefs));
+      }
+      this.savedStaffPanelOrder.set(prefs.order);
+      this.savedHiddenStaffIds.set(prefs.hidden);
+      this.staffPanelOpen.set(false);
+      this.showNotice('Scheduled staff saved');
+    } catch {
+      this.showNotice('Unable to save scheduled staff preference');
+    }
+  }
+
+  resetScheduledStaffPanel(): void {
+    const ids = (this.context()?.staff || []).map((person) => person.id).filter(Boolean);
+    this.staffPanelOrder.set(ids);
+    this.hiddenStaffIds.set([]);
+    this.staffPanelDragId.set('');
+  }
+
+  isScheduledStaffHidden(staffId: string): boolean {
+    return this.hiddenStaffIds().includes(staffId);
+  }
+
+  canToggleScheduledStaff(staffId: string): boolean {
+    return this.isScheduledStaffHidden(staffId) || this.visibleStaff().length > 1;
+  }
+
+  toggleScheduledStaffVisibility(staffId: string, checked: boolean): void {
+    const hidden = new Set(this.hiddenStaffIds());
+    if (checked) {
+      hidden.delete(staffId);
+    } else if (this.visibleStaff().length > 1) {
+      hidden.add(staffId);
+    } else {
+      this.showNotice('At least one staff must stay visible', 1800);
+      return;
+    }
+    this.hiddenStaffIds.set([...hidden]);
+  }
+
+  beginScheduledStaffDrag(staffId: string, event: DragEvent): void {
+    this.staffPanelDragId.set(staffId);
+    event.dataTransfer?.setData('text/plain', staffId);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  allowScheduledStaffDrop(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  dropScheduledStaff(targetStaffId: string, event: DragEvent): void {
+    event.preventDefault();
+    const sourceStaffId = event.dataTransfer?.getData('text/plain') || this.staffPanelDragId();
+    this.moveScheduledStaff(sourceStaffId, targetStaffId);
+    this.staffPanelDragId.set('');
+  }
+
+  endScheduledStaffDrag(): void {
+    this.staffPanelDragId.set('');
+  }
+
+  moveScheduledStaffByOffset(staffId: string, offset: number): void {
+    const order = this.currentStaffOrderIds();
+    const from = order.indexOf(staffId);
+    const to = Math.max(0, Math.min(order.length - 1, from + offset));
+    if (from < 0 || from === to) return;
+    order.splice(from, 1);
+    order.splice(to, 0, staffId);
+    this.staffPanelOrder.set(order);
+  }
+
+  private moveScheduledStaff(sourceStaffId: string, targetStaffId: string): void {
+    if (!sourceStaffId || sourceStaffId === targetStaffId) return;
+    const order = this.currentStaffOrderIds();
+    const from = order.indexOf(sourceStaffId);
+    const to = order.indexOf(targetStaffId);
+    if (from < 0 || to < 0) return;
+    const [source] = order.splice(from, 1);
+    order.splice(to, 0, source);
+    this.staffPanelOrder.set(order);
   }
 
   setCalendarLayout(value: string): void {
@@ -2705,15 +3113,47 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const minHeight = this.calendarLayout() === 'compact-grid' ? 28 : 36;
     const height = Math.max(minHeight, (this.appointmentDuration(appointment) / this.slotMinutes()) * this.rowHeight() - 4);
     const status = String(appointment.status || 'booked').toLowerCase();
+    const clientName = this.clientName(appointment.clientId);
+    const serviceLabel = this.serviceNames(appointment.serviceIds);
+    const timeLabel = `${this.shortTime(appointment.startAt)} - ${this.shortTime(appointment.endAt || this.isoAtMinute(this.minuteOf(appointment.startAt) + 30))}`;
     return {
       appointment,
       top,
       height,
       status,
-      clientName: this.clientName(appointment.clientId),
-      serviceLabel: this.serviceNames(appointment.serviceIds),
-      timeLabel: `${this.shortTime(appointment.startAt)} - ${this.shortTime(appointment.endAt || this.isoAtMinute(this.minuteOf(appointment.startAt) + 30))}`
+      clientName,
+      serviceLabel,
+      timeLabel,
+      detailRows: this.appointmentDetailRows(appointment, { clientName, serviceLabel, timeLabel })
     };
+  }
+
+  appointmentDetailRows(appointment: ApiRecord, summary: { clientName: string; serviceLabel: string; timeLabel: string }): AppointmentDetailRow[] {
+    const phone = this.clientPhone(String(appointment.clientId || '')) || this.firstText(appointment.clientPhone, appointment.phone, appointment.mobile, appointment.whatsapp);
+    const paymentMode = this.appointmentPaymentMode(appointment);
+    const paymentStatus = this.firstText(appointment.paymentStatus, appointment.payment_status, appointment.billingStatus, appointment.billStatus);
+    const total = this.appointmentTotal(appointment);
+    const paid = this.appointmentPaid(appointment);
+    const due = this.appointmentDue(appointment);
+    const amountSummary = [
+      total > 0 ? `Total ${this.money(total)}` : '',
+      paid > 0 ? `Paid ${this.money(paid)}` : '',
+      due > 0 ? `Due ${this.money(due)}` : ''
+    ].filter(Boolean).join(' | ');
+    const notes = this.appointmentNoteText(appointment).trim();
+    const rows: AppointmentDetailRow[] = [
+      { label: 'Time', value: `${summary.timeLabel} (${this.appointmentDuration(appointment)} mins)` },
+      { label: 'Client', value: summary.clientName },
+      { label: 'Phone', value: phone },
+      { label: 'Service', value: summary.serviceLabel },
+      { label: 'Staff', value: this.staffName(String(appointment.staffId || '')) },
+      { label: 'Status', value: this.label(String(appointment.status || 'booked')) },
+      { label: 'Payment', value: [paymentStatus ? this.label(paymentStatus) : '', paymentMode && paymentMode !== 'Not selected' ? paymentMode : ''].filter(Boolean).join(' | ') },
+      { label: 'Amount', value: amountSummary },
+      { label: 'Booking', value: this.firstText(appointment.bookingNo, appointment.bookingNumber, appointment.appointmentNo, appointment.invoiceNo, appointment.id) },
+      { label: 'Notes', value: notes }
+    ];
+    return rows.filter((row) => row.value.trim());
   }
 
   shiftBlock(row: ApiRecord): LaneBlock {
@@ -2947,6 +3387,14 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     return labels[type] || this.label(type || 'action');
   }
 
+  firstText(...values: unknown[]): string {
+    for (const value of values) {
+      const text = String(value || '').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
   label(value: string): string {
     return String(value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
   }
@@ -2979,6 +3427,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   trackLine(_: number, line: BookingLineDraft): string { return line.id; }
   trackBlock(_: number, block: LaneBlock): string { return block.id; }
   trackCard(_: number, card: AppointmentCard): string { return card.appointment.id; }
+  trackAppointmentDetailRow(_: number, row: AppointmentDetailRow): string { return row.label; }
   trackSmartSlot(_: number, slot: { staff: StaffLane; slot: TimeSlot }): string { return `${slot.staff.id}-${slot.slot.minute}`; }
   trackBillLine(_: number, line: AppointmentBillLine): string { return line.id; }
   trackActivityLine(_: number, line: AppointmentActivityLine): string { return line.id; }

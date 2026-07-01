@@ -11,6 +11,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   template: `
     <section class="marketing-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
+      <p class="state success" *ngIf="success()">{{ success() }}</p>
 
       <ng-container *ngIf="summary() as summary">
         <div class="page-heading">
@@ -42,15 +43,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <small>Choose one task instead of scrolling through every form.</small>
           </div>
           <div class="desk-tabs">
-            <button type="button" class="active">Segment</button>
-            <button type="button">Campaign</button>
-            <button type="button">Workflow</button>
-            <button type="button">WhatsApp</button>
-            <button type="button">Email</button>
+            <button type="button" [class.active]="activeTab() === 'segment'" (click)="setActiveTab('segment')">Segment</button>
+            <button type="button" [class.active]="activeTab() === 'campaign'" (click)="setActiveTab('campaign')">Campaign</button>
+            <button type="button" [class.active]="activeTab() === 'workflow'" (click)="setActiveTab('workflow')">Workflow</button>
+            <button type="button" [class.active]="activeTab() === 'whatsapp'" (click)="setActiveTab('whatsapp')">WhatsApp</button>
+            <button type="button" [class.active]="activeTab() === 'email'" (click)="setActiveTab('email')">Email</button>
           </div>
 
           <div class="workdesk-grid">
-            <form [formGroup]="segmentForm" (ngSubmit)="segment()" class="zenoti-form">
+            <form *ngIf="activeTab() === 'segment'" [formGroup]="segmentForm" (ngSubmit)="segment()" class="zenoti-form">
               <h3>Client segmentation</h3>
               <label class="field">
                 <span>Segment</span>
@@ -66,14 +67,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <label class="field"><span>Min visits</span><input type="number" formControlName="minVisits" /></label>
               <label class="field"><span>Inactive days</span><input type="number" formControlName="inactiveDays" /></label>
               <label class="check-line"><input type="checkbox" formControlName="membershipOnly" /><span>Members only</span></label>
-              <button class="primary-button" type="submit">Preview segment</button>
+              <button class="primary-button" type="submit" [disabled]="submitting()">Preview segment</button>
               <div class="segment-result" *ngIf="segmentResult() as result">
                 <strong>{{ result.name }} · {{ result.count }} clients</strong>
                 <span *ngFor="let client of result.clients">{{ client.name }}</span>
               </div>
             </form>
 
-            <form [formGroup]="campaignForm" (ngSubmit)="generateCampaign()" class="zenoti-form">
+            <form *ngIf="activeTab() === 'campaign'" [formGroup]="campaignForm" (ngSubmit)="generateCampaign()" class="zenoti-form">
               <h3>Auto campaign generation</h3>
               <label class="field"><span>Occasion</span><input formControlName="occasion" /></label>
               <label class="field">
@@ -87,10 +88,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </label>
               <label class="field"><span>Name</span><input formControlName="name" /></label>
               <label class="field full"><span>Offer hint</span><textarea formControlName="offerTitle"></textarea></label>
-              <button class="primary-button" type="submit">Generate campaign</button>
+              <button class="primary-button" type="submit" [disabled]="submitting()">Generate campaign</button>
             </form>
 
-            <form [formGroup]="workflowForm" (ngSubmit)="createWorkflow()" class="zenoti-form">
+            <form *ngIf="activeTab() === 'workflow'" [formGroup]="workflowForm" (ngSubmit)="createWorkflow()" class="zenoti-form">
               <h3>Retargeting workflow</h3>
               <label class="field"><span>Name</span><input formControlName="name" /></label>
               <label class="field"><span>Inactive days</span><input type="number" formControlName="inactiveDays" /></label>
@@ -101,24 +102,24 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <option>Email</option>
                 </select>
               </label>
-              <button class="primary-button" type="submit">Create workflow</button>
+              <button class="primary-button" type="submit" [disabled]="submitting()">Create workflow</button>
             </form>
 
-            <form [formGroup]="sequenceForm" (ngSubmit)="createSequence()" class="zenoti-form">
+            <form *ngIf="activeTab() === 'whatsapp'" [formGroup]="sequenceForm" (ngSubmit)="createSequence()" class="zenoti-form">
               <h3>WhatsApp sequence</h3>
               <label class="field"><span>Name</span><input formControlName="name" /></label>
               <label class="field"><span>Audience tag</span><input formControlName="tag" /></label>
               <label class="field"><span>Min visits</span><input type="number" formControlName="minVisits" /></label>
-              <button class="primary-button" type="submit">Create sequence</button>
+              <button class="primary-button" type="submit" [disabled]="submitting()">Create sequence</button>
             </form>
 
-            <form [formGroup]="emailForm" (ngSubmit)="createEmailTemplate()" class="zenoti-form wide">
+            <form *ngIf="activeTab() === 'email'" [formGroup]="emailForm" (ngSubmit)="createEmailTemplate()" class="zenoti-form wide">
               <h3>Email template generator</h3>
               <label class="field"><span>Name</span><input formControlName="name" /></label>
               <label class="field"><span>Occasion</span><input formControlName="occasion" /></label>
               <label class="field"><span>Subject</span><input formControlName="subject" /></label>
               <label class="field full"><span>Body</span><textarea formControlName="body"></textarea></label>
-              <button class="primary-button" type="submit">Generate template</button>
+              <button class="primary-button" type="submit" [disabled]="submitting()">Generate template</button>
             </form>
           </div>
         </section>
@@ -204,6 +205,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td>{{ sequence.channel }}</td>
                   <td>{{ sequence.steps?.length }} steps</td>
                 </tr>
+                <tr *ngIf="!summary.campaigns.length && !summary.workflows.length && !summary.sequences.length">
+                  <td colspan="5" class="empty-row">No campaigns, workflows or sequences yet</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -220,6 +224,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .brand-block strong { display: block; color: #fff; font-size: 15px; }
     .zenoti-button, .desk-tabs button, .primary-button { border: 1px solid #b9cbe0; background: #fff; color: #0065a8; border-radius: 3px; padding: 8px 13px; font-weight: 800; cursor: pointer; }
     .zenoti-button.primary, .primary-button, .desk-tabs .active { background: #0b8f7c; border-color: #0b8f7c; color: #fff; }
+    .primary-button:disabled { opacity: .5; cursor: not-allowed; }
     .zenoti-header, .page-heading, .metric-strip, .workdesk, .register-panel { background: #fff; border-bottom: 1px solid #d8e1ea; }
     .zenoti-header { display: grid; gap: 10px; padding: 18px 16px 12px; }
     .center-line { justify-content: space-between; }
@@ -245,10 +250,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .desk-tabs { flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid #d8e1ea; }
     .desk-tabs button { border-radius: 16px; color: #5f6f85; padding: 7px 13px; }
     .workdesk-grid { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; padding-top: 14px; }
-    .zenoti-form { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; }
+    .zenoti-form { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; box-shadow: 0 1px 3px rgba(0,0,0,.04); transition: box-shadow .15s, border-color .15s; }
+    .zenoti-form:focus-within { border-color: #0b8f7c; box-shadow: 0 2px 8px rgba(11,143,124,.1); }
     .zenoti-form.wide { grid-column: span 2; }
     .field.full { grid-column: 1 / -1; }
     .field textarea { min-height: 78px; resize: vertical; }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid rgba(11,143,124,.3); border-color: #0b8f7c; }
     .check-line { display: flex; align-items: center; gap: 8px; color: #41536b; font-weight: 700; }
     .segment-result { display: grid; gap: 5px; padding: 10px; background: #f4f7fa; border: 1px solid #d8e1ea; color: #41536b; font-size: 13px; }
     .table-wrap { overflow: auto; border: 1px solid #d8e1ea; background: #fff; }
@@ -261,8 +268,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .output-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
     .output-grid article { min-height: 82px; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; }
     app-state { display: block; }
+    .state.success { margin: 0 16px; padding: 12px 14px; border-radius: 8px; font-weight: 850; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
+    .empty-row { text-align: center; color: #8a9aa8; padding: 24px 12px !important; font-style: italic; }
     @media (max-width: 1100px) {
-      .metric-strip, .workdesk-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+      .metric-strip { grid-template-columns: repeat(3, 1fr); }
+      .workdesk-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
       .zenoti-form.wide { grid-column: span 1; }
     }
     @media (max-width: 760px) {
@@ -279,6 +289,22 @@ export class AiMarketingAutomationComponent implements OnInit {
   readonly latestResult = signal<ApiRecord | null>(null);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly activeTab = signal('segment');
+  readonly success = signal('');
+  readonly submitting = signal(false);
+  private successTimer: ReturnType<typeof setTimeout> | null = null;
+
+  setActiveTab(tab: string): void {
+    this.activeTab.set(tab);
+  }
+
+  private showSuccess(msg: string): void {
+    this.success.set(msg);
+    if (this.successTimer) window.clearTimeout(this.successTimer);
+    this.successTimer = window.setTimeout(() => {
+      if (this.success() === msg) this.success.set('');
+    }, 3200);
+  }
 
   readonly segmentForm = this.fb.group({
     tag: [''],
@@ -336,52 +362,84 @@ export class AiMarketingAutomationComponent implements OnInit {
   }
 
   segment(): void {
+    this.submitting.set(true);
     this.api.post<ApiRecord>('ai-marketing/segments', this.segmentForm.value).subscribe({
-      next: (result) => this.segmentResult.set(result),
-      error: (error) => this.error.set(error?.error?.error || 'Unable to segment clients')
+      next: (result) => {
+        this.segmentResult.set(result);
+        this.showSuccess('Segment preview ready');
+        this.submitting.set(false);
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to segment clients');
+        this.submitting.set(false);
+      }
     });
   }
 
   generateCampaign(): void {
+    this.submitting.set(true);
     this.api.post<ApiRecord>('ai-marketing/campaigns/generate', { ...this.campaignForm.value, segment: this.segmentForm.value }).subscribe({
       next: (result) => {
         this.latestResult.set(result);
+        this.showSuccess('Campaign generated');
+        this.submitting.set(false);
         this.load();
       },
-      error: (error) => this.error.set(error?.error?.error || 'Unable to generate campaign')
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to generate campaign');
+        this.submitting.set(false);
+      }
     });
   }
 
   createWorkflow(): void {
+    this.submitting.set(true);
     this.api.post<ApiRecord>('ai-marketing/retargeting-workflows', this.workflowForm.value).subscribe({
       next: (result) => {
         this.latestResult.set(result);
+        this.showSuccess('Workflow created');
+        this.submitting.set(false);
         this.load();
       },
-      error: (error) => this.error.set(error?.error?.error || 'Unable to create workflow')
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to create workflow');
+        this.submitting.set(false);
+      }
     });
   }
 
   createSequence(): void {
+    this.submitting.set(true);
     this.api.post<ApiRecord>('ai-marketing/whatsapp-sequences', {
       name: this.sequenceForm.value.name,
       audienceRule: { tag: this.sequenceForm.value.tag, minVisits: this.sequenceForm.value.minVisits }
     }).subscribe({
       next: (result) => {
         this.latestResult.set(result);
+        this.showSuccess('WhatsApp sequence created');
+        this.submitting.set(false);
         this.load();
       },
-      error: (error) => this.error.set(error?.error?.error || 'Unable to create sequence')
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to create sequence');
+        this.submitting.set(false);
+      }
     });
   }
 
   createEmailTemplate(): void {
+    this.submitting.set(true);
     this.api.post<ApiRecord>('ai-marketing/email-templates', this.emailForm.value).subscribe({
       next: (result) => {
         this.latestResult.set({ emailTemplate: result.template, generation: result.generation });
+        this.showSuccess('Email template created');
+        this.submitting.set(false);
         this.load();
       },
-      error: (error) => this.error.set(error?.error?.error || 'Unable to create email template')
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to create email template');
+        this.submitting.set(false);
+      }
     });
   }
 

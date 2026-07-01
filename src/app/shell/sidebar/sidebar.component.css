@@ -106,6 +106,67 @@
   align-self: end;
 }
 
+.enterprise-sidebar,
+.sidebar-rail {
+  overflow: visible;
+}
+
+.workspace-chip,
+.rail-nav a,
+.rail-footer button,
+.icon-action {
+  position: relative;
+  overflow: visible;
+}
+
+.workspace-chip::after,
+.rail-nav a::after,
+.rail-footer button::after,
+.icon-action::after {
+  content: attr(data-label);
+  position: absolute;
+  top: 50%;
+  z-index: 90;
+  max-width: 240px;
+  padding: 8px 10px;
+  border: 1px solid rgba(36, 164, 126, 0.28);
+  border-radius: 10px;
+  color: #07100d;
+  background: #fff;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+  transition: none;
+}
+
+.workspace-chip::after,
+.rail-nav a::after,
+.rail-footer button::after {
+  left: calc(100% + 10px);
+}
+
+.icon-action::after {
+  right: calc(100% + 10px);
+  transform: translateY(-50%) translateX(4px);
+}
+
+.workspace-chip:hover::after,
+.workspace-chip:focus-visible::after,
+.rail-nav a:hover::after,
+.rail-nav a:focus-visible::after,
+.rail-footer button:hover::after,
+.rail-footer button:focus-visible::after,
+.icon-action:hover::after,
+.icon-action:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
 /* ── Panel (expanded content) ────────────── */
 .sidebar-panel {
   min-width: 0;

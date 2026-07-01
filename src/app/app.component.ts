@@ -145,7 +145,7 @@ type ActiveModuleTabs = {
         [class.sidebar-compact]="sidebarUiCompact()"
       >
         <div class="sidebar-brand-row">
-          <a class="brand" routerLink="/home" aria-label="Aura Shine home">
+          <a class="brand" routerLink="/home" aria-label="Aura Shine home" data-label="Aura Shine home">
             <span class="brand-mark" aria-hidden="true">AS</span>
             <span>
               <strong>Aura Shine</strong>
@@ -161,7 +161,7 @@ type ActiveModuleTabs = {
             (click)="toggleSidebarSearch()"
             aria-label="Search modules and pages"
             [attr.aria-expanded]="sidebarSearchOpen()"
-            title="Search"
+            data-label="Search"
           >
             <svg class="sidebar-search-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M10.5 5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z M15 15l4 4"></path>
@@ -215,7 +215,7 @@ type ActiveModuleTabs = {
 
         <nav class="nav-list nav-accordion" aria-label="Primary navigation">
           <section class="nav-section" *ngFor="let group of visibleNavGroups(); trackBy: trackNavGroup" [class.active-section]="isGroupActive(group)">
-            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [title]="group.label" [attr.data-label]="group.label">
+            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [attr.aria-label]="group.label" [attr.data-label]="group.label">
               <span class="nav-icon nav-icon--module" aria-hidden="true">
                 <svg class="nav-icon-svg" viewBox="0 0 24 24" focusable="false">
                   <path [attr.d]="navGroupIconPath(group.id)"></path>
@@ -274,7 +274,6 @@ type ActiveModuleTabs = {
           routerLinkActive="active"
           [routerLinkActiveOptions]="{ exact: true }"
           aria-label="Customer Care AI"
-          title="Customer Care AI"
           data-label="Customer Care AI"
         >
           <svg class="sidebar-care-ai-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -356,7 +355,8 @@ type ActiveModuleTabs = {
                 [queryParams]="item.queryParams || null"
                 [class.active]="isLocalNavItemActive(item)"
                 [attr.aria-current]="isLocalNavItemActive(item) ? 'page' : null"
-                [title]="item.label"
+                [attr.aria-label]="item.label"
+                [attr.data-label]="item.label"
                 (click)="rememberNavGroup(localNav.groupId)"
               >
                 <span class="workspace-local-nav-icon" aria-hidden="true">{{ navItemInitials(item) }}</span>

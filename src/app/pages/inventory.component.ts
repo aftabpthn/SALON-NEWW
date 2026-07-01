@@ -115,7 +115,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
                 <td>{{ productVendorName(product) }}</td>
                 <td>{{ productInUse(product) }}</td>
                 <td><span class="zenoti-status-pill" [class.inactive]="productStatus(product) !== 'Active'">{{ productStatus(product) }}</span></td>
-                <td><button class="zenoti-row-action" type="button" (click)="openEditProductForm(product); $event.stopPropagation()">Edit</button></td>
+                <td class="zenoti-action-cell"><a class="zenoti-row-action" [routerLink]="['/inventory/products', product.id]" (click)="$event.stopPropagation()">View Details</a><button class="zenoti-row-action" type="button" (click)="openEditProductForm(product); $event.stopPropagation()">Manage</button></td>
               </tr>
               <tr *ngIf="!filteredProducts().length">
                 <td colspan="14" class="empty-cell">No products match these filters.</td>
