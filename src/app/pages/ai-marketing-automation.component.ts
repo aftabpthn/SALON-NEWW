@@ -236,7 +236,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .search-field { width: min(100%, 310px); }
     .search-field input, .field input, .field select, .field textarea { width: 100%; border: 1px solid #cbd8e5; border-radius: 3px; padding: 9px 11px; font: inherit; background: #fff; color: #172033; }
     .metric-strip { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 0; overflow-x: auto; }
-    .metric-strip article { min-width: 150px; padding: 13px 16px; border-right: 1px solid #d8e1ea; border-top: 3px solid #0b8f7c; }
+    .metric-strip article { min-width: 150px; padding: 13px 16px; border-right: 1px solid #d8e1ea; border-top: 3px solid #0b8f7c; display: flex; flex-direction: column; }
     .metric-strip article:nth-child(2) { border-top-color: #2b61d1; }
     .metric-strip article:nth-child(3) { border-top-color: #bd7400; }
     .metric-strip article:nth-child(4) { border-top-color: #0b8f7c; }
@@ -249,8 +249,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .desk-heading h2, .register-heading h2, .zenoti-form h3 { margin: 3px 0 0; color: #172033; font-size: 18px; }
     .desk-tabs { flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid #d8e1ea; }
     .desk-tabs button { border-radius: 16px; color: #5f6f85; padding: 7px 13px; }
-    .workdesk-grid { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; padding-top: 14px; }
-    .zenoti-form { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; box-shadow: 0 1px 3px rgba(0,0,0,.04); transition: box-shadow .15s, border-color .15s; }
+    .workdesk-grid { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; padding-top: 14px; min-height: 370px; align-content: start; }
+    .zenoti-form { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; box-shadow: 0 1px 3px rgba(0,0,0,.04); transition: box-shadow .15s, border-color .15s; min-height: 340px; }
     .zenoti-form:focus-within { border-color: #0b8f7c; box-shadow: 0 2px 8px rgba(11,143,124,.1); }
     .zenoti-form.wide { grid-column: span 2; }
     .field.full { grid-column: 1 / -1; }
@@ -258,7 +258,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid rgba(11,143,124,.3); border-color: #0b8f7c; }
     .check-line { display: flex; align-items: center; gap: 8px; color: #41536b; font-weight: 700; }
     .segment-result { display: grid; gap: 5px; padding: 10px; background: #f4f7fa; border: 1px solid #d8e1ea; color: #41536b; font-size: 13px; }
-    .table-wrap { overflow: auto; border: 1px solid #d8e1ea; background: #fff; }
+    .table-wrap { overflow: auto; border: 1px solid #d8e1ea; background: #fff; min-height: 100px; }
     table { width: 100%; min-width: 900px; border-collapse: collapse; }
     th, td { padding: 10px 12px; border-bottom: 1px solid #dfe7ef; text-align: left; vertical-align: middle; }
     th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
@@ -266,7 +266,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     tr:hover td { background: #eef7fc; }
     .badge { display: inline-flex; padding: 4px 9px; border-radius: 999px; background: #dff7ee; color: #046452; font-weight: 800; font-size: 12px; }
     .output-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-    .output-grid article { min-height: 82px; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; }
+    .output-grid article { min-height: 82px; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; display: flex; flex-direction: column; justify-content: center; }
     app-state { display: block; }
     .state.success { margin: 0 16px; padding: 12px 14px; border-radius: 8px; font-weight: 850; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
     .empty-row { text-align: center; color: #8a9aa8; padding: 24px 12px !important; font-style: italic; }
