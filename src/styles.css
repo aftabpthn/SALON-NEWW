@@ -10291,3 +10291,504 @@ app-dashboard .dashboard-command-panel .hub-icon {
   }
 }
 /* End collapsed local rail tooltip overlay. */
+/* Advanced dark mode: final theme layer so hardcoded light surfaces do not hide text. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --aura-bg: #080b12;
+  --aura-card: #111827;
+  --aura-card-muted: #0f172a;
+  --aura-primary: #f0a8c2;
+  --aura-primary-hover: #f6bdd2;
+  --aura-rose: #f0a8c2;
+  --aura-success: #34d399;
+  --aura-warning: #fbbf24;
+  --aura-danger: #fb7185;
+  --aura-text: #f8fafc;
+  --aura-muted: #a7b0c0;
+  --aura-border: rgba(148, 163, 184, 0.24);
+  --aura-shadow-soft: 0 18px 44px rgba(0, 0, 0, 0.36);
+  --aura-shadow-card: 0 14px 34px rgba(0, 0, 0, 0.3);
+  --aura-focus: 0 0 0 3px rgba(240, 168, 194, 0.28);
+  --aura-overview-bg: #080b12;
+  --aura-overview-card: #111827;
+  --aura-overview-muted: #a7b0c0;
+  --aura-overview-border: rgba(148, 163, 184, 0.24);
+  --aura-overview-primary: #f0a8c2;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .enterprise-app-shell,
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .workspace,
+:root[data-theme="dark"] .enterprise-workspace,
+:root[data-theme="dark"] .workspace-route-content,
+:root[data-theme="dark"] .workspace-route-shell {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(240, 168, 194, 0.13), transparent 310px),
+    radial-gradient(circle at 92% 12%, rgba(45, 212, 191, 0.09), transparent 280px),
+    linear-gradient(180deg, #0b1020 0%, #080b12 42%, #06080d 100%) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :where(.topbar, .command-topbar, .workspace-header, .workspace-module-tabs, .workspace-route-content > .workspace-module-tabs, .workspace-local-rail, .workspace-route-shell--with-local-nav) {
+  background: rgba(15, 23, 42, 0.86) !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: blur(18px) saturate(1.05);
+}
+
+:root[data-theme="dark"] .workspace-route-shell--with-local-nav {
+  background: #090d16 !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) {
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(
+  .module-hero, .page-head, .zenoti-page-heading, .panel, .form-panel, .content-card,
+  .metric-card, .metric, .kpi-card, .command-kpi, .cc-metric-card, .status-card,
+  .summary-card, .report-card, .report-panel, .daily-sheet-card, .score-panel, .score-card,
+  .dashboard-hub-card, .action-card, .quick-card, .control-card, .card, .state,
+  .table-wrap, .tbl-wrap, .aura-table-wrap, .compact-table-wrap, .form-table-wrap,
+  .checkout-panel, .billing-panel, .bill-panel, .bill-main, .bill-side, .client-card,
+  .thread-card, .review-card, .template-card, .service-card, .product-card, .supplier-card,
+  .approval-item, .ledger-preview, .ledger-suggestion, .calendar-panel, .drawer-section,
+  .drawer-panel, .drawer-action-card, .drawer-focus-card, .source-row, .record-row,
+  .suggestion-row, .workflow-card, .workflow-map-card, .preview-grid > div, .channel-grid > div
+) {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(15, 23, 42, 0.98)) !important;
+  border-color: var(--aura-border) !important;
+  box-shadow: var(--aura-shadow-card) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(
+  h1, h2, h3, h4, h5, h6, strong, b, label, legend, td, th,
+  .title, .section-title, .panel-title, .metric-value, .kpi-value, .card-title,
+  .table-link, .identity-cell strong, .profile-header h2
+),
+:root[data-theme="dark"] :where(.topbar h1, .topbar strong, .workspace-local-rail-head strong, .workspace-local-nav a) {
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(
+  p, small, .muted, .hint, .subtext, .eyebrow, .table-meta, .help-text,
+  .metric-card span, .metric-card small, .kpi-card span, .kpi-card small,
+  .summary-card span, .summary-card small, .report-card span, .report-card small
+),
+:root[data-theme="dark"] :where(.topbar .eyebrow, .topbar small, .workspace-local-nav-label) {
+  color: var(--aura-muted) !important;
+}
+
+:root[data-theme="dark"] :where(input, select, textarea, .field-input, .small-input, .cell-input),
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(input, select, textarea, .ng-select-container) {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] :where(input::placeholder, textarea::placeholder) {
+  color: rgba(203, 213, 225, 0.58) !important;
+}
+
+:root[data-theme="dark"] :where(input:focus, select:focus, textarea:focus) {
+  border-color: rgba(240, 168, 194, 0.58) !important;
+  box-shadow: var(--aura-focus) !important;
+  outline: none !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(table, .clients-crm-table, .zenoti-products-table) {
+  background: #0f172a !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(th, .clients-crm-table th, .zenoti-products-table th) {
+  background: #111827 !important;
+  color: var(--aura-muted) !important;
+  border-color: var(--aura-border) !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(td, .clients-crm-table td, .zenoti-products-table td) {
+  background: #0f172a !important;
+  color: var(--aura-text) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(tr:hover td, .selected-row, .row-active) {
+  background: rgba(240, 168, 194, 0.1) !important;
+}
+
+:root[data-theme="dark"] :where(.ghost-button, .outline-button, .filter-chip, .event-chip, .payment-mode-chip, .workspace-module-tab, .topbar-back-button),
+:root[data-theme="dark"] :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(.ghost-button, .outline-button, .filter-chip, .event-chip, .payment-mode-chip, .workspace-module-tab) {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :where(.ghost-button:hover, .outline-button:hover, .filter-chip:hover, .event-chip:hover, .payment-mode-chip:hover, .workspace-module-tab:hover, .topbar-back-button:hover) {
+  background: rgba(240, 168, 194, 0.12) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+:root[data-theme="dark"] :where(.primary-button, .dark-button, .save-button, .pos-save-button, .cta-button, button[type='submit']) {
+  background: linear-gradient(180deg, #b83274, #7f1d4e) !important;
+  border-color: rgba(240, 168, 194, 0.42) !important;
+  color: #fff !important;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.34) !important;
+}
+
+:root[data-theme="dark"] :where(.badge, .pill, .chip, .status-pill, .hdr-pill) {
+  border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+:root[data-theme="dark"] aura-header-actions :where(.hdr-icon-btn, .hdr-profile-btn) {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] aura-header-actions :where(.hdr-menu, .hdr-notif-empty, .hdr-profile-card, .hdr-theme-toggle) {
+  background: rgba(17, 24, 39, 0.98) !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.46) !important;
+}
+
+:root[data-theme="dark"] aura-header-actions :where(.hdr-menu-head strong, .hdr-profile-card-copy strong, .hdr-scope strong, .hdr-theme-copy strong, .hdr-menu-links a, .hdr-notif-empty strong) {
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] aura-header-actions :where(.hdr-profile-card-copy small, .hdr-scope span, .hdr-theme-copy small, .hdr-notif-empty small) {
+  color: var(--aura-muted) !important;
+}
+
+:root[data-theme="dark"] aura-header-actions :where(.hdr-menu-links, .hdr-menu-links a) {
+  border-color: var(--aura-border) !important;
+}
+
+:root[data-theme="dark"] aura-header-actions .hdr-menu-links a:hover {
+  background: rgba(240, 168, 194, 0.11) !important;
+}
+
+:root[data-theme="dark"] :where(.workspace-local-nav a.active, .workspace-local-nav a:hover, .workspace-local-nav a:focus-visible, .workspace-module-tab.active, .workspace-module-tab:hover, .workspace-module-tab:focus-visible) {
+  background: rgba(240, 168, 194, 0.14) !important;
+  color: #fff !important;
+  border-color: rgba(240, 168, 194, 0.34) !important;
+}
+
+:root[data-theme="dark"] :where(.workspace-local-nav .workspace-local-nav-icon) {
+  background: rgba(240, 168, 194, 0.12) !important;
+  color: #ffd7e5 !important;
+  border-color: rgba(240, 168, 194, 0.28) !important;
+}
+
+:root[data-theme="dark"] .workspace-route-shell.workspace-route-shell--with-local-nav.workspace-route-shell--local-rail-collapsed .workspace-local-nav a::after,
+:root[data-theme="dark"] .workspace-local-nav a .workspace-local-nav-label,
+:root[data-theme="dark"] .app-shell > aside.inline-app-sidebar.enterprise-sidebar :where(.brand, .sidebar-search-icon-button, .nav-section-trigger, .sidebar-care-ai-action)::after {
+  background: #111827 !important;
+  color: var(--aura-text) !important;
+  border-color: var(--aura-border) !important;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45) !important;
+}
+
+:root[data-theme="dark"] :where(.modal, .drawer, .drawer-panel, .detail-drawer, .side-drawer, .action-menu, .dropdown-menu, .menu-panel, .context-menu, .row-action-menu) {
+  background: #111827 !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.46) !important;
+}
+
+:root[data-theme="dark"] :where(.calendar-board, .day-board-scroll, .week-board, .month-grid, .timeline-board, .resource-grid, .scheduler-grid-shell, .scheduler-grid, .enterprise-scheduler, .appointment-grid, .slot-grid) {
+  background: #0f172a !important;
+  border-color: var(--aura-border) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :where(.lane-cell, .time-head, .staff-head, .time-column, .calendar-list-row) {
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :where(.avatar, .staff-avatar, .client-avatar, .product-avatar, .supplier-avatar, .um-avatar, .brand-mark, .logo-ring, .guide-logo, .swatch) {
+  border-color: rgba(240, 168, 194, 0.24) !important;
+}
+/* End advanced dark mode layer. */
+
+/* Home dashboard dark-mode refinement: prevent card overlays and pastel contrast clashes. */
+:root[data-theme="dark"] app-dashboard {
+  --dashboard-dark-bg: #070b12;
+  --dashboard-dark-panel: rgba(17, 24, 39, 0.96);
+  --dashboard-dark-card: rgba(15, 23, 42, 0.98);
+  --dashboard-dark-card-hover: rgba(22, 31, 49, 0.98);
+  --dashboard-dark-border: rgba(148, 163, 184, 0.24);
+  --dashboard-dark-text: #f8fafc;
+  --dashboard-dark-muted: #a7b0c0;
+  --dashboard-dark-accent: #2dd4bf;
+  color: var(--dashboard-dark-text) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .page-stack {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(240, 168, 194, 0.11), transparent 290px),
+    linear-gradient(180deg, #0b1020 0%, var(--dashboard-dark-bg) 44%, #05070c 100%) !important;
+  gap: 18px !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.dashboard-greeting, .dashboard-panel, .dashboard-command-panel, .dashboard-summary-grid > .panel) {
+  background: var(--dashboard-dark-panel) !important;
+  border: 1px solid var(--dashboard-dark-border) !important;
+  color: var(--dashboard-dark-text) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.section-title, .compact-title) {
+  border-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(h1, h2, strong, b, .metric-value) {
+  color: var(--dashboard-dark-text) !important;
+  text-shadow: none !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.muted-text, small, .metric-label, .summary-tile span, .timeline span) {
+  color: var(--dashboard-dark-muted) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile) {
+  min-width: 0 !important;
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(12, 18, 30, 0.98)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.22) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28) !important;
+  color: var(--dashboard-dark-text) !important;
+  overflow: hidden !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile)::before,
+:root[data-theme="dark"] app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile)::after {
+  content: none !important;
+  display: none !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.dashboard-hub-card, .action-card, .summary-tile) {
+  border-left: 3px solid rgba(45, 212, 191, 0.72) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card:hover, .metric-card:focus-visible, .dashboard-hub-card:hover, .dashboard-hub-card:focus-visible, .action-card:hover, .action-card:focus-visible, .summary-tile:hover) {
+  background: var(--dashboard-dark-card-hover) !important;
+  border-color: rgba(45, 212, 191, 0.36) !important;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34) !important;
+  outline: 2px solid rgba(45, 212, 191, 0.18) !important;
+  outline-offset: 2px !important;
+  transform: translateY(-2px) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+:root[data-theme="dark"] app-dashboard .metric-card {
+  min-height: 112px !important;
+  padding: 16px 18px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+:root[data-theme="dark"] app-dashboard .metric-label {
+  font-size: 0.7rem !important;
+  letter-spacing: 0.055em !important;
+  line-height: 1.2 !important;
+}
+
+:root[data-theme="dark"] app-dashboard .metric-value {
+  color: var(--dashboard-dark-text) !important;
+  font-size: clamp(1.5rem, 1.6vw, 1.9rem) !important;
+  line-height: 1.08 !important;
+  overflow-wrap: anywhere !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid {
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-card {
+  min-height: 132px !important;
+  padding: 14px 16px !important;
+  align-content: start !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-card :where(strong, small, b),
+:root[data-theme="dark"] app-dashboard .summary-tile :where(strong, span),
+:root[data-theme="dark"] app-dashboard .action-card strong {
+  position: relative !important;
+  z-index: 1 !important;
+  min-width: 0 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-card strong {
+  color: var(--dashboard-dark-text) !important;
+  line-height: 1.22 !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-card small {
+  color: var(--dashboard-dark-muted) !important;
+  line-height: 1.35 !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-card b {
+  color: #7dd3fc !important;
+  line-height: 1.2 !important;
+}
+
+:root[data-theme="dark"] app-dashboard .hub-icon {
+  width: 34px !important;
+  height: 34px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  border-radius: 10px !important;
+  background: rgba(45, 212, 191, 0.12) !important;
+  color: #99f6e4 !important;
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.18) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .quick-grid {
+  gap: 12px !important;
+}
+
+:root[data-theme="dark"] app-dashboard .quick-grid .action-card {
+  min-height: 82px !important;
+  padding: 14px 16px !important;
+}
+
+:root[data-theme="dark"] app-dashboard .summary-tile {
+  min-height: 118px !important;
+  padding: 18px 16px !important;
+  align-content: center !important;
+}
+
+:root[data-theme="dark"] app-dashboard .timeline {
+  background: var(--dashboard-dark-card) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .timeline span {
+  background: rgba(30, 41, 59, 0.82) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  color: var(--dashboard-dark-muted) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.ghost-button, .primary-button) {
+  min-height: 34px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 900px) {
+  :root[data-theme="dark"] app-dashboard .metrics-grid,
+  :root[data-theme="dark"] app-dashboard .dashboard-hub-grid,
+  :root[data-theme="dark"] app-dashboard .dashboard-summary-grid .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  :root[data-theme="dark"] app-dashboard .metrics-grid,
+  :root[data-theme="dark"] app-dashboard .dashboard-hub-grid,
+  :root[data-theme="dark"] app-dashboard .dashboard-summary-grid,
+  :root[data-theme="dark"] app-dashboard .dashboard-summary-grid .quick-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  :root[data-theme="dark"] app-dashboard .section-title {
+    align-items: stretch !important;
+  }
+
+  :root[data-theme="dark"] app-dashboard .header-link-row,
+  :root[data-theme="dark"] app-dashboard .topbar-actions {
+    width: 100% !important;
+  }
+}
+/* End home dashboard dark-mode refinement. */
+
+/* Workspace switcher dark-mode contrast refinement. */
+:root[data-theme="dark"] aura-workspace-switcher .wsw-btn {
+  background: rgba(15, 23, 42, 0.94) !important;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.26) !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-btn:hover,
+:root[data-theme="dark"] aura-workspace-switcher .wsw-btn.is-open {
+  background: rgba(22, 31, 49, 0.98) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34) !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher :where(.wsw-btn-copy strong, .wsw-opt-copy strong) {
+  color: #f8fafc !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher :where(.wsw-btn-copy small, .wsw-chevron, .wsw-menu-head, .wsw-opt-copy small, .wsw-empty) {
+  color: #a7b0c0 !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-btn-icon:not(.brand) {
+  background: rgba(240, 168, 194, 0.12) !important;
+  color: #fbcfe8 !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher :where(.wsw-menu, .wsw-menu-wide) {
+  background: rgba(17, 24, 39, 0.98) !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.46) !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher :where(.wsw-section + .wsw-section, .wsw-grid2) {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-opt {
+  color: #f8fafc !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-opt:hover,
+:root[data-theme="dark"] aura-workspace-switcher .wsw-opt.active {
+  background: rgba(240, 168, 194, 0.11) !important;
+  border-color: rgba(240, 168, 194, 0.22) !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-chip,
+:root[data-theme="dark"] aura-workspace-switcher .wsw-select {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+  color: #f8fafc !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-chip:hover {
+  color: #fbcfe8 !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+}
+
+:root[data-theme="dark"] aura-workspace-switcher .wsw-chip.active {
+  background: linear-gradient(180deg, #b83274, #7f1d4e) !important;
+  color: #ffffff !important;
+  border-color: rgba(240, 168, 194, 0.35) !important;
+}
+/* End workspace switcher dark-mode contrast refinement. */
