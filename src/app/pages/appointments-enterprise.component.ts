@@ -84,6 +84,14 @@ type AppointmentActionOption = {
   label: string;
 };
 
+type CalendarLayout = 'grid' | 'compact-grid' | 'timeline' | 'list';
+
+type CalendarLayoutOption = {
+  value: CalendarLayout;
+  label: string;
+  description: string;
+};
+
 type SchedulerContext = {
   branchId: string;
   date: string;
@@ -137,10 +145,23 @@ type LaneBlock = {
   reason: string;
 };
 
+type TimelineRow = {
+  staff: StaffLane;
+  cards: AppointmentCard[];
+};
+
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 22 * 60;
 const ROW_HEIGHT = 44;
+const COMPACT_ROW_HEIGHT = 32;
 const STAFF_LIMIT = 15;
+const CALENDAR_LAYOUT_STORAGE_KEY = 'aura.appointments.calendarLayout.v1';
+const CALENDAR_LAYOUT_OPTIONS: CalendarLayoutOption[] = [
+  { value: 'grid', label: 'Staff Grid', description: 'Full drag calendar' },
+  { value: 'compact-grid', label: 'Compact Grid', description: 'Dense staff view' },
+  { value: 'timeline', label: 'Timeline', description: 'Staff swimlanes' },
+  { value: 'list', label: 'List', description: 'Bookings table' }
+];
 const STATUS_OPTIONS = ['payment_pending', 'booked', 'confirmed', 'arrived', 'waiting', 'in-service', 'completed', 'cancelled', 'no-show'];
 const STATUS_TONES: Record<string, string> = {
   booked: 'blue',
@@ -206,8 +227,34 @@ const STATUS_TONES: Record<string, string> = {
           <article><span>Revenue</span><strong>{{ money(summaryValue('revenue')) }}</strong><small>planned value</small></article>
         </section>
 
-        <section class="scheduler-grid-shell">
-          <div class="scheduler-grid" [style.--staff-count]="visibleStaff().length" [style.--row-height.px]="rowHeight">
+        <section class="scheduler-view-toolbar" aria-label="Calendar view controls">
+          <div class="scheduler-view-copy">
+            <span class="eyebrow">Calendar layout</span>
+            <strong>{{ selectedCalendarLayoutLabel() }}</strong>
+            <small>{{ selectedDate() | date: 'EEE, dd MMM y' }} - {{ staffWindowLabel() }}</small>
+          </div>
+          <div class="scheduler-view-controls">
+            <label class="view-control-field">
+              <span>Slot</span>
+              <select [value]="slotMinutes()" (change)="setSlotMinutes($any($event.target).value)">
+                <option value="15">15 mins</option>
+                <option value="30">30 mins</option>
+              </select>
+            </label>
+            <div class="calendar-layout-toggle" role="group" aria-label="Calendar layout">
+              <button type="button" *ngFor="let option of calendarLayoutOptions; trackBy: trackCalendarLayoutOption" [class.active]="calendarLayout() === option.value" [attr.aria-pressed]="calendarLayout() === option.value" [title]="option.description" (click)="setCalendarLayout(option.value)">
+                {{ option.label }}
+              </button>
+            </div>
+            <div class="staff-window-controls scheduler-staff-window" aria-label="Staff window">
+              <button type="button" (click)="moveStaffWindow(-1)" [disabled]="staffOffset() === 0">Prev</button>
+              <span>{{ staffWindowLabel() }}</span>
+              <button type="button" (click)="moveStaffWindow(1)" [disabled]="!canMoveNextStaff()">Next</button>
+            </div>
+          </div>
+        </section>
+        <section class="scheduler-grid-shell" [class.scheduler-grid-shell--compact]="calendarLayout() === 'compact-grid'" *ngIf="isGridCalendarLayout(); else alternateCalendarLayout">
+          <div class="scheduler-grid" [class.scheduler-grid--compact]="calendarLayout() === 'compact-grid'" [style.--staff-count]="visibleStaff().length" [style.--slot-count]="timeSlots().length" [style.--row-height.px]="rowHeight()">
             <div class="time-head">Time</div>
             <div class="staff-head" *ngFor="let person of visibleStaff(); trackBy: trackStaff">
               <span class="avatar">{{ initials(person.name) }}</span>
@@ -280,7 +327,7 @@ const STATUS_TONES: Record<string, string> = {
                 type="button"
                 class="appointment-card"
                 *ngFor="let card of appointmentCardsByStaff().get(person.id) || []; trackBy: trackCard"
-                [class]="statusClass(card.status)"
+                [ngClass]="statusTone(card.status)"
                 [style.top.px]="card.top"
                 [style.height.px]="card.height"
                 draggable="true"
@@ -302,6 +349,73 @@ const STATUS_TONES: Record<string, string> = {
           </div>
         </section>
 
+        <ng-template #alternateCalendarLayout>
+          <section class="scheduler-grid-shell scheduler-grid-shell--alternate">
+            <div class="calendar-timeline-view" *ngIf="calendarLayout() === 'timeline'; else listCalendarLayout">
+              <div class="layout-empty" *ngIf="!timelineRows().length">
+                <strong>No staff visible</strong>
+                <span>Use staff window controls or reload after staff setup.</span>
+              </div>
+              <ng-container *ngIf="timelineRows().length">
+                <div class="timeline-scale">
+                  <span class="timeline-scale-label">Staff</span>
+                  <div class="timeline-scale-track">
+                    <span *ngFor="let slot of timelineScaleSlots(); trackBy: trackSlot" [style.left.%]="timelineLeftForMinute(slot.minute)">{{ slot.label }}</span>
+                  </div>
+                </div>
+                <article class="timeline-row" *ngFor="let row of timelineRows(); trackBy: trackTimelineRow">
+                  <div class="timeline-staff">
+                    <span class="avatar">{{ initials(row.staff.name) }}</span>
+                    <div>
+                      <strong>{{ row.staff.name }}</strong>
+                      <small>{{ row.cards.length }} booking(s)</small>
+                    </div>
+                  </div>
+                  <div class="timeline-track">
+                    <span class="timeline-marker" *ngFor="let slot of timelineScaleSlots(); trackBy: trackSlot" [style.left.%]="timelineLeftForMinute(slot.minute)"></span>
+                    <span class="timeline-empty" *ngIf="!row.cards.length">No bookings</span>
+                    <button type="button" class="timeline-appointment" *ngFor="let card of row.cards; trackBy: trackCard" [ngClass]="statusTone(card.status)" [style.left.%]="timelineLeft(card)" [style.width.%]="timelineWidth(card)" (click)="openAppointment(card.appointment)">
+                      <strong>{{ card.timeLabel }}</strong>
+                      <span>{{ card.clientName }}</span>
+                      <small>{{ card.serviceLabel }}</small>
+                    </button>
+                  </div>
+                </article>
+              </ng-container>
+            </div>
+            <ng-template #listCalendarLayout>
+              <div class="calendar-list-view">
+                <div class="calendar-list-header">
+                  <div>
+                    <span class="eyebrow">Bookings list</span>
+                    <strong>{{ calendarAppointmentCards().length }} appointment(s)</strong>
+                  </div>
+                  <button class="ghost-button mini" type="button" (click)="openBlankBooking()">New booking</button>
+                </div>
+                <div class="calendar-list-table" *ngIf="calendarAppointmentCards().length; else emptyCalendarList">
+                  <div class="calendar-list-head" aria-hidden="true">
+                    <span>Time</span>
+                    <span>Client / service</span>
+                    <span>Staff</span>
+                    <span>Status</span>
+                  </div>
+                  <button class="calendar-list-row" type="button" *ngFor="let card of calendarAppointmentCards(); trackBy: trackCard" (click)="openAppointment(card.appointment)">
+                    <span class="list-time">{{ card.timeLabel }}</span>
+                    <span class="list-client"><strong>{{ card.clientName }}</strong><small>{{ card.serviceLabel }}</small></span>
+                    <span>{{ staffName(card.appointment.staffId || '') }}</span>
+                    <span class="status-pill" [ngClass]="statusTone(card.status)">{{ label(card.status) }}</span>
+                  </button>
+                </div>
+                <ng-template #emptyCalendarList>
+                  <div class="layout-empty">
+                    <strong>No appointments on this page</strong>
+                    <span>Use Staff Grid to book a slot or tap New booking.</span>
+                  </div>
+                </ng-template>
+              </div>
+            </ng-template>
+          </section>
+        </ng-template>
         <section class="operations-grid compact">
           <article
             class="ops-panel ops-launch ai-slot-launch"
@@ -793,7 +907,7 @@ const STATUS_TONES: Record<string, string> = {
   styles: [`
     :host { display: block; }
     .enterprise-scheduler { display: grid; gap: 16px; }
-    .month-strip-band, .summary-strip, .scheduler-grid-shell, .operations-grid, .scheduler-drawer {
+    .month-strip-band, .scheduler-view-toolbar, .summary-strip, .scheduler-grid-shell, .operations-grid, .scheduler-drawer {
       border: 1px solid #dbe8e4;
       background: rgba(255,255,255,.94);
       box-shadow: 0 18px 42px rgba(15, 23, 42, .08);
@@ -818,7 +932,7 @@ const STATUS_TONES: Record<string, string> = {
     h3 { font-size: 22px; }
     p { margin: 8px 0 0; color: #64748b; max-width: 760px; }
     .eyebrow { color: #2563eb; font-size: 12px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
-    .calendar-actions, .drawer-actions, .staff-window-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .calendar-actions, .drawer-actions, .staff-window-controls, .scheduler-view-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .primary-button, .ghost-button {
       border: 1px solid #cfe0dc;
       border-radius: 12px;
@@ -840,6 +954,20 @@ const STATUS_TONES: Record<string, string> = {
     .month-strip button.active { border-color: #0f8f7f; box-shadow: inset 0 -3px 0 #0f8f7f; background: #ecfdf5; }
     .month-strip button.today { color: #0f8f7f; }
     .month-strip span, .month-strip small { display: block; font-size: 11px; }
+    .scheduler-view-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; gap: 12px; min-height: 58px; padding: 10px 14px; border-radius: 14px; }
+    .scheduler-view-copy { display: grid; gap: 2px; }
+    .scheduler-view-copy strong { color: #172033; font-size: 16px; }
+    .scheduler-view-copy small { color: #64748b; font-weight: 800; }
+    .scheduler-view-controls { justify-content: flex-end; }
+    .view-control-field { min-width: 122px; }
+    .view-control-field span { color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .view-control-field select { min-height: 38px; border-radius: 999px; padding: 7px 12px; }
+    .calendar-layout-toggle { display: flex; gap: 4px; max-width: 100%; overflow-x: auto; padding: 4px; border: 1px solid #d5e2df; border-radius: 999px; background: #f8fafc; }
+    .calendar-layout-toggle button { min-height: 34px; border: 0; border-radius: 999px; background: transparent; color: #334155; padding: 0 12px; font-weight: 900; white-space: nowrap; cursor: pointer; }
+    .calendar-layout-toggle button.active { background: #0f8f7f; color: #fff; box-shadow: 0 6px 14px rgba(15, 143, 127, .18); }
+    .scheduler-staff-window button { min-height: 34px; border: 1px solid #cfe0dc; border-radius: 999px; background: #fff; color: #172033; padding: 0 12px; font-weight: 900; cursor: pointer; }
+    .scheduler-staff-window button:disabled { opacity: .42; cursor: not-allowed; }
+    .scheduler-staff-window span { color: #64748b; font-size: 12px; font-weight: 900; white-space: nowrap; }
     label { display: grid; gap: 6px; color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     input, select, textarea { width: 100%; min-height: 42px; border: 1px solid #d5e2df; border-radius: 10px; padding: 9px 11px; font: inherit; background: white; color: #172033; }
     .summary-strip { display: grid; grid-template-columns: repeat(7, minmax(116px, 1fr)); justify-content: start; gap: 12px; min-height: 54px; padding: 8px 12px; border-radius: 16px; }
@@ -865,17 +993,22 @@ const STATUS_TONES: Record<string, string> = {
       border-radius: 14px;
       background: #f8fbfb;
     }
+    .scheduler-grid--compact { --staff-width: minmax(116px, 1fr); max-height: 640px; }
     .time-head, .staff-head { position: sticky; top: 0; z-index: 6; min-height: 76px; background: #f8fbfb; border-bottom: 1px solid #d7e4e1; }
+    .scheduler-grid--compact .time-head, .scheduler-grid--compact .staff-head { min-height: 58px; }
     .time-head { left: 0; z-index: 8; display: grid; place-items: center; font-weight: 900; color: #475569; text-transform: uppercase; }
     .staff-head { display: flex; align-items: center; gap: 8px; padding: 10px; border-left: 1px solid #d7e4e1; }
+    .scheduler-grid--compact .staff-head { gap: 6px; padding: 7px; }
     .staff-head strong { font-size: 12px; line-height: 1.1; display: block; }
     .staff-head small { font-size: 11px; color: #64748b; }
     .staff-menu-button { margin-left: auto; height: 28px; width: 28px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; cursor: pointer; font-weight: 900; }
     .staff-menu-button:hover { border-color: #0f8f7f; color: #0f766e; background: #ecfdf5; }
     .avatar { height: 30px; width: 30px; border-radius: 50%; display: grid; place-items: center; background: #d9f99d; color: #115e59; font-size: 11px; font-weight: 900; flex: 0 0 auto; }
-    .time-column { position: sticky; left: 0; z-index: 5; grid-column: 1; grid-row: 2; background: #f8fbfb; min-height: calc(var(--row-height) * 56); }
+    .scheduler-grid--compact .avatar { height: 26px; width: 26px; font-size: 10px; }
+    .time-column { position: sticky; left: 0; z-index: 5; grid-column: 1; grid-row: 2; background: #f8fbfb; min-height: calc(var(--row-height) * var(--slot-count)); }
     .time-row { height: var(--row-height); border-bottom: 1px solid #e5ecea; display: flex; align-items: start; justify-content: flex-end; padding: 8px 10px 0 0; font-size: 12px; font-weight: 900; color: #64748b; }
-    .staff-lane { position: relative; min-height: calc(var(--row-height) * 56); border-left: 1px solid #d7e4e1; grid-row: 2; }
+    .scheduler-grid--compact .time-row { padding-top: 5px; font-size: 11px; }
+    .staff-lane { position: relative; min-height: calc(var(--row-height) * var(--slot-count)); border-left: 1px solid #d7e4e1; grid-row: 2; }
     .lane-cell { display: block; width: 100%; height: var(--row-height); border: 0; border-bottom: 1px solid #edf2f1; background: white; cursor: crosshair; }
     .lane-cell:hover { background: #f0fdfa; outline: 1px solid #99f6e4; }
     .lane-block { position: absolute; left: 0; right: 0; z-index: 1; border: 1px solid rgba(15,23,42,.08); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 12px; overflow: hidden; }
@@ -883,10 +1016,13 @@ const STATUS_TONES: Record<string, string> = {
     .lane-block.blocked { background: repeating-linear-gradient(135deg, rgba(148,163,184,.25), rgba(148,163,184,.25) 8px, rgba(226,232,240,.7) 8px, rgba(226,232,240,.7) 16px); color: #334155; cursor: pointer; }
     .lane-block.roster-closed { background: repeating-linear-gradient(135deg, rgba(148,163,184,.2), rgba(148,163,184,.2) 8px, rgba(241,245,249,.82) 8px, rgba(241,245,249,.82) 16px); color: #64748b; cursor: not-allowed; }
     .appointment-card { position: absolute; left: 8px; right: 8px; z-index: 4; border-radius: 8px; border: 1px solid #475569; padding: 8px 10px; text-align: left; color: #172033; overflow: hidden; cursor: grab; box-shadow: 0 10px 20px rgba(15,23,42,.12); }
+    .scheduler-grid--compact .appointment-card { left: 5px; right: 5px; padding: 5px 7px; border-radius: 7px; }
     .appointment-card strong, .appointment-card b, .appointment-card span, .appointment-card small { display: block; line-height: 1.2; }
     .appointment-card strong { font-size: 12px; }
     .appointment-card b { font-size: 15px; margin-top: 4px; }
     .appointment-card span, .appointment-card small { font-size: 12px; }
+    .scheduler-grid--compact .appointment-card b { font-size: 12px; margin-top: 2px; }
+    .scheduler-grid--compact .appointment-card span, .scheduler-grid--compact .appointment-card small { font-size: 11px; }
     .appointment-card.blue { background: #bfdbfe; border-color: #2563eb; }
     .appointment-card.indigo { background: #c7d2fe; border-color: #4f46e5; }
     .appointment-card.teal { background: #99f6e4; border-color: #0f766e; }
@@ -905,6 +1041,46 @@ const STATUS_TONES: Record<string, string> = {
     .staff-action-menu button:last-child { border-bottom: 0; }
     .staff-action-menu span { border-radius: 999px; background: #e2e8f0; padding: 2px 7px; font-size: 11px; }
     .slot-hover { position: absolute; left: 96px; z-index: 10; background: #fff7ed; border: 1px solid #fb923c; padding: 4px 8px; border-radius: 6px; font-size: 12px; box-shadow: 0 10px 24px rgba(15,23,42,.12); pointer-events: none; }
+    .scheduler-grid-shell--alternate { overflow-x: auto; }
+    .calendar-timeline-view, .calendar-list-view { min-width: 780px; display: grid; gap: 10px; }
+    .layout-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; display: grid; gap: 5px; text-align: center; color: #64748b; background: #fff; }
+    .layout-empty strong { color: #172033; }
+    .timeline-scale, .timeline-row { display: grid; grid-template-columns: 180px minmax(640px, 1fr); }
+    .timeline-scale-label, .timeline-staff { border: 1px solid #d7e4e1; background: #f8fbfb; }
+    .timeline-scale-label { display: grid; place-items: center; min-height: 42px; color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .timeline-scale-track, .timeline-track { position: relative; border: 1px solid #d7e4e1; border-left: 0; background: #fff; overflow: hidden; }
+    .timeline-scale-track { min-height: 42px; }
+    .timeline-scale-track span { position: absolute; top: 50%; transform: translate(-50%, -50%); color: #64748b; font-size: 11px; font-weight: 900; white-space: nowrap; }
+    .timeline-row + .timeline-row .timeline-staff, .timeline-row + .timeline-row .timeline-track { border-top: 0; }
+    .timeline-staff { min-height: 68px; display: flex; align-items: center; gap: 9px; padding: 10px; }
+    .timeline-staff strong, .timeline-staff small { display: block; }
+    .timeline-staff small { margin-top: 2px; color: #64748b; font-size: 11px; font-weight: 800; }
+    .timeline-track { min-height: 68px; }
+    .timeline-marker { position: absolute; top: 0; bottom: 0; width: 1px; background: #e2e8f0; }
+    .timeline-empty { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px; font-weight: 900; }
+    .timeline-appointment { position: absolute; top: 7px; bottom: 7px; min-width: 76px; border: 1px solid #475569; border-radius: 8px; padding: 6px 8px; text-align: left; color: #172033; overflow: hidden; cursor: pointer; box-shadow: 0 10px 20px rgba(15,23,42,.1); }
+    .timeline-appointment strong, .timeline-appointment span, .timeline-appointment small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .timeline-appointment strong { font-size: 11px; }
+    .timeline-appointment span { font-size: 12px; font-weight: 900; margin-top: 2px; }
+    .timeline-appointment small { font-size: 11px; }
+    .calendar-list-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .calendar-list-header strong { display: block; color: #172033; font-size: 17px; }
+    .calendar-list-table { display: grid; gap: 6px; }
+    .calendar-list-head, .calendar-list-row { display: grid; grid-template-columns: 170px minmax(190px, 1.2fr) minmax(150px, 1fr) 140px; align-items: center; gap: 12px; }
+    .calendar-list-head { padding: 0 12px; color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .calendar-list-row { width: 100%; min-height: 58px; border: 1px solid #dbe7e4; border-radius: 12px; background: #fff; color: #172033; padding: 10px 12px; text-align: left; cursor: pointer; }
+    .calendar-list-row:hover { border-color: #0f8f7f; background: #f0fdfa; }
+    .list-time, .list-client strong { font-weight: 900; }
+    .list-client small { display: block; margin-top: 3px; color: #64748b; font-size: 12px; }
+    .status-pill { justify-self: start; border: 1px solid #cbd5e1; border-radius: 999px; padding: 6px 10px; color: #172033; font-size: 12px; font-weight: 900; }
+    .timeline-appointment.blue, .status-pill.blue { background: #bfdbfe; border-color: #2563eb; }
+    .timeline-appointment.indigo, .status-pill.indigo { background: #c7d2fe; border-color: #4f46e5; }
+    .timeline-appointment.teal, .status-pill.teal { background: #99f6e4; border-color: #0f766e; }
+    .timeline-appointment.amber, .status-pill.amber { background: #fde68a; border-color: #d97706; }
+    .timeline-appointment.violet, .status-pill.violet { background: #ddd6fe; border-color: #7c3aed; }
+    .timeline-appointment.green, .timeline-appointment.emerald, .status-pill.green, .status-pill.emerald { background: #bbf7d0; border-color: #16a34a; }
+    .timeline-appointment.red, .status-pill.red { background: #fecaca; border-color: #dc2626; }
+    .timeline-appointment.slate, .status-pill.slate { background: #e2e8f0; border-color: #64748b; }
     .operations-grid { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 14px; }
     .operations-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .ops-panel { border-radius: 14px; padding: 16px; display: grid; gap: 10px; align-content: start; }
@@ -1041,12 +1217,19 @@ const STATUS_TONES: Record<string, string> = {
     .wrap { flex-wrap: wrap; }
     .toast { position: fixed; right: 24px; bottom: 24px; z-index: 70; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #0f8f7f; color: white; padding: 14px 18px; border-radius: 12px; box-shadow: 0 18px 36px rgba(15,23,42,.22); font-weight: 900; }
     .toast-link { border: 1px solid rgba(255,255,255,.6); background: rgba(255,255,255,.16); color: white; border-radius: 999px; padding: 7px 10px; font-weight: 900; cursor: pointer; }
-    @media (max-width: 1100px) {
+@media (max-width: 1100px) {
+      .scheduler-view-toolbar { grid-template-columns: 1fr; }
+      .scheduler-view-controls { justify-content: flex-start; }
       .summary-strip, .operations-grid, .service-line, .bill-layout { grid-template-columns: 1fr 1fr; }
       .service-field-wide, .staff-field-wide, .start-field-wide, .duration-field-compact, .chair-field-compact, .service-remove-button { grid-column: auto; }
     }
     @media (max-width: 720px) {
       .month-strip-band { grid-template-columns: 1fr; }
+      .scheduler-view-controls, .calendar-layout-toggle, .scheduler-staff-window { width: 100%; }
+      .calendar-layout-toggle { border-radius: 12px; }
+      .calendar-layout-toggle button { flex: 1 0 auto; }
+      .timeline-scale, .timeline-row { grid-template-columns: 150px minmax(560px, 1fr); }
+      .calendar-list-head, .calendar-list-row { grid-template-columns: 1fr; gap: 6px; }
       .summary-strip, .operations-grid, .service-line, .inline-form-grid, .two-col, .pulse-grid, .bill-layout { grid-template-columns: 1fr; }
     }
   `]
@@ -1073,7 +1256,10 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     { value: 'add-payment', label: 'Add Payment' }
   ];
   private readonly completedAllowedActions = new Set(this.completedAppointmentActions.map((action) => action.value));
-  readonly rowHeight = ROW_HEIGHT;
+  readonly calendarLayoutOptions = CALENDAR_LAYOUT_OPTIONS;
+  readonly calendarLayout = signal<CalendarLayout>(this.initialCalendarLayout());
+  readonly selectedCalendarLayoutLabel = computed(() => this.calendarLayoutOptions.find((option) => option.value === this.calendarLayout())?.label || 'Staff Grid');
+  readonly rowHeight = computed(() => this.calendarLayout() === 'compact-grid' ? COMPACT_ROW_HEIGHT : ROW_HEIGHT);
   readonly statusOptions = STATUS_OPTIONS;
   readonly context = signal<SchedulerContext | null>(null);
   readonly adjustedDueFollowUpCount = signal(0);
@@ -1215,6 +1401,18 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     for (const cards of map.values()) cards.sort((a, b) => a.top - b.top);
     return map;
   });
+  readonly calendarAppointmentCards = computed(() =>
+    Array.from(this.appointmentCardsByStaff().values())
+      .flat()
+      .sort((a, b) => this.minuteOf(a.appointment.startAt) - this.minuteOf(b.appointment.startAt))
+  );
+  readonly timelineRows = computed<TimelineRow[]>(() =>
+    this.visibleStaff().map((staff) => ({ staff, cards: this.appointmentCardsByStaff().get(staff.id) || [] }))
+  );
+  readonly timelineScaleSlots = computed(() => {
+    const hourStep = Math.max(1, Math.round(60 / this.slotMinutes()));
+    return this.timeSlots().filter((_, index) => index % hourStep === 0);
+  });
   readonly pageAppointmentCount = computed(() =>
     new Set(
       Array.from(this.appointmentCardsByStaff().values())
@@ -1272,6 +1470,29 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     window.clearTimeout(this.noticeTimer);
     window.removeEventListener('pointermove', this.onResizeMove);
     window.removeEventListener('pointerup', this.onResizeEnd);
+  }
+
+  private initialCalendarLayout(): CalendarLayout {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return 'grid';
+      return this.normalizeCalendarLayout(window.localStorage.getItem(CALENDAR_LAYOUT_STORAGE_KEY));
+    } catch {
+      return 'grid';
+    }
+  }
+
+  private normalizeCalendarLayout(value: unknown): CalendarLayout {
+    return CALENDAR_LAYOUT_OPTIONS.some((option) => option.value === value) ? value as CalendarLayout : 'grid';
+  }
+
+  private saveCalendarLayout(value: CalendarLayout): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(CALENDAR_LAYOUT_STORAGE_KEY, value);
+      }
+    } catch {
+      // Layout preference is optional; navigation must keep working if storage is unavailable.
+    }
   }
 
   private showNotice(message: string, autoHideMs = 3200): void {
@@ -1358,6 +1579,21 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   setSlotMinutes(value: string): void {
     this.slotMinutes.set(Number(value) === 30 ? 30 : 15);
+  }
+
+  setCalendarLayout(value: string): void {
+    const next = this.normalizeCalendarLayout(value);
+    this.calendarLayout.set(next);
+    this.draggingAppointment.set(null);
+    this.resizeState.set(null);
+    this.hoverSlot.set(null);
+    this.closeSchedulerActionMenu();
+    this.saveCalendarLayout(next);
+  }
+
+  isGridCalendarLayout(): boolean {
+    const layout = this.calendarLayout();
+    return layout === 'grid' || layout === 'compact-grid';
   }
 
   moveStaffWindow(direction: number): void {
@@ -2080,7 +2316,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const rect = lane?.getBoundingClientRect();
     const rawY = rect ? event.clientY - rect.top : 0;
     const minute = rawY > 0
-      ? this.snapMinute(DAY_START_MINUTES + (rawY / ROW_HEIGHT) * this.slotMinutes())
+      ? this.snapMinute(DAY_START_MINUTES + (rawY / this.rowHeight()) * this.slotMinutes())
       : DAY_START_MINUTES;
     this.schedulerActionMenu.set({
       staffId: person.id,
@@ -2267,7 +2503,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const appointment = this.draggingAppointment();
     if (!appointment || !event.currentTarget) return;
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const minute = this.snapMinute(DAY_START_MINUTES + ((event.clientY - rect.top) / ROW_HEIGHT) * this.slotMinutes());
+    const minute = this.snapMinute(DAY_START_MINUTES + ((event.clientY - rect.top) / this.rowHeight()) * this.slotMinutes());
     const duration = Math.max(15, this.appointmentDuration(appointment));
     await this.moveAppointment(appointment, staff.id, this.isoAtMinute(minute), this.isoAtMinute(minute + duration), 'Drag-drop scheduler move');
     this.clearDrag();
@@ -2288,7 +2524,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   private readonly onResizeEnd = async (event: PointerEvent): Promise<void> => {
     const state = this.resizeState();
     if (!state) return;
-    const deltaRows = Math.round((event.clientY - state.startY) / ROW_HEIGHT);
+    const deltaRows = Math.round((event.clientY - state.startY) / this.rowHeight());
     const deltaMinutes = deltaRows * this.slotMinutes();
     const startMinute = this.minuteOf(state.appointment.startAt);
     const originalEndMinute = this.minuteOf(state.originalEnd);
@@ -2447,16 +2683,17 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   }
 
   minuteTop(minute: number): number {
-    return ((minute - DAY_START_MINUTES) / this.slotMinutes()) * ROW_HEIGHT;
+    return ((minute - DAY_START_MINUTES) / this.slotMinutes()) * this.rowHeight();
   }
 
   topToMinute(top: number): number {
-    return DAY_START_MINUTES + Math.round(top / ROW_HEIGHT) * this.slotMinutes();
+    return DAY_START_MINUTES + Math.round(top / this.rowHeight()) * this.slotMinutes();
   }
 
   appointmentCard(appointment: ApiRecord): AppointmentCard {
     const top = this.minuteTop(this.minuteOf(appointment.startAt));
-    const height = Math.max(36, (this.appointmentDuration(appointment) / this.slotMinutes()) * ROW_HEIGHT - 4);
+    const minHeight = this.calendarLayout() === 'compact-grid' ? 28 : 36;
+    const height = Math.max(minHeight, (this.appointmentDuration(appointment) / this.slotMinutes()) * this.rowHeight() - 4);
     const status = String(appointment.status || 'booked').toLowerCase();
     return {
       appointment,
@@ -2477,7 +2714,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       id: row.id,
       staffId: row.staffId,
       top: this.minuteTop(start),
-      height: Math.max(ROW_HEIGHT, ((end - start) / this.slotMinutes()) * ROW_HEIGHT),
+      height: Math.max(this.rowHeight(), ((end - start) / this.slotMinutes()) * this.rowHeight()),
       label: `${row.startTime || ''} TO ${row.endTime || ''}`,
       kind: 'shift',
       reason: `${date} ${row.shiftType || 'regular'}`
@@ -2516,7 +2753,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       id: `unavailable-${staffId}-${start}-${end}`,
       staffId,
       top: this.minuteTop(start),
-      height: Math.max(ROW_HEIGHT, ((end - start) / this.slotMinutes()) * ROW_HEIGHT),
+      height: Math.max(this.rowHeight(), ((end - start) / this.slotMinutes()) * this.rowHeight()),
       label: 'Off shift',
       kind: 'unavailable',
       reason: 'Outside staff shift'
@@ -2545,7 +2782,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       id: row.id,
       staffId: row.staffId,
       top: this.minuteTop(start),
-      height: Math.max(ROW_HEIGHT, ((end - start) / this.slotMinutes()) * ROW_HEIGHT),
+      height: Math.max(this.rowHeight(), ((end - start) / this.slotMinutes()) * this.rowHeight()),
       label: row.reason || 'Blocked',
       kind: 'blocked',
       reason: row.reason || 'Blocked'
@@ -2704,8 +2941,14 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     return String(value || '').replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
+  statusTone(status: string): string {
+    const raw = String(status || '').trim().toLowerCase();
+    const dashed = raw.replace(/_/g, '-');
+    return STATUS_TONES[raw] || STATUS_TONES[dashed] || 'blue';
+  }
+
   statusClass(status: string): string {
-    return `appointment-card ${STATUS_TONES[status] || 'blue'}`;
+    return `appointment-card ${this.statusTone(status)}`;
   }
 
   money(value: number): string {
@@ -2720,6 +2963,8 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   trackStaff(_: number, staff: StaffLane): string { return staff.id; }
   trackSlot(_: number, slot: TimeSlot): number { return slot.minute; }
   trackValue(_: number, value: string): string { return value; }
+  trackCalendarLayoutOption(_: number, option: CalendarLayoutOption): string { return option.value; }
+  trackTimelineRow(_: number, row: TimelineRow): string { return row.staff.id; }
   trackApiRecord(_: number, record: ApiRecord): string { return record.id; }
   trackLine(_: number, line: BookingLineDraft): string { return line.id; }
   trackBlock(_: number, block: LaneBlock): string { return block.id; }
@@ -2729,6 +2974,22 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   trackActivityLine(_: number, line: AppointmentActivityLine): string { return line.id; }
   trackClientServiceHistory(_: number, line: ClientServiceHistoryRow): string { return line.id; }
   trackActionOption(_: number, action: AppointmentActionOption): string { return action.value; }
+
+  timelineLeftForMinute(minute: number): number {
+    const span = DAY_END_MINUTES - DAY_START_MINUTES;
+    return Math.max(0, Math.min(100, ((minute - DAY_START_MINUTES) / span) * 100));
+  }
+
+  timelineLeft(card: AppointmentCard): number {
+    return this.timelineLeftForMinute(this.minuteOf(card.appointment.startAt));
+  }
+
+  timelineWidth(card: AppointmentCard): number {
+    const left = this.timelineLeft(card);
+    const span = DAY_END_MINUTES - DAY_START_MINUTES;
+    const width = (this.appointmentDuration(card.appointment) / span) * 100;
+    return Math.max(4, Math.min(100 - left, width));
+  }
 
   formatShortDate(value: string): string {
     const date = new Date(value);
