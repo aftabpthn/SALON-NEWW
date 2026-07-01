@@ -7,62 +7,14 @@ import { repositories } from "../repositories/repository-registry.js";
 import { builtinRoles, can, staticGrantsForRole } from "../middleware/rbac.js";
 import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 import { tenantService } from "./tenant.service.js";
+import { permissionResources, staffPermissionCatalog } from "../config/staff-permission-catalog.js";
 
 const backupDir = join(dataDir, "backups");
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
 const ownerControlRoles = new Set(["owner", "admin", "superAdmin"]);
 const tenantUserStatuses = new Set(["active", "hidden", "disabled", "suspended"]);
-const permissionResources = [
-  "dashboard",
-  "appointments",
-  "clients",
-  "services",
-  "packages",
-  "memberships",
-  "gift-cards",
-  "staff",
-  "payroll",
-  "products",
-  "inventory",
-  "inventory-intelligence",
-  "pos",
-  "sales",
-  "invoices",
-  "payments",
-  "appointment_deposits",
-  "finance",
-  "cash-drawer",
-  "outgoing-funds",
-  "refunds",
-  "suppliers",
-  "reports",
-  "analytics",
-  "marketing",
-  "whatsapp",
-  "reviews",
-  "loyalty",
-  "branches",
-  "booking-portal",
-  "online-booking",
-  "coupons",
-  "notifications",
-  "settings",
-  "security",
-  "workflows",
-  "customer-360",
-  "smart-booking",
-  "ai",
-  "quality",
-  "deployment",
-  "migration",
-  "marketplace-integrations",
-  "plugins",
-  "developer-api",
-  "webhooks",
-  "localization",
-  "franchise"
-];
+
 
 function scope(access, branchId = "") {
   const scoped = tenantService.accessScope(access || {});
@@ -186,6 +138,7 @@ export class SecurityService {
         staticGrants: staticGrantsForRole(role)
       })),
       resources: permissionResources,
+      permissionCatalog: staffPermissionCatalog,
       actions,
       matrix: roles.map((role) => ({
         role,
@@ -413,14 +366,16 @@ export class SecurityService {
       : repositories.roleDefinitions.create({ id: makeId("role"), ...data }, scope(access));
 
     permissions.forEach((permission) => {
-      if (!permission.resource || !Array.isArray(permission.actions) || !permission.actions.length) return;
-      const found = db.prepare("SELECT id FROM security_permissions WHERE tenantId = ? AND role = ? AND resource = ?").get(access.tenantId, role, permission.resource);
+      if (!permission.resource || !Array.isArray(permission.actions)) return;
+      if (!permission.actions.length && permission.effect !== "deny") return;
+      const found = db.prepare("SELECT id FROM security_permissions WHERE tenantId = @tenantId AND role = @role AND resource = @resource").get({ tenantId: access.tenantId, role, resource: permission.resource });
       const permissionData = {
         role,
         resource: permission.resource,
         actions: permission.actions,
         effect: permission.effect || "allow",
-        conditions: permission.conditions || {}
+        conditions: permission.conditions || {},
+        status: permission.status || "active"
       };
       if (found?.id) {
         repositories.securityPermissions.update(found.id, permissionData, scope(access));
@@ -564,7 +519,7 @@ export class SecurityService {
 
   upsertPermission(payload = {}, access, req = null) {
     if (!payload.role || !payload.resource) throw badRequest("role and resource are required");
-    const existing = db.prepare("SELECT id FROM security_permissions WHERE tenantId = ? AND role = ? AND resource = ?").get(access.tenantId, payload.role, payload.resource);
+    const existing = db.prepare("SELECT id FROM security_permissions WHERE tenantId = @tenantId AND role = @role AND resource = @resource").get({ tenantId: access.tenantId, role: payload.role, resource: payload.resource });
     const data = {
       role: payload.role,
       resource: payload.resource,
@@ -638,3 +593,4 @@ export class SecurityService {
 }
 
 export const securityService = new SecurityService();
+

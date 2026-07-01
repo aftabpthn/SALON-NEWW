@@ -49,9 +49,12 @@ export function grantsAllow(grants: string[], perm: string): boolean {
   if (grants.includes('*')) return true;
   if (grants.includes(perm)) return true;
   const [action, resource] = perm.split(':');
-  return grants.includes(`${action}:*`) || grants.includes('admin:*') || (resource ? grants.includes(`admin:${resource}`) : false);
+  const writeAliases = new Set(['create', 'update', 'delete', 'back', 'print', 'export']);
+  return grants.includes(`${action}:*`) ||
+    grants.includes('admin:*') ||
+    (resource ? grants.includes(`admin:${resource}`) : false) ||
+    (resource && writeAliases.has(action) ? grants.includes(`write:${resource}`) || grants.includes('write:*') : false);
 }
-
 export function staticGrantsForRole(role: string): string[] {
   return GRANTS[role] || [];
 }
@@ -73,3 +76,4 @@ export const permissionGuard: CanActivateFn = (route) => {
   const ok = perms.every((permission: string) => grantsAllow(grants, permission));
   return ok ? true : router.createUrlTree(['/dashboard']);
 };
+

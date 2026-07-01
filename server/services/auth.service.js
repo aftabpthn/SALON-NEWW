@@ -1,11 +1,12 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { env } from "../config/env.js";
 import { repositories } from "../repositories/repository-registry.js";
-import { staticGrantsForRole } from "../middleware/rbac.js";
+import { can, staticGrantsForRole } from "../middleware/rbac.js";
 import { AppError, badRequest, forbidden, unauthorized } from "../utils/app-error.js";
 import { tenantService } from "./tenant.service.js";
 import { twoFactorService } from "./two-factor.service.js";
 import { intrusionDetectionService } from "./intrusion-detection.service.js";
+import { permissionResources } from "../config/staff-permission-catalog.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
@@ -176,19 +177,21 @@ export class AuthService {
   }
 
   permissionsForUser(user, tenantId) {
-    const grants = new Set(staticGrantsForRole(user.role || ""));
-    if (grants.has("*")) return ["*"];
+    const staticGrants = staticGrantsForRole(user.role || "");
+    if (staticGrants.includes("*")) return ["*"];
     const permissionRows = repositories.securityPermissions.list({ limit: 5000 }, { tenantId })
       .filter((row) => row.role === user.role && (row.status || "active") === "active");
-    const denied = new Set();
-    permissionRows.forEach((row) => {
-      const target = row.effect === "deny" ? denied : grants;
-      safeActions(row.actions).forEach((action) => applyActionGrant(target, row.resource, action));
+    if (!permissionRows.length) return Array.from(new Set(staticGrants)).sort();
+
+    const actions = ["read", "write", "create", "update", "delete", "back", "print", "export", "admin", "allow"];
+    const grants = new Set();
+    permissionResources.forEach((resource) => {
+      actions.forEach((action) => {
+        if (can(user.role || "staff", action, resource, { tenantId })) grants.add(`${action}:${resource}`);
+      });
     });
-    denied.forEach((grant) => grants.delete(grant));
     return Array.from(grants).sort();
   }
-
   issueTokenPair({ tenant, user, branchId = "", deviceId = "" }) {
     const permissions = this.permissionsForUser(user, tenant.id);
     const accessPayload = {
@@ -291,3 +294,4 @@ export class AuthService {
 }
 
 export const authService = new AuthService();
+

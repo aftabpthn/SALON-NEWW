@@ -170,36 +170,100 @@ export function builtinRoles() {
   return Object.keys(permissions);
 }
 
-export function can(role, action, resource, access = {}) {
-  const grants = permissions[role] || [];
-  if (grants.includes("*") || grants.includes(`${action}:*`) || grants.includes(`${action}:${resource}`)) return true;
+const writeActionAliases = new Set(["create", "update", "delete", "back", "print", "export"]);
+
+function safeActions(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
   try {
-    const rows = db
-      .prepare("SELECT actions, effect FROM security_permissions WHERE tenantId = ? AND role = ? AND (resource = ? OR resource = '*') AND status = 'active'")
-      .all(access.tenantId || "", role, resource);
-    const parsedRows = rows.map((row) => ({
-      effect: row.effect,
-      actions: JSON.parse(row.actions || "[]")
-    }));
-    const matches = (row) => row.actions.includes(action) || row.actions.includes("*") || row.actions.includes("admin");
-    if (parsedRows.some((row) => row.effect === "deny" && matches(row))) return false;
-    return parsedRows.some((row) => {
-      if (row.effect === "deny") return false;
-      return matches(row);
-    });
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
   } catch {
-    return false;
+    return [];
   }
 }
 
+function actionMatches(actions, action) {
+  return actions.includes(action) || actions.includes("*") || actions.includes("admin") || (writeActionAliases.has(action) && actions.includes("write"));
+}
+
+function explicitDecision(rows, action) {
+  if (!rows.length) return null;
+  if (rows.some((row) => row.effect === "deny" && (!row.actions.length || actionMatches(row.actions, action)))) return false;
+  if (rows.some((row) => row.effect !== "deny" && actionMatches(row.actions, action))) return true;
+  return false;
+}
+
+function staticGrantAllows(grants, action, resource) {
+  return grants.includes("*") ||
+    grants.includes(`${action}:*`) ||
+    grants.includes(`${action}:${resource}`) ||
+    grants.includes("admin:*") ||
+    grants.includes(`admin:${resource}`) ||
+    (writeActionAliases.has(action) && (grants.includes("write:*") || grants.includes(`write:${resource}`)));
+}
+
+function requestAction(action, req) {
+  if (action === "write") {
+    if (req.method === "POST") return "create";
+    if (req.method === "PATCH" || req.method === "PUT") return "update";
+    if (req.method === "DELETE") return "delete";
+  }
+  if (action === "read" && /(?:^|\/)(?:export|download|csv|pdf)(?:\/|$)/i.test(req.path || req.originalUrl || "")) return "export";
+  return action;
+}
+export function can(role, action, resource, access = {}) {
+  const grants = permissions[role] || [];
+  if (grants.includes("*")) return true;
+  try {
+    const rows = db
+      .prepare(`SELECT resource, actions, effect
+                  FROM security_permissions
+                 WHERE tenantId = @tenantId
+                   AND role = @role
+                   AND (resource = @resource OR resource = '*')
+                   AND status = 'active'`)
+      .all({ tenantId: access.tenantId || "", role, resource });
+    const parsedRows = rows.map((row) => ({
+      resource: row.resource,
+      effect: row.effect || "allow",
+      actions: safeActions(row.actions)
+    }));
+    const exactDecision = explicitDecision(parsedRows.filter((row) => row.resource === resource), action);
+    if (exactDecision !== null) return exactDecision;
+    const wildcardDecision = explicitDecision(parsedRows.filter((row) => row.resource === "*"), action);
+    if (wildcardDecision !== null) return wildcardDecision;
+  } catch {
+    // Fall back to built-in grants when persisted role grants cannot be inspected.
+  }
+  return staticGrantAllows(grants, action, resource);
+}
 export function requirePermission(action, resourceResolver = (req) => req.params.resource || "system") {
   return (req, _res, next) => {
     const resource = resourceResolver(req);
     const role = req.access?.role || req.user?.role || "staff";
-    if (!can(role, action, resource, req.access || {})) {
+    const checkedAction = requestAction(action, req);
+    if (!can(role, checkedAction, resource, req.access || {})) {
       next(forbidden());
       return;
     }
     next();
   };
 }
+
+
+export function requireAnyPermission(checks = []) {
+  return (req, _res, next) => {
+    const role = req.access?.role || req.user?.role || "staff";
+    const allowed = checks.some((check) => {
+      const action = requestAction(check.action || "read", req);
+      const resource = typeof check.resource === "function" ? check.resource(req) : check.resource;
+      return can(role, action, resource || "system", req.access || {});
+    });
+    if (!allowed) {
+      next(forbidden());
+      return;
+    }
+    next();
+  };
+}
+

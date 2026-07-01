@@ -16,6 +16,22 @@ type TenantUser = ApiRecord & {
   branchIds: string[];
   isLocked?: boolean;
 };
+type StaffPermissionCatalogItem = {
+  groupKey: string;
+  groupLabel: string;
+  resource: string;
+  action: string;
+  label: string;
+  category?: string;
+  uiTargets?: string[];
+  apiTargets?: string[];
+};
+
+type StaffPermissionGroup = {
+  key: string;
+  label: string;
+  items: StaffPermissionCatalogItem[];
+};
 
 const OWNER_ROLES = new Set(['owner', 'admin', 'superAdmin']);
 const ACTION_COLUMNS: { key: PermissionAction; label: string; backend: string[] }[] = [
@@ -165,6 +181,17 @@ const RESOURCE_GROUPS = [
     .um-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 160px 180px auto; gap: 10px; align-items: end; }
     .um-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .um-rights-frame { overflow: auto; max-height: 62vh; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .salonist-permission-surface { border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
+    .salonist-summary { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .salonist-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: 46vh; overflow: auto; padding: 12px; }
+    .salonist-group { display: grid; gap: 8px; min-width: 0; padding: 0 0 10px; border-bottom: 1px solid #edf2f1; }
+    .salonist-group header { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; }
+    .salonist-group h4 { margin: 0; color: var(--ink); font-size: 14px; }
+    .salonist-group-select { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 900; }
+    .salonist-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }
+    .salonist-permission { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: start; min-width: 0; }
+    .salonist-permission span { display: block; color: var(--ink); font-weight: 800; line-height: 1.25; }
+    .salonist-permission small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .um-rights-table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 12px; }
     .um-rights-table th, .um-rights-table td { border-bottom: 1px solid #edf2f1; padding: 6px 7px; text-align: center; white-space: nowrap; }
     .um-rights-table th:first-child, .um-rights-table td:first-child { position: sticky; left: 0; z-index: 2; min-width: 270px; text-align: left; background: inherit; }
@@ -188,7 +215,7 @@ const RESOURCE_GROUPS = [
     .um-danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 32%, var(--line)); }
     .um-success-text { color: var(--green); font-weight: 900; }
     @media (max-width: 1180px) { .um-shell { grid-template-columns: 260px minmax(0, 1fr); } .um-control-panel { position: static; grid-column: 1 / -1; } .um-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @media (max-width: 780px) { .user-hero, .um-shell, .um-definition-grid, .um-toolbar, .um-form-grid, .um-filter-row { grid-template-columns: 1fr; } .um-sidebar { position: static; } .um-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-actions, .um-toolbar-actions { justify-content: stretch; } .hero-actions button, .um-toolbar-actions button { flex: 1; } }
+    @media (max-width: 780px) { .user-hero, .um-shell, .um-definition-grid, .um-toolbar, .um-form-grid, .um-filter-row, .salonist-groups, .salonist-grid { grid-template-columns: 1fr; } .um-sidebar { position: static; } .um-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-actions, .um-toolbar-actions { justify-content: stretch; } .hero-actions button, .um-toolbar-actions button { flex: 1; } }
   `],
   template: `
     <section class="page-stack user-management-os">
@@ -397,6 +424,35 @@ const RESOURCE_GROUPS = [
               </div>
               <span class="um-owner-note" *ngIf="isOwnerRole(selectedRole())">Full owner control</span>
             </div>
+            <section class="salonist-permission-surface" *ngIf="staffPermissionGroups().length">
+              <div class="um-panel-head">
+                <div>
+                  <h3>Staff permissions</h3>
+                  <span class="um-muted">Salonist-style controls saved through Aura RBAC grants.</span>
+                </div>
+                <span class="salonist-summary">{{ salonistPermissionCount() }} controls · {{ permissionCatalog().length }} cataloged</span>
+              </div>
+              <div class="salonist-groups">
+                <section class="salonist-group" *ngFor="let group of staffPermissionGroups()">
+                  <header>
+                    <h4>{{ group.label }}</h4>
+                    <label class="salonist-group-select">
+                      <input class="um-check" type="checkbox" [checked]="isFeatureGroupChecked(group)" [disabled]="isOwnerRole(selectedRole())" (change)="toggleFeatureGroup(group, $any($event.target).checked)" />
+                      <span>All</span>
+                    </label>
+                  </header>
+                  <div class="salonist-grid">
+                    <label class="salonist-permission" *ngFor="let item of group.items">
+                      <input class="um-check" type="checkbox" [checked]="isFeaturePermissionChecked(item)" [disabled]="isOwnerRole(selectedRole())" (change)="toggleFeaturePermission(item, $any($event.target).checked)" />
+                      <span>
+                        <span>{{ item.label }}</span>
+                        <small>{{ item.action }}:{{ item.resource }}</small>
+                      </span>
+                    </label>
+                  </div>
+                </section>
+              </div>
+            </section>
 
             <div class="um-rights-frame">
               <table class="um-rights-table">
@@ -513,6 +569,7 @@ export class PermissionMatrixComponent implements OnInit {
   readonly selectedRole = signal('owner');
   readonly copyFromRole = signal('');
   readonly draftPermissions = signal<Record<string, PermissionAction[]>>({});
+  readonly featureDraft = signal<Record<string, boolean>>({});
   readonly actionColumns = ACTION_COLUMNS;
   readonly resourceGroups = RESOURCE_GROUPS;
   readonly lockControls = [
@@ -545,7 +602,9 @@ export class PermissionMatrixComponent implements OnInit {
   readonly roles = computed<ApiRecord[]>(() => this.matrix()?.roles || []);
   readonly users = computed<TenantUser[]>(() => this.matrix()?.users || []);
   readonly metrics = computed(() => this.matrix()?.metrics || {});
-  readonly resourceCount = computed(() => this.resourceGroups.reduce((total, group) => total + group.resources.length, 0));
+  readonly permissionCatalog = computed<StaffPermissionCatalogItem[]>(() => Array.isArray(this.matrix()?.permissionCatalog) ? this.matrix()?.permissionCatalog as StaffPermissionCatalogItem[] : []);
+  readonly salonistPermissionCount = computed(() => this.permissionCatalog().length);
+  readonly resourceCount = computed(() => Array.isArray(this.matrix()?.resources) ? (this.matrix()?.resources as unknown[]).length : this.resourceGroups.reduce((total, group) => total + group.resources.length, 0));
   readonly branchOptions = computed(() => [...new Set(this.users().flatMap((user) => user.branchIds || []))].sort());
   readonly selectedUser = computed(() => this.users().find((user) => user.id === this.selectedUserId()) || null);
   readonly filteredUsers = computed(() => {
@@ -582,6 +641,18 @@ export class PermissionMatrixComponent implements OnInit {
       }))
       .filter((item) => item.resources.length);
   });
+  readonly staffPermissionGroups = computed<StaffPermissionGroup[]>(() => {
+    const query = this.permissionQuery().trim().toLowerCase();
+    const groups = new Map<string, StaffPermissionGroup>();
+    this.permissionCatalog().forEach((item) => {
+      const text = `${item.groupLabel} ${item.label} ${item.resource} ${item.action}`.toLowerCase();
+      if (query && !text.includes(query)) return;
+      const current = groups.get(item.groupKey) || { key: item.groupKey, label: item.groupLabel, items: [] };
+      current.items.push(item);
+      groups.set(item.groupKey, current);
+    });
+    return Array.from(groups.values());
+  });
   readonly activityRows = computed(() => [
     ...(this.matrix()?.activity || []),
     ...(this.matrix()?.sessions || [])
@@ -599,6 +670,7 @@ export class PermissionMatrixComponent implements OnInit {
     this.api.list<ApiRecord>('security/user-management', { includeAllBranches: true }).subscribe({
       next: (matrix) => {
         this.matrix.set(matrix);
+        this.refreshPermissionMatrixSnapshot();
         if (!this.applyLaunchContext()) {
           const current = this.selectedUserId();
           const user = this.users().find((item) => item.id === current) || this.users()[0];
@@ -611,6 +683,23 @@ export class PermissionMatrixComponent implements OnInit {
         this.error.set(this.api.errorText(error, 'Unable to load user management'));
         this.loading.set(false);
       }
+    });
+  }
+  private refreshPermissionMatrixSnapshot(): void {
+    this.api.list<ApiRecord>('security/permission-matrix', { includeAllBranches: true }).subscribe({
+      next: (snapshot) => {
+        const current = this.matrix() || {};
+        this.matrix.set({
+          ...current,
+          ...snapshot,
+          users: current.users || [],
+          metrics: current.metrics || {},
+          activity: current.activity || [],
+          sessions: current.sessions || []
+        });
+        this.hydrateDraftForRole(this.selectedRole());
+      },
+      error: () => undefined
     });
   }
 
@@ -761,13 +850,36 @@ export class PermissionMatrixComponent implements OnInit {
     const role = this.selectedRole();
     if (this.isOwnerRole(role)) return;
     const definition = this.roles().find((item) => item.role === role) || { role, name: this.roleName(role), description: '' };
-    const permissions = Object.entries(this.draftPermissions())
-      .map(([resource, actions]) => ({ resource, actions: this.backendActions(actions), effect: 'allow', conditions: { source: 'owner-user-management' } }))
-      .filter((item) => item.actions.length);
-    if (!permissions.length) {
-      this.error.set('Select at least one permission before saving rights');
-      return;
-    }
+    const permissionMap = new Map<string, Set<string>>();
+    const matrixResources = this.resourceGroups.flatMap((group) => group.resources.map((resource) => resource[0]));
+    const catalogResources = new Set(this.permissionCatalog().map((item) => item.resource));
+    const authoritativeResources = new Set([...matrixResources, ...catalogResources]);
+
+    const addAction = (resource: string, action: string): void => {
+      if (!resource || !action) return;
+      const set = permissionMap.get(resource) || new Set<string>();
+      set.add(action);
+      permissionMap.set(resource, set);
+    };
+
+    Object.entries(this.draftPermissions()).forEach(([resource, actions]) => {
+      const backend = catalogResources.has(resource) ? this.granularBackendActions(actions) : this.backendActions(actions);
+      backend.forEach((action) => addAction(resource, action));
+    });
+    this.permissionCatalog().forEach((item) => {
+      if (this.featureDraft()[this.featureKey(item)]) addAction(item.resource, item.action);
+    });
+
+    const permissions = Array.from(authoritativeResources).sort().map((resource) => {
+      const actions = Array.from(permissionMap.get(resource) || []).sort();
+      return {
+        resource,
+        actions,
+        effect: actions.length ? 'allow' : 'deny',
+        conditions: { source: 'owner-user-management', catalog: catalogResources.has(resource) }
+      };
+    });
+
     this.saving.set(true);
     this.api.post<ApiRecord>('security/roles', {
       role,
@@ -788,12 +900,12 @@ export class PermissionMatrixComponent implements OnInit {
       }
     });
   }
-
   copyRightsFromRole(): void {
     const source = this.copyFromRole();
     if (!source || source === this.selectedRole()) return;
     const draft = this.draftForRole(source);
     this.draftPermissions.set(draft);
+    this.featureDraft.set(this.featureDraftForRole(source));
     this.notice.set(`Copied rights from ${this.roleName(source)}`);
   }
 
@@ -806,6 +918,7 @@ export class PermissionMatrixComponent implements OnInit {
     };
     const fullActions: PermissionAction[] = role === 'staff' ? ['access'] : ['access', 'add', 'edit', 'print', 'export'];
     this.draftPermissions.set(Object.fromEntries(presets[role].map((resource) => [resource, fullActions])));
+    this.featureDraft.set(this.featureDraftForRole(this.selectedRole()));
     this.notice.set(`${this.roleName(role)} preset applied`);
     this.mode.set('rights');
   }
@@ -850,6 +963,26 @@ export class PermissionMatrixComponent implements OnInit {
   isGroupChecked(groupKey: string, action: PermissionAction): boolean {
     const group = this.visibleResourceGroups().find((item) => item.key === groupKey);
     return Boolean(group?.resources.length) && group!.resources.every((resource) => this.isPermissionChecked(resource[0], action));
+  }
+  isFeaturePermissionChecked(item: StaffPermissionCatalogItem): boolean {
+    if (this.isOwnerRole(this.selectedRole())) return true;
+    return Boolean(this.featureDraft()[this.featureKey(item)]);
+  }
+
+  toggleFeaturePermission(item: StaffPermissionCatalogItem, checked: boolean): void {
+    if (this.isOwnerRole(this.selectedRole())) return;
+    this.featureDraft.set({ ...this.featureDraft(), [this.featureKey(item)]: checked });
+  }
+
+  isFeatureGroupChecked(group: StaffPermissionGroup): boolean {
+    return group.items.length > 0 && group.items.every((item) => this.isFeaturePermissionChecked(item));
+  }
+
+  toggleFeatureGroup(group: StaffPermissionGroup, checked: boolean): void {
+    if (this.isOwnerRole(this.selectedRole())) return;
+    const next = { ...this.featureDraft() };
+    group.items.forEach((item) => next[this.featureKey(item)] = checked);
+    this.featureDraft.set(next);
   }
 
   exportUsers(): void {
@@ -933,6 +1066,7 @@ export class PermissionMatrixComponent implements OnInit {
 
   private hydrateDraftForRole(role: string): void {
     this.draftPermissions.set(this.draftForRole(role));
+    this.featureDraft.set(this.featureDraftForRole(role));
   }
 
   private draftForRole(role: string): Record<string, PermissionAction[]> {
@@ -958,6 +1092,51 @@ export class PermissionMatrixComponent implements OnInit {
       draft[permission.resource] = Array.from(set);
     });
     return draft;
+  }
+
+  private featureDraftForRole(role: string): Record<string, boolean> {
+    const draft: Record<string, boolean> = {};
+    this.permissionCatalog().forEach((item) => draft[this.featureKey(item)] = this.roleHasCatalogPermission(role, item));
+    return draft;
+  }
+
+  private roleHasCatalogPermission(role: string, item: StaffPermissionCatalogItem): boolean {
+    if (this.isOwnerRole(role)) return true;
+    const explicit = (this.matrix()?.permissionRows || []).filter((permission: ApiRecord) => permission.role === role && permission.resource === item.resource);
+    if (explicit.length) {
+      if (explicit.some((permission: ApiRecord) => permission.effect === 'deny' && (!this.asArray(permission.actions).length || this.backendActionMatches(this.asArray(permission.actions), item.action)))) return false;
+      if (explicit.some((permission: ApiRecord) => permission.effect !== 'deny' && this.backendActionMatches(this.asArray(permission.actions), item.action))) return true;
+      return false;
+    }
+    const row = (this.matrix()?.matrix || []).find((entry: ApiRecord) => entry.role === role);
+    const state = row?.resources?.[item.resource] || {};
+    if (item.action === 'read') return Boolean(state.read || state.admin);
+    if (item.action === 'write') return Boolean(state.write || state.admin);
+    if (['create', 'update', 'delete', 'back', 'print', 'export'].includes(item.action)) return Boolean(state.write || state.admin);
+    return Boolean(state.admin);
+  }
+
+  private backendActionMatches(actions: string[], action: string): boolean {
+    const normalized = actions.map((item) => String(item || '').toLowerCase());
+    return normalized.includes(action) || normalized.includes('*') || normalized.includes('admin') || (['create', 'update', 'delete', 'back', 'print', 'export'].includes(action) && normalized.includes('write'));
+  }
+
+  private featureKey(item: StaffPermissionCatalogItem): string {
+    return `${item.action}:${item.resource}`;
+  }
+
+  private granularBackendActions(actions: PermissionAction[]): string[] {
+    const selected = new Set(actions);
+    const backend = new Set<string>();
+    if (selected.has('access')) backend.add('read');
+    if (selected.has('add')) backend.add('create');
+    if (selected.has('edit')) backend.add('update');
+    if (selected.has('delete')) backend.add('delete');
+    if (selected.has('back')) backend.add('back');
+    if (selected.has('print')) backend.add('print');
+    if (selected.has('export')) backend.add('export');
+    if (selected.has('all')) backend.add('admin');
+    return Array.from(backend);
   }
 
   private mapBackendAction(action: string): PermissionAction[] {
@@ -1009,3 +1188,4 @@ export class PermissionMatrixComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 }
+
