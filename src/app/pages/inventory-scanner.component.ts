@@ -140,10 +140,12 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
   styles: [`
     .scanner-page { gap: 0; }
     .zenoti-scanner-workspace {
-      background: #fff;
+      background: #f0f2f5;
       border: 1px solid #d8e1ea;
       display: grid;
+      gap: 8px;
       overflow: hidden;
+      padding: 8px;
     }
     .zenoti-result-bar,
     .zenoti-filter-row,
@@ -154,9 +156,9 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
       justify-content: space-between;
       padding: 10px 16px;
     }
-    .zenoti-result-bar,
-    .zenoti-filter-row,
-    .zenoti-scan-form { border-bottom: 1px solid #d8e1ea; }
+    .zenoti-result-bar { border: 1px solid #d8e1ea; }
+    .zenoti-filter-row { border: 1px solid #d8e1ea; }
+    .zenoti-scan-form { border: 1px solid #d8e1ea; }
     .zenoti-result-bar > div,
     .zenoti-totals,
     .tab-strip,

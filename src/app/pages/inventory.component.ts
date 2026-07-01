@@ -834,8 +834,10 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       overflow: hidden;
       border: 1px solid #d7dee6;
       border-radius: 4px;
-      background: #fff;
+      background: #f0f2f5;
       box-shadow: none;
+      gap: 8px;
+      padding: 8px;
     }
 
     .zenoti-center-bar {
@@ -845,7 +847,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       gap: 16px;
       min-height: 50px;
       padding: 10px 14px;
-      border-bottom: 1px solid #e3e8ee;
+      border: 1px solid #e3e8ee;
       background: #fff;
     }
 
@@ -902,7 +904,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       justify-content: space-between;
       gap: 18px;
       padding: 14px;
-      border-bottom: 1px solid #e3e8ee;
+      border: 1px solid #e3e8ee;
       background: #fff;
     }
 
@@ -960,7 +962,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       gap: 8px;
       padding: 12px 14px 8px;
       background: #fbfcfe;
-      border-bottom: 1px solid #e3e8ee;
+      border: 1px solid #e3e8ee;
     }
 
     .zenoti-results-line {
@@ -969,7 +971,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       justify-content: space-between;
       gap: 14px;
       padding: 8px 14px;
-      border-bottom: 1px solid #e3e8ee;
+      border: 1px solid #e3e8ee;
       background: #fff;
     }
 
@@ -994,7 +996,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
     .zenoti-table-shell {
       max-height: 560px;
       overflow: auto;
-      border-bottom: 1px solid #d7dee6;
+      border: 1px solid #d7dee6;
     }
 
     .zenoti-products-table {

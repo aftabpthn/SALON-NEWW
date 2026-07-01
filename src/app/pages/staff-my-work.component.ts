@@ -152,7 +152,7 @@ type StaffSelfDashboard = {
     </section>
   `,
   styles: [`
-    .staff-workspace { display: grid; color: #1d2430; background: #f7f9fb; min-height: calc(100vh - 20px); }
+    .staff-workspace { display: grid; gap: 8px; padding: 8px; color: #1d2430; background: #f0f2f5; min-height: calc(100vh - 20px); }
     .command-bar { min-height: 58px; background: #111827; color: #f8fafc; display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid #d4dee8; }
     .brand-mark { width: 34px; height: 34px; border-radius: 8px; background: #6654d9; display: grid; place-items: center; font-weight: 900; }
     .command-bar p { margin: 0; color: #7f8da3; font-size: 10px; font-weight: 900; text-transform: uppercase; }
@@ -160,26 +160,26 @@ type StaffSelfDashboard = {
     .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .top-actions a, .top-actions button, .quick-buttons a, .quick-buttons button { min-height: 30px; border: 1px solid #c6d7ea; background: #fff; color: #0963a6; border-radius: 3px; padding: 6px 12px; font-weight: 900; text-decoration: none; cursor: pointer; }
     .top-actions span { color: #9aa8bd; font-size: 12px; }
-    .quick-actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 18px 14px 10px; background: #fff; border-bottom: 1px solid #d9e1ea; }
+    .quick-actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 18px 14px 10px; background: #fff; border: 1px solid #d9e1ea; }
     .branch-label { grid-row: span 2; align-self: center; font-weight: 900; text-transform: lowercase; }
     .quick-buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
     .quick-actions > select { grid-column: 2; min-width: min(620px, 100%); }
-    .page-title { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 14px; background: #fff; border-bottom: 1px solid #d9e1ea; }
+    .page-title { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 14px; background: #fff; border: 1px solid #d9e1ea; }
     .page-title h1, .register-heading h2 { margin: 0; letter-spacing: 0; }
     .page-title p { margin: 6px 0 0; color: #38506d; font-size: 13px; }
     .page-title strong { color: #38506d; text-align: right; }
-    .filters { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)) minmax(180px, 1.2fr); gap: 8px; align-items: end; padding: 12px 14px; background: #fff; border-bottom: 1px solid #d9e1ea; }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)) minmax(180px, 1.2fr); gap: 8px; align-items: end; padding: 12px 14px; background: #fff; border: 1px solid #d9e1ea; }
     label { display: grid; gap: 5px; color: #5d6f87; font-size: 11px; font-weight: 900; }
     input, select { border: 1px solid #bdcfe2; border-radius: 3px; min-height: 34px; padding: 7px 10px; font: inherit; color: #1d2430; background: #fff; min-width: 0; }
     .identity { align-self: end; color: #4c5f78; font-size: 12px; overflow-wrap: anywhere; }
     .state { margin: 12px 14px 0; border: 1px solid #cbd5e1; background: #fff; color: #4c5f78; padding: 12px; }
     .error { color: #b42318; border-color: #f1b5aa; background: #fff6f4; }
-    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0 14px 12px; background: #fff; border-bottom: 1px solid #d9e1ea; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 0 14px 12px; background: #fff; border-left: 1px solid #d9e1ea; border-right: 1px solid #d9e1ea; border-bottom: 1px solid #d9e1ea; }
     .metrics article { display: grid; gap: 3px; min-height: 74px; padding: 12px 14px; border: 1px solid #d9e1ea; border-left: 0; border-top: 3px solid #0a78b6; }
     .metrics article:first-child { border-left: 1px solid #d9e1ea; }
     .metrics span, .metrics small { color: #64748b; font-weight: 800; font-size: 12px; }
     .metrics strong { font-size: 22px; line-height: 1; }
-    .register-panel { background: #fff; border-bottom: 1px solid #d9e1ea; padding: 12px 14px; display: grid; gap: 10px; }
+    .register-panel { background: #fff; border: 1px solid #d9e1ea; padding: 12px 14px; display: grid; gap: 10px; }
     .register-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .eyebrow { margin: 0 0 3px; color: #5d6f87; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .register-heading > span { color: #5d6f87; font-weight: 800; font-size: 12px; }

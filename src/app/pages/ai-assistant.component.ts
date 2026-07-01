@@ -1,7 +1,7 @@
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -26,6 +26,8 @@ type AiPageCard = {
   icon: string;
   description: string;
   category?: string;
+  path: string;
+  tone: 'mint' | 'rose' | 'sky' | 'green';
 };
 
 @Component({
@@ -80,13 +82,17 @@ type AiPageCard = {
         </article>
       </div>
 
-      <div class="ai-page-card-grid" *ngIf="!loading()">
+      <div class="ai-page-card-grid" *ngIf="!loading() && !openedAiPage()">
         <button
           type="button"
           class="ai-page-card"
           *ngFor="let card of aiPageCards"
           [class.active]="isAiPageCardActive(card)"
-          (click)="openAiPage(card.page, card.category)"
+          [class.ai-page-card--mint]="card.tone === 'mint'"
+          [class.ai-page-card--rose]="card.tone === 'rose'"
+          [class.ai-page-card--sky]="card.tone === 'sky'"
+          [class.ai-page-card--green]="card.tone === 'green'"
+          [routerLink]="['/ai', card.path]"
         >
           <span class="ai-page-card-icon">{{ card.icon }}</span>
           <span>
@@ -96,6 +102,75 @@ type AiPageCard = {
           <b>{{ isAiPageCardActive(card) ? 'Open' : 'View' }}</b>
         </button>
       </div>
+
+      <section class="panel ai-open-page" *ngIf="openedAiPage()">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">{{ activeAiPageCard()?.label || 'AI page' }}</span>
+            <h2>{{ activeAiPageCard()?.label || 'AI page' }}</h2>
+          </div>
+          <a class="ghost-button" routerLink="/ai">Back to AI cards</a>
+        </div>
+
+        <ng-container *ngIf="showWorkflowPane()">
+          <div class="category-tabs">
+            <button type="button" *ngFor="let category of categoryPills()" [class.active]="activeCategory() === category.label" (click)="activeCategory.set(category.label)">
+              {{ category.label }} <small>{{ category.count }}</small>
+            </button>
+          </div>
+          <div class="workflow-list ai-open-workflow-list">
+            <button
+              type="button"
+              class="workflow-card"
+              *ngFor="let tool of filteredTools()"
+              [class.active]="activeTool() === tool.id"
+              [class.disabled]="!taskEnabled(tool)"
+              (click)="selectTool(tool.id)"
+            >
+              <span class="workflow-icon">{{ tool.icon }}</span>
+              <span class="workflow-copy">
+                <span class="workflow-card-topline">
+                  <strong>{{ tool.title }}</strong>
+                  <em>{{ tool.tier }}</em>
+                </span>
+                <small>{{ tool.description }}</small>
+                <span class="workflow-card-footer">
+                  <span>{{ tool.category }}</span>
+                  <b>{{ activeTool() === tool.id ? 'Opened' : 'Open workflow' }}</b>
+                </span>
+              </span>
+            </button>
+          </div>
+        </ng-container>
+
+        <div class="governance-stack" *ngIf="activeAiPage() === 'governance'">
+          <article><span>Provider mode</span><strong>{{ modelMode() }}</strong><small>{{ observability()?.providerStatus?.openaiConfigured ? 'External provider configured' : 'Local business-rule fallback active' }}</small></article>
+          <article><span>Daily limit</span><strong>{{ governance()?.usage?.callsToday || 0 }} / {{ governance()?.dailyCallLimit || 0 }}</strong><small>{{ (governance()?.usage?.costTodayUsd || 0) | currency:'USD':'symbol':'1.2-2' }} spent today</small></article>
+          <article><span>Policy denials</span><strong>{{ observability()?.policyDenialsToday || 0 }}</strong><small>Role, budget and task override controls</small></article>
+        </div>
+
+        <div class="queue-stack" *ngIf="activeAiPage() === 'queue'">
+          <article><span>WhatsApp drafts</span><strong>{{ whatsappDrafts().length }}</strong><small>Draft-first customer messaging</small></article>
+          <article><span>Automation suggestions</span><strong>{{ automationSuggestions().length }}</strong><small>Review before activation</small></article>
+          <article><span>Knowledge docs</span><strong>{{ observability()?.knowledgeDocumentCount || 0 }}</strong><small>Grounding library</small></article>
+        </div>
+
+        <div class="table-wrap" *ngIf="activeAiPage() === 'history'">
+          <table>
+            <thead><tr><th>Workflow</th><th>Prompt</th><th>Model</th><th>Confidence</th><th>Created</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let item of history()">
+                <td><span class="badge">{{ item.type }}</span></td>
+                <td><strong>{{ item.output?.title || item.prompt }}</strong><small>{{ item.prompt }}</small></td>
+                <td>{{ item.model }}</td>
+                <td>{{ item.confidence }}</td>
+                <td>{{ item.createdAt }}</td>
+              </tr>
+              <tr *ngIf="!history().length"><td colspan="5">No activity saved yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
     </section>
   `,
@@ -129,6 +204,54 @@ type AiPageCard = {
 
     .ai-hero,
     .panel,
+
+
+    .ai-open-page {
+      width: min(1180px, calc(100% - 28px));
+      justify-self: center;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .ai-open-workflow-list {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      max-height: none;
+      padding-right: 0;
+    }
+
+    .ai-open-page .table-wrap {
+      width: 100%;
+      overflow: auto;
+      border: 1px solid var(--ai-line);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .ai-open-page table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+    }
+
+    .ai-open-page th,
+    .ai-open-page td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--ai-line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.84rem;
+    }
+
+    .ai-open-page th {
+      color: var(--ai-muted);
+      background: var(--ai-card-soft);
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+
     .ai-kpi {
       border: 1px solid var(--ai-line);
       border-radius: 12px;
@@ -228,7 +351,7 @@ type AiPageCard = {
     .task-badges span:first-child,
     .badge {
       color: var(--ai-primary);
-      background: var(--ai-primary-soft);
+      background: rgba(255, 255, 255, 0.58);
       border-color: rgba(15, 118, 110, 0.18);
     }
 
@@ -272,6 +395,26 @@ type AiPageCard = {
       cursor: pointer;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
       appearance: none;
+    }
+
+    .ai-command-page .ai-page-card--mint {
+      background: linear-gradient(105deg, #bff4e7 0%, #d4f4fb 100%);
+      border-color: #a6e7dd;
+    }
+
+    .ai-command-page .ai-page-card--rose {
+      background: linear-gradient(105deg, #efd1f5 0%, #ffd3ed 100%);
+      border-color: #ecc4ed;
+    }
+
+    .ai-command-page .ai-page-card--sky {
+      background: linear-gradient(105deg, #cfe7fb 0%, #d9f3fb 100%);
+      border-color: #bddff3;
+    }
+
+    .ai-command-page .ai-page-card--green {
+      background: linear-gradient(105deg, #c9f7df 0%, #d7f6e7 100%);
+      border-color: #b7e9ce;
     }
 
     .ai-command-page .ai-page-card:hover,
@@ -1164,18 +1307,13 @@ export class AiAssistantComponent implements OnInit {
   readonly activeTool = signal('analytics-summary');
   readonly activeCategory = signal('All');
   readonly activeAiPage = signal<AiWorkspacePage>('cockpit');
+  readonly openedAiPage = signal(false);
   readonly aiPageCards: AiPageCard[] = [
-    { id: 'cockpit', page: 'cockpit', label: 'Cockpit', icon: 'AI', description: 'All panels together' },
-    { id: 'workflows', page: 'workflows', label: 'Workflow router', icon: 'WF', description: 'Search and run all workflows', category: 'All' },
-    { id: 'executive', page: 'workflows', label: 'Executive', icon: 'EX', description: 'Briefs, risk and revenue', category: 'Executive' },
-    { id: 'client360', page: 'workflows', label: 'Client 360', icon: 'C3', description: 'Retention and next action', category: 'Client 360' },
-    { id: 'calendar', page: 'workflows', label: 'Calendar', icon: 'CA', description: 'Slots, risk and load', category: 'Calendar' },
-    { id: 'pos', page: 'workflows', label: 'POS', icon: 'PO', description: 'Cart and payment intelligence', category: 'POS' },
-    { id: 'inventory', page: 'workflows', label: 'Inventory', icon: 'IN', description: 'Stock and purchase planning', category: 'Inventory' },
-    { id: 'whatsapp', page: 'workflows', label: 'WhatsApp', icon: 'WA', description: 'Drafts and replies', category: 'WhatsApp' },
-    { id: 'governance', page: 'governance', label: 'Governance', icon: 'GV', description: 'Policy, prompts and usage' },
-    { id: 'queue', page: 'queue', label: 'Action queue', icon: 'AQ', description: 'Drafts and suggestions' },
-    { id: 'history', page: 'history', label: 'History', icon: 'HI', description: 'Saved interactions' }
+    { id: 'cockpit', page: 'cockpit', label: 'Cockpit', icon: 'AI', description: 'All panels together', path: 'cockpit', tone: 'mint' },
+    { id: 'workflows', page: 'workflows', label: 'Workflow router', icon: 'WF', description: 'Search and run all workflows', category: 'All', path: 'workflows', tone: 'rose' },
+    { id: 'governance', page: 'governance', label: 'Governance', icon: 'GV', description: 'Policy, prompts and usage', path: 'governance', tone: 'mint' },
+    { id: 'queue', page: 'queue', label: 'Action queue', icon: 'AQ', description: 'Drafts and suggestions', path: 'queue', tone: 'rose' },
+    { id: 'history', page: 'history', label: 'History', icon: 'HI', description: 'Saved interactions', path: 'history', tone: 'sky' }
   ];
   readonly toolQuery = signal('');
   readonly clients = signal<ApiRecord[]>([]);
@@ -1217,10 +1355,11 @@ export class AiAssistantComponent implements OnInit {
     offer: ['']
   });
 
-  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
+  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder, private readonly route: ActivatedRoute) {}
 
   ngOnInit(): void {
     this.selectTool(this.activeTool());
+    this.route.paramMap.subscribe((params) => this.openAiSection(params.get('section')));
     this.load();
   }
 
@@ -1271,14 +1410,33 @@ export class AiAssistantComponent implements OnInit {
     });
   }
 
+  private openAiSection(section: string | null): void {
+    const card = section ? this.aiPageCards.find((item) => item.path === section) : undefined;
+    if (!card) {
+      this.openedAiPage.set(false);
+      this.activeAiPage.set('cockpit');
+      this.activeCategory.set('All');
+      return;
+    }
+    this.openAiPage(card.page, card.category || 'All');
+  }
+
   openAiPage(page: AiWorkspacePage, category = 'All'): void {
     this.activeAiPage.set(page);
+    this.openedAiPage.set(true);
     if (page === 'workflows' || page === 'cockpit') {
       this.activeCategory.set(category);
       this.toolQuery.set('');
       const firstTool = this.filteredTools()[0];
       if (firstTool && (category !== 'All' || page === 'workflows')) this.selectTool(firstTool.id);
     }
+  }
+
+  activeAiPageCard(): AiPageCard | undefined {
+    if (this.activeAiPage() === 'workflows') {
+      return this.aiPageCards.find((card) => card.page === 'workflows' && (card.category || 'All') === this.activeCategory()) || this.aiPageCards.find((card) => card.id === 'workflows');
+    }
+    return this.aiPageCards.find((card) => card.page === this.activeAiPage());
   }
 
   isAiPageCardActive(card: AiPageCard): boolean {

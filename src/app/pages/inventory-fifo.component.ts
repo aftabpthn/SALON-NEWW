@@ -85,10 +85,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .zenoti-fifo-workspace {
-      background: #fff;
+      background: #f0f2f5;
       border: 1px solid #d8e1ea;
       display: grid;
+      gap: 8px;
       overflow: hidden;
+      padding: 8px;
     }
 
     .zenoti-result-bar,
@@ -101,7 +103,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
 
     .zenoti-result-bar {
-      border-bottom: 1px solid #d8e1ea;
+      border: 1px solid #d8e1ea;
     }
 
     .zenoti-result-bar > div,

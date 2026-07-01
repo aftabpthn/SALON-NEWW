@@ -415,9 +415,10 @@ type ServiceProductLockDraft = {
 
     .zenoti-module-page {
       display: grid;
-      gap: 0;
+      gap: 8px;
+      padding: 8px;
       color: #1d2430;
-      background: #f7f9fb;
+      background: #f0f2f5;
       min-height: calc(100vh - 20px);
     }
 
@@ -488,13 +489,21 @@ type ServiceProductLockDraft = {
       color: #fff;
     }
 
-    .zenoti-header,
-    .zenoti-page-heading,
-    .zenoti-metric-strip,
+    .zenoti-header {
+      background: #fff;
+    }
+    .zenoti-page-heading {
+      background: #fff;
+      border: 1px solid #d8e1ea;
+    }
+    .zenoti-metric-strip {
+      background: #fff;
+      border: 1px solid #d8e1ea;
+    }
     .zenoti-module-page .form-panel,
     .zenoti-module-page .panel {
       background: #fff;
-      border-bottom: 1px solid #d8e1ea;
+      border: 1px solid #d8e1ea;
     }
 
     .zenoti-header {

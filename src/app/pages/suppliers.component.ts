@@ -251,7 +251,9 @@ interface SupplierCommandRow {
   `,
   styles: [`
     .suppliers-page {
-      gap: 0;
+      gap: 8px;
+      padding: 8px;
+      background: #f0f2f5;
     }
 
     .zenoti-supplier-header,
@@ -349,8 +351,7 @@ interface SupplierCommandRow {
     }
 
     .zenoti-result-bar {
-      border-top: 0;
-      border-bottom: 1px solid #d8e1ea;
+      border: 1px solid #d8e1ea;
     }
 
     .zenoti-result-bar > div,
@@ -394,7 +395,7 @@ interface SupplierCommandRow {
       height: 18px;
       overflow-x: auto;
       overflow-y: hidden;
-      border-bottom: 1px solid #d8e1ea;
+      border: 1px solid #d8e1ea;
       background: #fff;
     }
 

@@ -12,6 +12,7 @@ export const routes: Routes = [
   { path: 'kpi-details/:module/:kpiKey', loadComponent: () => import('./pages/kpi-detail.component').then(m => m.KpiDetailComponent), title: 'KPI Details' },
   { path: 'prd', loadComponent: () => import('./pages/prd.component').then(m => m.PrdComponent), title: 'Product Requirement Document' },
   { path: 'design-system', loadComponent: () => import('./pages/design-system.component').then(m => m.DesignSystemComponent), title: 'Design System' },
+  { path: 'ai/:section', loadComponent: () => import('./pages/ai-assistant.component').then(m => m.AiAssistantComponent), title: 'AI Assistant' },
   { path: 'ai', loadComponent: () => import('./pages/ai-assistant.component').then(m => m.AiAssistantComponent), title: 'AI Assistant' },
   { path: 'analytics', loadComponent: () => import('./pages/analytics-engine.component').then(m => m.AnalyticsEngineComponent), title: 'Advanced Analytics' },
   { path: 'engagement', loadComponent: () => import('./pages/engagement-command-center.component').then(m => m.EngagementCommandCenterComponent), title: 'Engagement Command Center' },

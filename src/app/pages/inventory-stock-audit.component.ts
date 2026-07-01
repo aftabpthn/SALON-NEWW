@@ -135,10 +135,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .inventory-enterprise-page { gap: 0; }
     .section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .zenoti-audit-workspace {
-      background: #fff;
+      background: #f0f2f5;
       border: 1px solid #d8e1ea;
       display: grid;
+      gap: 8px;
       overflow: hidden;
+      padding: 8px;
     }
     .zenoti-result-bar,
     .zenoti-filter-row,
@@ -149,8 +151,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       justify-content: space-between;
       padding: 10px 16px;
     }
-    .zenoti-result-bar,
-    .zenoti-filter-row { border-bottom: 1px solid #d8e1ea; }
+    .zenoti-result-bar { border: 1px solid #d8e1ea; }
+    .zenoti-filter-row { border: 1px solid #d8e1ea; }
     .zenoti-result-bar > div,
     .zenoti-totals {
       align-items: center;

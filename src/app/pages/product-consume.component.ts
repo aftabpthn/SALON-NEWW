@@ -1003,7 +1003,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     </section>
   `,
   styles: [`
-    .page-stack { display: grid; gap: 12px; }
+    .page-stack { display: grid; gap: 8px; padding: 8px; background: #f0f2f5; }
     .zenoti-consume-register, .workspace, .editor, .owner-report, .owner-dashboard, .control-report, .staff-audit { background: #fff; border: 1px solid #d8e1ea; box-shadow: none; }
     .module-hero { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 24px; border-radius: 22px; }
     .module-hero h1, .editor h2, .zenoti-toolbar h2 { margin: 4px 0; color: #111827; }
@@ -1015,11 +1015,11 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .ghost { background: white; color: #0f172a; }
     button:disabled { opacity: .55; cursor: not-allowed; }
     .zenoti-consume-register { display: grid; overflow: hidden; border-radius: 0; }
-    .zenoti-toolbar { display: flex; justify-content: space-between; gap: 14px; align-items: end; padding: 14px 16px; border-bottom: 1px solid #d8e1ea; }
+    .zenoti-toolbar { display: flex; justify-content: space-between; gap: 14px; align-items: end; padding: 14px 16px; border: 1px solid #d8e1ea; }
     .toolbar-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
     .toolbar-actions label { display: grid; gap: 4px; min-width: 210px; }
     .toolbar-actions span { color: #5b6b81; font-size: 12px; font-weight: 900; }
-    .consume-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8e1ea; }
+    .consume-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-left: 1px solid #d8e1ea; border-right: 1px solid #d8e1ea; border-bottom: 1px solid #d8e1ea; }
     .consume-kpi-strip article { padding: 10px 16px; display: grid; gap: 3px; border-right: 1px solid #e5edf4; }
     .consume-kpi-strip article:last-child { border-right: 0; }
     .consume-kpi-strip span, .info-grid span, .consume-table .head { color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
