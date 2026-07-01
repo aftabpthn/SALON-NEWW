@@ -83,7 +83,6 @@ type SalaryRow = {
     <section class="salary-page">
       <header class="hero">
         <div>
-          <span class="eyebrow">Staff OS / Payroll</span>
           <h1>Salary Generate</h1>
         </div>
         <div class="hero-actions">
@@ -231,7 +230,7 @@ type SalaryRow = {
 
       <aside class="drawer" *ngIf="selectedRow() as row">
         <div class="drawer-head">
-          <div><span class="eyebrow">Staff Detail</span><h2>{{ row.staffName }}</h2></div>
+          <div><h2>{{ row.staffName }}</h2></div>
           <button type="button" (click)="selectedRow.set(null)">Close</button>
         </div>
         <section>

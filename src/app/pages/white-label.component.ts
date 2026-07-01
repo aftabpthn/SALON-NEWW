@@ -13,7 +13,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 15 · White-label SaaS</span>
           <h2>Custom branding, theme system, custom logo, custom domain and branch-specific branding</h2>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>

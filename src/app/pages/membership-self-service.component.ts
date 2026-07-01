@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack self-service-page">
       <div class="module-hero compact-hero">
         <div>
-          <span class="eyebrow">Client self-service</span>
           <h2>Membership status</h2>
         </div>
       </div>

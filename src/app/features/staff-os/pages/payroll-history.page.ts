@@ -12,7 +12,6 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Staff OS / Payroll</span>
           <h2>Payroll History</h2>
         </div>
         <div class="hero-actions">
@@ -90,7 +89,6 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Payroll ledger</span>
               <h2>Run and staff-wise salary history</h2>
             </div>
             <span class="badge">{{ data.rows?.length || 0 }} rows</span>

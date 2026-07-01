@@ -205,7 +205,6 @@ const STATUS_TONES: Record<string, string> = {
       <ng-container *ngIf="!loading() && (!error() || drawer())">
         <section class="deposit-followup-strip" *ngIf="adjustedDueFollowUpCount() > 0">
           <div>
-            <span class="eyebrow">Front-desk follow-up</span>
             <strong>{{ adjustedDueFollowUpCount() }} adjusted + due booking(s) pending</strong>
           </div>
           <button class="ghost-button mini" type="button" (click)="openDepositFollowUpReport()">Open deposit report</button>
@@ -245,7 +244,6 @@ const STATUS_TONES: Record<string, string> = {
 
         <section class="scheduler-view-toolbar" aria-label="Calendar view controls">
           <div class="scheduler-view-copy">
-            <span class="eyebrow">Calendar layout</span>
             <strong>{{ selectedCalendarLayoutLabel() }}</strong>
             <small>{{ selectedDate() | date: 'EEE, dd MMM y' }} - {{ staffWindowLabel() }}</small>
           </div>
@@ -474,7 +472,6 @@ const STATUS_TONES: Record<string, string> = {
               <div class="calendar-list-view">
                 <div class="calendar-list-header">
                   <div>
-                    <span class="eyebrow">Bookings list</span>
                     <strong>{{ calendarAppointmentCards().length }} appointment(s)</strong>
                   </div>
                   <button class="ghost-button mini" type="button" (click)="openBlankBooking()">New booking</button>
@@ -513,7 +510,7 @@ const STATUS_TONES: Record<string, string> = {
             (keydown.enter)="openAiSlotPilot()"
             (keydown.space)="openAiSlotPilot(); $event.preventDefault()"
           >
-            <div class="panel-head"><span class="eyebrow">Slot suggestions</span><strong>Best safe slots</strong></div>
+            <div class="panel-head"><strong>Best safe slots</strong></div>
             <p>{{ smartSlots().length }} safe slot suggestions ready</p>
           </article>
           <article
@@ -525,7 +522,7 @@ const STATUS_TONES: Record<string, string> = {
             (keydown.enter)="openOperationsPulse()"
             (keydown.space)="openOperationsPulse(); $event.preventDefault()"
           >
-            <div class="panel-head"><span class="eyebrow">Waitlist</span><strong>Demand queue</strong><small>{{ waitlist().length }}</small></div>
+            <div class="panel-head"><strong>Demand queue</strong><small>{{ waitlist().length }}</small></div>
           </article>
           <article
             class="ops-panel ops-launch pulse"
@@ -536,7 +533,7 @@ const STATUS_TONES: Record<string, string> = {
             (keydown.enter)="openOperationsPulse()"
             (keydown.space)="openOperationsPulse(); $event.preventDefault()"
           >
-            <div class="panel-head"><span class="eyebrow">Operations pulse</span><strong>Risk radar</strong></div>
+            <div class="panel-head"><strong>Risk radar</strong></div>
             <p>{{ actionQueue().length }} action(s) - {{ summaryValue('capacityPct') }}% capacity - {{ summaryValue('conflicts') }} conflicts - {{ summaryValue('blockedTimes') }} blocked</p>
           </article>
         </section>
@@ -547,7 +544,6 @@ const STATUS_TONES: Record<string, string> = {
       <aside class="scheduler-drawer ai-slot-drawer" *ngIf="drawer() === 'ai-slots'">
         <header>
           <div>
-            <span class="eyebrow">Slot suggestions</span>
             <h3>Best safe slots</h3>
           </div>
           <button type="button" (click)="closeDrawer()">×</button>
@@ -565,7 +561,6 @@ const STATUS_TONES: Record<string, string> = {
       <aside class="scheduler-drawer operations-drawer" *ngIf="drawer() === 'operations'">
         <header>
           <div>
-            <span class="eyebrow">Calendar operations</span>
             <h3>Demand queue</h3>
           </div>
           <button type="button" (click)="closeDrawer()">×</button>
@@ -573,7 +568,6 @@ const STATUS_TONES: Record<string, string> = {
         <div class="drawer-stack">
           <section class="drawer-panel">
             <div class="panel-head">
-              <span class="eyebrow">Waitlist</span>
               <strong>{{ waitlist().length }} waiting clients</strong>
               <button class="mini-action" type="button" (click)="openWaitlistEntry()">Add</button>
             </div>
@@ -586,7 +580,7 @@ const STATUS_TONES: Record<string, string> = {
           </section>
 
           <section class="drawer-panel">
-            <div class="panel-head"><span class="eyebrow">Operations pulse</span><strong>Risk radar</strong></div>
+            <div class="panel-head"><strong>Risk radar</strong></div>
             <div class="pulse-grid expanded">
               <div><span>Capacity</span><strong>{{ summaryValue('capacityPct') }}%</strong><small>{{ summaryValue('bookedMinutes') }} of {{ summaryValue('plannedMinutes') }} min</small></div>
               <div><span>Conflicts</span><strong>{{ summaryValue('conflicts') }}</strong></div>
@@ -597,7 +591,6 @@ const STATUS_TONES: Record<string, string> = {
 
           <section class="drawer-panel">
             <div class="panel-head">
-              <span class="eyebrow">Booking action queue</span>
               <strong>{{ actionQueue().length }} live task{{ actionQueue().length === 1 ? '' : 's' }}</strong>
             </div>
             <div class="waitlist-row action-row" *ngFor="let row of actionQueue(); trackBy: trackApiRecord">
@@ -614,7 +607,6 @@ const STATUS_TONES: Record<string, string> = {
       <aside class="scheduler-drawer" *ngIf="drawer() === 'booking'">
         <header>
           <div>
-            <span class="eyebrow">Front-desk quick booking</span>
             <h3>Create multi-service booking</h3>
           </div>
           <button type="button" (click)="closeDrawer()">×</button>
@@ -788,7 +780,6 @@ const STATUS_TONES: Record<string, string> = {
       <aside class="scheduler-drawer" *ngIf="drawer() === 'waitlist'">
         <header>
           <div>
-            <span class="eyebrow">Calendar waitlist</span>
             <h3>Add waitlist entry</h3>
           </div>
           <button type="button" (click)="closeDrawer()">×</button>
@@ -840,7 +831,6 @@ const STATUS_TONES: Record<string, string> = {
       <aside class="scheduler-drawer" *ngIf="drawer() === 'blocked-time'">
         <header>
           <div>
-            <span class="eyebrow">Staff availability</span>
             <h3>{{ blockMode() === 'add' ? 'New blocked time' : 'Remove blocked time' }}</h3>
           </div>
           <button type="button" (click)="closeDrawer()">×</button>

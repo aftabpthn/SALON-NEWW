@@ -101,7 +101,6 @@ interface EngagementDetail extends ApiRecord {
       <section class="lead-intelligence-panel" *ngIf="activeWorkspace() === 'leads'">
         <div class="section-title-row">
           <div>
-            <span class="eyebrow">Lead Pipeline</span>
             <h3>Lead Intelligence</h3>
           </div>
           <div class="reports-actions">
@@ -251,7 +250,6 @@ interface EngagementDetail extends ApiRecord {
       <section class="action-queue-strip" *ngIf="activeWorkspace() === 'inbox' && engagementActionQueue().length">
         <div class="section-title-row">
           <div>
-            <span class="eyebrow">WhatsApp operations</span>
             <h3>Engagement action queue</h3>
           </div>
           <button class="ghost-button mini" type="button" (click)="loadManagerActions()">Refresh queue</button>
@@ -426,7 +424,6 @@ interface EngagementDetail extends ApiRecord {
         <aside class="client-rail">
           <ng-container *ngIf="selectedThread()?.clientId; else noClient">
             <section class="client-card">
-              <span class="eyebrow">Client 360</span>
               <h3>{{ clientProfile()?.name || selectedThread()?.displayName || 'Linked client' }}</h3>
               <p>{{ clientProfile()?.phone || selectedThread()?.phone || 'Phone not captured' }}</p>
               <p class="muted-line">{{ clientProfile()?.email || selectedThread()?.email || 'Email not captured' }}</p>
@@ -437,7 +434,6 @@ interface EngagementDetail extends ApiRecord {
             </section>
 
             <section class="client-card">
-              <span class="eyebrow">Membership, package, wallet, due</span>
               <div class="info-grid">
                 <div><strong>{{ client360()?.membership?.summaryText || 'None' }}</strong></div>
                 <div><strong>{{ client360()?.package?.summaryText || 'None' }}</strong></div>
@@ -449,7 +445,6 @@ interface EngagementDetail extends ApiRecord {
             </section>
 
             <section class="client-card">
-              <span class="eyebrow">Visits and bookings</span>
               <div class="mini-list">
                 <article>
                   <strong>Last visit</strong>
@@ -467,7 +462,6 @@ interface EngagementDetail extends ApiRecord {
             </section>
 
             <section class="client-card">
-              <span class="eyebrow">Past invoices</span>
               <div class="mini-list">
                 <article *ngFor="let invoice of pastInvoices().slice(0, 4)">
                   <strong>{{ invoice.invoiceNumber || invoice.id }}</strong>
@@ -481,7 +475,6 @@ interface EngagementDetail extends ApiRecord {
             </section>
 
             <section class="client-card">
-              <span class="eyebrow">Preferences</span>
               <div class="info-grid">
                 <div><strong>{{ listLabels(preferredStaff(), 'name') || 'None' }}</strong></div>
                 <div><strong>{{ listLabels(preferredServices(), 'name') || 'None' }}</strong></div>
@@ -491,7 +484,6 @@ interface EngagementDetail extends ApiRecord {
             </section>
 
             <section class="client-card">
-              <span class="eyebrow">Notes, files and alerts</span>
               <p>{{ clientProfile()?.notes || clientProfile()?.preferences || 'No notes captured yet.' }}</p>
               <p class="muted-line">{{ client360()?.files?.placeholder || 'Files placeholder ready.' }}</p>
               <div class="alert-list">
@@ -505,7 +497,6 @@ interface EngagementDetail extends ApiRecord {
 
             <section class="client-card ai-summary">
               <div class="card-header-row">
-                <span class="eyebrow">AI guest summary</span>
                 <button class="ghost-button mini" type="button" (click)="openAiSummaryDrawer()" [disabled]="aiSummaryGenerating()">Review</button>
               </div>
               <p>{{ latestAiSummaryText() }}</p>
@@ -522,7 +513,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="booking-drawer" *ngIf="bookingDrawerOpen()" role="dialog" aria-label="Engagement booking drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">Booking wizard</span>
             <h3>Book from conversation</h3>
             <p>{{ bookingClientLabel() }}</p>
           </div>
@@ -596,7 +586,6 @@ interface EngagementDetail extends ApiRecord {
 
         <section class="drawer-section">
           <div class="card-header-row">
-            <span class="eyebrow">Suggested slots</span>
             <button class="ghost-button mini" type="button" (click)="previewBookingSlots()" [disabled]="bookingLoading() || !canPreviewBooking()">Find slots</button>
           </div>
           <div class="warning-stack" *ngIf="bookingSlotPreview() as preview">
@@ -621,7 +610,6 @@ interface EngagementDetail extends ApiRecord {
         </section>
 
         <section class="drawer-section review-box">
-          <span class="eyebrow">Review & book</span>
           <div class="info-grid">
             <div><strong>{{ bookingServiceName() }}</strong></div>
             <div><strong>{{ selectedBookingSlot()?.startAt ? (selectedBookingSlot()?.startAt | date:'short') : 'Not selected' }}</strong></div>
@@ -638,7 +626,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="recovery-drawer" *ngIf="recoveryDrawerOpen()" role="dialog" aria-label="Recovery opportunities drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">Recovery Opportunities</span>
             <h3>Revenue recovery board</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeRecoveryDrawer()" aria-label="Close recovery board">x</button>
@@ -704,7 +691,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="risk-drawer" *ngIf="riskDrawerOpen()" role="dialog" aria-label="AI risk and next best action drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">AI Risk & Next Best Action</span>
             <h3>Client engagement risk signals</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeRiskDrawer()" aria-label="Close risk signals">x</button>
@@ -799,7 +785,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="sla-drawer" *ngIf="slaDrawerOpen()" role="dialog" aria-label="SLA and staff accountability drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">SLA & Staff Accountability</span>
             <h3>Manager response board</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeSlaDrawer()" aria-label="Close SLA board">x</button>
@@ -827,7 +812,6 @@ interface EngagementDetail extends ApiRecord {
           <article class="drawer-section">
             <div class="section-title-row">
               <div>
-                <span class="eyebrow">Overdue Queue</span>
                 <h4>Follow-ups needing manager attention</h4>
               </div>
               <button class="ghost-button mini" type="button" (click)="loadSlaAccountability()" [disabled]="slaLoading()">Refresh</button>
@@ -853,7 +837,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">Manager View</span>
             <h4>Escalated and unresolved conversations</h4>
             <div class="info-grid">
               <div><strong>{{ managerView()?.escalatedThreads?.length || 0 }}</strong></div>
@@ -865,7 +848,6 @@ interface EngagementDetail extends ApiRecord {
         </section>
 
         <section class="drawer-section">
-          <span class="eyebrow">Staff Performance</span>
           <h4>Response, resolution and recovery accountability</h4>
           <div class="staff-performance-table">
             <div class="staff-performance-head">
@@ -898,7 +880,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="reports-drawer" *ngIf="reportsDrawerOpen()" role="dialog" aria-label="Engagement reports and analytics drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">Reports & Analytics</span>
             <h3>Engagement performance center</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeReportsDrawer()" aria-label="Close engagement reports">x</button>
@@ -1019,7 +1000,6 @@ interface EngagementDetail extends ApiRecord {
           <article class="drawer-section">
             <div class="section-title-row">
               <div>
-                <span class="eyebrow">Channel-wise Messages</span>
                 <h4>WhatsApp, SMS, email, calls and review traffic</h4>
               </div>
               <span class="badge">{{ report.channelWiseMessages?.length || 0 }} channels</span>
@@ -1035,7 +1015,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">Response Time & SLA</span>
             <h4>First response and breach control</h4>
             <div class="info-grid">
               <div><strong>{{ report.responseTime?.avgFirstResponseLabel || '0m' }}</strong></div>
@@ -1046,7 +1025,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section wide">
-            <span class="eyebrow">Staff-wise Engagement</span>
             <h4>Ownership, messages, conversions and recovery revenue</h4>
             <div class="report-table">
               <div class="report-table-head six">
@@ -1064,7 +1042,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">Recovery Revenue</span>
             <h4>Opportunity pipeline and converted value</h4>
             <div class="info-grid">
               <div><strong>{{ reportCurrency(report.recoveryRevenue?.totalRevenue) }}</strong></div>
@@ -1075,7 +1052,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">Membership / Package / Payment Recovery</span>
             <h4>Expiry and due-balance recovery performance</h4>
             <div class="info-grid">
               <div><strong>{{ report.membershipPackageExpiryRecovery?.membership || 0 }}</strong></div>
@@ -1086,7 +1062,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">Review Response Performance</span>
             <h4>Review recovery and approval coverage</h4>
             <div class="info-grid">
               <div><strong>{{ report.reviewResponsePerformance?.totalReviews || 0 }}</strong></div>
@@ -1097,7 +1072,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">AI Suggestion Acceptance</span>
             <h4>Draft approval and rejection trend</h4>
             <div class="info-grid">
               <div><strong>{{ report.aiSuggestionAcceptance?.suggestions || 0 }}</strong></div>
@@ -1108,7 +1082,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section wide">
-            <span class="eyebrow">Template Performance</span>
             <h4>Template render, draft and send outcomes</h4>
             <div class="report-table">
               <div class="report-table-head five">
@@ -1125,7 +1098,6 @@ interface EngagementDetail extends ApiRecord {
           </article>
 
           <article class="drawer-section">
-            <span class="eyebrow">WhatsApp Delivery</span>
             <h4>Provider status placeholder</h4>
             <div class="info-grid">
               <div><strong>{{ report.whatsappDeliveryStatus?.configured ? 'Yes' : 'No' }}</strong></div>
@@ -1142,7 +1114,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="provider-drawer" *ngIf="providerDrawerOpen()" role="dialog" aria-label="Provider readiness drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">Provider Readiness</span>
             <h3>Communication provider adapters</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeProviderDrawer()" aria-label="Close provider readiness">x</button>
@@ -1235,7 +1206,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="audit-drawer" *ngIf="auditDrawerOpen()" role="dialog" aria-label="Communication audit ledger drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">Communication Audit Ledger</span>
             <h3>Immutable engagement audit</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeAuditDrawer()" aria-label="Close audit ledger">x</button>
@@ -1279,7 +1249,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="review-response-drawer" *ngIf="reviewDrawerOpen()" role="dialog" aria-label="Review response drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">Review Response Center</span>
             <h3>Approve-safe review replies</h3>
           </div>
           <button class="ghost-button mini icon-button" type="button" (click)="closeReviewDrawer()" aria-label="Close review response center">x</button>
@@ -1335,7 +1304,6 @@ interface EngagementDetail extends ApiRecord {
 
             <section class="drawer-section">
               <div class="card-header-row">
-                <span class="eyebrow">AI smart response</span>
                 <select [(ngModel)]="reviewTone">
                   <option value="warm">Warm</option>
                   <option value="professional">Professional</option>
@@ -1367,7 +1335,6 @@ interface EngagementDetail extends ApiRecord {
       <aside class="ai-summary-drawer" *ngIf="aiSummaryDrawerOpen()" role="dialog" aria-label="AI guest summary drawer">
         <header class="drawer-head">
           <div>
-            <span class="eyebrow">AI guest summary</span>
             <h3>{{ clientProfile()?.name || selectedThread()?.displayName || 'Linked client' }}</h3>
             <p *ngIf="generatedAiSummary()">
               Version {{ generatedAiSummary()?.version || 1 }} · Generated
@@ -1386,12 +1353,10 @@ interface EngagementDetail extends ApiRecord {
         </button>
 
         <section class="drawer-section summary-overview">
-          <span class="eyebrow">Summary</span>
           <p>{{ latestAiSummaryText() }}</p>
         </section>
 
         <section class="drawer-section">
-          <span class="eyebrow">Insights</span>
           <div class="summary-list">
             <article *ngFor="let item of summaryArray('insights')">
               <strong>{{ summaryItemTitle(item) }}</strong>
@@ -1402,7 +1367,6 @@ interface EngagementDetail extends ApiRecord {
         </section>
 
         <section class="drawer-section">
-          <span class="eyebrow">Suggestions</span>
           <div class="summary-list">
             <article *ngFor="let item of summaryArray('suggestions')">
               <strong>{{ summaryItemTitle(item) }}</strong>
@@ -1413,7 +1377,6 @@ interface EngagementDetail extends ApiRecord {
         </section>
 
         <section class="drawer-section">
-          <span class="eyebrow">Alerts</span>
           <div class="summary-list">
             <article *ngFor="let item of summaryArray('alerts')">
               <strong>{{ summaryItemTitle(item) }}</strong>
@@ -1424,7 +1387,6 @@ interface EngagementDetail extends ApiRecord {
         </section>
 
         <section class="drawer-section">
-          <span class="eyebrow">Risks</span>
           <div class="summary-list">
             <article *ngFor="let item of summaryArray('risks')" class="risk-item">
               <strong>{{ summaryItemTitle(item) }} <em>{{ item.riskLevel || 'low' }}</em></strong>
@@ -1435,7 +1397,6 @@ interface EngagementDetail extends ApiRecord {
         </section>
 
         <section class="drawer-section">
-          <span class="eyebrow">Next best action</span>
           <div class="summary-list">
             <article *ngFor="let item of summaryArray('nextBestActions')">
               <strong>{{ summaryItemTitle(item) }}</strong>
@@ -1469,7 +1430,6 @@ interface EngagementDetail extends ApiRecord {
 
       <ng-template #noClient>
         <section class="client-card no-client">
-          <span class="eyebrow">No client selected</span>
           <h3>Thread is not linked to a client</h3>
         </section>
       </ng-template>

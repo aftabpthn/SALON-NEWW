@@ -11,7 +11,6 @@ import { DataMigrationStore } from './data-migration.store';
     <section class="migration-shell">
       <header class="command-header">
         <div>
-          <span class="eyebrow">Enterprise Data Migration OS</span>
           <h1>100X import command center</h1>
         </div>
         <div class="score-card" [class.danger]="store.readinessScore() < 60" [class.warning]="store.readinessScore() >= 60 && store.readinessScore() < 85">

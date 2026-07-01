@@ -265,7 +265,6 @@ interface PolicyRow {
     <section class="page-stack ai-workforce-page">
       <article class="module-hero ai-workforce-hero">
         <div>
-          <span class="eyebrow">Workforce Tools</span>
           <h2>Workforce Automation</h2>
         </div>
         <div class="hero-actions">
@@ -304,7 +303,6 @@ interface PolicyRow {
         <article class="panel executive-brief-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Executive Command Briefing</span>
               <h3>Readiness, risk and next actions</h3>
             </div>
             <span class="badge" [ngClass]="executiveTone()">{{ executiveStatusLabel() }}</span>
@@ -346,7 +344,6 @@ interface PolicyRow {
         <article class="panel control-tower-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Agent Control Tower</span>
               <h3>Health, cost, approvals and impact by agent</h3>
             </div>
             <span class="badge" [ngClass]="controlTowerRiskTone()">{{ controlTowerRiskLabel() }}</span>
@@ -445,7 +442,6 @@ interface PolicyRow {
           <article class="panel ai-list-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Agents</span>
                 <h3>Live Workforce</h3>
               </div>
               <span class="badge info">{{ agents().length }} agents</span>
@@ -475,7 +471,6 @@ interface PolicyRow {
           <article class="panel agent-detail-panel" *ngIf="selectedAgent() as agent">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Agent Detail</span>
                 <h3>{{ agent.agentName || agent.agentKey }}</h3>
               </div>
               <span class="badge" [ngClass]="riskTone(agent.riskLevel)">{{ agent.riskLevel || 'low' }} risk</span>
@@ -539,7 +534,6 @@ interface PolicyRow {
         <article class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Human Approval Required</span>
               <h3>Approval Queue 2.0</h3>
             </div>
             <span class="badge warning">{{ queue().length }} pending</span>
@@ -599,7 +593,6 @@ interface PolicyRow {
               <aside class="approval-detail-panel" *ngIf="selectedQueueItem() as item">
                 <div class="section-title compact">
                   <div>
-                    <span class="eyebrow">Decision detail</span>
                     <h3>{{ item.title || 'Approval required' }}</h3>
                   </div>
                   <span class="badge" [ngClass]="riskTone(item.riskLevel)">{{ item.riskLevel || 'medium' }}</span>
@@ -650,7 +643,6 @@ interface PolicyRow {
         <article class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Live Run Console</span>
               <h3>Run timeline, inputs and approval gates</h3>
             </div>
             <span class="badge info">{{ runs().length }} runs</span>
@@ -701,7 +693,6 @@ interface PolicyRow {
             <aside class="run-console" *ngIf="selectedRunDetail() as run">
               <div class="section-title compact">
                 <div>
-                  <span class="eyebrow">Selected run</span>
                   <h3>{{ agentName(run.agentId) }}</h3>
                 </div>
                 <span class="badge" [ngClass]="statusTone(run.status)">{{ run.status || 'created' }}</span>
@@ -786,7 +777,6 @@ interface PolicyRow {
         <article class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Incident & Audit Evidence Center</span>
               <h3>Alerts, triage and response evidence</h3>
             </div>
             <span class="badge danger">{{ alerts().length }} open</span>
@@ -911,7 +901,6 @@ interface PolicyRow {
         <article class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Governance Defaults</span>
               <h3>Agent Settings</h3>
             </div>
             <span class="badge info">Approval ON by default</span>
@@ -1079,7 +1068,6 @@ interface PolicyRow {
           <article class="panel premium-card">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Provider Health Center</span>
                 <h3>Keys, latency, cost and fallback health</h3>
               </div>
               <span class="badge info">{{ configuredProviders() }} configured</span>
@@ -1141,7 +1129,6 @@ interface PolicyRow {
           <article class="panel premium-card">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Agent Marketplace Studio</span>
                 <h3>Template readiness and deployment plan</h3>
               </div>
               <span class="badge info">{{ marketplace().length }} templates</span>
@@ -1248,7 +1235,6 @@ interface PolicyRow {
           <article class="panel premium-card">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Prompt Version Studio</span>
                 <h3>Govern prompts before activation</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="createPromptVersion(selectedAgent())" [disabled]="!!saving() || !selectedAgent()">
@@ -1281,7 +1267,6 @@ interface PolicyRow {
               <div *ngIf="selectedPrompt() as prompt" class="prompt-inspector">
                 <div class="prompt-inspector-head">
                   <div>
-                    <span class="eyebrow">Selected version</span>
                     <h3>{{ prompt.promptTitle || agentName(prompt.agentId) }}</h3>
                     <small>{{ prompt.promptKey || 'dashboard-prompt' }} · {{ agentName(prompt.agentId) }}</small>
                   </div>
@@ -1341,7 +1326,6 @@ interface PolicyRow {
           <article class="panel premium-card">
             <div class="section-title">
               <div>
-                <span class="eyebrow">ROI Control Studio</span>
                 <h3>Spend, value and agent economics</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="recordKpiImpact(selectedAgent())" [disabled]="!!saving() || !selectedAgent()">
@@ -1422,7 +1406,6 @@ interface PolicyRow {
               <aside class="roi-agent-panel">
                 <div class="section-title compact">
                   <div>
-                    <span class="eyebrow">Selected agent</span>
                     <h3>{{ selectedAgent().agentName || selectedAgent().agentKey || 'No agent selected' }}</h3>
                   </div>
                   <span class="badge" [ngClass]="selectedAgentRoiTone()">{{ selectedAgentRoiLabel() }}</span>

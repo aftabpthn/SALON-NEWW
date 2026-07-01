@@ -33,7 +33,6 @@ type RosterView = 'day' | 'week' | 'month';
           <div class="profile-identity">
             <span class="avatar large">{{ initials(profile.staff.name) }}</span>
             <div>
-              <span class="eyebrow">Employee 360</span>
               <h2>{{ profile.staff.name }}</h2>
               <p>{{ profile.staff.designation || profile.staff.role }} · {{ profile.staff.department || 'Service' }} · {{ branchName(profile.staff.branchId) }}</p>
               <div class="chip-row">
@@ -74,7 +73,7 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <section class="panel" *ngIf="tab() === 'overview'">
-          <div class="section-title"><div><span class="eyebrow">Profile</span><h2>Personal info, permissions and service assignment</h2></div></div>
+          <div class="section-title"><div><h2>Personal info, permissions and service assignment</h2></div></div>
           <div class="employee-profile-grid">
             <article><span>Employee code</span><strong>{{ profile.staff.employeeCode || profile.staff.id }}</strong><small>{{ profile.staff.messageName || profile.staff.name }} in appointment messages</small></article>
             <article><span>Contact</span><strong>{{ profile.staff.phone || 'No phone' }}</strong><small>{{ profile.staff.email || 'No email' }}</small></article>
@@ -93,7 +92,7 @@ type RosterView = 'day' | 'week' | 'month';
 
         <section class="panel" *ngIf="tab() === 'roles'">
           <div class="section-title">
-            <div><span class="eyebrow">Employee roles</span><h2>Map employee to branch, center and role</h2></div>
+            <div><h2>Map employee to branch, center and role</h2></div>
             <button class="primary-button" type="button" (click)="addEmployeeRole()" [disabled]="saving()">Add role</button>
           </div>
           <section class="form-panel compact-form">
@@ -119,7 +118,7 @@ type RosterView = 'day' | 'week' | 'month';
 
         <section class="panel" *ngIf="tab() === 'services'">
           <div class="section-title">
-            <div><span class="eyebrow">Services</span><h2>Per-employee service assignment, pricing and online booking</h2></div>
+            <div><h2>Per-employee service assignment, pricing and online booking</h2></div>
             <button class="primary-button" type="button" (click)="saveServiceMatrix()" [disabled]="saving()">Save service matrix</button>
           </div>
           <div class="table-wrap service-matrix-wrap">
@@ -149,7 +148,7 @@ type RosterView = 'day' | 'week' | 'month';
 
         <section class="panel" *ngIf="tab() === 'slabs'">
           <div class="section-title">
-            <div><span class="eyebrow">Commissions</span><h2>Scaling factors, slabs and historical-safe payout rules</h2></div>
+            <div><h2>Scaling factors, slabs and historical-safe payout rules</h2></div>
             <button class="primary-button" type="button" (click)="saveCommissionSettings()" [disabled]="saving()">Save settings</button>
           </div>
           <section class="form-panel compact-form">
@@ -183,7 +182,7 @@ type RosterView = 'day' | 'week' | 'month';
 
         <section class="panel" *ngIf="tab() === 'roster'">
           <div class="section-title">
-            <div><span class="eyebrow">Roster</span><h2>Shift calendar, leave workflow and conflicts</h2></div>
+            <div><h2>Shift calendar, leave workflow and conflicts</h2></div>
             <div class="segmented compact-tabs">
               <button type="button" [class.active]="rosterView() === 'day'" (click)="rosterView.set('day')">Day</button>
               <button type="button" [class.active]="rosterView() === 'week'" (click)="rosterView.set('week')">Week</button>
@@ -262,7 +261,7 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <section class="panel" *ngIf="tab() === 'payroll'">
-          <div class="section-title"><div><span class="eyebrow">Payroll and commission</span><h2>Salary components, deductions, approval and rules</h2></div></div>
+          <div class="section-title"><div><h2>Salary components, deductions, approval and rules</h2></div></div>
           <div class="dashboard-grid">
             <section class="form-panel compact-form">
               <h3>Payroll component</h3>
@@ -301,7 +300,7 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <section class="panel" *ngIf="tab() === 'kyc'">
-          <div class="section-title"><div><span class="eyebrow">KYC and skill matrix</span><h2>Documents, certificates and service eligibility</h2></div></div>
+          <div class="section-title"><div><h2>Documents, certificates and service eligibility</h2></div></div>
           <div class="dashboard-grid">
             <section class="form-panel compact-form">
               <h3>Add document metadata</h3>
@@ -333,7 +332,7 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <section class="panel" *ngIf="tab() === 'reviews'">
-          <div class="section-title"><div><span class="eyebrow">Reviews and quality</span><h2>Rating, complaints, rebooking and punctuality</h2></div></div>
+          <div class="section-title"><div><h2>Rating, complaints, rebooking and punctuality</h2></div></div>
           <section class="form-panel compact-form">
             <h3>Add review / feedback</h3>
             <label class="field"><span>Rating</span><input type="number" min="1" max="5" [(ngModel)]="reviewDraft.rating" /></label>
@@ -349,7 +348,7 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <section class="panel" *ngIf="tab() === 'approvals'">
-          <div class="section-title"><div><span class="eyebrow">Approvals and transfer</span><h2>Manager approvals and branch transfer history</h2></div></div>
+          <div class="section-title"><div><h2>Manager approvals and branch transfer history</h2></div></div>
           <section class="form-panel compact-form">
             <h3>Create branch transfer</h3>
             <label class="field"><span>To branch</span><select [(ngModel)]="transferDraft.toBranchId"><option value="">Select branch</option><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>
@@ -379,7 +378,7 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <section class="panel" *ngIf="tab() === 'optimizer'">
-          <div class="section-title"><div><span class="eyebrow">Staff optimizer</span><h2>Best staff, burnout, recovery and workload plan</h2></div></div>
+          <div class="section-title"><div><h2>Best staff, burnout, recovery and workload plan</h2></div></div>
           <div class="quick-grid">
             <article class="action-card"><strong>Best for booking</strong><span>{{ profile.optimizer.bestForBooking }}</span></article>
             <article class="action-card"><strong>Burnout risk</strong><span>{{ profile.optimizer.burnoutRisk }}</span><small>{{ profile.optimizer.workloadBalance }}</small></article>

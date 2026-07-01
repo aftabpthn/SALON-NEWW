@@ -28,7 +28,6 @@ type StaffModuleGroup = {
     <section class="page-stack connected-modules-page">
       <section class="connected-hero">
         <div>
-          <span class="eyebrow">Staff command links</span>
           <h2>Connected modules</h2>
         </div>
         <a class="ghost-button" routerLink="/staff">Back to staff directory</a>
@@ -82,7 +81,6 @@ type StaffModuleGroup = {
         <section class="connected-health-panel">
           <div class="section-title compact-title">
             <div>
-              <span class="eyebrow">Real integration health</span>
               <h2>Backend sources connected</h2>
             </div>
           </div>

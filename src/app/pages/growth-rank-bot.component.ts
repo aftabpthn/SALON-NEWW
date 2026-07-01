@@ -12,7 +12,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="rank-hero">
         <div>
-          <span class="eyebrow">AI Rank Bot</span>
           <h2>AI Growth Agency OS</h2>
           <div class="hero-badges">
             <span>Level 1-15 live</span>
@@ -49,7 +48,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="panel command-panel" *ngIf="commandCenter() as command">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Growth command center</span>
             <h3>Campaign ROI, recommendation queue, approvals and social leads</h3>
           </div>
           <span class="badge">{{ command.metrics?.approvalRequired || 0 }} approvals</span>
@@ -124,7 +122,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Client profile</span>
               <h3>Create or update audit</h3>
             </div>
           </div>
@@ -155,7 +152,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Saved audits</span>
               <h3>Client growth plans</h3>
             </div>
           </div>
@@ -192,7 +188,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel ai-workbench">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Advanced AI</span>
               <h3>Live AI workbench</h3>
             </div>
             <span class="ai-pill">real model · honest estimates</span>
@@ -283,7 +278,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel command-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Operator command layer</span>
               <h3>{{ audit.businessName }} live actions</h3>
             </div>
             <div class="section-actions">
@@ -391,7 +385,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="ai-history" *ngIf="audit.workspace?.copilotChats?.length">
             <div class="section-title">
               <div>
-                <span class="eyebrow">AI history</span>
                 <h3>Previous suggestions</h3>
               </div>
             </div>
@@ -406,7 +399,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel growth-report-engine">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Live growth report engine</span>
               <h3>{{ audit.businessName }} performance report</h3>
             </div>
             <div class="section-actions">
@@ -546,7 +538,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <div class="opened-report-panel" id="growth-opened-report" *ngIf="activeGrowthReport() as reportKey">
             <div>
-              <span class="eyebrow">Opened report</span>
               <h4>{{ growthReportTitle(reportKey) }}</h4>
               <p>{{ growthReportOpenNote(reportKey, audit) }}</p>
             </div>
@@ -558,7 +549,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel ads-command-center">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Enterprise Ads Command Center</span>
               <h3>Google + Meta growth control room</h3>
             </div>
             <span class="ai-pill">approval-first · multi-tenant · spend-safe</span>
@@ -752,7 +742,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel enterprise-ai-os">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Enterprise AI Growth OS</span>
               <h3>Autonomous growth layer with approval control</h3>
             </div>
             <span class="ai-pill">local simulation · no real API calls</span>
@@ -802,7 +791,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel business-empire-os">
           <div class="section-title">
             <div>
-              <span class="eyebrow">AuraShine Enterprise OS</span>
               <h3>CEO Command Center + AI Workforce + Customer Intelligence</h3>
             </div>
             <span class="ai-pill">Tier 1–8 · local enterprise simulation</span>
@@ -901,7 +889,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Positioning</span>
               <h3>{{ audit.businessName }} growth plan</h3>
             </div>
           </div>

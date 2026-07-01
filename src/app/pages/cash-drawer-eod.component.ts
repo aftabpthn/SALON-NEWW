@@ -271,7 +271,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     <section class="cash-eod-page">
       <header class="module-hero">
         <div>
-          <span class="eyebrow">POS / Day close</span>
           <h2>Cash Drawer Tally</h2>
         </div>
         <div class="hero-actions">
@@ -286,7 +285,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
 
       <section class="panel token-approval-panel" *ngIf="tokenApproval() as approvalContext">
         <div>
-          <span class="eyebrow">WhatsApp approval link</span>
           <h3>Owner cash-risk approval</h3>
           <p>{{ approvalContext.session?.businessDate }} · risk {{ approvalContext.risk?.score || 0 }}/100 {{ approvalContext.risk?.level || 'low' }}</p>
         </div>
@@ -330,7 +328,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
           <div class="cash-workspace-detail">
             <div class="detail-head">
               <div>
-                <span class="eyebrow">Selected KPI</span>
                 <h3>{{ selectedCashWorkspace().label }}</h3>
                 <p>{{ selectedCashWorkspace().source }}</p>
               </div>
@@ -353,7 +350,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
               <section class="panel denomination-panel" *ngIf="cashWorkspace() === 'cashCount'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Physical drawer</span>
                 <h3>Note and coin count</h3>
               </div>
               <strong>{{ money(countedTotal()) }}</strong>
@@ -371,7 +367,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
           <section class="panel" *ngIf="cashWorkspace() === 'operations'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Cash operations</span>
                 <h3>Drops, pickups and payouts</h3>
               </div>
             </div>
@@ -416,7 +411,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
           <section class="panel" *ngIf="cashWorkspace() === 'operations'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Multi till</span>
                 <h3>Tills and handover</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="createTill(active)" [disabled]="saving()">Add till</button>
@@ -449,7 +443,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
           <section class="panel" *ngIf="cashWorkspace() === 'collections' && !isBlind(active)">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Collection by mode</span>
                 <h3>Auto pull + manual edit</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="saveCash(active)" [disabled]="saving()">Save</button>
@@ -472,7 +465,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
           <section class="panel" *ngIf="cashWorkspace() === 'collections'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Bank settlement</span>
                 <h3>Non-cash reconciliation</h3>
               </div>
             </div>
@@ -497,7 +489,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
         <section class="panel reconciliation-panel" *ngIf="cashWorkspace() === 'reconciliation'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Three-way reconciliation</span>
               <h3>POS collection, bank settlement and physical count</h3>
             </div>
             <button class="ghost-button mini" type="button" (click)="loadThreeWay(active)" [disabled]="saving()">Refresh match</button>
@@ -571,7 +562,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
         <section class="panel owner-risk-panel" *ngIf="ownerRiskDashboard() as dashboard">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Owner risk dashboard</span>
               <h3>Risk approvals and WhatsApp links</h3>
             </div>
             <button class="ghost-button mini" type="button" (click)="loadOwnerRiskDashboard()" [disabled]="saving()">Refresh dashboard</button>
@@ -606,7 +596,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
         <section class="panel risk-panel" *ngIf="risk() as riskState">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Cash risk & approval control</span>
               <h3>Close approval gate</h3>
             </div>
             <button class="ghost-button mini" type="button" (click)="loadRisk(active)" [disabled]="saving()">Refresh risk</button>
@@ -647,7 +636,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
         <section class="panel accounting-panel" *ngIf="cashWorkspace() === 'accounting'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Accounting auto-integration</span>
               <h3>Journal, tax register and Tally export</h3>
             </div>
             <div class="button-row">
@@ -680,7 +668,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
 
         <section class="report-card" *ngIf="cashWorkspace() === 'float'">
           <div>
-            <span class="eyebrow">Float control</span>
             <h3>Next-day change float</h3>
           </div>
           <div class="report-metrics" *ngIf="floatSuggestion() as suggestion">
@@ -694,7 +681,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
 
         <section class="close-panel" *ngIf="cashWorkspace() === 'closeReport'">
           <div>
-            <span class="eyebrow">Close gate</span>
             <h3>Din Band Karein</h3>
             <p *ngIf="active.canClose">All checks are clear. Closing will freeze the report and logout this user.</p>
             <p *ngIf="!active.canClose">Close is blocked until denomination count, cash variance and settlement checks pass.</p>
@@ -712,7 +698,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
         <ng-container *ngIf="cashWorkspace() === 'closeReport'">
         <section class="report-card" *ngIf="todayReport() as report">
           <div>
-            <span class="eyebrow">Today's Close</span>
             <h3>{{ report.businessDate }}</h3>
             <p>Owner notification: {{ report.notificationStatus || 'pending' }}</p>
           </div>
@@ -728,7 +713,6 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
             <ng-template #openDayWorkspace>
               <section class="open-panel open-workspace-panel">
                 <div>
-                  <span class="eyebrow">Day open</span>
                   <h3>Start cash drawer session</h3>
                 </div>
                 <label class="field">

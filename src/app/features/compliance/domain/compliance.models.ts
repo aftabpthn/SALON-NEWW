@@ -24,7 +24,7 @@ export interface ComplianceDashboard {
 
 export interface ComplianceRouteMeta {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   module: string;
   primaryAction: string;
 }

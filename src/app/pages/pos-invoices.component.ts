@@ -66,7 +66,6 @@ type ProductConsumeDraftRow = {
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">POS / invoice register</span>
           <h2>{{ pageTitle() }}</h2>
           <p>{{ pageDescription() }}</p>
         </div>
@@ -95,7 +94,6 @@ type ProductConsumeDraftRow = {
         <section class="billing-control-strip">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Billing / POS control</span>
               <h2>Payment truth, GST, margin and fraud checks</h2>
             </div>
             <a class="ghost-button mini" routerLink="/pos/invoice-activity">Audit trail</a>
@@ -339,7 +337,6 @@ type ProductConsumeDraftRow = {
           <section class="panel floating-detail-card invoice-detail-panel" (click)="$event.stopPropagation()">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Invoice detail</span>
                 <h2>{{ invoice.invoiceNumber }}</h2>
                 <a
                   class="consume-status-link"
@@ -676,7 +673,6 @@ type ProductConsumeDraftRow = {
         <section class="panel floating-detail-card invoice-detail-panel" (click)="$event.stopPropagation()">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Manager approval</span>
               <h2>{{ approvalActionTitle(request.action) }}</h2>
               <p>{{ request.invoice.invoiceNumber }} · {{ request.invoice.clientName }} · {{ request.invoice.total | currency: 'INR':'symbol':'1.0-0' }}</p>
             </div>
@@ -714,7 +710,6 @@ type ProductConsumeDraftRow = {
         <section class="panel floating-detail-card invoice-detail-panel" (click)="$event.stopPropagation()">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Enterprise control</span>
               <h2>Adjustment note</h2>
               <p>{{ request.invoice.invoiceNumber }} · direct edit locked for closed invoices</p>
             </div>

@@ -144,7 +144,6 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       <section class="panel operations-panel" *ngIf="activeDesk()">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Inventory &gt; Manage Products</span>
             <h2>{{ deskTitle() }}</h2>
           </div>
           <div class="section-actions">

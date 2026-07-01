@@ -52,7 +52,6 @@ const DEFAULT_FIELDS: ClientCustomField[] = [
       <main class="settings-content">
         <header class="settings-hero">
           <div>
-            <span class="eyebrow">Setup / Clients</span>
             <h1>Clients - Custom Form</h1>
           </div>
           <div class="hero-actions">

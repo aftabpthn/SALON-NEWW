@@ -23,7 +23,7 @@ type ColumnConfig = {
 type PageConfig = {
   entity: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   createLabel: string;
   columns: ColumnConfig[];
   fields: FieldConfig[];
@@ -52,7 +52,7 @@ type ServiceProductLockDraft = {
         <div class="zenoti-page-heading">
           <div>
             <h1>{{ config.title }}</h1>
-            <p>{{ config.subtitle }}</p>
+            
           </div>
           <label class="zenoti-search">
             <span>{{ zenotiSearchLabel() }}</span>
@@ -68,9 +68,8 @@ type ServiceProductLockDraft = {
       <ng-template #defaultHero>
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Module</span>
           <h2>{{ config.title }}</h2>
-          <p>{{ config.subtitle }}</p>
+          
         </div>
         <button class="primary-button" type="button" (click)="toggleForm()">{{ showForm ? 'Close form' : config.createLabel }}</button>
       </div>
@@ -89,7 +88,6 @@ type ServiceProductLockDraft = {
           <section class="service-product-lock" *ngIf="isServicesPage()">
             <div class="section-title compact">
               <div>
-                <span class="eyebrow">Product consumption</span>
                 <h3>Wastage lock for this service</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="addServiceProductLock()">Add product line</button>
@@ -123,7 +121,6 @@ type ServiceProductLockDraft = {
                 <button class="ghost-button mini danger" type="button" (click)="removeServiceProductLock(item.uid)" [disabled]="serviceProductLocks.length <= 1">Remove</button>
               </div>
             </div>
-            <p class="service-lock-note">Save ke baad ye lock service recipe me sync hoga. Product Consume me max qty ke upar actual use par auto waste aur owner approval guard chalega.</p>
           </section>
           <div class="form-actions">
             <button class="ghost-button" type="button" (click)="toggleForm()">Cancel</button>
@@ -157,7 +154,6 @@ type ServiceProductLockDraft = {
             <aside class="service-category-panel">
               <div class="section-title compact">
                 <div>
-                  <span class="eyebrow">Categories</span>
                   <h3>Service groups</h3>
                 </div>
                 <span class="badge">{{ categorySummaries().length }}</span>
@@ -173,7 +169,6 @@ type ServiceProductLockDraft = {
               <div class="rate-filter-block">
                 <div class="section-title compact">
                   <div>
-                    <span class="eyebrow">GST Rates</span>
                     <h3>Rate groups</h3>
                   </div>
                   <span class="badge">{{ gstRateSummaries().length }}</span>

@@ -12,7 +12,6 @@ import { StaffOsSectionComponent } from '../ui/staff-os-section.component';
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Staff mobile app</span>
           <h2>Mobile Staff Dashboard</h2>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>

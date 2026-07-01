@@ -82,7 +82,6 @@ type OutgoingFundEntry = ApiRecord & {
     <section class="outgoing-page">
       <header class="module-hero">
         <div>
-          <span class="eyebrow">Transactions / Funds</span>
           <h2>Outgoing Funds Entry</h2>
         </div>
         <div class="hero-actions">
@@ -112,7 +111,6 @@ type OutgoingFundEntry = ApiRecord & {
         <section class="register-bar">
           <header class="register-header">
             <div>
-              <span class="eyebrow">Register</span>
               <h3>Saved vouchers</h3>
             </div>
             <button class="ghost-button mini" type="button" (click)="startNew()">Add</button>

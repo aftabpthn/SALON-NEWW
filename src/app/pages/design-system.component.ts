@@ -23,7 +23,6 @@ type BrandPreset = {
     <section class="brand-studio" [ngStyle]="previewStyle()">
       <header class="studio-hero">
         <div>
-          <span class="eyebrow">100x Enterprise Design System Live</span>
           <h1>Salon Brand Customization Studio</h1>
         </div>
         <div class="hero-actions">
@@ -54,7 +53,6 @@ type BrandPreset = {
         <aside class="control-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Brand controls</span>
               <h2>Complete color system</h2>
             </div>
           </div>
@@ -107,7 +105,6 @@ type BrandPreset = {
             <section class="preview-workspace">
               <div class="preview-topbar">
                 <div>
-                  <span class="eyebrow">Live preview</span>
                   <h2>Executive Dashboard</h2>
                 </div>
                 <button type="button" class="studio-button primary">Book appointment</button>
@@ -124,7 +121,6 @@ type BrandPreset = {
                 <section class="preview-card">
                   <div class="section-title">
                     <div>
-                      <span class="eyebrow">Hover and border preview</span>
                       <h3>Client booking pipeline</h3>
                     </div>
                     <button type="button" class="studio-button ghost">Filter</button>
@@ -140,7 +136,6 @@ type BrandPreset = {
                 <section class="preview-card">
                   <div class="section-title">
                     <div>
-                      <span class="eyebrow">Form controls</span>
                       <h3>Theme-safe inputs</h3>
                     </div>
                   </div>
@@ -155,7 +150,6 @@ type BrandPreset = {
           <section class="css-export">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Developer handoff</span>
                 <h2>Generated CSS variables</h2>
               </div>
             </div>

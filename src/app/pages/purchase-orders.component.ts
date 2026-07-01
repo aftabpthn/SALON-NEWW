@@ -68,7 +68,7 @@ type ReceiveItem = {
       <div class="po-layout">
         <section class="panel">
           <div class="section-title">
-            <div><span class="eyebrow">Create PO draft</span><h2>Product purchase entry</h2></div>
+            <div><h2>Product purchase entry</h2></div>
             <button class="ghost-button mini" type="button" (click)="addDraftLine()">Add item</button>
           </div>
           <form [formGroup]="draftForm" (ngSubmit)="createDraft()" class="po-form">
@@ -168,7 +168,7 @@ type ReceiveItem = {
 
         <section class="panel">
           <div class="section-title">
-            <div><span class="eyebrow">GRN receiving</span><h2>Receive approved PO into FIFO stock</h2></div>
+            <div><h2>Receive approved PO into FIFO stock</h2></div>
           </div>
           <form [formGroup]="receiveForm" (ngSubmit)="receiveBatch()" class="po-form receive">
             <input type="hidden" formControlName="purchaseOrderId" />
@@ -221,7 +221,7 @@ type ReceiveItem = {
       </div>
 
       <section class="panel">
-        <div class="section-title"><div><span class="eyebrow">AI Reorder Autopilot</span><h2>Suggested purchase orders</h2></div></div>
+        <div class="section-title"><div><h2>Suggested purchase orders</h2></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Product</th><th>Branch</th><th>Stockout</th><th>Suggested qty</th><th>Cost</th><th>Reason</th><th>Action</th></tr></thead>
@@ -242,7 +242,7 @@ type ReceiveItem = {
       </section>
 
       <section class="panel">
-        <div class="section-title"><div><span class="eyebrow">Purchase order lifecycle</span><h2>Draft, approve, order, receive</h2></div></div>
+        <div class="section-title"><div><h2>Draft, approve, order, receive</h2></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>PO</th><th>Supplier</th><th>Branch</th><th>Items</th><th>Expected</th><th>Total</th><th>Status</th><th>Warnings</th><th>Actions</th></tr></thead>
@@ -275,7 +275,7 @@ type ReceiveItem = {
 
       <section class="panel po-detail" *ngIf="selectedPo() as po" id="po-print-area">
         <div class="section-title">
-          <div><span class="eyebrow">PO detail</span><h2>{{ po.poNumber || po.id }}</h2></div>
+          <div><h2>{{ po.poNumber || po.id }}</h2></div>
           <div class="hero-actions">
             <button class="ghost-button mini" type="button" (click)="prepareReceive(po)" [disabled]="!canReceive(po)">Receive</button>
             <button class="ghost-button mini" type="button" (click)="printSelectedPo()">Print</button>
@@ -317,7 +317,7 @@ type ReceiveItem = {
       </section>
 
       <section class="panel" *ngIf="whatsappDraft()">
-        <div class="section-title"><div><span class="eyebrow">WhatsApp supplier ordering</span><h2>Approval-safe draft message</h2></div></div>
+        <div class="section-title"><div><h2>Approval-safe draft message</h2></div></div>
         <div class="draft-box">{{ whatsappDraft() }}</div>
       </section>
     </section>

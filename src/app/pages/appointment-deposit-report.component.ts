@@ -21,7 +21,6 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Appointment Deposits</span>
           <h2>Advance Payment Report</h2>
         </div>
         <div class="action-row">

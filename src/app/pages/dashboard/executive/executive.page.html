@@ -1,7 +1,6 @@
 <section class="executive-page">
   <header class="executive-header">
     <div>
-      <span class="eyebrow">Owner command center</span>
       <h1>Executive Business Dashboard</h1>
     </div>
     <div class="header-actions">
@@ -40,7 +39,6 @@
 
     <section class="owner-priority-board">
       <div class="priority-intro">
-        <span class="eyebrow">Priority board</span>
         <h2>What the owner checks first</h2>
       </div>
       <a *ngFor="let card of priorityCards()" class="priority-card" [ngClass]="'tone-' + card.tone" [routerLink]="card.route">
@@ -55,7 +53,6 @@
         <section class="panel compact-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Sales command</span>
               <h2>Revenue trend · {{ dashboard.range.from }} → {{ dashboard.range.to }}</h2>
             </div>
             <a class="ghost-button" routerLink="/reports">Reports</a>
@@ -72,7 +69,6 @@
           <article class="panel compact-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Top services</span>
                 <h2>Profitability and demand</h2>
               </div>
               <a class="ghost-button" routerLink="/reports">View report</a>
@@ -90,7 +86,6 @@
           <article class="panel compact-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Peak hours heatmap</span>
                 <h2>Occupancy by day and hour</h2>
               </div>
             </div>
@@ -107,7 +102,6 @@
           <article class="panel compact-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Salon-critical KPIs</span>
                 <h2>Capacity, walk-ins, visit gap</h2>
               </div>
             </div>
@@ -138,7 +132,6 @@
           <article class="panel compact-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">RFM + CLV</span>
                 <h2>Customer retention engine</h2>
               </div>
               <a class="ghost-button" routerLink="/clients">CRM</a>
@@ -162,7 +155,6 @@
           <article class="panel compact-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">GST and compliance</span>
                 <h2>India-ready billing snapshot</h2>
               </div>
               <a class="ghost-button" routerLink="/finance">Finance</a>
@@ -197,7 +189,6 @@
           <article class="panel compact-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Anomaly detection</span>
                 <h2>Open alerts</h2>
               </div>
             </div>
@@ -224,7 +215,6 @@
         <section class="panel compact-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Live feed</span>
               <h2>Realtime activity</h2>
             </div>
           </div>
@@ -234,7 +224,6 @@
         <section class="panel compact-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Top performers</span>
               <h2>Staff and service leaders</h2>
             </div>
           </div>

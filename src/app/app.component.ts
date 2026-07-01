@@ -6,6 +6,7 @@ import { filter } from 'rxjs';
 import { ApiRecord, ApiService } from './core/api.service';
 import { AuthSessionService } from './core/auth-session.service';
 import { I18nService, LocalePreference } from './core/i18n.service';
+import { NavigationPrefetchService } from './core/navigation-prefetch.service';
 import { grantsAllow, staticGrantsForRole } from './core/permission.guard';
 import { AppStateService, UserRole } from './core/state/app-state.service';
 import { AutoNameCaseDirective } from './shared/directives/auto-name-case.directive';
@@ -63,7 +64,6 @@ type ActiveModuleTabs = {
               <span class="auth-brand-kicker">Enterprise Salon OS</span>
             </div>
             <div>
-              <span class="eyebrow">Secure sign in</span>
               <h1>Aura Salon OS</h1>
             </div>
           </header>
@@ -144,7 +144,7 @@ type ActiveModuleTabs = {
         [class.sidebar-compact]="sidebarUiCompact()"
       >
         <div class="sidebar-brand-row">
-          <a class="brand" routerLink="/home" aria-label="Aura Shine home" data-label="Aura Shine home">
+          <a class="brand" routerLink="/home" aria-label="Aura Shine home" data-label="Aura Shine home" (mouseenter)="prefetchNavPath('/home')" (focus)="prefetchNavPath('/home')">
             <span class="brand-mark" aria-hidden="true">AS</span>
             <span>
               <strong>Aura Shine</strong>
@@ -193,6 +193,8 @@ type ActiveModuleTabs = {
                   [queryParams]="item.queryParams || null"
                   routerLinkActive="active"
                   [routerLinkActiveOptions]="{ exact: item.path === '/home' || item.path === '/dashboard' }"
+                  (mouseenter)="prefetchNavItem(item)"
+                  (focus)="prefetchNavItem(item)"
                   (click)="rememberNavGroup(group.id); closeSidebarSearch(true)"
                 >
                   <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -212,7 +214,7 @@ type ActiveModuleTabs = {
 
         <nav class="nav-list nav-accordion" aria-label="Primary navigation">
           <section class="nav-section" *ngFor="let group of visibleNavGroups(); trackBy: trackNavGroup" [class.active-section]="isGroupActive(group)">
-            <button class="nav-section-trigger" type="button" (click)="openNavGroup(group)" [attr.aria-label]="group.label" [attr.data-label]="group.label">
+            <button class="nav-section-trigger" type="button" (mouseenter)="prefetchNavGroup(group)" (focus)="prefetchNavGroup(group)" (click)="openNavGroup(group)" [attr.aria-label]="group.label" [attr.data-label]="group.label">
               <span class="nav-icon nav-icon--module" aria-hidden="true">
                 <svg class="nav-icon-svg" viewBox="0 0 24 24" focusable="false">
                   <path [attr.d]="navGroupIconPath(group.id)"></path>
@@ -234,6 +236,8 @@ type ActiveModuleTabs = {
                       [routerLink]="item.path"
                       [queryParams]="item.queryParams || null"
                       routerLinkActive="active"
+                      (mouseenter)="prefetchNavItem(item)"
+                      (focus)="prefetchNavItem(item)"
                       (click)="rememberNavGroup(group.id)"
                     >
                       <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -249,6 +253,8 @@ type ActiveModuleTabs = {
                       [queryParams]="item.queryParams || null"
                       routerLinkActive="active"
                       [routerLinkActiveOptions]="{ exact: item.path === '/home' || item.path === '/dashboard' }"
+                      (mouseenter)="prefetchNavItem(item)"
+                      (focus)="prefetchNavItem(item)"
                       (click)="rememberNavGroup(group.id)"
                     >
                       <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -270,6 +276,8 @@ type ActiveModuleTabs = {
           routerLink="/ai"
           routerLinkActive="active"
           [routerLinkActiveOptions]="{ exact: true }"
+          (mouseenter)="prefetchNavPath('/ai')"
+          (focus)="prefetchNavPath('/ai')"
           aria-label="Customer Care AI"
           data-label="Customer Care AI"
         >
@@ -313,7 +321,7 @@ type ActiveModuleTabs = {
               (countryChange)="selectCountry($event)"
               (languageChange)="selectLanguage($event)">
             </aura-workspace-switcher>
-            <a class="dark-button" routerLink="/pos">{{ i18n.t('shell.fastPos', 'Fast POS') }}</a>
+            <a class="dark-button" routerLink="/pos" (mouseenter)="prefetchNavPath('/pos')" (focus)="prefetchNavPath('/pos')">{{ i18n.t('shell.fastPos', 'Fast POS') }}</a>
             <span class="topbar-divider" aria-hidden="true"></span>
             <aura-header-actions></aura-header-actions>
           </div>
@@ -346,13 +354,15 @@ type ActiveModuleTabs = {
             </div>
             <nav class="workspace-local-nav" [attr.aria-label]="localNav.label + ' pages'">
               <a
-                *ngFor="let item of localNav.children"
+                *ngFor="let item of localNav.children; trackBy: trackNavItem"
                 [routerLink]="item.path"
                 [queryParams]="item.queryParams || null"
                 [class.active]="isLocalNavItemActive(item)"
                 [attr.aria-current]="isLocalNavItemActive(item) ? 'page' : null"
                 [attr.aria-label]="item.label"
                 [attr.data-label]="item.label"
+                (mouseenter)="prefetchNavItem(item)"
+                (focus)="prefetchNavItem(item)"
                 (click)="rememberNavGroup(localNav.groupId)"
               >
                 <span class="workspace-local-nav-icon" aria-hidden="true">{{ navItemInitials(item) }}</span>
@@ -364,11 +374,13 @@ type ActiveModuleTabs = {
             <section class="workspace-module-tabs" *ngIf="activeModuleTabs() as moduleTabs" [attr.aria-label]="moduleTabs.label + ' modules'">
               <nav class="workspace-module-tabs-nav" [attr.aria-label]="moduleTabs.label + ' module groups'">
                 <a
-                  *ngFor="let tab of moduleTabs.items"
+                  *ngFor="let tab of moduleTabs.items; trackBy: trackNavItem"
                   class="workspace-module-tab"
                   [routerLink]="tab.path"
                   [class.active]="isNavItemActive(tab)"
                   [attr.aria-current]="isNavItemActive(tab) ? 'page' : null"
+                  (mouseenter)="prefetchNavItem(tab)"
+                  (focus)="prefetchNavItem(tab)"
                   (click)="rememberNavGroup(moduleTabs.groupId)"
                 >
                   <span class="nav-icon" aria-hidden="true">{{ tab.icon }}</span>
@@ -381,7 +393,7 @@ type ActiveModuleTabs = {
         </section>
       </main>
       <aura-command-palette></aura-command-palette>
-      <a class="ai-fab" routerLink="/ai" aria-label="Ask Aura AI assistant" title="Ask Aura AI">
+      <a class="ai-fab" routerLink="/ai" aria-label="Ask Aura AI assistant" title="Ask Aura AI" (mouseenter)="prefetchNavPath('/ai')" (focus)="prefetchNavPath('/ai')">
         <svg class="ai-fab-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <path fill="currentColor" d="M5 3h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H10l-4.6 3.45A1 1 0 0 1 4 19.6V17a3 3 0 0 1-1-2.24V6a3 3 0 0 1 3-3z"/>
           <circle cx="8.5" cy="10" r="1.25" fill="#7c3aed"/>
@@ -1269,7 +1281,8 @@ export class AppComponent implements OnDestroy {
     readonly state: AppStateService,
     readonly session: AuthSessionService,
     readonly i18n: I18nService,
-    private readonly router: Router
+    private readonly router: Router,
+    private readonly prefetcher: NavigationPrefetchService
   ) {
     delete document.documentElement.dataset.theme;
     this.isPortal.set(this.isPortalUrl(this.router.url));
@@ -1300,6 +1313,7 @@ export class AppComponent implements OnDestroy {
         this.loadTenants();
         this.loadBranches();
         this.loadLocalizationPreference(this.state.selectedTenantId());
+        this.prefetcher.warmHighUseRoutes();
       }
     });
   }
@@ -1333,6 +1347,7 @@ export class AppComponent implements OnDestroy {
         this.loginForm.controls.totpToken.setValue('');
         this.loadTenants();
         this.loadBranches();
+        this.prefetcher.warmHighUseRoutes();
       },
       error: (error) => {
         if (AuthSessionService.requiresTotp(error)) {
@@ -1471,6 +1486,17 @@ export class AppComponent implements OnDestroy {
     });
   }
 
+  prefetchNavPath(path: string): void {
+    this.prefetcher.prefetch(path);
+  }
+
+  prefetchNavItem(item: NavItem): void {
+    this.prefetchNavPath(item.path);
+  }
+
+  prefetchNavGroup(group: NavGroup): void {
+    this.prefetchNavPath(group.primaryPath);
+  }
   navGroupIconPath(groupId: string): string {
     return this.navGroupIconPaths[groupId] || this.navGroupIconFallback;
   }

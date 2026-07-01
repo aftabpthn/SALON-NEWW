@@ -72,7 +72,6 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
       <main class="settings-content">
         <header class="settings-hero">
           <div>
-            <span class="eyebrow">Setup / Point of Sale</span>
             <h1>Tax Settings</h1>
           </div>
           <div class="hero-actions">

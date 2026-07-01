@@ -15,7 +15,6 @@ type PunchType = 'in' | 'out';
     <section class="face-page">
       <header class="hero">
         <div>
-          <span class="eyebrow">Attendance / Mobile biometric</span>
           <h1>Face Punch</h1>
         </div>
         <button class="primary" type="button" (click)="openCamera()" [disabled]="cameraOn()">Start camera</button>

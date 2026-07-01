@@ -107,7 +107,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid two audit-workdesk">
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Stock count</span><h2>Actual quantity entry</h2></div></div>
+          <div class="section-title"><div><h2>Actual quantity entry</h2></div></div>
           <form [formGroup]="countForm" (ngSubmit)="createCount()" class="audit-form">
             <label class="field"><span>Branch</span><select formControlName="branchId"><option value="">Select branch</option><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>
             <label class="field"><span>Product</span><select formControlName="productId"><option value="">All branch products</option><option *ngFor="let product of products()" [value]="product.id">{{ product.name }} · system {{ product.stock || 0 }}</option></select></label>
@@ -118,7 +118,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Branch transfer</span><h2>Move stock before buying</h2></div></div>
+          <div class="section-title"><div><h2>Move stock before buying</h2></div></div>
           <form [formGroup]="transferForm" (ngSubmit)="createTransfer()" class="audit-form transfer">
             <label class="field"><span>Source branch</span><select formControlName="sourceBranchId"><option value="">Source</option><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>
             <label class="field"><span>Target branch</span><select formControlName="targetBranchId"><option value="">Target</option><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>

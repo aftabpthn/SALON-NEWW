@@ -28,7 +28,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 interface HubConfig {
   eyebrow: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   icon: string;
   route: string;
 }
@@ -48,98 +48,84 @@ const hubConfigs: Record<string, HubConfig> = {
   rewards: {
     eyebrow: "Aura rewards",
     title: "Rewards from your real bookings",
-    subtitle: "Your points and booking activity are loaded from your AuraSalon customer profile.",
     icon: "ribbon-outline",
     route: "/tabs/rewards"
   },
   wallet: {
     eyebrow: "Aura wallet",
     title: "Wallet records",
-    subtitle: "Wallet balance, credits, refunds and cashback will appear only after wallet APIs return real customer records.",
     icon: "wallet-outline",
     route: "/tabs/wallet"
   },
   memberships: {
     eyebrow: "Memberships",
     title: "Membership records",
-    subtitle: "Active memberships and benefits will appear only when the SaaS backend returns them for your account.",
     icon: "heart-circle-outline",
     route: "/tabs/memberships"
   },
   packages: {
     eyebrow: "Packages",
     title: "Package records",
-    subtitle: "Purchased packages, session balances and redemption history will appear from the backend.",
     icon: "ticket-outline",
     route: "/tabs/packages"
   },
   "gift-cards": {
     eyebrow: "Gift cards",
     title: "Gift card records",
-    subtitle: "Gift card purchases, sends, redemptions and balances will appear only from live backend data.",
     icon: "gift-outline",
     route: "/tabs/gift-cards"
   },
   support: {
     eyebrow: "Support",
     title: "Support records",
-    subtitle: "Tickets and salon conversations will appear when customer support APIs return live records.",
     icon: "chatbubbles-outline",
     route: "/tabs/support"
   },
   referrals: {
     eyebrow: "Referrals",
     title: "Referral records",
-    subtitle: "Invite links, reward status and referral history will appear only from the SaaS backend.",
     icon: "share-social-outline",
     route: "/tabs/referrals"
   },
   gallery: {
     eyebrow: "Gallery",
     title: "Saved inspiration",
-    subtitle: "Before/after photos and saved inspiration will appear only from customer gallery APIs.",
     icon: "images-outline",
     route: "/tabs/gallery"
   },
   family: {
     eyebrow: "Family booking",
     title: "Family profiles",
-    subtitle: "Family members and group booking records will appear only from authenticated backend data.",
     icon: "people-outline",
     route: "/tabs/family"
   },
   corporate: {
     eyebrow: "Corporate benefits",
     title: "Corporate records",
-    subtitle: "Employee benefits and company package records will appear only from the SaaS backend.",
     icon: "briefcase-outline",
     route: "/tabs/corporate"
   },
   goals: {
     eyebrow: "Beauty goals",
     title: "Beauty goal records",
-    subtitle: "Goals, plans and treatment history will appear only from backend customer records.",
     icon: "color-palette-outline",
     route: "/tabs/goals"
   },
   payments: {
     eyebrow: "Payments",
     title: "Payment records",
-    subtitle: "Successful and pending payments will appear only from invoice-linked backend records.",
     icon: "wallet-outline",
     route: "/tabs/payments"
   },
   invoices: {
     eyebrow: "Invoices",
     title: "Invoice records",
-    subtitle: "Invoices and balances will appear only from customer-owned SaaS invoice records.",
     icon: "ticket-outline",
     route: "/tabs/invoices"
   },
   notifications: {
     eyebrow: "Notifications",
     title: "Notification records",
-    subtitle: "Booking, payment and reminder updates will appear only from backend notification records.",
     icon: "chatbubbles-outline",
     route: "/notifications"
   }

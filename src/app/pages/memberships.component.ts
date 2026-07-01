@@ -163,7 +163,6 @@ type PlanLifecycleDialog = {
       <section class="membership-overview-grid" *ngIf="activeTab() === 'overview'">
         <article class="overview-card primary">
           <div>
-            <span class="eyebrow">Today focus</span>
             <h3>{{ report().expiringSoon?.length || 0 }} renewal follow-ups</h3>
           </div>
           <div class="overview-actions">
@@ -173,25 +172,21 @@ type PlanLifecycleDialog = {
         </article>
 
         <article class="overview-card">
-          <span class="eyebrow">Best plan visibility</span>
           <h3>{{ activeMembershipPlans()[0]?.name || 'No active plan yet' }}</h3>
           <p>{{ activeMembershipPlans()[0]?.discountPercent || 0 }}% service discount · {{ activeMembershipPlans()[0]?.validityDays || 0 }} days validity.</p>
           <button class="ghost-button mini" type="button" (click)="setTab('plans')">Manage plans</button>
         </article>
 
         <article class="overview-card">
-          <span class="eyebrow">Liability</span>
           <h3>{{ (report().metrics?.pendingLiability || 0) | currency: 'INR':'symbol':'1.0-0' }}</h3>
           <p>{{ report().metrics?.creditsRemaining || 0 }} credits still available for redemption.</p>
         </article>
 
         <article class="overview-card">
-          <span class="eyebrow">Membership Wallet</span>
           <h3>{{ selectedClientBenefitsLabel() }}</h3>
         </article>
 
         <article class="overview-card">
-          <span class="eyebrow">Active packages</span>
           <h3>{{ report().metrics?.creditsRemaining || 0 }} credits</h3>
         </article>
       </section>
@@ -318,7 +313,6 @@ type PlanLifecycleDialog = {
           </table>
           <div class="package-detail-card" *ngIf="selectedPackage() as pkg">
             <div>
-              <span class="eyebrow">Selected package</span>
               <h3>{{ packageName(pkg) }}</h3>
               <p>{{ packageRuleText(pkg) }}</p>
             </div>
@@ -486,7 +480,6 @@ type PlanLifecycleDialog = {
       <section class="panel" *ngIf="activeTab() === 'active'">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Lifecycle controls</span>
             <h2>{{ memberListTitle() }}</h2>
           </div>
           <div class="inline-actions">
@@ -549,7 +542,6 @@ type PlanLifecycleDialog = {
           <section class="form-panel">
             <div class="section-title compact-title">
               <div>
-                <span class="eyebrow">Owner/manager approval</span>
                 <h3>Membership self-service control center</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="loadSelfServiceSummary()">Load summary</button>
@@ -586,7 +578,6 @@ type PlanLifecycleDialog = {
           <section class="form-panel">
             <div class="section-title compact-title">
               <div>
-                <span class="eyebrow">Enterprise controls</span>
                 <h3>Manual credit adjustment</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="refreshSelfServiceRequests()">Pending approval</button>
@@ -647,7 +638,6 @@ type PlanLifecycleDialog = {
       <section class="panel" *ngIf="activeTab() === 'autoRenew'">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Payment-safe engine</span>
             <h2>Auto-renew queue</h2>
           </div>
           <button class="ghost-button mini" type="button" (click)="load()">Refresh queue</button>
@@ -732,7 +722,6 @@ type PlanLifecycleDialog = {
       <section class="panel" *ngIf="activeTab() === 'commission'">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Phase 6 commission integration</span>
             <h2>Membership commission center</h2>
           </div>
           <a class="ghost-button mini" routerLink="/reports/commission-preview">Commission preview</a>
@@ -749,7 +738,6 @@ type PlanLifecycleDialog = {
           <section class="form-panel">
             <div class="section-title compact-title">
               <div>
-                <span class="eyebrow">Staff membership sales</span>
                 <h3>Staff-wise revenue and retention</h3>
               </div>
             </div>
@@ -780,7 +768,6 @@ type PlanLifecycleDialog = {
           <section class="form-panel">
             <div class="section-title compact-title">
               <div>
-                <span class="eyebrow">Cancellation impact on commission</span>
                 <h3>Reversal and audit flags</h3>
               </div>
             </div>
@@ -824,7 +811,6 @@ type PlanLifecycleDialog = {
       <section class="panel" *ngIf="activeTab() === 'risk'">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Phase 7 risk and leakage detection</span>
             <h2>Membership risk center</h2>
           </div>
           <div class="inline-actions">
@@ -876,7 +862,6 @@ type PlanLifecycleDialog = {
       <section class="panel" *ngIf="activeTab() === 'reports'">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Phase 8 reports</span>
             <h2>Membership reports center</h2>
           </div>
           <div class="inline-actions">
@@ -1023,7 +1008,6 @@ type PlanLifecycleDialog = {
         <section class="form-panel report-card action-queue-card report-detail-card" *ngIf="activeReportTab() === 'actionQueue'">
           <div class="section-title compact-section-title">
             <div>
-              <span class="eyebrow">Advanced queue</span>
               <h3>Membership action queue</h3>
             </div>
             <span class="badge" [class.danger]="reportMetric('actionQueue') > 0">{{ reportMetric('actionQueue') }} open</span>
@@ -1155,7 +1139,6 @@ type PlanLifecycleDialog = {
           <section class="form-panel report-card report-detail-card wide-report-card" *ngIf="activeReportTab() === 'membershipSalesByCustomer'">
             <div class="section-title compact-section-title">
               <div>
-                <span class="eyebrow">Customer-wise membership sale</span>
                 <h3>Membership Sales By Customer</h3>
               </div>
               <span class="badge">{{ reportSet('membershipSalesByCustomer').length }} rows</span>
@@ -1203,7 +1186,6 @@ type PlanLifecycleDialog = {
           <section class="form-panel report-card report-detail-card wide-report-card" *ngIf="activeReportTab() === 'membershipRedeem'">
             <div class="section-title compact-section-title">
               <div>
-                <span class="eyebrow">Wallet + POS redemption</span>
                 <h3>Membership Redeem</h3>
               </div>
               <span class="badge">{{ reportSet('membershipRedeem').length }} rows</span>
@@ -1242,7 +1224,6 @@ type PlanLifecycleDialog = {
       <section class="panel rewards-panel" *ngIf="activeTab() === 'rewards'">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Loyalty command center</span>
             <h2>Rewards Ledger + ROI</h2>
           </div>
           <div class="inline-actions">
@@ -1385,7 +1366,6 @@ type PlanLifecycleDialog = {
         <section class="renewal-modal" role="dialog" aria-modal="true" aria-labelledby="renewalTitle" (click)="$event.stopPropagation()">
           <div class="section-title compact-title">
             <div>
-              <span class="eyebrow">Payment required</span>
               <h2 id="renewalTitle">Renew membership</h2>
             </div>
             <button class="ghost-button mini" type="button" (click)="closeRenewalDialog()">Close</button>
@@ -1465,7 +1445,6 @@ type PlanLifecycleDialog = {
         <section class="renewal-modal" role="dialog" aria-modal="true" aria-labelledby="lifecycleTitle" (click)="$event.stopPropagation()">
           <div class="section-title compact-title">
             <div>
-              <span class="eyebrow">Payment-safe lifecycle</span>
               <h2 id="lifecycleTitle">{{ lifecycleTitle(dialog.action) }}</h2>
             </div>
             <button class="ghost-button mini" type="button" (click)="closeLifecycleDialog()">Close</button>

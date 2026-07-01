@@ -100,7 +100,6 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
 
       <section class="panel report-hero" [ngClass]="config().accent">
         <div>
-          <span class="eyebrow">Client intelligence</span>
           <h1>{{ config().title }}</h1>
           <p>{{ config().description }}</p>
         </div>

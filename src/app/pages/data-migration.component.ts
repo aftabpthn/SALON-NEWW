@@ -151,7 +151,6 @@ type MigrationRecoveryReport = {
     <section class="migration-shell">
       <header class="command-header">
         <div>
-          <span class="eyebrow">Enterprise Data Migration OS</span>
           <h1>100X import command center</h1>
         </div>
         <div class="score-card" [class.danger]="readinessScore() < 60" [class.warning]="readinessScore() >= 60 && readinessScore() < 85">
@@ -200,7 +199,6 @@ type MigrationRecoveryReport = {
         <article class="panel import-panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Live Import Runbook</span>
               <h2>Controlled migration launch</h2>
             </div>
             <span class="status-pill">{{ loading() ? 'Running' : 'Ready' }}</span>
@@ -321,7 +319,6 @@ type MigrationRecoveryReport = {
         <aside class="panel risk-panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Risk Radar</span>
               <h2>Import blockers</h2>
             </div>
           </div>
@@ -338,7 +335,6 @@ type MigrationRecoveryReport = {
         <article class="panel worker-panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Large Migration Worker</span>
               <h2>Chunked import queue</h2>
             </div>
             <span class="status-pill" [class.danger]="largeJob()?.status === 'failed'">{{ largeJob()?.status || 'Not prepared' }}</span>
@@ -417,7 +413,6 @@ type MigrationRecoveryReport = {
         <article class="panel proof-panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Migration Proof</span>
               <h2>Reconciliation sign-off</h2>
             </div>
             <span class="status-pill" [class.danger]="latestLargeReconciliation()?.status === 'warning' || reconciliationResult()?.mismatchCount">{{ proofStatus() }}</span>
@@ -480,7 +475,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">AI Mapping Studio</span>
               <h2>Field confidence & saved profiles</h2>
             </div>
             <span class="status-pill">{{ mappingCoverage() }}% mapped</span>
@@ -508,7 +502,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Entity Coverage</span>
               <h2>Detected modules</h2>
             </div>
           </div>
@@ -526,7 +519,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Reconciliation</span>
               <h2>Old vs Aura checks</h2>
             </div>
           </div>
@@ -544,7 +536,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Reconciliation Lab</span>
               <h2>Expected totals vs analyzed data</h2>
             </div>
             <span class="status-pill" [class.danger]="reconciliationResult()?.mismatchCount">{{ reconciliationResult()?.matched ? 'Matched' : reconciliationResult() ? 'Mismatch' : 'Not run' }}</span>
@@ -571,7 +562,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Approval Control Tower</span>
               <h2>Owner sign-off workflow</h2>
             </div>
             <button class="secondary-button" type="button" [disabled]="loading()" (click)="loadApprovals()">Refresh</button>
@@ -609,7 +599,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Duplicate Merge Studio</span>
               <h2>Client, invoice & source collisions</h2>
             </div>
             <span class="status-pill">{{ duplicateDecisionCount() }}/{{ duplicateRows().length }} decided</span>
@@ -633,7 +622,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Validation Ops Queue</span>
               <h2>Fix priorities</h2>
             </div>
           </div>
@@ -651,7 +639,6 @@ type MigrationRecoveryReport = {
         <article class="panel" *ngIf="previewRows().length">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Validation Cockpit</span>
               <h2>First 500 row decisions</h2>
             </div>
             <div class="segmented">
@@ -690,7 +677,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Go-Live Checklist</span>
               <h2>Sign-off controls</h2>
             </div>
           </div>
@@ -717,7 +703,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Enterprise Controls</span>
               <h2>Quality, sandbox & approval gate</h2>
             </div>
             <span class="status-pill" [class.danger]="dataQualityScore() < 60">{{ dataQualityScore() }}% quality</span>
@@ -745,7 +730,6 @@ type MigrationRecoveryReport = {
         <article class="panel">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Migration Assistant</span>
               <h2>Ask why rows failed</h2>
             </div>
           </div>
@@ -774,7 +758,6 @@ type MigrationRecoveryReport = {
       <section class="panel">
         <div class="panel-head">
           <div>
-            <span class="eyebrow">Migration Ledger</span>
             <h2>Jobs, audits and rollback history</h2>
           </div>
           <button class="secondary-button" (click)="loadJobs()" [disabled]="loading()">Refresh</button>
@@ -815,7 +798,6 @@ type MigrationRecoveryReport = {
         <div class="job-detail" *ngIf="selectedJob() as job">
           <div class="panel-head">
             <div>
-              <span class="eyebrow">Job Drilldown</span>
               <h2>{{ job.fileName || job.id }}</h2>
             </div>
             <div class="action-row tight">
@@ -848,7 +830,6 @@ type MigrationRecoveryReport = {
           <div class="recovery-panel" *ngIf="selectedJobRecovery() as recovery">
             <div class="panel-head">
               <div>
-                <span class="eyebrow">Recovery Control</span>
                 <h2>{{ recovery.status | titlecase }}</h2>
               </div>
               <span class="status-pill" [class.danger]="recovery.blockers.length">{{ recovery.blockers.length || 0 }} blocker(s)</span>

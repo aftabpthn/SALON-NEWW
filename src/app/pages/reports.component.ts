@@ -143,6 +143,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: EXECUTIVE ANALYTICS (2-col)                  -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="revenue" class="sec">
         <div class="sec-h">
           <h2>Executive analytics</h2>
@@ -197,10 +198,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="revenue" class="sec defer-shell" aria-label="Revenue overview loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-chart"></div>
+        </section>
+      }
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: FINANCIAL + BOOKING + CLIENT DASHBOARD        -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="bookings" class="sec">
         <div class="sec-h">
           <h2>Business snapshots</h2>
@@ -262,10 +270,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="bookings" class="sec defer-shell" aria-label="Business snapshots loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-grid"></div>
+        </section>
+      }
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: STAFF DASHBOARD                              -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="staff" class="sec">
         <ng-container *ngIf="report() as r">
           <div class="sec-h">
@@ -279,7 +294,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <table class="tbl">
               <thead><tr><th>Staff</th><th>Role</th><th>Revenue</th><th>Bookings</th><th>Completion</th><th>Commission</th></tr></thead>
               <tbody>
-                <tr *ngFor="let p of topStaff(); let i = index">
+                <tr *ngFor="let p of topStaff(); let i = index; trackBy: trackStaffPerformance">
                   <td><div class="staff-cell"><span class="staff-rank">{{ i + 1 }}</span><strong>{{ p.name }}</strong></div></td>
                   <td><span class="role-badge">{{ p.role }}</span></td>
                   <td><strong>₹{{ p.revenue | number:'1.0-0' }}</strong></td>
@@ -295,10 +310,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="staff" class="sec defer-shell" aria-label="Staff performance loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-table"></div>
+        </section>
+      }
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: INVENTORY + AI INSIGHTS                       -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="inventory" class="sec">
         <ng-container *ngIf="report() as r">
           <div class="sec-h">
@@ -320,10 +342,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="inventory" class="sec defer-shell" aria-label="Inventory overview loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-grid"></div>
+        </section>
+      }
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: REPORT LIBRARY (tiles) + CONNECTED REPORTS    -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="reports" class="sec">
         <div class="sec-h">
           <h2>Report library</h2>
@@ -331,7 +360,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
         <ng-container *ngIf="report() as r">
           <div class="lib-grid">
-            <div class="lib-card" *ngFor="let link of quickLinks()" (click)="navigate(link.path)">
+            <div class="lib-card" *ngFor="let link of quickLinks(); trackBy: trackQuickLink" (click)="navigate(link.path)">
               <span class="lib-card-icon" [style.background]="libColor(link.module)">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
               </span>
@@ -351,7 +380,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span class="sec-badge">{{ a.kpiDetailMap?.length || 0 }} drill-downs</span>
           </div>
           <div class="lib-grid">
-            <div class="lib-card" *ngFor="let item of a.kpiDetailMap" (click)="navigate(item.route)">
+            <div class="lib-card" *ngFor="let item of a.kpiDetailMap; trackBy: trackKpiMap" (click)="navigate(item.route)">
               <span class="lib-card-icon" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
               </span>
@@ -364,10 +393,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="reports" class="sec defer-shell" aria-label="Report library loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-grid"></div>
+        </section>
+      }
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: AI INSIGHTS + SCHEDULED REPORTS (2-col)       -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="insights" class="sec">
         <ng-container *ngIf="analyticsCommand() as a">
           <div class="sec-h"><h2>AI Insights & schedules</h2></div>
@@ -379,7 +415,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <span>AI recommendations</span>
               </div>
               <div class="is-ins" *ngIf="a.aiInsights?.length">
-                <div class="is-ins-item" *ngFor="let ins of a.aiInsights">
+                <div class="is-ins-item" *ngFor="let ins of a.aiInsights; trackBy: trackInsight">
                   <span class="is-dot" [class]="sevClass(ins.severity)"></span>
                   <div>
                     <strong>{{ ins.title }}</strong>
@@ -404,7 +440,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <table class="tbl tbl-compact">
                   <thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th><th></th></tr></thead>
                   <tbody>
-                    <ng-container *ngFor="let s of a.scheduledReports">
+                    <ng-container *ngFor="let s of a.scheduledReports; trackBy: trackSchedule">
                       <tr class="sch-row" [class.sch-row-open]="expandedSchedule() === s.id" (click)="toggleSchedule(s.id)">
                         <td><strong>{{ s.name }}</strong></td>
                         <td>{{ s.cadence }}</td>
@@ -446,10 +482,17 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="insights" class="sec defer-shell" aria-label="AI insights loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-table"></div>
+        </section>
+      }
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: DRILLDOWNS TABLE                            -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      @defer (on viewport) {
       <section id="drilldowns" class="sec">
         <ng-container *ngIf="analyticsCommand() as a">
           <div class="sec-h"><h2>Report drilldowns</h2><span class="sec-badge">{{ a.drilldowns?.length || 0 }} reports</span></div>
@@ -457,7 +500,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <table class="tbl">
               <thead><tr><th>Report</th><th>Rows</th><th>Source</th><th></th></tr></thead>
               <tbody>
-                <tr *ngFor="let d of a.drilldowns">
+                <tr *ngFor="let d of a.drilldowns; trackBy: trackDrilldown">
                   <td><strong>{{ d.title }}</strong></td>
                   <td><span class="count-badge">{{ d.rows }}</span></td>
                   <td><span class="src-label">{{ d.source }}</span></td>
@@ -468,6 +511,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </ng-container>
       </section>
+      } @placeholder {
+        <section id="drilldowns" class="sec defer-shell" aria-label="Report drilldowns loading">
+          <div class="defer-skeleton defer-skeleton-head"></div>
+          <div class="defer-skeleton defer-skeleton-table"></div>
+        </section>
+      }
 
       <!-- ═══════ FOOTER ACTIONS ═══════ -->
       <div class="page-footer">
@@ -601,6 +650,21 @@ import { StateComponent } from '../shared/ui/state/state.component';
     /* ─── SECTION ─── */
     .sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 170px; padding: 24px 20px; border-radius: 16px; background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
     .sec + .sec { margin-top: 18px; }
+    .defer-shell { min-height: 178px; justify-content: center; }
+    .defer-skeleton {
+      border-radius: 12px;
+      background: linear-gradient(90deg, rgba(148,163,184,0.14), rgba(148,163,184,0.08), rgba(148,163,184,0.14));
+      background-size: 220% 100%;
+      animation: reportSkeleton 1.25s ease-in-out infinite;
+    }
+    .defer-skeleton-head { width: min(320px, 60%); height: 24px; }
+    .defer-skeleton-chart { min-height: 132px; }
+    .defer-skeleton-grid { min-height: 132px; }
+    .defer-skeleton-table { min-height: 156px; }
+    @keyframes reportSkeleton {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
     .sec-h {
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 4px;
     }
@@ -902,6 +966,29 @@ export class ReportsComponent implements OnInit {
 
   readonly expandedSchedule = signal<string | null>(null);
 
+  trackStaffPerformance(index: number, person: ApiRecord): string {
+    return String(person?.['id'] || person?.['staffId'] || person?.['name'] || index);
+  }
+
+  trackQuickLink(index: number, link: ApiRecord): string {
+    return String(link?.['path'] || link?.['label'] || index);
+  }
+
+  trackKpiMap(index: number, item: ApiRecord): string {
+    return String(item?.['route'] || item?.['title'] || index);
+  }
+
+  trackInsight(index: number, insight: ApiRecord): string {
+    return String(insight?.['id'] || insight?.['title'] || insight?.['recommendation'] || index);
+  }
+
+  trackSchedule(index: number, schedule: ApiRecord): string {
+    return String(schedule?.['id'] || schedule?.['name'] || index);
+  }
+
+  trackDrilldown(index: number, drilldown: ApiRecord): string {
+    return String(drilldown?.['route'] || drilldown?.['title'] || index);
+  }
   toggleSchedule(id: string): void {
     this.expandedSchedule.set(this.expandedSchedule() === id ? null : id);
   }

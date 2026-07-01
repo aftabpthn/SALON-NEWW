@@ -239,7 +239,6 @@ interface InvoiceActivityRow {
     <section class="page-stack invoice-activity-page">
       <div class="module-hero invoice-activity-hero">
         <div>
-          <span class="eyebrow">POS / invoice activity</span>
           <h2>Invoice Audit Center</h2>
         </div>
         <div class="hero-actions">
@@ -301,7 +300,6 @@ interface InvoiceActivityRow {
       <div class="panel invoice-activity-shell" *ngIf="!loading() && !error()">
         <div class="section-title invoice-activity-title">
           <div>
-            <span class="eyebrow">Level 2 filters</span>
             <h3>Search & filter activity</h3>
           </div>
           <div class="invoice-activity-filter-actions">
@@ -427,7 +425,6 @@ interface InvoiceActivityRow {
             <section class="cancelled-void-panel" *ngIf="activityView === 'cancelled'">
               <div class="section-title invoice-activity-title">
                 <div>
-                  <span class="eyebrow">Cancelled / Void-ed Bill</span>
                   <h3>Cancelled and soft-deleted bill register</h3>
                 </div>
                 <div class="invoice-activity-filter-actions">
@@ -737,7 +734,6 @@ interface InvoiceActivityRow {
         <aside class="activity-detail-drawer" *ngIf="selectedRow() as selected">
           <div class="drawer-header">
             <div>
-              <span class="eyebrow">Invoice audit detail</span>
               <h3>{{ selected.invoiceNumber }}</h3>
               <p>{{ actionLabel(selected.actionType) }} by {{ selected.actionByUser }} on {{ formatDate(selected.actionTime) }} at {{ formatTime(selected.actionTime) }}</p>
             </div>
@@ -785,7 +781,6 @@ interface InvoiceActivityRow {
           <section class="finance-impact-panel">
             <div class="section-title invoice-activity-title">
               <div>
-                <span class="eyebrow">Finance impact</span>
                 <h3>Before and after impact</h3>
               </div>
               <span class="badge" [ngClass]="statusBadgeClass(selected.financeImpact.statusAfter)">{{ statusLabel(selected.financeImpact.statusAfter) }}</span>
@@ -832,7 +827,6 @@ interface InvoiceActivityRow {
           <section class="risk-review-panel" [ngClass]="riskBadgeClass(selected.riskLevel)">
             <div class="section-title invoice-activity-title">
               <div>
-                <span class="eyebrow">Risk detection</span>
                 <h3>{{ riskLabel(selected.riskLevel) }} risk</h3>
               </div>
               <span class="badge" [ngClass]="riskBadgeClass(selected.riskLevel)">Score {{ selected.riskScore }}</span>
@@ -852,7 +846,6 @@ interface InvoiceActivityRow {
           <section class="audit-trail-panel">
             <div class="section-title invoice-activity-title">
               <div>
-                <span class="eyebrow">Audit trail</span>
                 <h3>User, role, branch and timestamp</h3>
               </div>
               <span class="badge info">{{ selected.auditRole || 'Role captured' }}</span>
@@ -898,7 +891,6 @@ interface InvoiceActivityRow {
           <section class="approval-workflow-panel" *ngIf="hasApprovalWorkflow(selected)">
             <div class="section-title invoice-activity-title">
               <div>
-                <span class="eyebrow">Approval workflow</span>
                 <h3>{{ statusLabel(selected.status) }}</h3>
               </div>
               <span class="badge" [ngClass]="statusBadgeClass(selected.status)">{{ statusLabel(selected.status) }}</span>
@@ -948,7 +940,6 @@ interface InvoiceActivityRow {
           <section class="approval-workflow-panel" *ngIf="canShowRestore(selected)">
             <div class="section-title invoice-activity-title">
               <div>
-                <span class="eyebrow">Enterprise control</span>
                 <h3>Restore soft-deleted invoice</h3>
               </div>
               <span class="badge warning">Role protected</span>

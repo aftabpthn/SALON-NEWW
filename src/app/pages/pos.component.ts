@@ -121,7 +121,6 @@ type PackageClientNotice = {
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">POS / GST billing</span>
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/pos/invoices">Invoices</a>
@@ -403,7 +402,6 @@ type PackageClientNotice = {
           <section class="form-panel pos-client-form" *ngIf="showClientForm()">
             <div class="section-title compact-title">
               <div>
-                <span class="eyebrow">Add client from POS</span>
                 <h2>New client details</h2>
               </div>
               <button class="ghost-button mini" type="button" (click)="closeClientForm()">Close form</button>
@@ -682,7 +680,6 @@ type PackageClientNotice = {
         <aside class="panel checkout-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Invoice summary</span>
             </div>
           </div>
           <div class="summary-control-grid summary-control-grid--discount">
@@ -737,7 +734,6 @@ type PackageClientNotice = {
           <section class="benefit-mapping-box" *ngIf="selectedRedeemableBenefit() as benefit">
             <div class="benefit-mapping-box__header">
               <div>
-                <span class="eyebrow">Service-line package mapping</span>
                 <strong>Choose service lines before save</strong>
               </div>
               <button class="ghost-button mini" type="button" (click)="autoAllocateBenefitCredits()" [disabled]="!creditsUsed || !redeemableServiceLines().length">
@@ -786,7 +782,6 @@ type PackageClientNotice = {
 
           <section class="tip-box">
             <div class="section-title compact-title tip-box-title">
-              <span class="eyebrow">Staff tips</span>
               <a class="ghost-button mini" routerLink="/pos/tips">Tip register</a>
             </div>
             <div class="tip-draft-grid">
@@ -832,7 +827,6 @@ type PackageClientNotice = {
 
           <section class="unpaid-receive-box" *ngIf="bookingAdvanceInfo() as advance">
             <div class="unpaid-receive-copy">
-              <span class="eyebrow">Booking advance</span>
               <strong>{{ bookingAdvancePaidAmount() | currency: 'INR':'symbol':'1.0-0' }}</strong>
               <small *ngIf="hasBookingAdvanceSuggestion">Advance is available. Apply it to include it in this invoice.</small>
               <small *ngIf="appliedBookingAdvanceAmount() > 0">Advance is included. Collect remaining {{ bookingAdvanceRemainingSuggestion | currency: 'INR':'symbol':'1.0-0' }}.</small>
@@ -850,7 +844,6 @@ type PackageClientNotice = {
 
           <div class="payment-header">
             <div class="payment-title-copy">
-              <span class="eyebrow">Click to fill balance</span>
               <h2>Payment collection</h2>
             </div>
             <div class="payment-actions">
@@ -885,7 +878,6 @@ type PackageClientNotice = {
           </div>
           <section class="unpaid-receive-box round-off-box" *ngIf="roundOffDueAmount > 0">
             <div class="unpaid-receive-copy">
-              <span class="eyebrow">Balance choice</span>
               <strong>{{ roundOffDueAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
               <small *ngIf="roundOffPreviewLabel()">{{ roundOffPreviewLabel() }}</small>
             </div>
@@ -900,7 +892,6 @@ type PackageClientNotice = {
           </section>
           <section class="unpaid-receive-box" *ngIf="selectedClientUnpaidBalance > 0">
             <div class="unpaid-receive-copy">
-              <span class="eyebrow">Receive old balance</span>
               <strong>{{ selectedClientUnpaidBalance | currency: 'INR':'symbol':'1.0-0' }}</strong>
             </div>
             <label class="field">
@@ -937,7 +928,6 @@ type PackageClientNotice = {
 
           <section class="settlement-preview-bar" *ngIf="items().length">
             <div class="settlement-preview-copy">
-              <span class="eyebrow">Final settlement preview</span>
               <strong>Review payment split before saving</strong>
             </div>
             <div class="settlement-preview-metrics">
@@ -965,11 +955,9 @@ type PackageClientNotice = {
           </button>
 
           <section class="invoice-preview" *ngIf="invoice() as invoice">
-            <span class="eyebrow">Invoice generated</span>
             <h3>{{ invoice.invoiceNumber }}</h3>
             <p>Status: <strong>{{ invoice.status }}</strong></p>
             <section class="generated-settlement-card" *ngIf="generatedInvoiceSettlement() as settlement">
-              <span class="eyebrow">Settlement recap</span>
               <div class="generated-settlement-lines">
                 <div><span>Advance adjusted</span><strong>{{ settlement.advance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
                 <div><span>Counter paid</span><strong>{{ settlement.counter | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
@@ -977,7 +965,6 @@ type PackageClientNotice = {
                 <div *ngIf="settlement.walletCredit > 0"><span>Wallet credit</span><strong>{{ settlement.walletCredit | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
               </div>
               <div class="generated-benefit-card" *ngIf="generatedInvoiceBenefitRedeem() as benefitRedeem">
-                <span class="eyebrow">Redeemed benefit summary</span>
                 <div class="generated-settlement-lines">
                   <div><span>Benefit</span><strong>{{ generatedBenefitRedeemLabel(benefitRedeem) }}</strong></div>
                   <div><span>Credits used</span><strong>{{ generatedBenefitRedeemCredits(benefitRedeem) }}</strong></div>

@@ -168,7 +168,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <section class="calendar-panel smart-slot-panel">
           <div class="panel-heading">
             <div>
-              <span class="eyebrow">AI slot pilot</span>
               <h3>Best safe slots</h3>
             </div>
             <small>{{ smartSlotRecommendations().length }} ranked options</small>
@@ -192,7 +191,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <section class="calendar-panel ops-pulse-panel">
           <div class="panel-heading">
             <div>
-              <span class="eyebrow">Operations pulse</span>
               <h3>Today risk radar</h3>
             </div>
             <small>{{ selectedDate() | date: 'MMM d' }}</small>
@@ -224,7 +222,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel flow-panel" *ngIf="!loading()">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Lifecycle command board</span>
             <h3>Status handoff lanes</h3>
           </div>
           <small>{{ visibleAppointments().length }} active cards</small>
@@ -390,7 +387,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel" *ngIf="!loading() && viewMode() === 'week'">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Week view</span>
             <h3>7-day booking spread</h3>
           </div>
         </div>
@@ -413,7 +409,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel" *ngIf="!loading() && viewMode() === 'month'">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Month heatmap</span>
             <h3>Booking count and revenue pressure</h3>
           </div>
         </div>
@@ -435,7 +430,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel" *ngIf="!loading() && viewMode() === 'timeline'">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Timeline</span>
             <h3>Horizontal staff swimlanes</h3>
           </div>
         </div>
@@ -461,7 +455,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel" *ngIf="!loading() && viewMode() === 'resource'">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Resource view</span>
             <h3>Chair and room utilization</h3>
           </div>
           <small>{{ resources().length }} resources</small>
@@ -484,7 +477,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel" *ngIf="!loading() && viewMode() === 'queue'">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Walk-in queue</span>
             <h3>Tokens and arrival desk</h3>
           </div>
           <small>{{ queueAppointments().length }} active entries</small>
@@ -504,7 +496,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <section class="calendar-panel" *ngIf="!loading() && viewMode() === 'waitlist'">
         <div class="panel-heading">
           <div>
-            <span class="eyebrow">Waitlist</span>
             <h3>Recovery and no-slot opportunities</h3>
           </div>
           <button class="ghost-button mini" type="button" (click)="openWaitlistDrawer()">Add waitlist</button>
@@ -533,7 +524,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <aside class="appointment-drawer waitlist-drawer" *ngIf="waitlistDrawerOpen()">
         <header>
           <div>
-            <span class="eyebrow">Calendar waitlist</span>
             <h3>Add client to waitlist</h3>
           </div>
           <button type="button" class="ghost-button mini" (click)="closeWaitlistDrawer()">Close</button>
@@ -605,7 +595,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <aside class="appointment-drawer booking-drawer" *ngIf="bookingDrawerOpen()">
         <header>
           <div>
-            <span class="eyebrow">Front-desk quick booking</span>
             <h3>{{ bookingDrawerTitle() }}</h3>
             <p>{{ bookingDrawerSubtitle() }}</p>
           </div>
@@ -676,7 +665,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <div class="service-plan">
               <div class="plan-head">
                 <div>
-                  <span class="eyebrow">Multi-service plan</span>
                   <strong>{{ bookingServiceLines().length }} service{{ bookingServiceLines().length === 1 ? '' : 's' }}</strong>
                 </div>
                 <div class="plan-actions">
@@ -740,7 +728,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
 
             <div class="booking-guard drawer-guard" *ngIf="bookingGuard() as guard" [class.guard-danger]="guard.level === 'danger'" [class.guard-warning]="guard.level === 'warning'" [class.guard-success]="guard.level === 'success'">
               <div>
-                <span class="eyebrow">Live booking guard</span>
                 <strong>{{ guard.title }}</strong>
               </div>
               <ul>
@@ -761,7 +748,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <aside class="appointment-drawer block-time-drawer" *ngIf="blockTimeDrawerMode() === 'add'">
         <header>
           <div>
-            <span class="eyebrow">Staff calendar control</span>
             <h3>New Blocked Time</h3>
           </div>
           <button type="button" class="ghost-button mini" (click)="closeBlockTimeDrawer()">Close</button>
@@ -808,7 +794,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <aside class="appointment-drawer block-time-drawer" *ngIf="blockTimeDrawerMode() === 'remove'">
         <header>
           <div>
-            <span class="eyebrow">Staff calendar control</span>
             <h3>Remove Blocked Time</h3>
             <p>{{ blockTimeStaffName() }} · {{ blockTimeDate() | date: 'dd-MM-yyyy' }}</p>
           </div>
@@ -847,7 +832,6 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       <aside class="appointment-drawer" *ngIf="selectedAppointment() as selected">
         <header>
           <div>
-            <span class="eyebrow">Appointment desk</span>
             <h3>{{ clientName(selected.clientId) }}</h3>
             <p>{{ serviceNames(selected.serviceIds) }} with {{ staffName(selected.staffId) }}</p>
           </div>

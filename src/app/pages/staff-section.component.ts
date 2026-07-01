@@ -16,7 +16,6 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
     <section class="page-stack">
       <div class="module-hero compact-hero">
         <div>
-          <span class="eyebrow">Staff workspace</span>
           <h2>{{ pageTitle() }}</h2>
           <p>{{ pageSubtitle() }}</p>
         </div>
@@ -73,7 +72,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
       <ng-container [ngSwitch]="section()">
         <section class="panel" *ngSwitchCase="'directory'">
           <div class="section-title">
-            <div><span class="eyebrow">Team</span><h2>Staff directory full page</h2></div>
+            <div><h2>Staff directory full page</h2></div>
             <a class="primary-button" routerLink="/staff">+ Add staff</a>
           </div>
           <div class="section-toolbar">
@@ -159,7 +158,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         </section>
 
         <section class="panel" *ngSwitchCase="'performance'">
-          <div class="section-title"><div><span class="eyebrow">Performance</span><h2>Performance ranking full page</h2></div></div>
+          <div class="section-title"><div><h2>Performance ranking full page</h2></div></div>
           <div class="table-wrap tall-table">
             <table>
               <thead><tr><th>Rank</th><th>Staff</th><th>Score</th><th>Revenue</th><th>Bookings</th><th>Efficiency</th><th>Attendance</th><th>Open</th></tr></thead>
@@ -182,7 +181,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
 
         <section class="panel" *ngSwitchCase="'incentives'">
           <div class="section-title">
-            <div><span class="eyebrow">Incentives</span><h2>Incentive calculation full page</h2></div>
+            <div><h2>Incentive calculation full page</h2></div>
             <button class="primary-button" type="button" (click)="runCommission()" [disabled]="saving()">Run commission</button>
           </div>
           <div class="rank-list wide-rank-list">
@@ -201,7 +200,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         </section>
 
         <section class="panel" *ngSwitchCase="'payroll'">
-          <div class="section-title"><div><span class="eyebrow">Payroll</span><h2>Payroll preview full page</h2></div></div>
+          <div class="section-title"><div><h2>Payroll preview full page</h2></div></div>
           <div class="section-tabs">
             <button type="button" [class.active]="payrollMode === 'employee'" (click)="payrollMode = 'employee'">Employee wise</button>
             <button type="button" [class.active]="payrollMode === 'invoice'" (click)="payrollMode = 'invoice'">Invoice wise</button>
@@ -260,7 +259,6 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         <section class="panel" *ngSwitchCase="'schedule'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Roster</span>
               <h2>Employee schedule week view</h2>
             </div>
             <a class="ghost-button" routerLink="/staff">Open shift planner</a>
@@ -293,7 +291,6 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         <section class="panel" *ngSwitchCase="'attendance'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Attendance</span>
               <h2>Employee attendance summary</h2>
             </div>
             <a class="ghost-button" routerLink="/staff">Open attendance form</a>

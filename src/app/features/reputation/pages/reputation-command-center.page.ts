@@ -44,7 +44,6 @@ interface StaffPreview {
     <section class="rep-page">
       <header class="page-heading">
         <div>
-          <span class="eyebrow">Reputation</span>
           <h2>Command Center</h2>
         </div>
         <div class="heading-actions">
@@ -67,7 +66,6 @@ interface StaffPreview {
         <section class="feedback-intelligence-panel" *ngIf="activeTab !== 'overview'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Customer feedback intelligence</span>
               <h3>{{ tabTitle }}</h3>
             </div>
             <div class="heading-actions">
@@ -226,7 +224,6 @@ interface StaffPreview {
         <section class="score-grid">
           <article class="score-panel">
             <div class="score-copy">
-              <span class="eyebrow">Unified score</span>
               <h3>{{ data.score.overallScore }} / 100</h3>
               <p>{{ scoreLabel(data.score.overallScore) }}</p>
             </div>
@@ -248,7 +245,6 @@ interface StaffPreview {
           <article class="alerts-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Urgent</span>
                 <h3>Alerts</h3>
               </div>
               <span class="count-pill">{{ data.alerts.length }}</span>
@@ -293,7 +289,6 @@ interface StaffPreview {
 
         <section class="request-panel">
           <div>
-            <span class="eyebrow">Review link</span>
             <h3>Send invoice review link</h3>
           </div>
           <label class="field">
@@ -325,7 +320,6 @@ interface StaffPreview {
           <div class="drawer-head">
             <button type="button" class="close-button" (click)="closePlatformSetup()" aria-label="Close">x</button>
             <div>
-              <span class="eyebrow">Platform setup</span>
               <h3>Connect {{ setup.name }}</h3>
             </div>
           </div>
@@ -408,7 +402,6 @@ interface StaffPreview {
           <article class="feed-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Live feed</span>
                 <h3>Recent reviews</h3>
               </div>
               <a routerLink="/reputation/inbox">View all</a>
@@ -434,7 +427,6 @@ interface StaffPreview {
 
           <aside class="analytics-panel">
             <section>
-              <span class="eyebrow">Sentiment preview</span>
               <h3>Visible review mix</h3>
               <div class="sentiment-bars">
                 <div *ngFor="let row of sentimentPreviewRows">
@@ -446,7 +438,6 @@ interface StaffPreview {
             </section>
 
             <section>
-              <span class="eyebrow">AI reply draft</span>
               <h3>Approval queue</h3>
               <div class="draft-box" *ngIf="data.recentReviews.length; else noDraftReview">
                 <label class="field">
@@ -478,7 +469,6 @@ interface StaffPreview {
             </section>
 
             <section>
-              <span class="eyebrow">Staff preview</span>
               <h3>Attribution</h3>
               <div class="staff-list" *ngIf="staffPreviewRows.length; else noStaff">
                 <div class="staff-row" *ngFor="let staff of staffPreviewRows">

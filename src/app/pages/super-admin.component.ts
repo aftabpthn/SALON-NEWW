@@ -20,7 +20,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">SaaS super admin</span>
           <h2>Manage salons, subscriptions, platform revenue, analytics and feature access</h2>
         </div>
         <button class="ghost-button" type="button" (click)="runAnalytics()">Run global analytics</button>
@@ -42,7 +41,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <section class="panel revenue-trend-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">MRR / Revenue trend</span>
                 <h2>Invoice revenue, MRR base and outstanding exposure</h2>
               </div>
               <span class="badge">{{ overview.revenueCommand?.arr | currency: 'INR':'symbol':'1.0-0' }} ARR</span>
@@ -68,7 +66,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <section class="panel compliance-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Compliance audit timeline</span>
                 <h2>Latest super-admin actions and approval events</h2>
               </div>
               <span class="badge">{{ complianceTimeline(overview).length }} events</span>
@@ -89,7 +86,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="super-admin-command" *ngIf="commandMetrics(overview) as command">
           <div class="command-heading">
             <div>
-              <span class="eyebrow">Executive command center</span>
               <h2>Revenue, tenant risk and platform control</h2>
             </div>
             <div class="command-live">
@@ -145,7 +141,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel command-search-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Command search</span>
               <h2>Search salons, domains, invoices, audit events, feature flags and plans</h2>
             </div>
             <span class="badge">{{ commandSearch().trim() ? commandSearchResults(overview).length + ' results' : 'Live index ready' }}</span>
@@ -180,7 +175,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.actionInbox as inbox">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Action inbox</span>
               <h2>Need attention today</h2>
             </div>
             <div class="command-live">
@@ -259,7 +253,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <section class="panel" *ngIf="overview.actionSafetyCommand as safety">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Approval Center</span>
                 <h2>Dangerous action approval queue</h2>
               </div>
               <span class="badge">{{ safety.pendingApprovals?.length || 0 }} pending</span>
@@ -289,7 +282,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <section class="panel" *ngIf="overview.operationsPlaybooks as playbooks">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Playbook automation</span>
                 <h2>One-click operating playbooks</h2>
               </div>
             </div>
@@ -306,7 +298,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <section class="panel" *ngIf="overview.commandCenterNotifications as center">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Command notifications</span>
                 <h2>Live operating signals</h2>
               </div>
               <div class="command-live">
@@ -337,7 +328,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.saasHealthEngine as health">
           <div class="section-title">
             <div>
-              <span class="eyebrow">SaaS health engine</span>
               <h2>Platform health, tenant segments and recovery playbooks</h2>
             </div>
             <span class="badge" [style.background]="healthTone(health.platformScore)" style="color:#fff">Grade {{ health.grade }}</span>
@@ -411,7 +401,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.realtimeHealthAlerts as alerts">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Real-time health alerts</span>
               <h2>Critical tenant alerts ready for websocket broadcast</h2>
             </div>
             <button class="ghost-button" type="button" [disabled]="saving() || !alerts.length" (click)="broadcastHealthAlerts()">Broadcast alerts</button>
@@ -436,7 +425,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.securityRiskCenter as risk">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Security Risk Center</span>
               <h2>Login risk, enterprise gaps and sensitive actions</h2>
             </div>
             <span class="badge" [style.background]="risk.metrics.criticalLogins ? 'var(--danger,#dc2626)' : risk.metrics.suspiciousLogins ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)'" style="color:#fff">{{ risk.metrics.suspiciousLogins }} suspicious</span>
@@ -496,7 +484,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.actionSafetyCommand as safety">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Action safety</span>
               <h2>Dangerous actions require reason, confirmation and audit trail</h2>
             </div>
           </div>
@@ -598,7 +585,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.actionSafetyCommand as safety">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Super-admin audit log</span>
               <h2>Who did what, when, and on which target</h2>
             </div>
           </div>
@@ -635,7 +621,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="selectedTenant() as tenant">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Tenant 360</span>
               <h2>{{ tenantLabel(tenant) }} account health, billing risk and adoption</h2>
             </div>
             <label class="field" style="max-width:280px;margin:0">
@@ -743,7 +728,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.tenantRiskCommand as riskCommand">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Risk alerts</span>
               <h2>{{ riskCommand.alertCount }} tenant alerts across the SaaS base</h2>
             </div>
           </div>
@@ -764,7 +748,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.revenueCommand as revenue">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Revenue command center</span>
               <h2>ARR, plan mix, revenue quality and billing risk</h2>
             </div>
           </div>
@@ -840,7 +823,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.revenueIntelligence as intel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Tier 2 revenue intelligence</span>
               <h2>Expansion, churn risk, collection priority and plan opportunity</h2>
             </div>
           </div>
@@ -899,7 +881,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.revenueLeakageReport as leakage">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Revenue leakage report</span>
               <h2>{{ leakage.totalLeakage | currency: 'INR':'symbol':'1.0-0' }} leakage across billing, adoption and rollout gaps</h2>
             </div>
             <span class="badge" [style.background]="leakage.lowUsageExpiringCount ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)'" style="color:#fff">{{ leakage.lowUsageExpiringCount }} churn-risk badges</span>
@@ -959,7 +940,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.billingOperationsReport as billingOps">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Billing operations</span>
               <h2>Failed payments, paused subscriptions and dunning status</h2>
             </div>
             <span class="badge" [style.background]="billingOps.criticalDunning ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)'" style="color:#fff">{{ billingOps.criticalDunning }} escalations</span>
@@ -1006,7 +986,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.usageQuotaBillingAlerts as quota">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Usage quotas & billing alerts</span>
               <h2>{{ quota.quotaAlertCount }} quota alerts and {{ quota.billingAlertCount }} billing alerts</h2>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1056,7 +1035,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.revenueGrowthGraph as graph">
           <div class="section-title">
             <div>
-              <span class="eyebrow">MRR / ARR growth</span>
               <h2>Month-wise revenue growth with churn overlay</h2>
             </div>
           </div>
@@ -1099,7 +1077,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.trialPaidFunnel as funnel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Trial to paid funnel</span>
               <h2>{{ funnel.conversionRate | number: '1.0-1' }}% conversion with {{ funnel.trialLeakage }} expired trial leakages</h2>
             </div>
           </div>
@@ -1135,7 +1112,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.churnPrediction as churn">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Churn prediction</span>
               <h2>{{ churn.highRiskCount }} high-risk and {{ churn.mediumRiskCount }} medium-risk tenants</h2>
             </div>
             <span class="badge" style="background:var(--danger,#dc2626);color:#fff">{{ churn.mrrAtRisk | currency: 'INR':'symbol':'1.0-0' }} MRR at risk</span>
@@ -1185,7 +1161,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Global insights</span>
               <h2>Platform analytics</h2>
             </div>
           </div>
@@ -1200,7 +1175,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Bulk actions</span>
               <h2>Tenant Command Table 2.0</h2>
             </div>
             <span class="badge">{{ selectedTenantIds().length }} selected</span>
@@ -1377,7 +1351,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
           <div class="panel bulk-preview-panel" (click)="$event.stopPropagation()">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Bulk action preview</span>
                 <h2>{{ preview.label }}</h2>
               </div>
               <button class="ghost-button mini" type="button" (click)="bulkPreviewOpen.set(false)">Close</button>
@@ -1430,7 +1403,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
             (click)="$event.stopPropagation()">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Tenant drill-down</span>
                 <h2>{{ tenantLabel(tenant) }} full profile, usage, invoices and audit log</h2>
               </div>
               <button class="ghost-button mini" type="button" (click)="drilldownOpen.set(false)">Close</button>
@@ -1522,7 +1494,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
             <div class="risk-timeline" *ngIf="tenant.riskTimeline?.length">
               <div class="section-title compact-title">
                 <div>
-                  <span class="eyebrow">Risk Timeline</span>
                   <h2>AI risk movement</h2>
                 </div>
                 <span class="badge" [style.background]="riskTone(tenant.aiRiskScore?.label)" style="color:#fff">{{ tenant.aiRiskScore?.score || 0 }}</span>
@@ -2146,7 +2117,6 @@ type ActionInboxFilter = 'all' | 'billing' | 'usage' | 'login' | 'security' | 's
         <section class="panel" *ngIf="overview.tenantFeatureOverrides as overrides">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Tenant override precedence</span>
               <h2>Tenant-specific ON/OFF wins over global toggle</h2>
             </div>
             <span class="badge">{{ overrides.overrideCount }} overrides</span>

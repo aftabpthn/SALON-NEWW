@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Reports / Commission preview</span>
           <h2>Commission Calculation Preview</h2>
         </div>
         <div class="hero-actions">
@@ -65,7 +64,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <section class="panel rule-note">
           <div>
-            <span class="eyebrow">Calculation rules</span>
             <h2>Preview assumptions</h2>
             <p>{{ data.assumptions?.rulePriority }}. Basis: {{ data.assumptions?.basis }}.</p>
           </div>
@@ -80,7 +78,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Payout preview</span>
               <h2>Staff commission summary</h2>
             </div>
           </div>
@@ -144,7 +141,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Audit lines</span>
               <h2>Invoice item commission</h2>
             </div>
           </div>

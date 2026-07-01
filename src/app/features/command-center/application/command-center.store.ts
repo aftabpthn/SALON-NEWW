@@ -8,7 +8,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'ai-workforce': {
     module: 'ai-workforce',
     title: 'AI Workforce Dashboard',
-    subtitle: 'Explainable AI agents, safety scores and approval-required decisions.',
     primaryEndpoint: 'ai-workforce/agents',
     secondaryEndpoint: 'ai-workforce/decisions',
     actionEndpoint: 'ai-workforce/agents',
@@ -17,7 +16,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'ai-ceo': {
     module: 'ai-ceo',
     title: 'AI CEO Daily Brief',
-    subtitle: 'Today top actions across revenue, staff, inventory, cash, campaigns and branch risk.',
     primaryEndpoint: 'ai-ceo/actions',
     secondaryEndpoint: 'ai-ceo/daily-brief',
     actionEndpoint: 'ai-ceo/daily-brief',
@@ -26,7 +24,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'approval-hub': {
     module: 'approval-hub',
     title: 'Autonomous Approval Hub',
-    subtitle: 'Approve, reject, snooze, delegate and request evidence for AI recommendations.',
     primaryEndpoint: 'approval-hub/requests',
     actionEndpoint: 'approval-hub/requests',
     actionLabel: 'Create approval'
@@ -34,7 +31,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'model-router': {
     module: 'model-router',
     title: 'AI Model Router',
-    subtitle: 'Route OpenAI, Gemini, Claude or local models by cost, latency and accuracy policy.',
     primaryEndpoint: 'ai-model-router/providers',
     secondaryEndpoint: 'ai-model-router/metrics',
     actionEndpoint: 'ai-model-router/route',
@@ -43,7 +39,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'event-ledger': {
     module: 'event-ledger',
     title: 'Event-Sourcing Ledger',
-    subtitle: 'Append-only booking, invoice, salary, stock and payment event audit replay.',
     primaryEndpoint: 'event-ledger/events',
     actionEndpoint: 'event-ledger/events',
     actionLabel: 'Append event'
@@ -51,7 +46,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'war-room': {
     module: 'war-room',
     title: 'Multi-Branch War Room',
-    subtitle: 'Live branch risk map for revenue, manpower, fraud, stockout, burnout and cash close.',
     primaryEndpoint: 'war-room/alerts',
     secondaryEndpoint: 'war-room/snapshot',
     actionEndpoint: 'war-room/snapshot',
@@ -60,7 +54,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'revenue-leaks': {
     module: 'revenue-leaks',
     title: 'Revenue Leak Center',
-    subtitle: 'Find empty slots, unpaid invoices, no-shows and recovery opportunities.',
     primaryEndpoint: 'revenue-leaks',
     secondaryEndpoint: 'revenue-leaks/summary',
     actionEndpoint: 'revenue-leaks/scan',
@@ -69,7 +62,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'digital-twin': {
     module: 'digital-twin',
     title: 'Digital Twin Simulator',
-    subtitle: 'Run branch what-if simulations before changing roster, pricing or campaigns.',
     primaryEndpoint: 'digital-twin/recommendations',
     secondaryEndpoint: 'digital-twin/snapshots',
     actionEndpoint: 'digital-twin/simulate',
@@ -78,7 +70,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'digital-twin-v2': {
     module: 'digital-twin-v2',
     title: 'Salon Digital Twin v2',
-    subtitle: 'Full forecast simulator with cost, profit, stock, staff and campaign impact.',
     primaryEndpoint: 'digital-twin-v2/scenarios',
     secondaryEndpoint: 'digital-twin-v2/scenarios',
     actionEndpoint: 'digital-twin-v2/forecast',
@@ -87,7 +78,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'owner-command': {
     module: 'owner-command',
     title: 'Owner Command Center',
-    subtitle: 'Convert business commands into approval-safe action plans.',
     primaryEndpoint: 'command-center/commands',
     actionEndpoint: 'command-center/commands',
     actionLabel: 'Create plan'
@@ -95,7 +85,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'whatsapp-campaign': {
     module: 'whatsapp-campaign',
     title: 'WhatsApp Campaign Planner',
-    subtitle: 'Create consent-aware campaign drafts with quiet-hour and approval controls.',
     primaryEndpoint: 'whatsapp-campaign-planner/plans',
     secondaryEndpoint: 'whatsapp-campaign-planner/outcomes',
     actionEndpoint: 'whatsapp-campaign-planner/plans',
@@ -104,7 +93,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'customer-super-graph': {
     module: 'customer-super-graph',
     title: 'Customer Super Graph',
-    subtitle: 'Client, family, referrals, wallet, services, complaints and staff compatibility graph.',
     primaryEndpoint: 'customer-super-graph/demo-client',
     actionEndpoint: 'customer-super-graph/demo-client/rebuild',
     actionLabel: 'Rebuild graph'
@@ -112,14 +100,12 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'client-memory': {
     module: 'client-memory',
     title: 'Client Memory Graph',
-    subtitle: 'Inspect client preferences, risk signals and next-best actions.',
     primaryEndpoint: '',
     actionLabel: 'Await client'
   },
   'voice-receptionist': {
     module: 'voice-receptionist',
     title: 'Voice AI Receptionist',
-    subtitle: 'Call capture, booking intent, transcript privacy and human handoff architecture.',
     primaryEndpoint: 'voice-receptionist/calls',
     actionEndpoint: 'voice-receptionist/calls',
     actionLabel: 'Log call'
@@ -127,7 +113,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'computer-vision': {
     module: 'computer-vision',
     title: 'Computer Vision Readiness',
-    subtitle: 'Queue, cleanliness, before-after and shelf-check events with privacy-first metadata.',
     primaryEndpoint: 'computer-vision/events',
     actionEndpoint: 'computer-vision/events',
     actionLabel: 'Log event'
@@ -135,7 +120,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'whatsapp-commerce': {
     module: 'whatsapp-commerce',
     title: 'Real WhatsApp Commerce',
-    subtitle: 'Booking, invoice, payment, membership, package balance and support commerce sessions.',
     primaryEndpoint: 'whatsapp-commerce/sessions',
     actionEndpoint: 'whatsapp-commerce/sessions',
     actionLabel: 'Open session'
@@ -143,7 +127,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'owner-mobile': {
     module: 'owner-mobile',
     title: 'Owner Mobile Command API',
-    subtitle: 'Owner app briefs, offline-ready policy and push notification architecture.',
     primaryEndpoint: 'owner-mobile/brief',
     actionEndpoint: 'ai-ceo/daily-brief',
     actionLabel: 'Refresh brief'
@@ -151,7 +134,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'franchise-os': {
     module: 'franchise-os',
     title: 'Franchise Operating System',
-    subtitle: 'Franchise onboarding, royalty runs, SOP compliance and multi-owner reporting.',
     primaryEndpoint: 'franchise-os/units',
     actionEndpoint: 'franchise-os/units',
     actionLabel: 'Add franchise'
@@ -159,7 +141,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'financial-brain': {
     module: 'financial-brain',
     title: 'Financial Brain',
-    subtitle: 'Cash flow, P&L, tax reserve, margin and salary-to-revenue intelligence.',
     primaryEndpoint: 'financial-brain/findings',
     actionEndpoint: 'financial-brain/forecast',
     actionLabel: 'Forecast finance'
@@ -167,7 +148,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   marketplace: {
     module: 'marketplace',
     title: 'Marketplace and Connectors',
-    subtitle: 'Provider connector framework for Razorpay, WhatsApp, biometric, accounting and ads.',
     primaryEndpoint: 'marketplace/connectors',
     secondaryEndpoint: 'marketplace/plugins',
     actionEndpoint: 'marketplace/connectors',
@@ -176,7 +156,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'cloud-hardening': {
     module: 'cloud-hardening',
     title: 'Production Cloud Hardening',
-    subtitle: 'Postgres, Redis, object storage, backups, secrets, rate limits and DR readiness.',
     primaryEndpoint: 'cloud-hardening/checks',
     actionEndpoint: 'cloud-hardening/checks',
     actionLabel: 'Run check'
@@ -184,7 +163,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'inventory-autopilot': {
     module: 'inventory-autopilot',
     title: 'Inventory Autopilot',
-    subtitle: 'Detect stockout, expiry, vendor delay and service-readiness risks.',
     primaryEndpoint: 'inventory-autopilot/risks',
     secondaryEndpoint: 'inventory-autopilot/purchase-recommendations',
     actionEndpoint: 'inventory-autopilot/scan',
@@ -193,7 +171,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'payment-intelligence': {
     module: 'payment-intelligence',
     title: 'Payment Intelligence',
-    subtitle: 'Track refund, discount, cash drawer and payment anomaly risks.',
     primaryEndpoint: 'payment-intelligence/risks',
     secondaryEndpoint: 'payment-intelligence/summary',
     actionEndpoint: 'payment-intelligence/scan',
@@ -202,7 +179,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   observability: {
     module: 'observability',
     title: 'Observability Center',
-    subtitle: 'Monitor health, errors, latency, usage, backup and queue posture.',
     primaryEndpoint: 'observability/health',
     secondaryEndpoint: 'observability/errors',
     actionEndpoint: 'observability/snapshot',
@@ -211,7 +187,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   'security-hardening': {
     module: 'security-hardening',
     title: 'Security Hardening',
-    subtitle: 'Detect suspicious sessions, API abuse and sensitive access anomalies.',
     primaryEndpoint: 'security-hardening/findings',
     secondaryEndpoint: 'security-hardening/summary',
     actionEndpoint: 'security-hardening/scan',
@@ -220,7 +195,6 @@ export const commandCenterConfigs: Record<CommandCenterModule, CommandCenterConf
   warehouse: {
     module: 'warehouse',
     title: 'Data Warehouse',
-    subtitle: 'Refresh KPI facts and warehouse snapshots for analytics readiness.',
     primaryEndpoint: 'warehouse/kpis',
     secondaryEndpoint: 'warehouse/snapshots',
     actionEndpoint: 'warehouse/refresh',

@@ -127,7 +127,6 @@ interface ClientScoreRow {
     <section class="appointment-activity-page">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Appointments / register</span>
           <h2>Appointment Report & Full History Register</h2>
         </div>
         <div class="hero-actions">
@@ -151,7 +150,6 @@ interface ClientScoreRow {
         <article class="panel owner-summary-panel">
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Owner dashboard</span>
               <h3>Live appointment control</h3>
             </div>
             <span>{{ filteredRegisterRows().length }} appointment(s)</span>
@@ -168,7 +166,6 @@ interface ClientScoreRow {
         <article class="panel whatsapp-report-panel">
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">WhatsApp daily report</span>
               <h3>Owner summary ready</h3>
             </div>
             <button class="ghost-button mini" type="button" (click)="copyWhatsappSummary()">Copy</button>
@@ -181,7 +178,6 @@ interface ClientScoreRow {
       <section class="panel smart-alert-panel" *ngIf="!loading() && smartAlerts.length">
         <div class="section-title activity-title">
           <div>
-            <span class="eyebrow">Smart problem finder</span>
             <h3>Live alerts to fix today</h3>
           </div>
           <span>{{ smartAlerts.length }} alert(s)</span>
@@ -201,7 +197,6 @@ interface ClientScoreRow {
         <article class="panel insight-panel">
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Staff performance</span>
               <h3>Staff-wise live appointment view</h3>
             </div>
           </div>
@@ -234,7 +229,6 @@ interface ClientScoreRow {
         <article class="panel insight-panel">
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Client reliability score</span>
               <h3>Risky clients and follow-up</h3>
             </div>
           </div>
@@ -254,7 +248,6 @@ interface ClientScoreRow {
       <section class="panel filter-panel" *ngIf="!loading()">
         <div class="section-title activity-title">
           <div>
-            <span class="eyebrow">Filters</span>
             <h3>Search appointment audit trail</h3>
           </div>
           <div class="action-row">
@@ -351,7 +344,6 @@ interface ClientScoreRow {
       <section class="report-panel" *ngIf="!loading()">
         <div class="section-title activity-title">
           <div>
-            <span class="eyebrow">Advanced reports</span>
             <h3>Cancellation, reschedule and no-show review</h3>
           </div>
           <div class="action-row">
@@ -385,7 +377,6 @@ interface ClientScoreRow {
       <section class="client-reliability-panel" *ngIf="clientHistory() as history">
         <div class="section-title activity-title">
           <div>
-            <span class="eyebrow">Client reliability</span>
             <h3>{{ history.client?.name || 'Selected client' }}</h3>
           </div>
           <span class="risk-pill" [ngClass]="riskClass(history.reliability?.riskLevel || 'low')">
@@ -407,7 +398,6 @@ interface ClientScoreRow {
       <section class="panel table-panel register-panel" *ngIf="!loading()">
         <div class="section-title activity-title">
           <div>
-            <span class="eyebrow">Appointment register</span>
             <h3>Full appointment history</h3>
           </div>
           <div class="action-row">
@@ -478,7 +468,6 @@ interface ClientScoreRow {
       <section class="panel table-panel" *ngIf="!loading()">
         <div class="section-title activity-title">
           <div>
-            <span class="eyebrow">Audit trail</span>
             <h3>Status and edit activity</h3>
           </div>
           <span>{{ filteredRows().length }} activity row(s)</span>
@@ -539,7 +528,6 @@ interface ClientScoreRow {
       <aside class="detail-drawer" *ngIf="selectedRegister() as register">
         <header>
           <div>
-            <span class="eyebrow">Appointment full history</span>
             <h3>{{ register.clientName }} - {{ label(register.status) }}</h3>
             <p>{{ register.serviceNames || register.appointmentId }} with {{ register.staffName }} at {{ formatDateTime(register.appointmentStartAt) }}</p>
           </div>
@@ -562,7 +550,6 @@ interface ClientScoreRow {
         <section>
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Timeline</span>
               <h3>Booked to current status</h3>
             </div>
             <span>{{ register.timelineCount }} event(s)</span>
@@ -583,7 +570,6 @@ interface ClientScoreRow {
         <section>
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Problem finder</span>
               <h3>Attention points</h3>
             </div>
           </div>
@@ -597,7 +583,6 @@ interface ClientScoreRow {
       <aside class="detail-drawer" *ngIf="!selectedRegister() && selected() as row">
         <header>
           <div>
-            <span class="eyebrow">Activity detail</span>
             <h3>{{ actionLabel(row.action) }} - {{ row.clientName }}</h3>
             <p>{{ row.serviceNames || row.appointmentId }} with {{ row.staffName }} at {{ formatDateTime(row.appointmentStartAt) }}</p>
           </div>
@@ -614,7 +599,6 @@ interface ClientScoreRow {
         <section>
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Before / after</span>
               <h3>Changed fields</h3>
             </div>
           </div>
@@ -631,7 +615,6 @@ interface ClientScoreRow {
         <section>
           <div class="section-title activity-title">
             <div>
-              <span class="eyebrow">Risk reasons</span>
               <h3>Smart detection signals</h3>
             </div>
           </div>

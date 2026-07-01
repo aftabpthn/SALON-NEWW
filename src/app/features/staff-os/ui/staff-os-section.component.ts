@@ -145,7 +145,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
           <section class="staff-workspace-detail" [ngSwitch]="staffWorkspaceCategory()">
             <header class="workspace-detail-head" *ngIf="selectedStaffWorkspaceCategory() as active">
               <div>
-                <span class="eyebrow">Selected staff category</span>
                 <h2>{{ active.label }}</h2>
                 <p>{{ active.source }}</p>
               </div>
@@ -651,7 +650,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
               <section class="login-provision full">
                 <div>
-                  <span class="eyebrow">Staff app login</span>
                   <strong>Give this staff their own login ID and password.</strong>
                 </div>
                 <label class="check-field">
@@ -704,7 +702,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
               <section class="salary-quick-panel full" aria-label="Salary setup shortcut">
                 <div>
-                  <span class="eyebrow">Salary setup</span>
                   <strong>{{ staffForm.get('basicSalary')?.value || 0 | currency:'INR':'symbol-narrow':'1.0-0' }} basic salary</strong>
                 </div>
                 <div class="salary-quick-meta">
@@ -924,7 +921,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             <ng-container *ngIf="detailTab() === 'incentive'">
               <section class="incentive-command full">
                 <div>
-                  <span class="eyebrow">Incentive engine</span>
                   <strong>Compact staff payout profile</strong>
                   <small>{{ incentiveSummaryText() }}</small>
                 </div>
@@ -1121,7 +1117,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             <ng-container *ngIf="detailTab() === 'attendance'">
               <section class="salary-command full">
                 <div>
-                  <span class="eyebrow">Attendance & salary</span>
                   <strong>Salary yahin employee profile ke saath save hoti hai.</strong>
                 </div>
                 <a class="refresh" routerLink="/staff-os/payroll-salary-structure">Salary Structure</a>
@@ -1949,7 +1944,6 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
         <section class="commission-setup" *ngIf="section === 'commission-dashboard'">
           <div>
-            <span class="eyebrow">Add commission</span>
             <strong>Commission dashboard report ke liye hai. Commission rule yahan se add karo.</strong>
           </div>
           <div class="commission-actions">

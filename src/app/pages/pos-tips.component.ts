@@ -79,7 +79,6 @@ type TipsReport = {
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">POS / tips payout intelligence</span>
           <h2>Staff Tips / Tip Payout Register</h2>
         </div>
         <div class="hero-actions">
@@ -171,7 +170,6 @@ type TipsReport = {
         <section class="panel" *ngIf="alerts().length">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Audit / abuse checks</span>
               <h2>Tip payout alerts</h2>
             </div>
           </div>
@@ -187,7 +185,6 @@ type TipsReport = {
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Tip ledger</span>
               <h2>Invoice tip payout queue</h2>
             </div>
             <div class="section-actions">
@@ -263,7 +260,6 @@ type TipsReport = {
         <section class="panel" *ngIf="selected() as row">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Selected tip</span>
               <h2>{{ row.clientName }} paid {{ row.amount | currency: 'INR':'symbol':'1.0-0' }}</h2>
             </div>
             <a class="ghost-button mini" routerLink="/pos/invoices" [queryParams]="{ q: row.invoiceNumber }">Open invoice</a>
@@ -280,7 +276,6 @@ type TipsReport = {
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Staff tip breakdown</span>
               <h2>Staff payout summary</h2>
             </div>
           </div>

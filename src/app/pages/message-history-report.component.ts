@@ -18,7 +18,6 @@ type MessageHistoryResponse = {
     <section class="message-history-page">
       <header class="page-hero">
         <div>
-          <span class="eyebrow">Automated messages</span>
           <h1>Message History</h1>
         </div>
         <div class="hero-actions">
@@ -97,7 +96,6 @@ type MessageHistoryResponse = {
       <section class="table-panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Message ledger</span>
             <h2>Automated Messages</h2>
           </div>
           <div class="table-actions">

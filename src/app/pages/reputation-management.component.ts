@@ -44,7 +44,6 @@ interface SegmentRow {
     <section class="reputation-page">
       <div class="reputation-hero">
         <div class="hero-copy">
-          <span class="eyebrow">Reputation</span>
           <h2>Reviews command center</h2>
         </div>
         <div class="hero-actions">
@@ -64,7 +63,6 @@ interface SegmentRow {
       <section class="form-panel" *ngIf="showForm">
         <div class="section-heading">
           <div>
-            <span class="eyebrow">Capture</span>
             <h3>Add reputation review</h3>
           </div>
           <button class="icon-button" type="button" (click)="toggleForm()" aria-label="Close review form">x</button>
@@ -154,7 +152,6 @@ interface SegmentRow {
         <section class="review-feed" aria-label="Review feed">
           <div class="section-heading">
             <div>
-              <span class="eyebrow">Inbox</span>
               <h3>{{ filteredReviews.length }} visible reviews</h3>
             </div>
             <span class="health-pill" [class.alert]="negativeCount > 0">{{ healthLabel }}</span>
@@ -196,7 +193,6 @@ interface SegmentRow {
 
         <aside class="insight-panel" aria-label="Review intelligence">
           <section>
-            <span class="eyebrow">Sentiment</span>
             <h3>Service recovery radar</h3>
             <div class="segment-list">
               <div class="segment-row" *ngFor="let segment of sentimentSegments">
@@ -212,7 +208,6 @@ interface SegmentRow {
           </section>
 
           <section>
-            <span class="eyebrow">Channels</span>
             <h3>Platform mix</h3>
             <div class="platform-row" *ngFor="let platform of platformSegments">
               <span>{{ platform.label }}</span>
@@ -221,7 +216,6 @@ interface SegmentRow {
           </section>
 
           <section>
-            <span class="eyebrow">Actions</span>
             <h3>Manager queue</h3>
             <ul class="action-list">
               <li *ngFor="let action of actionQueue">{{ action }}</li>

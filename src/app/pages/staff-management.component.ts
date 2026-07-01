@@ -36,7 +36,6 @@ type StaffDirectoryRow = ApiRecord & {
     <section class="page-stack staff-page">
       <section class="staff-command-center">
         <div class="staff-title-block">
-          <span class="eyebrow">Smart staff management</span>
           <h2>Commission, attendance, shifts, performance, incentives and payroll</h2>
         </div>
 
@@ -115,7 +114,6 @@ type StaffDirectoryRow = ApiRecord & {
               <section class="panel compact-panel">
                 <div class="section-title compact-title">
                   <div>
-                    <span class="eyebrow">Staff insights</span>
                     <h2>Recommendations</h2>
                   </div>
                 </div>
@@ -169,7 +167,6 @@ type StaffDirectoryRow = ApiRecord & {
               <section class="panel compact-panel staff-directory-panel">
                 <div class="section-title compact-title staff-directory-title">
                   <div>
-                    <span class="eyebrow">Live staff directory</span>
                     <h2>Search and act on staff</h2>
                   </div>
                   <div class="staff-directory-controls">

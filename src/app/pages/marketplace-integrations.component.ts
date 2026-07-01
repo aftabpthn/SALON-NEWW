@@ -432,7 +432,6 @@ const catalog: IntegrationCategory[] = [
     <section class="integrations-page">
       <header class="integrations-header">
         <div>
-          <span class="eyebrow">Marketplace</span>
           <h2>Integrations</h2>
         </div>
         <div class="header-actions">

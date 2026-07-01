@@ -1,7 +1,6 @@
 <section class="page-stack level6-page">
   <div class="page-header">
     <div>
-      <span class="eyebrow">Happy Hours Level 6</span>
       <h2>Readiness Center</h2>
     </div>
     <button class="ghost-button" type="button" (click)="load()" [disabled]="loading()">
@@ -76,7 +75,6 @@
   <section class="panel roadmap-panel" *ngIf="report() as current">
     <div class="section-title">
       <h2>Auto roadmap</h2>
-      <span class="muted-text">Best order after each gate completes</span>
     </div>
     <div class="roadmap-list">
       <article class="roadmap-item" *ngFor="let item of current.roadmap">
@@ -94,7 +92,6 @@
   <section class="panel platform-panel" *ngIf="report() as current">
     <div class="section-title">
       <h2>Platform signals</h2>
-      <span class="muted-text">Real activity estimate for Level 6 gates</span>
     </div>
     <div class="signal-grid">
       <div>
@@ -128,7 +125,6 @@
   <section class="panel tenant-panel" *ngIf="report() as current">
     <div class="section-title">
       <h2>Per-tenant activity samples</h2>
-      <span class="muted-text">Invoices, appointments, demand signals, and paying signal</span>
     </div>
     <div class="table-wrap">
       <table>

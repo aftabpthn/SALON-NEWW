@@ -12,7 +12,7 @@ type KpiVm = {
   key: string;
   label: string;
   value: string;
-  subtitle: string;
+  subtitle?: string;
   delta: number;
   trend: string;
   route: string;

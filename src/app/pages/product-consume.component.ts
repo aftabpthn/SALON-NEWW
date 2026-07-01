@@ -72,7 +72,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
       <section class="zenoti-consume-register">
         <div class="zenoti-toolbar">
           <div>
-            <span class="eyebrow">Product consume register</span>
             <h2>Invoice service usage</h2>
           </div>
           <div class="toolbar-actions">
@@ -150,7 +149,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
       <section class="owner-report" *ngIf="backbarReport() as report">
         <div class="ledger-head">
           <div>
-            <span class="eyebrow">Owner report</span>
             <h3>Backbar bulk control</h3>
           </div>
         </div>
@@ -166,7 +164,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
       <section class="owner-dashboard" *ngIf="backbarDashboard() as dashboard">
         <div class="ledger-head">
           <div>
-            <span class="eyebrow">Owner dashboard</span>
             <h3>Daily / weekly product control</h3>
           </div>
           <div class="dashboard-actions">
@@ -222,7 +219,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
       <section class="control-report" *ngIf="controlLedgerReport() as report">
         <div class="ledger-head">
           <div>
-            <span class="eyebrow">Control ledger reports</span>
             <h3>Every ml / gram report center</h3>
           </div>
         </div>
@@ -255,7 +251,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
         <div class="product-360" *ngIf="product360() as view">
           <div class="ledger-head">
             <div>
-              <span class="eyebrow">Product 360</span>
               <h3>{{ view['productName'] || view['product']?.name }}</h3>
             </div>
           </div>
@@ -701,7 +696,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
       <section class="staff-audit" *ngIf="staffUsageAudit() as audit">
         <div class="ledger-head">
           <div>
-            <span class="eyebrow">Staff usage audit</span>
             <h3>Product consume accountability</h3>
           </div>
         </div>
@@ -764,7 +758,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
         <section class="editor" *ngIf="selected() as draft; else noSelection">
           <div class="editor-head">
             <div>
-              <span class="eyebrow">Consume draft</span>
               <h2>{{ draft.invoiceNumber }}</h2>
             </div>
             <span class="badge" [class.done]="draft.status === 'confirmed'">{{ draft.status }}</span>
@@ -779,7 +772,6 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
 
           <section class="wastage-guard" *ngIf="draftWastageGuard(draft) as guard" [class.warn]="guard.warn" [class.blocked]="guard.approvalRequired">
             <div>
-              <span class="eyebrow">Waste lock</span>
               <strong>{{ guard.status }}</strong>
               <small>{{ guard.detail }}</small>
             </div>
@@ -840,13 +832,11 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
           <section class="backbar-ledger" *ngIf="ledgerProducts().length">
             <div class="ledger-head">
               <div>
-                <span class="eyebrow">Backbar control</span>
                 <h3>Open container ledger</h3>
               </div>
             </div>
             <div class="container-scan">
               <div>
-                <span class="eyebrow">QR / barcode scan</span>
                 <strong>Container instant history</strong>
               </div>
               <input [(ngModel)]="containerScanCode" placeholder="Scan or paste container QR / barcode">

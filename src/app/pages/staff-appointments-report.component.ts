@@ -21,7 +21,6 @@ type StaffAppointmentsReport = {
     <section class="page-stack staff-appointments-page">
       <div class="module-hero report-hero">
         <div>
-          <span class="eyebrow">Reports / Appointments</span>
           <h2>Appointment Booked By Staff</h2>
         </div>
         <div class="hero-actions">

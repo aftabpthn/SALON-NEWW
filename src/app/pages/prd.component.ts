@@ -10,7 +10,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 17 · Product requirement document</span>
           <h2>Product contract for workflow, finance, customer intelligence and online booking</h2>
         </div>
       </div>

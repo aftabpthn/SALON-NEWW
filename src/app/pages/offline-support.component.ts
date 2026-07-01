@@ -14,7 +14,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Offline Resilience Command Center</span>
           <h2>Run billing, appointments and recovery workflows even when internet is unstable</h2>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>

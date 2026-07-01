@@ -65,7 +65,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
               <div class="staff-list">
                 <button class="staff-choice premium-card" [class.selected]="selectedStaffId() === null" (click)="setStaff(null)">
                   <div class="any-avatar"><ion-icon name="sparkles-outline"></ion-icon></div>
-                  <div><strong>Any available professional</strong><span>Let the business assign the best available staff member</span></div>
+                  <div><strong>Any available professional</strong></div>
                   <em>Recommended</em>
                 </button>
                 @for (staff of business.staff; track staff.id) {

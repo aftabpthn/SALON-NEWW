@@ -12,7 +12,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 25 · Testing and quality</span>
           <h2>Unit tests, API tests, validation tests, build checks, error boundary and demo seed data</h2>
         </div>
         <div class="hero-actions">

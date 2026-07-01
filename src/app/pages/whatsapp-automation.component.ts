@@ -57,7 +57,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Automation workflows</span>
               <h2>Run operational WhatsApp jobs</h2>
             </div>
           </div>
@@ -109,7 +108,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="panel register-panel" *ngIf="result() as result">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Last workflow result</span>
             <h2>{{ resultTitle(result) }}</h2>
           </div>
         </div>
@@ -126,7 +124,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Conversation inbox</span>
               <h2>WhatsApp threads</h2>
             </div>
           </div>
@@ -150,7 +147,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Human handoff</span>
               <h2>Escalation queue</h2>
             </div>
           </div>
@@ -171,7 +167,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="panel register-panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Automation rules</span>
             <h2>WhatsApp rule library</h2>
           </div>
         </div>

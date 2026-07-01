@@ -46,7 +46,7 @@ export type CommandCenterModule =
 export interface CommandCenterConfig {
   module: CommandCenterModule;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   primaryEndpoint: string;
   secondaryEndpoint?: string;
   actionEndpoint?: string;

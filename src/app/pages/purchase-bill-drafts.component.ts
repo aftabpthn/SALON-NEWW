@@ -48,7 +48,6 @@ type UploadFile = {
         <section class="panel upload-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Upload bill</span>
               <h2>New draft</h2>
             </div>
           </div>
@@ -99,7 +98,6 @@ type UploadFile = {
         <section class="panel draft-list-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Draft queue</span>
               <h2>Review before stock</h2>
             </div>
             <select class="inline-select" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); load()" [ngModelOptions]="{ standalone: true }">
@@ -151,7 +149,6 @@ type UploadFile = {
         <aside class="panel bill-preview">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Bill image</span>
               <h2>{{ draft.originalFileName || 'Attachment' }}</h2>
             </div>
           </div>
@@ -174,7 +171,6 @@ type UploadFile = {
         <section class="panel draft-editor">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Draft header</span>
               <h2>{{ draft.supplierName || 'Supplier pending' }}</h2>
               <div class="supplier-status">
                 <span class="badge success" *ngIf="draft.supplierId">Supplier linked</span>
@@ -209,7 +205,6 @@ type UploadFile = {
 
           <div class="section-title item-title">
             <div>
-              <span class="eyebrow">Bill items</span>
               <h2>Product matching and receiving lines</h2>
             </div>
             <button class="ghost-button" type="button" (click)="addItem()" [disabled]="draft.status !== 'draft' || saving()">Add line</button>

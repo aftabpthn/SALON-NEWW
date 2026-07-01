@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack product-edit-page">
       <div class="module-hero compact-hero">
         <div>
-          <span class="eyebrow">Inventory - Web</span>
           <h2>Edit Product</h2>
           <p>{{ product()?.name || 'Selected product' }}</p>
         </div>
@@ -30,7 +29,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel edit-shell">
           <div class="edit-heading">
             <div>
-              <span class="eyebrow">Edit Product</span>
               <h2>{{ item.name }}</h2>
               <small>{{ productCode(item) }} - {{ productStatus(item) }}</small>
             </div>

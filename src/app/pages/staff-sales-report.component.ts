@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Reports / Staff sales</span>
           <h2>Staff Sales Report</h2>
         </div>
         <div class="hero-actions">
@@ -184,11 +183,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel" *ngIf="activeTab() === 'leaderboard' && leaderboardView() === 'summary'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Leaderboard</span>
               <h2>Staff summary</h2>
             </div>
             <div class="section-actions">
-              <span class="view-hint">One view at a time</span>
               <button class="ghost-button mini" type="button" (click)="setLeaderboardView('items')">Staff by item</button>
             </div>
           </div>
@@ -297,7 +294,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel" *ngIf="activeTab() === 'services'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Services sales by staff</span>
               <h2>Services By Staff</h2>
             </div>
             <button class="ghost-button mini" type="button" (click)="exportCsv()">Services CSV</button>
@@ -444,7 +440,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel" *ngIf="activeTab() === 'products'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Products by staff</span>
               <h2>Products By Staff</h2>
             </div>
             <button class="ghost-button mini" type="button" (click)="exportProductRowsCsv()">Products CSV</button>
@@ -530,7 +525,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel" *ngIf="activeTab() === 'commission'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Commission / payout</span>
               <h2>Staff payout preview</h2>
             </div>
             <button class="ghost-button mini" type="button" (click)="exportPayoutPdf()">Payout PDF</button>
@@ -558,7 +552,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel" *ngIf="activeTab() === 'leaderboard' && leaderboardView() === 'items'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Line item audit</span>
               <h2>Staff by item</h2>
             </div>
             <div class="section-actions">

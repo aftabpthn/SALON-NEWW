@@ -57,7 +57,6 @@ import { AppStateService } from '../../../../core/state/app-state.service';
     <section class="close-shell">
       <header class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">Daily closing</span>
           <h1>Cash, card, UPI and bank day close</h1>
         </div>
         <div class="hero-actions">
@@ -68,16 +67,15 @@ import { AppStateService } from '../../../../core/state/app-state.service';
       </header>
 
       <section class="metric-grid">
-        <article class="metric"><span class="eyebrow">Lock status</span><strong>{{ lockStatusText() }}</strong><small class="muted">{{ branchId() }} · {{ businessDate() }}</small></article>
-        <article class="metric"><span class="eyebrow">Expected cash</span><strong>{{ money(expectedCash()) }}</strong></article>
-        <article class="metric"><span class="eyebrow">Cash variance</span><strong>{{ money(cashVariance()) }}</strong></article>
-        <article class="metric"><span class="eyebrow">Bank net</span><strong>{{ money(expectedBankNet()) }}</strong></article>
+        <article class="metric"><strong>{{ lockStatusText() }}</strong><small class="muted">{{ branchId() }} · {{ businessDate() }}</small></article>
+        <article class="metric"><strong>{{ money(expectedCash()) }}</strong></article>
+        <article class="metric"><strong>{{ money(cashVariance()) }}</strong></article>
+        <article class="metric"><strong>{{ money(expectedBankNet()) }}</strong></article>
       </section>
 
       <section class="grid">
         <aside class="action-panel">
           <div>
-            <span class="eyebrow">Close controls</span>
             <h2>Cashier close form</h2>
           </div>
           <div class="form-row">
@@ -117,7 +115,6 @@ import { AppStateService } from '../../../../core/state/app-state.service';
         <main class="panel">
           <div class="toolbar">
             <div>
-              <span class="eyebrow">Close checklist</span>
               <h2>Cash/card/UPI/bank variance</h2>
             </div>
             <button class="ghost" type="button" [disabled]="busy()" (click)="processOutbox()">Process GL outbox</button>
@@ -138,16 +135,15 @@ import { AppStateService } from '../../../../core/state/app-state.service';
       <section class="panel">
         <div class="toolbar">
           <div>
-            <span class="eyebrow">Z-report summary</span>
             <h2>{{ zReport()?.['report_no'] || 'No report generated yet' }}</h2>
           </div>
           <a class="button ghost" [routerLink]="['/balance-sheet']">Balance sheet</a>
         </div>
         <div class="metric-grid" *ngIf="zReport(); else noReport">
-          <article class="metric"><span class="eyebrow">Sales</span><strong>{{ money(zReport()?.['sales_total']) }}</strong><small class="muted">{{ zReport()?.['invoice_count'] || 0 }} invoices</small></article>
-          <article class="metric"><span class="eyebrow">Refund</span><strong>{{ money(zReport()?.['refund_total']) }}</strong><small class="muted">{{ zReport()?.['refund_count'] || 0 }} refunds</small></article>
-          <article class="metric"><span class="eyebrow">Cash</span><strong>{{ money(zReport()?.['cash_total']) }}</strong><small class="muted">Diff {{ money(zReport()?.['cash_difference']) }}</small></article>
-          <article class="metric"><span class="eyebrow">UPI/Card</span><strong>{{ money(numberValue(zReport()?.['upi_total']) + numberValue(zReport()?.['card_total'])) }}</strong><small class="muted">Wallet {{ money(zReport()?.['wallet_total']) }}</small></article>
+          <article class="metric"><strong>{{ money(zReport()?.['sales_total']) }}</strong><small class="muted">{{ zReport()?.['invoice_count'] || 0 }} invoices</small></article>
+          <article class="metric"><strong>{{ money(zReport()?.['refund_total']) }}</strong><small class="muted">{{ zReport()?.['refund_count'] || 0 }} refunds</small></article>
+          <article class="metric"><strong>{{ money(zReport()?.['cash_total']) }}</strong><small class="muted">Diff {{ money(zReport()?.['cash_difference']) }}</small></article>
+          <article class="metric"><strong>{{ money(numberValue(zReport()?.['upi_total']) + numberValue(zReport()?.['card_total'])) }}</strong><small class="muted">Wallet {{ money(zReport()?.['wallet_total']) }}</small></article>
         </div>
         <ng-template #noReport><div class="empty">Generate Z-report to freeze the day summary before locking.</div></ng-template>
       </section>

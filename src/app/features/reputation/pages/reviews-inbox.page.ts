@@ -17,7 +17,6 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
     <section class="inbox-page">
       <header class="page-heading">
         <div>
-          <span class="eyebrow">Reviews</span>
           <h2>Inbox</h2>
         </div>
         <div class="heading-actions">
@@ -87,7 +86,6 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
         <section class="review-list">
           <div class="list-header">
             <div>
-              <span class="eyebrow">Queue</span>
               <h3>{{ filteredReviews.length }} reviews</h3>
             </div>
           </div>
@@ -142,7 +140,6 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
 
             <section class="detail-section">
               <div class="section-title">
-                <span class="eyebrow">AI analysis</span>
                 <strong>{{ analysisStatus(review) }}</strong>
               </div>
               <div class="analysis-grid">
@@ -158,7 +155,6 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
 
             <section class="detail-section">
               <div class="section-title">
-                <span class="eyebrow">Reply</span>
                 <strong>{{ review.replyApprovalStatus || 'approval required' }}</strong>
               </div>
               <div class="reply-tools">
@@ -195,7 +191,6 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
 
             <section class="detail-section">
               <div class="section-title">
-                <span class="eyebrow">Actions</span>
                 <strong>{{ review.priority || 'normal' }}</strong>
               </div>
               <label class="field">

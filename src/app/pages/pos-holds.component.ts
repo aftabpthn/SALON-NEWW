@@ -11,7 +11,6 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">POS / held invoices</span>
           <h2>Hold invoice register</h2>
         </div>
         <div class="hero-actions">
@@ -29,7 +28,6 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
       <section class="panel">
         <div class="table-toolbar">
           <div>
-            <span class="eyebrow">Click invoice to resume</span>
             <h2>Held invoice list</h2>
           </div>
           <button class="ghost-button" type="button" (click)="clearAll()" [disabled]="!holds().length">Clear all holds</button>

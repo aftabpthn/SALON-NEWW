@@ -33,7 +33,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="financial-grid">
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Dead stock</span><h2>Cash stuck on shelves</h2></div></div>
+          <div class="section-title"><div><h2>Cash stuck on shelves</h2></div></div>
           <article class="finance-row" *ngFor="let product of deadStockProducts()">
             <div><strong>{{ product.name }}</strong><span>{{ product.stock || 0 }} unit(s) · no sale/service usage</span></div>
             <strong>{{ stockValue(product) | currency:'INR':'symbol':'1.0-0' }}</strong>
@@ -42,7 +42,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Margin leakage</span><h2>Weak-margin products</h2></div></div>
+          <div class="section-title"><div><h2>Weak-margin products</h2></div></div>
           <article class="finance-row danger" *ngFor="let product of marginLeakageProducts()">
             <div><strong>{{ product.name }}</strong><span>Price {{ product.price | currency:'INR':'symbol':'1.0-0' }} · cost {{ product.unitCost | currency:'INR':'symbol':'1.0-0' }}</span></div>
             <strong>{{ productMargin(product) | currency:'INR':'symbol':'1.0-0' }}</strong>
@@ -52,7 +52,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <section class="panel">
-        <div class="section-title"><div><span class="eyebrow">Supplier spend</span><h2>Purchase cost by supplier</h2></div></div>
+        <div class="section-title"><div><h2>Purchase cost by supplier</h2></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Supplier</th><th>Purchase entries</th><th>Total purchase</th><th>Last movement</th></tr></thead>

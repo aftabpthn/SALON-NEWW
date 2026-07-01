@@ -60,7 +60,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Usage limits</span>
               <h2>Plan consumption</h2>
             </div>
           </div>
@@ -76,7 +75,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Subscription billing</span>
               <h2>Current period metering</h2>
             </div>
             <small>{{ context.billingPreview?.periodStart }} · {{ context.billingPreview?.status }}</small>
@@ -93,7 +91,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Advanced SaaS health</span>
               <h2>Tenant health, subscription limits and usage-based billing</h2>
             </div>
             <small>{{ context.usageBasedBilling?.invoiceMode }} · {{ context.usageBasedBilling?.status }}</small>
@@ -123,7 +120,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Plan feature flags</span>
               <h2>Feature access for this tenant</h2>
             </div>
           </div>
@@ -141,7 +137,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">White-label readiness</span>
               <h2>Brand, domain and theme setup</h2>
             </div>
             <small>{{ context.whiteLabelReadiness?.score || 0 }}% · {{ context.whiteLabelReadiness?.status }}</small>
@@ -203,7 +198,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Subscription plans</span>
             <h2>Trial and plan catalogue</h2>
           </div>
         </div>

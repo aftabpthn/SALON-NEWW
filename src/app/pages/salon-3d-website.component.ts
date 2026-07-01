@@ -16,7 +16,6 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
     <main class="booking-share-page">
       <section class="share-hero">
         <div class="share-copy">
-          <span class="eyebrow">Online booking link</span>
           <h1>{{ activeBusinessName() }}</h1>
           <div class="outlet-meta">
             <span>{{ activeBranchCity() }}</span>
@@ -33,7 +32,6 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
 
       <section class="link-panel">
         <article>
-          <span class="eyebrow">Business profile</span>
           <strong>Public customer view</strong>
           <div class="link-row">
             <input [value]="businessProfileUrl()" readonly aria-label="Business profile link" />
@@ -41,7 +39,6 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
           </div>
         </article>
         <article>
-          <span class="eyebrow">Direct booking</span>
           <strong>Send this to clients</strong>
           <div class="link-row">
             <input [value]="bookingFlowUrl()" readonly aria-label="Direct booking link" />
@@ -53,7 +50,6 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
       <section class="preview-section">
         <div class="preview-head">
           <div>
-            <span class="eyebrow">Live preview</span>
             <h2>Customer app page</h2>
           </div>
           <div class="preview-tools">

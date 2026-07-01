@@ -20,7 +20,6 @@ type ColumnDef = {
     <section class="page-stack inward-revenue-page">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Reports / FlexiSalon import</span>
           <h2>Inward Revenue Report</h2>
         </div>
         <div class="hero-actions">
@@ -33,7 +32,6 @@ type ColumnDef = {
 
       <section class="panel import-panel">
         <div class="import-copy">
-          <span class="eyebrow">Excel import</span>
           <h3>FlexiSalonERP Inward Revenues</h3>
         </div>
         <label class="file-drop">
@@ -51,7 +49,6 @@ type ColumnDef = {
       <section class="panel preview-panel" *ngIf="preview() as previewData">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Import preview</span>
             <h3>{{ previewData.title || selectedFileName }}</h3>
           </div>
           <span class="badge">{{ previewData.invoiceCount || 0 }} invoices</span>
@@ -149,7 +146,6 @@ type ColumnDef = {
           <section class="panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Payment mode details</span>
                 <h3>Cash, card, online and cheque</h3>
               </div>
             </div>
@@ -165,7 +161,6 @@ type ColumnDef = {
           <section class="panel column-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Show columns</span>
                 <h3>FlexiSalon-style chooser</h3>
               </div>
               <button class="ghost-button mini" type="button" (click)="resetColumns()">Reset</button>
@@ -206,7 +201,6 @@ type ColumnDef = {
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Detailed rows</span>
               <h3>Line-item revenue with invoice drill-down</h3>
             </div>
             <small>{{ reportData.rows?.length || 0 }} visible rows</small>
@@ -247,7 +241,6 @@ type ColumnDef = {
         <section class="panel floating-detail-card" (click)="$event.stopPropagation()">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Legacy invoice detail</span>
               <h3>{{ detail.invoice.invoiceNo }}</h3>
               <small>{{ detail.invoice.clientName }} · {{ detail.invoice.docDate | date: 'dd MMM yyyy' }}</small>
             </div>

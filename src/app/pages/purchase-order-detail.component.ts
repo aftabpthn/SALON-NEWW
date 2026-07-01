@@ -30,7 +30,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="panel printable-po" *ngIf="po() as row" id="po-print-area">
         <div class="print-header">
           <div>
-            <span class="eyebrow">Purchase Order</span>
             <h1>{{ row.poNumber || row.id }}</h1>
             <p>{{ branchName(row.branchId) }} · {{ row.createdAt | date: 'medium' }}</p>
           </div>
@@ -96,7 +95,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <section class="sub-panel">
-          <div class="section-title"><div><span class="eyebrow">Items</span><h2>Ordered vs received</h2></div></div>
+          <div class="section-title"><div><h2>Ordered vs received</h2></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Product / HSN</th><th>Ordered</th><th>Received</th><th>MRP</th><th>Rate</th><th>Last rate</th><th>Discount</th><th>GST</th><th>Total</th><th>Batch</th></tr></thead>
@@ -120,7 +119,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <div class="two-column">
           <section class="sub-panel">
-            <div class="section-title"><div><span class="eyebrow">Inventory impact</span><h2>Stock preview after receiving</h2></div></div>
+            <div class="section-title"><div><h2>Stock preview after receiving</h2></div></div>
             <div class="impact-summary">
               <span><strong>{{ row.inventoryImpact?.totalReceiveQty || 0 }}</strong>stock units pending</span>
               <span><strong>{{ row.inventoryImpact?.lowStockClearedCount || 0 }}</strong>low-stock alerts cleared</span>
@@ -136,7 +135,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
 
           <section class="sub-panel">
-            <div class="section-title"><div><span class="eyebrow">PO vs bill matching</span><h2>AI Purchase Bill Draft links</h2></div></div>
+            <div class="section-title"><div><h2>AI Purchase Bill Draft links</h2></div></div>
             <div class="mini-list">
               <div *ngFor="let match of billMatches()">
                 <strong>{{ match.billNo || match.draftId }}</strong>
@@ -154,7 +153,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <div class="two-column">
           <section class="sub-panel">
-            <div class="section-title"><div><span class="eyebrow">Status history</span><h2>Approval and lifecycle audit</h2></div></div>
+            <div class="section-title"><div><h2>Approval and lifecycle audit</h2></div></div>
             <div class="timeline">
               <div *ngFor="let event of row.statusHistory || []">
                 <strong>{{ event.status }}</strong>
@@ -165,7 +164,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
 
           <section class="sub-panel">
-            <div class="section-title"><div><span class="eyebrow">Receive history</span><h2>GRN trail</h2></div></div>
+            <div class="section-title"><div><h2>GRN trail</h2></div></div>
             <div class="timeline">
               <div *ngFor="let event of row.receiveHistory || []">
                 <strong>{{ event.grnNumber || event.status }}</strong>
@@ -181,7 +180,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <section class="sub-panel no-print">
-          <div class="section-title"><div><span class="eyebrow">WhatsApp history</span><h2>Supplier message audit</h2></div></div>
+          <div class="section-title"><div><h2>Supplier message audit</h2></div></div>
           <div class="whatsapp-list">
             <article *ngFor="let message of row.whatsappHistory || []">
               <strong>{{ message.status }}</strong>

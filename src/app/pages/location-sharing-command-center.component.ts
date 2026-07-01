@@ -28,7 +28,6 @@ type LocationSharingOverview = {
 
       <div class="module-hero location-hero">
         <div>
-          <span class="eyebrow">Multi-Branch / Governance</span>
           <h2>Location Sharing Command Center</h2>
         </div>
         <div class="hero-actions">

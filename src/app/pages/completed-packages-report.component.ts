@@ -21,7 +21,6 @@ type CompletedPackagesReport = {
     <section class="page-stack completed-packages-page">
       <div class="module-hero report-hero">
         <div>
-          <span class="eyebrow">Reports / Packages</span>
           <h2>Completed Packages</h2>
         </div>
         <div class="hero-actions">

@@ -138,7 +138,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
       <div class="client360-toolbar">
         <a class="ghost-button fit" routerLink="/clients">Back to clients</a>
         <div class="client360-toolbar-copy">
-          <span class="eyebrow">Client CRM</span>
           <strong>Enterprise 360 workspace</strong>
         </div>
       </div>
@@ -149,7 +148,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <div class="client360-header-body">
             <span class="avatar large">{{ initials(client.name) }}</span>
             <div class="client360-header-main">
-              <span class="eyebrow">Client 360 profile</span>
               <h2>{{ client.name || 'Walk-in client' }}</h2>
               <p>{{ client.phone || client.mobile || 'No mobile' }} · {{ client.email || 'No email' }}</p>
               <div class="chip-row client360-status-row">
@@ -242,7 +240,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <aside class="panel client360-summary-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Client 360 summary</span>
                 <h2>Quick history</h2>
               </div>
               <span class="badge">{{ clientTypeLabel(client) }}</span>
@@ -271,7 +268,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <aside class="panel client360-actions-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Smart actions</span>
                 <h2>Client shortcuts</h2>
               </div>
               <span class="badge">{{ totalDue() > 0 ? 'Due pending' : 'Ready' }}</span>
@@ -339,7 +335,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <section class="panel">
                 <div class="section-title">
                   <div>
-                    <span class="eyebrow">Front desk intelligence</span>
                     <h2>Next best action</h2>
                   </div>
                   <span class="badge">{{ clientRiskLevel() }}</span>
@@ -359,7 +354,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <section class="panel">
                 <div class="section-title">
                   <div>
-                    <span class="eyebrow">Client risk control</span>
                     <h2>Warnings</h2>
                   </div>
                 </div>
@@ -382,7 +376,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <section class="panel">
                 <div class="section-title">
                   <div>
-                    <span class="eyebrow">Sales trail</span>
                     <h2>Recent invoices</h2>
                   </div>
                 </div>
@@ -401,7 +394,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <section class="panel">
                 <div class="section-title">
                   <div>
-                    <span class="eyebrow">Visit trail</span>
                     <h2>Recent appointments</h2>
                   </div>
                 </div>
@@ -420,7 +412,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <section class="panel">
                 <div class="section-title">
                   <div>
-                    <span class="eyebrow">Wallet trail</span>
                     <h2>Recent wallet activity</h2>
                   </div>
                 </div>
@@ -442,7 +433,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Beauty and safety profile</span>
                 <h2>Client preferences for faster service</h2>
               </div>
               <button class="primary-button" type="button" (click)="saveBeautyProfile()" [disabled]="profileSaving()">
@@ -627,7 +617,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel consultation-history-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Treatments / Consultation</span>
                 <h2>Salon consultation history</h2>
               </div>
               <span class="badge">{{ clientConsultationHistory(client).length }} record(s)</span>
@@ -636,7 +625,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <article class="consultation-history-card" *ngFor="let item of clientConsultationHistory(client); trackBy: trackHistoryRow">
                 <div class="consultation-history-head">
                   <div>
-                    <span class="eyebrow">Treatment date</span>
                     <h3>{{ item.treatmentDate }}</h3>
                   </div>
                   <span class="badge">{{ item.treatmentStaff }}</span>
@@ -665,7 +653,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">What to capture next</span>
                 <h2>Profile completeness</h2>
               </div>
             </div>
@@ -688,7 +675,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel" [hidden]="activeHistoryTab() !== 'sales'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">POS billing sync</span>
                 <h2>Sales / Bills</h2>
               </div>
               <span class="badge">{{ filteredClientInvoices().length }} shown</span>
@@ -778,7 +764,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel" [hidden]="activeHistoryTab() !== 'products'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Product intelligence</span>
                 <h2>Product purchase profile</h2>
               </div>
               <span class="badge">{{ clientProductRows().length }} product(s)</span>
@@ -786,7 +771,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <div class="product-profile-grid" *ngIf="clientProductRows().length; else noClientProducts">
               <article class="product-profile-card" *ngFor="let product of clientProductRows(); trackBy: trackHistoryRow">
                 <div>
-                  <span class="eyebrow">Product</span>
                   <h3>{{ product.name }}</h3>
                   <p>{{ product.invoice }} · {{ product.lastBought }}</p>
                 </div>
@@ -812,7 +796,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel" [hidden]="activeHistoryTab() !== 'wallet'">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Wallet / E-wallet</span>
                 <h2>Wallet ledger</h2>
               </div>
               <span class="badge">{{ filteredClientWalletLedgerRows().length }} shown</span>
@@ -876,7 +859,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel" [hidden]="activeHistoryTab() !== 'family'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Family account</span>
               <h2>Linked members and communication rules</h2>
             </div>
             <button class="ghost-button" type="button" (click)="loadFamily(client.id)">Refresh family</button>
@@ -909,7 +891,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <div class="family-account-layout" *ngIf="family() as tree; else noFamilyTree">
             <article class="family-primary-card">
               <div>
-                <span class="eyebrow">Primary account</span>
                 <h3>{{ familyPrimary(tree, client).name }}</h3>
                 <p>{{ familyPrimary(tree, client).phone || 'No phone' }} · {{ familyMembers(tree).length }} linked member(s)</p>
               </div>
@@ -955,7 +936,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel" [hidden]="activeHistoryTab() !== 'personal'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Personal details</span>
               <h2>Profile, preferences and client identity</h2>
             </div>
             <button class="primary-button" type="button" (click)="savePersonalDetails()" [disabled]="personalSaving()">
@@ -1031,7 +1011,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel" [hidden]="activeHistoryTab() !== 'packages'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Packages</span>
               <h2>Package history</h2>
             </div>
             <span class="badge">{{ clientPackageHistoryRows().length }} package(s)</span>
@@ -1087,7 +1066,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel" [hidden]="activeHistoryTab() !== 'memberships'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Membership</span>
               <h2>Membership history</h2>
             </div>
             <span class="badge">{{ clientMembershipHistoryRows().length || membershipStatusLabel(client) }}</span>
@@ -1133,7 +1111,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel" [hidden]="activeHistoryTab() !== 'feedback'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Feedback</span>
               <h2>Ratings and service feedback</h2>
             </div>
             <span class="badge">{{ feedbackHistory(client).length }} review(s)</span>
@@ -1172,7 +1149,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel notes-page-panel" #notesPanel [hidden]="activeHistoryTab() !== 'notes'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Client notes</span>
               <h2>Notes and follow-up</h2>
             </div>
             <button class="primary-button" type="button" (click)="saveNotes()" [disabled]="notesSaving()">Save note</button>
@@ -1202,7 +1178,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <aside class="whatsapp-summary-card">
               <div class="section-title">
                 <div>
-                  <span class="eyebrow">WhatsApp follow-up</span>
                   <h2>Summary</h2>
                 </div>
                 <a class="ghost-button fit" [href]="whatsAppFollowUpLink(client)" target="_blank" rel="noopener">Open WhatsApp</a>
@@ -1220,7 +1195,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <div class="note-history-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">History</span>
                 <h2>Note history</h2>
               </div>
               <span class="badge">{{ clientNoteHistory(client).length }} item(s)</span>
@@ -1242,7 +1216,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="panel" [hidden]="activeHistoryTab() !== 'documents'">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Documents / consent</span>
               <h2>Signed consent forms</h2>
             </div>
             <span class="badge">{{ consentHistory(client).length }} form(s)</span>
@@ -1280,7 +1253,6 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
           <section class="panel appointment-history-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Appointment history</span>
                 <h2>Bookings and visits</h2>
               </div>
               <span class="badge">{{ filteredClientAppointments().length }} shown</span>

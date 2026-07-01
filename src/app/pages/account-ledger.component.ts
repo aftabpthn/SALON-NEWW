@@ -49,7 +49,6 @@ type LedgerResponse = {
     <section class="ledger-shell">
       <div class="ledger-titlebar">
         <div>
-          <span class="eyebrow">Reports</span>
           <h2>Account Ledger</h2>
         </div>
         <a class="close-link" routerLink="/reports" aria-label="Back to reports">×</a>
@@ -137,7 +136,7 @@ type LedgerResponse = {
               <tr *ngIf="!data.entries.length" class="empty-row">
                 <td colspan="15">
                   <strong>No ledger transactions yet</strong>
-                  <span>Opening balance is available. Voucher, purchase and payment entries will appear here after posting.</span>
+
                 </td>
               </tr>
             </tbody>

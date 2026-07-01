@@ -11,7 +11,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 type WorkflowConfig = {
   workflowType: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   prompt: string;
   primaryEndpoint: string;
   secondaryEndpoint?: string;
@@ -28,7 +28,7 @@ type WorkflowConfig = {
       <header class="workflow-hero">
         <div>
           <h1>{{ config.title }}</h1>
-          <p>{{ config.subtitle }}</p>
+          
         </div>
         <nav class="hero-actions">
           <a routerLink="/future-features">Innovation center</a>
@@ -365,7 +365,6 @@ export class FutureWorkflowComponent implements OnInit {
   config: WorkflowConfig = {
     workflowType: 'growth-advisor',
     title: 'Future Workflow',
-    subtitle: 'Connected workflow powered by live salon data.',
     prompt: 'Create a live operational recommendation from connected salon data.',
     primaryEndpoint: 'future-features/summary',
     recordLabel: 'Records'

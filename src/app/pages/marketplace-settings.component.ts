@@ -97,7 +97,6 @@ const DEFAULT_SUMMARY: ReputationSummary = {
       <main class="settings-content">
         <header class="settings-hero">
           <div>
-            <span class="eyebrow">Setup / Reviews</span>
             <h1>Review & Marketplace Reputation Control</h1>
           </div>
           <div class="hero-actions">

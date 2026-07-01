@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="topbar dashboard-greeting" *ngIf="report()">
         <div>
-          <span class="eyebrow">Owner Command</span>
           <h1>{{ greeting() }} 👋</h1>
         </div>
         <div class="topbar-actions">
@@ -26,7 +25,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="panel dashboard-panel" *ngIf="report() as data">
         <div class="section-title compact-title">
           <div>
-            <span class="eyebrow">Today's Pulse</span>
             <h2>Key Metrics</h2>
           </div>
           <span class="muted-text">{{ today() }}</span>
@@ -76,47 +74,40 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="dashboard-hub-grid">
           <a class="dashboard-hub-card" routerLink="/appointments">
             <span class="hub-icon">📅</span>
-            <span class="eyebrow">Calendar</span>
             <strong>{{ data.totalBookings }} bookings</strong>
             <b>Open calendar</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/pos">
             <span class="hub-icon">🧾</span>
-            <span class="eyebrow">POS</span>
             <strong>{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }} received due</strong>
             <small>{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }} still pending</small>
             <b>Open POS</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/inventory">
             <span class="hub-icon">📦</span>
-            <span class="eyebrow">Inventory</span>
             <strong>{{ data.lowStockAlerts.length || 0 }} alerts</strong>
             <small>{{ data.lowStockAlerts[0]?.name || 'Stock is healthy' }}</small>
             <b>Open stock</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/staff-os/employee-masters">
             <span class="hub-icon">🧑‍💼</span>
-            <span class="eyebrow">Staff</span>
             <strong>{{ data.staffPerformance[0]?.name || 'No ranking yet' }}</strong>
             <small>{{ (data.staffPerformance[0]?.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }} top revenue</small>
             <b>Open Staff OS</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/customer-360">
             <span class="hub-icon">👤</span>
-            <span class="eyebrow">Customers</span>
             <strong>{{ data.repeatCustomerRate }}% repeat</strong>
             <small>{{ data.newClients }} new clients this month</small>
             <b>Open customer intelligence</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/smart-booking">
             <span class="hub-icon">🌐</span>
-            <span class="eyebrow">Online booking</span>
             <strong>Workflow</strong>
             <b>Open workflow</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/memberships">
             <span class="hub-icon">💎</span>
-            <span class="eyebrow">Memberships</span>
             <strong>{{ data.membershipRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <b>Open memberships</b>
           </a>
@@ -127,7 +118,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Quick actions</span>
               <h2>Front desk shortcuts</h2>
             </div>
           </div>
@@ -150,7 +140,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Staff performance</span>
               <h2>{{ data.staffPerformance.length }} ranked staff</h2>
             </div>
             <a class="ghost-button" routerLink="/staff">Open staff</a>
@@ -164,7 +153,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Inventory alerts</span>
               <h2>{{ data.lowStockAlerts.length || 0 }} low stock alerts</h2>
             </div>
             <a class="ghost-button" routerLink="/inventory">Open stock</a>
@@ -178,7 +166,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Online booking</span>
               <h2>Operational workflow</h2>
             </div>
             <a class="ghost-button" routerLink="/smart-booking">Open workflow</a>

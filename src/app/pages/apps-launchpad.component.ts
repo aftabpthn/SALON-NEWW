@@ -20,7 +20,7 @@ type SuiteApp = {
 type SuiteGroup = {
   id: string;
   label: string;
-  subtitle: string;
+  subtitle?: string;
   apps: SuiteApp[];
 };
 
@@ -40,7 +40,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'command',
     label: 'Command OS',
-    subtitle: 'Owner, executive, KPI and multi-branch control rooms.',
     apps: [
       { path: '/dashboard', label: 'Live Dashboard', description: 'Revenue, bookings, dues, stock alerts and staff performance in one branch-aware view.', icon: 'DB', tone: 'teal', status: 'Live', tags: ['dashboard', 'kpi', 'owner'] },
       { path: '/dashboard/executive', label: 'Executive Dashboard', description: 'Board-level metrics for revenue, performance, branches and operating health.', icon: 'EX', tone: 'blue', status: 'Ready', tags: ['executive', 'analytics'] },
@@ -57,7 +56,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'frontdesk',
     label: 'Front Desk OS',
-    subtitle: 'Appointments, guests, queue, booking site and client records.',
     apps: [
       { path: '/appointments', label: 'Appointment Calendar', description: 'Create, move, complete and monitor front-desk appointments.', icon: 'CA', tone: 'teal', status: 'Live', tags: ['appointments', 'calendar'] },
       { path: '/appointments-enterprise', label: 'Enterprise Scheduler', description: 'Multi-staff and multi-service scheduling with resource-aware operations.', icon: 'ES', tone: 'blue', status: 'Ready', tags: ['scheduler', 'resources'] },
@@ -72,7 +70,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'pos',
     label: 'POS & Billing',
-    subtitle: 'Checkout, invoices, payments, memberships, packages and daily cash control.',
     apps: [
       { path: '/pos', label: 'Fast POS', description: 'Service and product checkout with payments, discounts and invoice flow.', icon: 'POS', tone: 'green', status: 'Live', tags: ['pos', 'billing'] },
       { path: '/billing', label: 'Billing Center', description: 'Invoice list, reconciliation, refunds and closing workflows.', icon: 'BI', tone: 'blue', status: 'Ready', tags: ['billing', 'refunds'] },
@@ -87,7 +84,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'inventory',
     label: 'Inventory & Suppliers',
-    subtitle: 'Products, suppliers, purchase orders, stock audit and recipes.',
     apps: [
       { path: '/inventory', label: 'Products & Inventory', description: 'Product master, stock, low-stock alerts, valuation and movement visibility.', icon: 'IV', tone: 'teal', status: 'Live', tags: ['inventory', 'products'] },
       { path: '/inventory/purchase-bill-drafts', label: 'Bill Drafts', description: 'Review purchase bill drafts before stock confirmation.', icon: 'AI', tone: 'violet', status: 'AI', tags: ['purchase', 'ocr', 'draft'] },
@@ -102,7 +98,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'staff',
     label: 'Staff & Payroll',
-    subtitle: 'Employee master, attendance, roster, payroll, commission and performance.',
     apps: [
       { path: '/staff-os/employee-masters', label: 'Staff OS', description: 'Employee master, attendance, payroll and lifecycle actions.', icon: 'SO', tone: 'blue', status: 'Ready', tags: ['staff', 'payroll'] },
       { path: '/staff-os/staff-list', label: 'Staff Directory', description: 'Active team, staff categories, documents and operational staff controls.', icon: 'ST', tone: 'teal', status: 'Live', tags: ['staff', 'employee'] },
@@ -117,7 +112,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'finance',
     label: 'Finance & Compliance',
-    subtitle: 'Ledgers, outgoing funds, GST, statutory compliance and controls.',
     apps: [
       { path: '/finance', label: 'Finance', description: 'Cash flow, expenses, margin and finance workflows.', icon: 'FN', tone: 'blue', status: 'Ready', tags: ['finance'] },
       { path: '/account-master', label: 'Account Master', description: 'Chart of accounts and ledger-ready financial master records.', icon: 'AM', tone: 'neutral', status: 'Admin', tags: ['accounts'] },
@@ -130,7 +124,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'growth',
     label: 'Growth, WhatsApp & AI',
-    subtitle: 'Marketing, reputation, recommendations, WhatsApp and salon automation.',
     apps: [
       { path: '/marketing', label: 'Marketing', description: 'Campaigns, win-back, upsell, retention and client segments.', icon: 'MK', tone: 'violet', status: 'AI', tags: ['marketing', 'ai'] },
       { path: '/growth-rank-bot', label: 'AI Rank Bot', description: 'Instagram, Facebook and Google rank-readiness audits with ethical local SEO, content and review workflows.', icon: 'RB', tone: 'violet', status: 'AI', tags: ['rank', 'google', 'instagram'] },
@@ -146,7 +139,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
   {
     id: 'platform',
     label: 'SaaS Platform',
-    subtitle: 'Tenant, branch, RBAC, security, offline, developer API and marketplace.',
     apps: [
       { path: '/super-admin', label: 'Super Admin', description: 'Tenant-level SaaS administration, platform controls and global visibility.', icon: 'SA', tone: 'red', status: 'Admin', tags: ['saas', 'admin'] },
       { path: '/saas', label: 'SaaS Onboarding', description: 'Tenant onboarding, branch readiness and subscription operating controls.', icon: 'SX', tone: 'blue', status: 'Admin', tags: ['tenant'] },
@@ -168,7 +160,6 @@ const SUITE_GROUPS: SuiteGroup[] = [
     <section class="apps-shell">
       <header class="apps-header">
         <div>
-          <span class="eyebrow">AuraShine full suite</span>
           <h2>All Apps</h2>
         </div>
         <div class="header-actions">
@@ -226,7 +217,7 @@ const SUITE_GROUPS: SuiteGroup[] = [
           <div>
             <span class="eyebrow">{{ group.apps.length }} apps</span>
             <h3>{{ group.label }}</h3>
-            <p>{{ group.subtitle }}</p>
+            
           </div>
         </div>
 

@@ -13,7 +13,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Advanced analytics engine</span>
           <h2>Forecasting, productivity, retention, churn, heatmaps and branch reports</h2>
         </div>
         <div class="form-actions">
@@ -28,7 +27,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <section class="panel" *ngIf="commandCenter() as command">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Analytics control room</span>
             <h2>Insights, scheduled reports, export controls and anomaly detection</h2>
           </div>
           <span class="badge">{{ command.exportControls.allowed ? 'Export controlled' : 'Export blocked' }}</span>
@@ -122,7 +120,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Executive insights</span>
               <h2>Generated snapshot {{ snapshot()?.id }}</h2>
             </div>
           </div>
@@ -160,7 +157,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <section class="panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Heatmap</span>
               <h2>Booking and revenue intensity by day and hour</h2>
             </div>
           </div>
@@ -262,7 +258,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <section class="panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Persisted snapshots</span>
             <h2>Analytics run history</h2>
           </div>
         </div>

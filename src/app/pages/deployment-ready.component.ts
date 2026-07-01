@@ -13,7 +13,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 26 · Deployment ready</span>
           <h2>Docker, environment config, production build, backend start, database backup and deployment guide</h2>
         </div>
         <div class="hero-actions">

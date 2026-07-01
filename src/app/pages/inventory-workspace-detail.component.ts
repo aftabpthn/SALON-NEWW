@@ -27,7 +27,6 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
         <ng-container *ngSwitchCase="'vendors'">
           <div class="detail-title">
             <div>
-              <span class="eyebrow">Inventory - Vendors</span>
               <h2>Manage Vendors</h2>
             </div>
           </div>
@@ -68,7 +67,6 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
         <ng-container *ngSwitchCase="'stock'">
           <div class="detail-title">
             <div>
-              <span class="eyebrow">Inventory - Reports</span>
               <h2>Current Stock</h2>
             </div>
           </div>
@@ -123,7 +121,6 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
         <ng-container *ngSwitchDefault>
           <div class="detail-title">
             <div>
-              <span class="eyebrow">Inventory - Procurement</span>
               <h2>Manage Procurement</h2>
             </div>
           </div>

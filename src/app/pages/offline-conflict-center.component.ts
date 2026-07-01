@@ -11,7 +11,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Offline Resilience</span>
           <h2>Conflict Resolution Center</h2>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>

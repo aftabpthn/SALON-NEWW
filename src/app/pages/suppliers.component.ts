@@ -201,7 +201,7 @@ interface SupplierCommandRow {
 
       <section class="panel supplier-draft-panel" *ngIf="whatsappDraft()">
         <div class="section-title">
-          <div><span class="eyebrow">Supplier WhatsApp draft</span><h2>Approval-safe message</h2></div>
+          <div><h2>Approval-safe message</h2></div>
           <button class="ghost-button" type="button" (click)="whatsappDraft.set('')">Clear draft</button>
         </div>
         <div class="draft-box">{{ whatsappDraft() }}</div>

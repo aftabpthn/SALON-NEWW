@@ -14,7 +14,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 21 · Customer 360</span>
           <h2>Lifetime value, visit behavior, preferences, risk score, timeline and AI next-best-action</h2>
         </div>
         <div class="customer-360-hero-actions">
@@ -115,7 +114,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <section class="profile-header">
           <span class="avatar large">{{ clientInitial(profileData.client) }}</span>
           <div>
-            <span class="eyebrow">Selected customer</span>
             <h2>{{ clientName(profileData.client) }}</h2>
             <p>{{ clientContactLine(profileData.client) }}</p>
             <div class="chip-row"><span class="badge" *ngFor="let tag of clientTags(profileData.client)">{{ tag }}</span></div>

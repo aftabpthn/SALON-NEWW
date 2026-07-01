@@ -20,7 +20,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="profile-header">
           <span class="avatar large">{{ profileData.client.name.slice(0, 1) }}</span>
           <div>
-            <span class="eyebrow">Selected customer</span>
             <h2>{{ profileData.client.name }}</h2>
             <p>{{ profileData.client.phone }} · {{ profileData.client.email || 'No email' }}</p>
             <div class="chip-row"><span class="badge" *ngFor="let tag of profileData.client.tags || []">{{ tag }}</span></div>

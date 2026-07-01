@@ -12,7 +12,6 @@ import { PosPaymentMode, PosSettingsService } from '../core/pos-settings.service
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">POS setup</span>
           <h2>Payment modes</h2>
         </div>
         <a class="ghost-button" routerLink="/pos">Back to POS</a>
@@ -52,7 +51,6 @@ import { PosPaymentMode, PosSettingsService } from '../core/pos-settings.service
       <section class="panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Invoice visible</span>
             <h2>Modes shown in POS</h2>
           </div>
           <button class="ghost-button mini" type="button" (click)="resetDefaults()">Reset defaults</button>

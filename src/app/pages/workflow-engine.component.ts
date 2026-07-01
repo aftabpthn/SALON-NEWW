@@ -13,7 +13,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 19 · Automation workflow engine</span>
           <h2>Trigger, condition, action, delay and WhatsApp/SMS/Email execution</h2>
         </div>
         <div class="hero-actions">

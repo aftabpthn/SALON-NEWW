@@ -21,7 +21,6 @@ type PendingPackageReport = {
     <section class="page-stack pending-packages-page">
       <div class="module-hero report-hero">
         <div>
-          <span class="eyebrow">Reports / Packages</span>
           <h2>Pending Packages</h2>
         </div>
         <div class="hero-actions">

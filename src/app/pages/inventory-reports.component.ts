@@ -46,7 +46,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <section class="panel product-inout-panel" *ngIf="activeTab() === 'product-in-out'">
         <div class="section-title">
-          <div><span class="eyebrow">Retail stock movement</span><h2>Product IN/OUT Retail</h2></div>
+          <div><h2>Product IN/OUT Retail</h2></div>
           <div class="hero-actions">
             <button class="ghost-button" type="button" (click)="exportProductInOutCsv()">Export CSV</button>
             <button class="ghost-button" type="button" (click)="exportProductInOutOwnerPdf()">Owner PDF</button>
@@ -160,7 +160,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid three" *ngIf="activeTab() === 'dead-stock'">
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Dead stock</span><h2>Cash locked in shelves</h2></div></div>
+          <div class="section-title"><div><h2>Cash locked in shelves</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.deadStock || []">
             <span>{{ row.name }}</span><strong>{{ row.value | currency:'INR':'symbol':'1.0-0' }}</strong>
           </article>
@@ -170,7 +170,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid three" *ngIf="activeTab() === 'expiry-risk'">
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Expiry</span><h2>Batch risk</h2></div></div>
+          <div class="section-title"><div><h2>Batch risk</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.expiring || []">
             <span>{{ row.productName }} · {{ row.daysToExpiry }} days</span><strong>{{ row.value | currency:'INR':'symbol':'1.0-0' }}</strong>
           </article>
@@ -180,7 +180,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid three" *ngIf="activeTab() === 'supplier-spend'">
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Supplier spend</span><h2>PO value by supplier</h2></div></div>
+          <div class="section-title"><div><h2>PO value by supplier</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.supplierSpend || []">
             <span>{{ row.name }} · {{ row.openPoItems }} open</span><strong>{{ row.spend | currency:'INR':'symbol':'1.0-0' }}</strong>
           </article>
@@ -189,7 +189,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <section class="panel">
-        <div class="section-title"><div><span class="eyebrow">WhatsApp supplier orders</span><h2>Manual-send queue</h2></div></div>
+        <div class="section-title"><div><h2>Manual-send queue</h2></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Supplier</th><th>PO</th><th>Phone</th><th>Status</th><th>Message</th><th>Action</th></tr></thead>

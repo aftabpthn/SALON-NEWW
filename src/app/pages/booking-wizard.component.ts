@@ -15,7 +15,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
     <section class="page-stack compact-wizard">
       <div class="module-hero compact-hero">
         <div>
-          <span class="eyebrow">Enterprise booking wizard</span>
           <h2>Service → Staff → Slot → Customer → Confirm</h2>
         </div>
         <div class="hero-actions">
@@ -53,7 +52,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
                 </select>
               </label>
               <div class="summary-card" *ngIf="resolvedServices().length">
-                <span class="eyebrow">Auto-added service chain</span>
                 <strong>{{ resolvedServices().length }} service item(s)</strong>
                 <small *ngFor="let item of resolvedServices()">{{ serviceName(item.serviceId) }} {{ item.isAuto ? '· auto' : '' }}</small>
               </div>
@@ -72,7 +70,6 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
                 <input type="date" formControlName="date" (change)="queueStateSave()" />
               </label>
               <div class="summary-card">
-                <span class="eyebrow">Staff matching</span>
                 <strong>{{ staffForBranch().length }} eligible team members</strong>
               </div>
             </div>
@@ -113,17 +110,14 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
 
             <div *ngSwitchCase="5" class="confirm-grid">
               <article class="summary-card">
-                <span class="eyebrow">Booking summary</span>
                 <strong>{{ serviceName(wizardForm.value.serviceId) }}</strong>
                 <small>{{ selectedSlot()?.startAt | date:'medium' }} with {{ selectedSlot()?.staffName || 'auto staff' }}</small>
                 <small>{{ wizardForm.value.clientName }} · {{ wizardForm.value.phone }}</small>
               </article>
               <article class="summary-card">
-                <span class="eyebrow">Safety</span>
                 <strong>{{ holdId() ? 'Slot hold active' : 'No active hold' }}</strong>
               </article>
               <article class="summary-card" *ngIf="createdAppointment() as appointment">
-                <span class="eyebrow">Confirmed</span>
                 <strong>{{ appointment.id }}</strong>
                 <small>{{ appointment.status }} · {{ appointment.startAt | date:'medium' }}</small>
               </article>

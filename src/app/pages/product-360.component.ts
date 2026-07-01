@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack product-360-page">
       <div class="module-hero compact-hero">
         <div>
-          <span class="eyebrow">Inventory / Product 360</span>
           <h2>{{ product()?.name || 'Product intelligence' }}</h2>
         </div>
         <div class="hero-actions">
@@ -35,7 +34,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="product-layout">
           <section class="panel product-card">
             <div class="product-avatar">{{ initials(item.name) }}</div>
-            <span class="eyebrow">Product profile</span>
             <h2>{{ item.name }}</h2>
             <p>{{ item.category || 'Uncategorised' }} · {{ item.usageType || 'retail' }}</p>
             <div class="detail-list">
@@ -50,7 +48,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <section class="panel">
             <div class="section-title">
-              <div><span class="eyebrow">AI reorder autopilot</span><h2>Stockout and purchase recommendation</h2></div>
+              <div><h2>Stockout and purchase recommendation</h2></div>
             </div>
             <div class="recommendation-card" *ngIf="recommendation() as rec; else noRecommendation">
               <strong>{{ rec.recommendedQty || 0 }} units suggested</strong>
@@ -65,7 +63,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Branch stock</span><h2>Same product across branches</h2></div></div>
+          <div class="section-title"><div><h2>Same product across branches</h2></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Branch</th><th>Stock</th><th>Reorder level</th><th>Value</th><th>Risk</th></tr></thead>
@@ -84,7 +82,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <div class="product-grid">
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Batch + FIFO</span><h2>Batch, expiry and supplier trail</h2></div></div>
+            <div class="section-title"><div><h2>Batch, expiry and supplier trail</h2></div></div>
             <div class="timeline">
               <article *ngFor="let batch of productBatches()">
                 <strong>{{ batch.batchNumber || batch.id }}</strong>
@@ -96,7 +94,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
 
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Usage intelligence</span><h2>POS sales and service consumption</h2></div></div>
+            <div class="section-title"><div><h2>POS sales and service consumption</h2></div></div>
             <div class="mini-metrics">
               <div><span>POS sold</span><strong>{{ productSaleUsage(item.id) }}</strong></div>
               <div><span>Service used</span><strong>{{ productServiceUsage(item.id) }}</strong></div>
@@ -114,7 +112,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Product consume report</span><h2>Service-wise usage and cost</h2></div></div>
+          <div class="section-title"><div><h2>Service-wise usage and cost</h2></div></div>
           <div class="mini-metrics">
             <div><span>Purchase rate</span><strong>{{ (item.unitCost || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
             <div><span>Used in services</span><strong>{{ consumeReportTotals().serviceCount || 0 }}</strong></div>
@@ -149,7 +147,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <section class="panel control-ledger-panel">
           <div class="section-title">
-            <div><span class="eyebrow">Product Consumption Control Ledger</span><h2>Every ml, gram, container, client and staff in one report</h2></div>
+            <div><h2>Every ml, gram, container, client and staff in one report</h2></div>
           </div>
           <div class="control-card-grid">
             <article *ngFor="let card of controlCards()" [class.attention]="card['status'] === 'attention'" [class.clean]="card['status'] === 'clean'">
@@ -212,7 +210,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Tube-level / bulk history</span><h2>Backbar container trail</h2></div></div>
+          <div class="section-title"><div><h2>Backbar container trail</h2></div></div>
           <div class="mini-metrics">
             <div><span>Sealed stock</span><strong>{{ backbarSummary()['sealedStock'] || 0 }}</strong></div>
             <div><span>Open containers</span><strong>{{ backbarSummary()['openContainers'] || 0 }}</strong></div>
@@ -244,7 +242,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <div class="product-grid">
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Service Recipe / BOM</span><h2>Services using this product</h2></div></div>
+            <div class="section-title"><div><h2>Services using this product</h2></div></div>
             <div class="timeline mini">
               <article *ngFor="let service of servicesUsingProduct()">
                 <strong>{{ service.name }}</strong>
@@ -255,7 +253,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
 
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">POS sale history</span><h2>Invoices that used this product</h2></div></div>
+            <div class="section-title"><div><h2>Invoices that used this product</h2></div></div>
             <div class="timeline mini">
               <article *ngFor="let sale of productSales().slice(0, 8)">
                 <strong>{{ sale.invoiceNumber || sale.id }}</strong>

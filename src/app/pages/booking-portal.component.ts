@@ -15,7 +15,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
     <main class="portal-page">
       <section class="module-hero">
         <div>
-          <span class="eyebrow">Level 22 · Online booking website</span>
           <h2>{{ context()?.branding?.brandName || 'Book your salon appointment' }}</h2>
         </div>
         <a class="ghost-button" routerLink="/dashboard">Admin console</a>
@@ -36,7 +35,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
 
       <section class="public-profile" *ngIf="profile() as publicProfile">
         <div class="profile-main">
-          <span class="eyebrow">Aura Shine public booking</span>
           <h1>{{ publicProfile.tenant?.name || context()?.branding?.brandName || 'Aura Shine' }}</h1>
           <p>{{ branch().address || 'Salon address' }}<ng-container *ngIf="branch().city">, {{ branch().city }}</ng-container></p>
           <div class="trust-row">
@@ -58,7 +56,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <section class="panel" *ngIf="salonPicks().length">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Salon picks</span>
             <h2>Featured services</h2>
           </div>
           <span class="badge">Fresha-style discovery</span>
@@ -130,7 +127,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <section class="panel" *ngIf="profile() as publicProfile">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Service catalog</span>
             <h2>Book by service or professional</h2>
           </div>
           <span class="badge">{{ publicProfile.categories?.length || 0 }} categories</span>
@@ -157,7 +153,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <section class="panel" *ngIf="staffForBranch().length">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Professionals</span>
             <h2>Choose staff or auto assign</h2>
           </div>
           <span class="badge">Any professional enabled</span>
@@ -188,7 +183,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <section class="panel" *ngIf="reviews().length">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Verified sentiment</span>
             <h2>Recent reviews</h2>
           </div>
           <span class="badge">{{ profile()?.reviews?.count || reviews().length }} review signals</span>
@@ -205,7 +199,6 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <section class="panel" *ngIf="appointment() as appt">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Booking confirmation</span>
             <h2>Appointment {{ appt.status }} for {{ appt.startAt | date: 'medium' }}</h2>
           </div>
           <span class="badge">{{ appt.onlineStatus }}</span>

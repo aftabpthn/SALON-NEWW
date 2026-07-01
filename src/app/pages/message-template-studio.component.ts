@@ -22,7 +22,6 @@ type PreferencesResponse = {
     <section class="studio-page">
       <header class="studio-hero">
         <div>
-          <span class="eyebrow">Message command center</span>
           <h1>Message Template Studio</h1>
         </div>
         <div class="hero-actions">
@@ -51,7 +50,6 @@ type PreferencesResponse = {
       <section *ngIf="activeTab === 'settings'" class="settings-panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Notification settings</span>
             <h2>Client, admin and staff notifications</h2>
           </div>
           <button class="primary-button" type="button" (click)="saveAllPreferences()">Save all</button>
@@ -170,7 +168,6 @@ type PreferencesResponse = {
 
       <section *ngIf="activeTab === 'history'" class="history-panel">
         <div>
-          <span class="eyebrow">Message ledger</span>
           <h2>Message History</h2>
         </div>
         <a class="primary-button" routerLink="/message-logs">Open Message History</a>

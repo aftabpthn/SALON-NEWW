@@ -11,7 +11,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Offline Resilience</span>
           <h2>Smart Sync Queue</h2>
         </div>
         <div class="form-actions">

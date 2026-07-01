@@ -131,7 +131,6 @@ type WalletLedgerRow = ApiRecord & {
     <section class="financial-summary-page">
       <div class="module-hero financial-hero">
         <div>
-          <span class="eyebrow">Reports / Financial summary</span>
           <h2>Financial Summary</h2>
         </div>
         <div class="hero-actions">
@@ -259,7 +258,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="panel report-section">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Wallet liability and audit</span>
               <h3>Wallet / Ewallet Ledger</h3>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · credit, debit, balance-after and abuse audit.</p>
             </div>
@@ -400,7 +398,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="panel matrix-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Owner accounting view</span>
               <h2>Sales and collection matrix</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ matrixColumns().length - 1 }} {{ periodMode === 'quarter' ? 'quarter(s)' : 'month(s)' }}</p>
             </div>
@@ -431,7 +428,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="panel insight-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Quick checks</span>
               <h2>Financial control signals</h2>
             </div>
           </div>
@@ -475,7 +471,6 @@ type WalletLedgerRow = ApiRecord & {
           <section class="panel payment-table-panel">
             <div class="section-title">
               <div>
-                <span class="eyebrow">Payment register</span>
                 <h2>{{ selectedPaymentReportTitle() }}</h2>
                 <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ paymentDistributionRows().length }} payment row(s)</p>
               </div>
@@ -533,7 +528,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="daily-sheet-stack">
           <div class="section-title daily-sheet-title">
             <div>
-              <span class="eyebrow">Daily closing control</span>
               <h2>Daily Sheet / EOD Financial Control</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ branchLabel() }}</p>
             </div>
@@ -631,7 +625,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="daily-revenue-stack">
           <div class="section-title daily-sheet-title">
             <div>
-              <span class="eyebrow">Date-wise revenue intelligence</span>
               <h2>Daily Revenue 10x Report</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · revenue, collection, due, discounts and owner alerts.</p>
             </div>
@@ -831,7 +824,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="member-sales-stack">
           <div class="section-title daily-sheet-title">
             <div>
-              <span class="eyebrow">Membership growth report</span>
               <h2>Member vs Non-Member Sales</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · compare revenue, visits, ROI and conversion opportunities.</p>
             </div>
@@ -985,7 +977,6 @@ type WalletLedgerRow = ApiRecord & {
         <section class="sales-tax-stack">
           <div class="section-title daily-sheet-title sales-tax-title">
             <div>
-              <span class="eyebrow">GST filing intelligence</span>
               <h2>Sales Tax / GST 10x Report</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · invoice tax register, rate breakup, service/product split and accounting checks.</p>
             </div>

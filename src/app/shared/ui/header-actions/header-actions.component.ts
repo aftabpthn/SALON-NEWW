@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthSessionService } from '../../../core/auth-session.service';
 import { AppStateService } from '../../../core/state/app-state.service';
+import { SidebarStore } from '../../../shell/sidebar/sidebar.store';
 
 type PanelId = 'notifications' | 'profile' | null;
 
@@ -67,6 +68,13 @@ type PanelId = 'notifications' | 'profile' | null;
             <div><span>Workspace</span><strong>{{ state.tenantScopeLabel() }}</strong></div>
             <div><span>Branch</span><strong>{{ state.branchScopeLabel() }}</strong></div>
           </div>
+          <button class="hdr-theme-toggle" type="button" (click)="toggleLightDarkMode()" [attr.aria-label]="themeButtonLabel()">
+            <span class="hdr-theme-icon" aria-hidden="true">{{ themeIcon() }}</span>
+            <span class="hdr-theme-copy">
+              <strong>{{ themeButtonLabel() }}</strong>
+              <small>{{ themeCaption() }}</small>
+            </span>
+          </button>
           <nav class="hdr-menu-links">
             <a routerLink="/settings" (click)="closeAll()"><span class="hdr-link-icon">⚙</span> Settings</a>
             <a routerLink="/two-factor" (click)="closeAll()"><span class="hdr-link-icon">🛡</span> Security &amp; 2FA</a>
@@ -206,6 +214,20 @@ type PanelId = 'notifications' | 'profile' | null;
       font-size: 0.78rem; color: #1d2740;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .hdr-theme-toggle {
+      width: calc(100% - 12px); margin: 0 6px 8px; padding: 9px 10px; border-radius: 12px;
+      border: 1px solid rgba(99, 102, 241, 0.14); background: #f7f8fd; color: #1d2740;
+      display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; cursor: pointer;
+      text-align: left; transition: background 130ms ease, border-color 130ms ease, transform 130ms ease;
+    }
+    .hdr-theme-toggle:hover { background: #eef1fb; border-color: rgba(99, 102, 241, 0.28); transform: translateY(-1px); }
+    .hdr-theme-icon {
+      width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px;
+      color: #fff; background: var(--gradient-brand, linear-gradient(135deg, #6366f1, #7c3aed)); font-weight: 900;
+    }
+    .hdr-theme-copy { display: grid; gap: 1px; min-width: 0; }
+    .hdr-theme-copy strong { font-size: 0.82rem; color: #1d2740; }
+    .hdr-theme-copy small { font-size: 0.7rem; color: #6f7a90; }
     .hdr-menu-links { display: grid; gap: 2px; padding: 4px 0; border-top: 1px solid rgba(15,23,42,0.07); }
     .hdr-menu-links a {
       display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px;
@@ -236,8 +258,13 @@ export class HeaderActionsComponent {
     return (name.slice(0, 2) || 'AU').toUpperCase();
   });
 
+  readonly themeButtonLabel = computed(() => this.sidebarStore.theme() === 'dark' ? 'Light mode' : 'Dark mode');
+  readonly themeIcon = computed(() => this.sidebarStore.theme() === 'dark' ? '☀' : '◐');
+  readonly themeCaption = computed(() => this.sidebarStore.theme() === 'dark' ? 'Switch to light interface' : 'Switch to dark interface');
+
   constructor(
     readonly state: AppStateService,
+    readonly sidebarStore: SidebarStore,
     private readonly session: AuthSessionService,
     private readonly router: Router
   ) {}
@@ -250,6 +277,9 @@ export class HeaderActionsComponent {
     this.panel.set(null);
   }
 
+  toggleLightDarkMode(): void {
+    this.sidebarStore.theme.set(this.sidebarStore.theme() === 'dark' ? 'light' : 'dark');
+  }
   logout(): void {
     this.closeAll();
     this.session.logout();

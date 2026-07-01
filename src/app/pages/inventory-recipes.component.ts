@@ -162,7 +162,6 @@ const DEFAULT_MODIFIERS = [
         <section class="panel editor-panel recipe-canvas">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Recipe editor</span>
               <h2>{{ editingRecipeId() ? 'Revise auto-consume recipe' : 'Auto-consume service recipe' }}</h2>
               <p>{{ selectedService()?.name || 'Select one service, then map every product that should be consumed automatically from live inventory.' }}</p>
             </div>
@@ -223,7 +222,7 @@ const DEFAULT_MODIFIERS = [
         </section>
 
         <section class="panel impact-panel">
-          <div class="section-title"><div><span class="eyebrow">Recipe impact</span><h2>Cost, margin and stock</h2></div></div>
+          <div class="section-title"><div><h2>Cost, margin and stock</h2></div></div>
           <div class="impact-stack">
             <article><span>Expected service cost</span><strong>{{ expectedCostPreview() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
             <article><span>Service margin</span><strong>{{ marginPreview() | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ marginPctPreview() }}% after professional stock</small></article>

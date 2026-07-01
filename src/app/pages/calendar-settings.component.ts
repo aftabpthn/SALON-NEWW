@@ -70,7 +70,6 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
       <main class="settings-content">
         <header class="settings-hero">
           <div>
-            <span class="eyebrow">Setup / Calendar</span>
             <h1>Calendar settings</h1>
           </div>
           <button class="primary-button" type="button" (click)="save()">Save</button>

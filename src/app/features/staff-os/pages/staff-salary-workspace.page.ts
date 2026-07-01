@@ -13,14 +13,13 @@ type WorkspaceLink = {
 
 type WorkspaceSection = {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   links: WorkspaceLink[];
 };
 
 const sections: WorkspaceSection[] = [
   {
     title: '1. Staff Setup',
-    subtitle: 'Employee master data is prepared here.',
     links: [
       { label: 'Staff List', path: '/staff-os/staff-list', tag: 'Live', note: 'Staff add/edit, active/inactive status.' },
       { label: 'Staff Categories', path: '/staff-os/staff-categories', tag: 'Live', note: 'Role, designation, staff category.' },
@@ -29,7 +28,6 @@ const sections: WorkspaceSection[] = [
   },
   {
     title: '2. Attendance & Shift Rules',
-    subtitle: 'Salary is based on attendance, shifts and leave rules.',
     links: [
       { label: 'Shift Master', path: '/staff-os/shift-master', tag: 'Live', note: 'Shift hours, week off, timing rules.' },
       { label: 'Attendance Master', path: '/staff-os/attendance-master', tag: 'Live', note: 'Present, absent, holiday and paid/unpaid rules.' },
@@ -43,7 +41,6 @@ const sections: WorkspaceSection[] = [
   },
   {
     title: '3. Payroll Setup',
-    subtitle: 'Salary formula, fines, advance, allowance aur week-off rules.',
     links: [
       { label: 'Payroll Rules', path: '/staff-os/payroll-rules', tag: 'New', note: 'Week off, sandwich, weekend penalty, commission %, advance cap.' },
       { label: 'Salary Structure', path: '/staff-os/payroll-salary-structure', tag: 'Live', note: 'Basic salary and payroll structure.' },
@@ -53,7 +50,6 @@ const sections: WorkspaceSection[] = [
   },
   {
     title: '4. Commission & Salary Generate',
-    subtitle: 'Final salary preview, commission, payroll report aur payout.',
     links: [
       { label: 'Target Incentives', path: '/staff-os/target-incentives/service', tag: 'Live', note: 'Service, product and membership incentive rules.' },
       { label: 'Commission Dash', path: '/staff-os/commission-dashboard', tag: 'Live', note: 'Commission overview and payout status.' },

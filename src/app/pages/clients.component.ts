@@ -14,7 +14,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack">
       <div class="module-hero client-command-hero">
         <div class="hero-copy">
-          <span class="eyebrow">Client CRM</span>
           <h2>Client list</h2>
         </div>
         <div class="client-hero-actions">

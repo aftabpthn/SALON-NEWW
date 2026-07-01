@@ -13,7 +13,6 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     <section class="page-stack">
       <div class="module-hero">
         <div>
-          <span class="eyebrow">Level 12 · Smart booking system</span>
           <h2>Slot recommendation, staff assignment, conflict prevention, waitlist, QR check-in and queue prediction</h2>
         </div>
         <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -77,7 +76,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
       <section class="panel" *ngIf="recommendations().length">
         <div class="section-title">
-          <div><span class="eyebrow">Smart recommendations</span><h2>Available slots</h2></div>
+          <div><h2>Available slots</h2></div>
         </div>
         <div class="table-wrap">
           <table>

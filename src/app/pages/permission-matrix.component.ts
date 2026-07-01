@@ -221,7 +221,6 @@ const RESOURCE_GROUPS = [
     <section class="page-stack user-management-os">
       <div class="module-hero user-hero">
         <div>
-          <span class="eyebrow">Owner command · User management</span>
           <h2>Advanced users, roles and rights control</h2>
         </div>
         <div class="hero-actions">
@@ -328,7 +327,6 @@ const RESOURCE_GROUPS = [
                 <div class="um-panel-head">
                   <div>
                     <h3>{{ userForm.value.id ? 'Edit user' : 'Create user' }}</h3>
-                    <span class="um-muted">Password is only saved when a temporary password is entered.</span>
                   </div>
                   <span class="badge">{{ selectedUser()?.id || 'new' }}</span>
                 </div>
@@ -367,7 +365,6 @@ const RESOURCE_GROUPS = [
                 <div class="um-panel-head">
                   <div>
                     <h3>Role definition</h3>
-                    <span class="um-muted">Create custom roles or update named role descriptions.</span>
                   </div>
                   <span class="badge">{{ selectedRole() }}</span>
                 </div>
@@ -427,7 +424,6 @@ const RESOURCE_GROUPS = [
               <div class="um-panel-head">
                 <div>
                   <h3>Staff permissions</h3>
-                  <span class="um-muted">Salonist-style controls saved through Aura RBAC grants.</span>
                 </div>
                 <span class="salonist-summary">{{ salonistPermissionCount() }} controls · {{ permissionCatalog().length }} cataloged</span>
               </div>
@@ -495,7 +491,6 @@ const RESOURCE_GROUPS = [
             <div class="um-panel-head">
               <div>
                 <h2>User audit and sessions</h2>
-                <span class="um-muted">Recent API activity and active session records for this tenant.</span>
               </div>
               <button class="ghost-button" type="button" (click)="load()">Reload audit</button>
             </div>
@@ -527,7 +522,6 @@ const RESOURCE_GROUPS = [
 
           <div class="um-card">
             <h3>Lock sensitive actions</h3>
-            <span class="um-muted">Saved as role-level admin controls when rights are saved.</span>
             <div class="um-lock-list">
               <label class="um-lock-item" *ngFor="let item of lockControls">
                 <input class="um-check" type="checkbox" [checked]="isPermissionChecked(item.resource, 'all')" [disabled]="isOwnerRole(selectedRole())" (change)="togglePermission(item.resource, 'all', $any($event.target).checked)" />
@@ -538,7 +532,6 @@ const RESOURCE_GROUPS = [
 
           <div class="um-card">
             <h3>Owner safety</h3>
-            <span class="um-muted">Owner/admin roles cannot lose full access from this matrix. The API also blocks disabling the last active owner/admin.</span>
             <div class="um-inline-actions">
               <button class="ghost-button" type="button" (click)="selectRole('owner')">View owner</button>
               <button class="ghost-button" type="button" (click)="selectRole('manager')">View manager</button>

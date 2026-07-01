@@ -42,7 +42,6 @@ type GroupBucket = {
     <section class="account-page">
       <header class="account-hero">
         <div>
-          <span class="eyebrow">Finance / Masters</span>
           <h2>Account Master</h2>
         </div>
         <div class="hero-actions">
@@ -66,7 +65,6 @@ type GroupBucket = {
         <aside class="account-list-panel">
           <div class="panel-title">
             <div>
-              <span class="eyebrow">Register</span>
               <h3>Accounts</h3>
             </div>
             <button class="ghost-button mini" type="button" (click)="startAdd()">Add</button>
@@ -96,7 +94,7 @@ type GroupBucket = {
             </button>
             <div class="empty-state" *ngIf="!filteredAccounts().length">
               <strong>No account found</strong>
-              <span>Add bank, cash, vendor, expense or income ledgers here.</span>
+
             </div>
           </div>
         </aside>

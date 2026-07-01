@@ -565,7 +565,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
         <ng-container *ngSwitchCase="'ledgerMaster'">
           <section class="split ledger-master-grid">
             <article class="panel">
-              <div class="panel-head"><h2>Auto ledger grouping</h2><span class="muted small">Tally-style master engine</span></div>
+              <div class="panel-head"><h2>Auto ledger grouping</h2></div>
               <div class="form-col">
                 <label><span>Ledger name</span><input placeholder="e.g. Salary, Furniture, Cash at Bank" [ngModel]="ledgerDraftName()" (ngModelChange)="onLedgerDraftName($event)" /></label>
                 <label><span>Suggested group</span>
@@ -606,7 +606,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
           </section>
 
           <section class="panel">
-            <div class="panel-head"><h2>Ledger & group mapping</h2><span class="muted small">Images se added Tally-style mapping</span></div>
+            <div class="panel-head"><h2>Ledger & group mapping</h2></div>
             <div class="scroll"><table><thead><tr><th>Ledger</th><th>Group</th><th>Side</th><th>Hint</th></tr></thead>
               <tbody><tr *ngFor="let m of ledgerMappingRows()"><td>{{ m.ledger }}</td><td>{{ m.group }}</td><td>{{ m.side }}</td><td class="muted">{{ m.hint }}</td></tr></tbody>
             </table></div>
@@ -793,7 +793,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
           </section>
 
           <section class="panel" *ngIf="(costs()?.lines || []).length">
-            <div class="panel-head"><h2>Cost breakdown</h2><span class="muted small">Change behavior to reclassify</span></div>
+            <div class="panel-head"><h2>Cost breakdown</h2></div>
             <div class="scroll"><table><thead><tr><th>Account</th><th>Category</th><th>Behavior</th><th class="r">Amount</th></tr></thead>
               <tbody><tr *ngFor="let l of costs()?.lines">
                 <td>{{ l.code }} · {{ l.name }}</td><td class="muted">{{ l.category }}</td>
@@ -836,7 +836,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
         <!-- TALLY STYLE DRILL DOWN -->
         <ng-container *ngSwitchCase="'drilldown'">
           <section class="panel">
-            <div class="panel-head"><h2>Tally Prime style drill down</h2><span class="muted small">Group → Ledger → Voucher</span></div>
+            <div class="panel-head"><h2>Tally Prime style drill down</h2></div>
             <div class="drill-tree" *ngIf="drillTree() as tree">
               <ng-container *ngFor="let n of tree">
                 <button type="button" class="drill-row" [style.paddingLeft.px]="n.level * 18 + 12" (click)="onDrill(n)">
@@ -879,7 +879,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
         <!-- AI INSIGHTS -->
         <ng-container *ngSwitchCase="'ai'">
           <section class="panel">
-            <div class="panel-head"><h2>AI finance advisor</h2><span class="muted small">Rule-based local insights</span></div>
+            <div class="panel-head"><h2>AI finance advisor</h2></div>
             <div class="ai-card" *ngFor="let i of advancedAiInsights()" [attr.data-sev]="i.severity">
               <strong>{{ i.title }}</strong><span>{{ i.text }}</span><em>{{ i.action }}</em>
             </div>
@@ -889,7 +889,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
         <!-- FORECASTING -->
         <ng-container *ngSwitchCase="'forecast'">
           <section class="panel">
-            <div class="panel-head"><h2>12 month balance-sheet forecast</h2><span class="muted small">Assets, liabilities, net worth</span></div>
+            <div class="panel-head"><h2>12 month balance-sheet forecast</h2></div>
             <div class="forecast-grid">
               <div class="forecast-card" *ngFor="let f of forecast()"><span>{{ f.month }}</span><b>{{ fmt(f.netWorth) }}</b><small>Assets {{ fmt(f.assets) }} · Liabilities {{ fmt(f.liabilities) }}</small></div>
             </div>

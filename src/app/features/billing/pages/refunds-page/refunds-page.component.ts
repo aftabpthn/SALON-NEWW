@@ -62,7 +62,6 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
     <section class="refund-shell">
       <header class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">Refund control</span>
           <h1>Refund, void and credit note approval queue</h1>
         </div>
         <div class="hero-actions">
@@ -73,10 +72,10 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
       </header>
 
       <section class="metric-grid">
-        <article class="metric-card"><span class="eyebrow">Refundable</span><strong>{{ money(refundableTotal()) }}</strong><small class="muted">{{ refundableRows().length }} invoices</small></article>
-        <article class="metric-card"><span class="eyebrow">Already refunded</span><strong>{{ refundedRows().length }}</strong><small class="muted">{{ money(refundedTotal()) }} processed</small></article>
-        <article class="metric-card"><span class="eyebrow">Void candidates</span><strong>{{ voidCandidateRows().length }}</strong></article>
-        <article class="metric-card"><span class="eyebrow">Credit notes</span><strong>{{ creditNoteRows().length }}</strong></article>
+        <article class="metric-card"><strong>{{ money(refundableTotal()) }}</strong><small class="muted">{{ refundableRows().length }} invoices</small></article>
+        <article class="metric-card"><strong>{{ refundedRows().length }}</strong><small class="muted">{{ money(refundedTotal()) }} processed</small></article>
+        <article class="metric-card"><strong>{{ voidCandidateRows().length }}</strong></article>
+        <article class="metric-card"><strong>{{ creditNoteRows().length }}</strong></article>
       </section>
 
       <section class="grid">
@@ -120,7 +119,6 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
 
         <aside class="action-box">
           <div>
-            <span class="eyebrow">Controlled action</span>
             <h2>{{ actionTitle() }}</h2>
             <p class="muted" *ngIf="selectedInvoice(); else noSelection">{{ invoiceLabel(selectedInvoice()) }} selected hai.</p>
             <ng-template #noSelection></ng-template>

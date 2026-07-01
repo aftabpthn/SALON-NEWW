@@ -65,7 +65,6 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
     <section class="recon-shell">
       <header class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">Payment reconciliation</span>
           <h1>Settlement matching for Razorpay, UPI, card and bank</h1>
         </div>
         <div class="hero-actions">
@@ -76,16 +75,15 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
       </header>
 
       <section class="metric-grid">
-        <article class="metric"><span class="eyebrow">Captured</span><strong>{{ money(providerSummary().captured) }}</strong><small class="muted">{{ providerLabel() }} collection</small></article>
-        <article class="metric"><span class="eyebrow">Expected settlement</span><strong>{{ money(providerSummary().expected) }}</strong></article>
-        <article class="metric"><span class="eyebrow">Difference</span><strong>{{ money(providerSummary().difference) }}</strong><small class="muted">{{ providerSummary().status }}</small></article>
-        <article class="metric"><span class="eyebrow">Stored runs</span><strong>{{ storedRows().length }}</strong><small class="muted">{{ mismatchRows().length }} mismatch</small></article>
+        <article class="metric"><strong>{{ money(providerSummary().captured) }}</strong><small class="muted">{{ providerLabel() }} collection</small></article>
+        <article class="metric"><strong>{{ money(providerSummary().expected) }}</strong></article>
+        <article class="metric"><strong>{{ money(providerSummary().difference) }}</strong><small class="muted">{{ providerSummary().status }}</small></article>
+        <article class="metric"><strong>{{ storedRows().length }}</strong><small class="muted">{{ mismatchRows().length }} mismatch</small></article>
       </section>
 
       <section class="grid">
         <aside class="settlement-card">
           <div>
-            <span class="eyebrow">Run settlement match</span>
             <h2>{{ providerLabel() }}</h2>
           </div>
           <div class="form-row">
@@ -125,12 +123,12 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
           </div>
 
           <div class="calc-grid">
-            <article><span class="muted">Captured</span><strong>{{ money(providerSummary().captured) }}</strong></article>
-            <article><span class="muted">Gateway fee</span><strong>{{ money(providerSummary().fees) }}</strong></article>
-            <article><span class="muted">GST on fee</span><strong>{{ money(providerSummary().taxOnFees) }}</strong></article>
-            <article><span class="muted">Refunds</span><strong>{{ money(providerSummary().refunds) }}</strong></article>
-            <article><span class="muted">Expected</span><strong>{{ money(providerSummary().expected) }}</strong></article>
-            <article><span class="muted">Difference</span><strong>{{ money(providerSummary().difference) }}</strong></article>
+            <article><strong>{{ money(providerSummary().captured) }}</strong></article>
+            <article><strong>{{ money(providerSummary().fees) }}</strong></article>
+            <article><strong>{{ money(providerSummary().taxOnFees) }}</strong></article>
+            <article><strong>{{ money(providerSummary().refunds) }}</strong></article>
+            <article><strong>{{ money(providerSummary().expected) }}</strong></article>
+            <article><strong>{{ money(providerSummary().difference) }}</strong></article>
           </div>
 
           <button class="primary" type="button" [disabled]="busy()" (click)="runProviderMatch()">Run settlement match</button>
@@ -141,7 +139,6 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
         <main class="panel">
           <div class="toolbar">
             <div>
-              <span class="eyebrow">Stored reconciliation rows</span>
               <h2>Mismatch review queue</h2>
             </div>
             <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); load()">

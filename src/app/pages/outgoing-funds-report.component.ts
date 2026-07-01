@@ -63,7 +63,6 @@ type ReportRow = {
     <section class="report-page">
       <header class="report-hero">
         <div>
-          <span class="eyebrow">Transactions / Funds</span>
           <h2>Outgoing Funds Saved Entries</h2>
         </div>
         <div class="actions">

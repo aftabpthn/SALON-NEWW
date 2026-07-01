@@ -105,7 +105,6 @@ type InvoiceLine = {
     <section class="page-stack">
       <div class="module-hero invoice-report-hero">
         <div>
-          <span class="eyebrow">Reports / Invoice command center</span>
           <h2>10x Enterprise Invoice Reports</h2>
         </div>
         <div class="hero-actions">
@@ -483,7 +482,6 @@ type InvoiceLine = {
         <section class="panel report-command-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">21 connected reports</span>
               <h2>{{ activeDefinition().title }}</h2>
               <p>{{ activeDefinition().description }}</p>
             </div>

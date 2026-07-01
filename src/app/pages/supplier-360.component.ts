@@ -13,7 +13,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
     <section class="page-stack supplier-360-page">
       <div class="module-hero compact-hero">
         <div>
-          <span class="eyebrow">Inventory / Supplier 360</span>
           <h2>{{ supplier()?.name || 'Supplier details' }}</h2>
         </div>
         <div class="hero-actions">
@@ -39,7 +38,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="supplier-layout">
           <section class="panel supplier-card">
             <div class="supplier-avatar">{{ initials(supplierDisplayName(vendor)) }}</div>
-            <span class="eyebrow">Supplier profile</span>
             <h2>{{ supplierDisplayName(vendor) }}</h2>
             <p>{{ vendor.status || 'active' }} vendor · GST-ready master</p>
             <div class="detail-list">
@@ -57,7 +55,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <section class="panel">
             <div class="section-title">
-              <div><span class="eyebrow">WhatsApp supplier ordering</span><h2>Approval-safe draft</h2></div>
+              <div><h2>Approval-safe draft</h2></div>
               <button class="ghost-button" type="button" (click)="buildWhatsAppDraft(vendor)">Build draft</button>
             </div>
             <div class="mini-metrics tight">
@@ -74,7 +72,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Supplier compliance panel</span><h2>GSTIN, contact, invoice, status and mapping quality</h2></div></div>
+          <div class="section-title"><div><h2>GSTIN, contact, invoice, status and mapping quality</h2></div></div>
           <div class="status-matrix">
             <span class="mini-status" [class.ok]="!complianceIssues().length" [class.warn]="complianceIssues().length">{{ complianceIssues().length ? complianceIssues().join(', ') : 'Compliance ready' }}</span>
             <span class="mini-status" [class.ok]="!mappingWarnings().length" [class.warn]="mappingWarnings().length">{{ mappingWarnings().length ? mappingWarnings().join(', ') : 'Product mapping ready' }}</span>
@@ -84,7 +82,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Auto PO recommendation</span><h2>Low-stock products to order from this supplier</h2></div></div>
+          <div class="section-title"><div><h2>Low-stock products to order from this supplier</h2></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Product</th><th>Qty</th><th>Unit cost</th><th>Total</th><th>Reason</th></tr></thead>
@@ -104,7 +102,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <div class="supplier-grid">
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Pending purchase orders</span><h2>Purchase recommendations for this supplier</h2></div></div>
+            <div class="section-title"><div><h2>Purchase recommendations for this supplier</h2></div></div>
             <div class="timeline">
               <article *ngFor="let row of pendingRecommendations()">
                 <strong>{{ productName(row.productId || row['product_id']) }}</strong>
@@ -116,7 +114,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
 
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Price comparison</span><h2>Same product, supplier-wise rate</h2></div></div>
+            <div class="section-title"><div><h2>Same product, supplier-wise rate</h2></div></div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Product</th><th>This supplier</th><th>Best supplier</th><th>Saving</th><th>Signal</th></tr></thead>
@@ -144,7 +142,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">PO / GRN reliability</span><h2>Receive performance and variance trail</h2></div></div>
+          <div class="section-title"><div><h2>Receive performance and variance trail</h2></div></div>
           <div class="mini-metrics">
             <div><span>Received PO</span><strong>{{ receivedPurchaseOrders().length }}</strong></div>
             <div><span>Open PO</span><strong>{{ openPurchaseOrders().length }}</strong></div>
@@ -174,7 +172,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">Payment / outstanding tracker</span><h2>Payable, credit days and last payment</h2></div></div>
+          <div class="section-title"><div><h2>Payable, credit days and last payment</h2></div></div>
           <div class="mini-metrics">
             <div><span>Estimated payable</span><strong>{{ outstandingValue() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
             <div><span>Payment terms</span><strong>{{ paymentTerms() }}</strong></div>
@@ -184,7 +182,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title"><div><span class="eyebrow">WhatsApp log</span><h2>Supplier ordering message history</h2></div></div>
+          <div class="section-title"><div><h2>Supplier ordering message history</h2></div></div>
           <div class="timeline mini">
             <article *ngFor="let row of supplierWhatsappLogs().slice(0, 8)">
               <strong>{{ row.status || 'draft' }}</strong>
@@ -197,7 +195,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <div class="supplier-grid">
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Products supplied</span><h2>Branch stock and batch quality</h2></div></div>
+            <div class="section-title"><div><h2>Branch stock and batch quality</h2></div></div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Product</th><th>Stock</th><th>Branch</th><th>Expiry</th><th>Mapping</th><th>Risk</th></tr></thead>
@@ -217,7 +215,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
 
           <section class="panel">
-            <div class="section-title"><div><span class="eyebrow">Quality issue log</span><h2>Expiry, waste and replacement risk</h2></div></div>
+            <div class="section-title"><div><h2>Expiry, waste and replacement risk</h2></div></div>
             <div class="timeline mini">
               <article *ngFor="let row of qualityIssues()">
                 <strong>{{ productName(row.productId || row.product_id) }}</strong>

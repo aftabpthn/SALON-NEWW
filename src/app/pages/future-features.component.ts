@@ -24,7 +24,6 @@ type WorkflowOption = {
         <div class="hero-orb hero-orb-a"></div>
         <div class="hero-orb hero-orb-b"></div>
         <div class="future-hero-copy">
-          <span class="eyebrow">AI Innovation Command Center</span>
           <h2>Live connected future intelligence for growth, pricing, booking, inventory and front desk automation</h2>
           <div class="future-signal-row">
             <span>{{ metric('liveSources') }}/{{ sourceHealth().totalSources || 0 }} live data sources</span>
@@ -54,7 +53,6 @@ type WorkflowOption = {
         <section class="panel live-spine-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Live data spine</span>
               <h2>Where AI gets real data</h2>
             </div>
             <span class="badge">No fake data</span>
@@ -74,7 +72,6 @@ type WorkflowOption = {
         <section class="panel launch-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Connected launcher</span>
               <h2>Run future feature with source trace</h2>
             </div>
             <span class="badge">{{ selectedWorkflow()?.status || 'connected' }}</span>
@@ -116,7 +113,6 @@ type WorkflowOption = {
         <section class="panel action-rail-panel">
           <div class="section-title">
             <div>
-              <span class="eyebrow">Action rail</span>
               <h2>Where output goes next</h2>
             </div>
           </div>
@@ -135,7 +131,6 @@ type WorkflowOption = {
       <section class="panel">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Enterprise interconnect map</span>
             <h2>10 AI workflows connected to live operational modules</h2>
           </div>
           <span class="badge">{{ metric('actionPaths') }} action paths</span>
@@ -158,7 +153,6 @@ type WorkflowOption = {
       <section class="panel" *ngIf="output()">
         <div class="section-title">
           <div>
-            <span class="eyebrow">Latest generated output</span>
             <h2>{{ output()?.title }}</h2>
           </div>
           <span class="badge">{{ output()?.safetyMode || 'review-before-action' }}</span>

@@ -73,7 +73,6 @@ type MoneyFlowCheck = {
     <section class="money-flow-shell">
       <header class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">Core Money Flow</span>
           <h1>100% readiness control</h1>
         </div>
         <div class="hero-actions">
@@ -85,22 +84,18 @@ type MoneyFlowCheck = {
 
       <section class="score-strip">
         <article class="metric">
-          <span class="eyebrow">Ready score</span>
           <strong>{{ readyScore() }}%</strong>
           <span class="muted">{{ doneCount() }}/{{ checks().length }} checks done</span>
         </article>
         <article class="metric">
-          <span class="eyebrow">Invoices</span>
           <strong>{{ invoiceRows().length }}</strong>
           <span class="muted">{{ paidInvoiceCount() }} paid / {{ dueInvoiceCount() }} due</span>
         </article>
         <article class="metric">
-          <span class="eyebrow">GL outbox</span>
           <strong>{{ failedOutboxCount() }}</strong>
           <span class="muted">{{ pendingOutboxCount() }} pending / {{ postedOutboxCount() }} posted</span>
         </article>
         <article class="metric">
-          <span class="eyebrow">Day close</span>
           <strong>{{ dailyOps()?.['ownerDailyClose']?.['ready'] ? 'Ready' : 'Check' }}</strong>
           <span class="muted">Cash {{ money(dailyOps()?.['cashBankReconciliation']?.['expectedCash']) }}</span>
         </article>
@@ -109,7 +104,6 @@ type MoneyFlowCheck = {
       <section class="panel">
         <div class="panel-head">
           <div>
-            <span class="eyebrow">Definition of done</span>
             <h2>Core Money Flow tab 100% tab maana jayega jab</h2>
           </div>
           <div class="toolbar">
@@ -137,7 +131,6 @@ type MoneyFlowCheck = {
       <section class="action-panel">
         <div class="panel-head">
           <div>
-            <span class="eyebrow">Fix queue</span>
             <h2>{{ blockingCount() ? blockingCount() + ' blocker' : 'No blocker' }}</h2>
           </div>
           <a class="button ghost" routerLink="/balance-sheet">Open balance sheet</a>

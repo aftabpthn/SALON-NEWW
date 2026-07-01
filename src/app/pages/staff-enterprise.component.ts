@@ -154,7 +154,7 @@ interface StaffOption {
 interface DetailSelection {
   eyebrow: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   status?: string;
   riskLevel?: RiskLevel;
   payload: unknown;
@@ -189,7 +189,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     <section class="enterprise-shell">
       <header class="enterprise-header">
         <div>
-          <span class="eyebrow">Staff Enterprise OS</span>
           <h1>Workforce Center</h1>
         </div>
         <nav class="header-actions" aria-label="Staff enterprise navigation">
@@ -280,7 +279,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
         <section class="section-band">
           <div class="section-heading">
             <div>
-              <span class="eyebrow">Live Staff Module Links</span>
               <h2>Open connected pages with same branch/staff context</h2>
             </div>
             <small class="snapshot-label">{{ command()?.generatedAt || filters.periodEnd }} live snapshot</small>
@@ -296,7 +294,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
         <section class="section-band command-grid">
           <div class="section-heading">
-            <span class="eyebrow">1. Workforce Center</span>
             <h2>Owner attention queue</h2>
           </div>
           <div class="command-list">
@@ -310,7 +307,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
         <section class="section-band">
           <div class="section-heading">
-            <span class="eyebrow">2. Profit-per-minute scheduler insights</span>
             <h2>Roster profitability view</h2>
           </div>
           <div class="profit-grid">
@@ -329,7 +325,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
         <section class="section-band">
           <div class="section-heading">
-            <span class="eyebrow">3. Staff Digital Twin cards</span>
             <h2>Performance, finance and skill profile</h2>
           </div>
           <div class="twin-grid">
@@ -354,7 +349,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
         <section class="section-band two-column">
           <div>
             <div class="section-heading">
-              <span class="eyebrow">4. Skill License Matrix</span>
               <h2>Certification status</h2>
             </div>
             <div class="table-wrap">
@@ -376,7 +370,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
           <div>
             <div class="section-heading">
-              <span class="eyebrow">5. Revenue Leakage Detector</span>
               <h2>Cash, discount and commission signals</h2>
             </div>
             <div class="signal-list">
@@ -392,7 +385,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
         <section class="section-band two-column">
           <div>
             <div class="section-heading">
-              <span class="eyebrow">6. Burnout + Attrition Prediction</span>
               <h2>Workforce risk review</h2>
             </div>
             <div class="signal-list">
@@ -406,7 +398,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
           <div>
             <div class="section-heading">
-              <span class="eyebrow">7. Auto Training Academy suggestions</span>
               <h2>Recommended coaching</h2>
             </div>
             <div class="signal-list">
@@ -422,7 +413,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
         <section class="section-band two-column">
           <div>
             <div class="section-heading">
-              <span class="eyebrow">8. Payroll Intelligence summary</span>
               <h2>Payout and compliance signals</h2>
             </div>
             <div class="table-wrap">
@@ -444,7 +434,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
           <div>
             <div class="section-heading">
-              <span class="eyebrow">9. Live Floor Control Tower</span>
               <h2>Today status</h2>
             </div>
             <div class="signal-list">
@@ -459,7 +448,6 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
         <section class="section-band">
           <div class="section-heading">
-            <span class="eyebrow">10. Zero-Trust Staff Audit</span>
             <h2>Immutable activity view</h2>
           </div>
           <div class="audit-timeline">
