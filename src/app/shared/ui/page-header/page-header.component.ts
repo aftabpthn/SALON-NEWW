@@ -10,7 +10,6 @@ import { Component, Input } from '@angular/core';
       <div class="aura-page-title">
         <span class="aura-breadcrumb" *ngIf="breadcrumb">{{ breadcrumb }}</span>
         <h1>{{ title }}</h1>
-        <p *ngIf="subtitle">{{ subtitle }}</p>
       </div>
       <div class="aura-page-actions">
         <ng-content select="[header-actions]"></ng-content>

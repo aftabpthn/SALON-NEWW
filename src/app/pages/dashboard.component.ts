@@ -35,37 +35,30 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <a class="metric-card" style="border-top:3px solid #0f766e" routerLink="/kpi-details/dashboard/revenue-today">
             <span class="metric-label">Revenue today</span>
             <strong class="metric-value" style="color:#0f766e">{{ data.revenueToday | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <span class="metric-change">From saved sales</span>
           </a>
           <a class="metric-card" style="border-top:3px solid #7c3aed" routerLink="/kpi-details/dashboard/revenue-this-month">
             <span class="metric-label">Revenue this month</span>
             <strong class="metric-value" style="color:#7c3aed">{{ data.revenueMonth | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <span class="metric-change">Branch aware</span>
           </a>
           <a class="metric-card" style="border-top:3px solid #2563eb" routerLink="/kpi-details/dashboard/total-bookings">
             <span class="metric-label">Total bookings</span>
             <strong class="metric-value" style="color:#2563eb">{{ data.totalBookings }}</strong>
-            <span class="metric-change">Online, walk-in, front desk</span>
           </a>
           <a class="metric-card" style="border-top:3px solid #059669" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }">
             <span class="metric-label">Received due</span>
             <strong class="metric-value" style="color:#059669">{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <span class="metric-change up">↑ collections</span>
           </a>
           <a class="metric-card" style="border-top:3px solid #dc2626" routerLink="/kpi-details/dashboard/pending-payments">
             <span class="metric-label">Pending payments</span>
             <strong class="metric-value" style="color:#dc2626">{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <span class="metric-change down">Open invoice balance</span>
           </a>
           <a class="metric-card" style="border-top:3px solid #d97706" routerLink="/clients">
             <span class="metric-label">New clients</span>
             <strong class="metric-value" style="color:#d97706">{{ data.newClients }}</strong>
-            <span class="metric-change up">↑ this month</span>
           </a>
           <a class="metric-card" style="border-top:3px solid #059669" routerLink="/customer-360">
             <span class="metric-label">Client retention</span>
             <strong class="metric-value" style="color:#059669">{{ data.clientRetention }}%</strong>
-            <span class="metric-change">Repeat vs new mix</span>
           </a>
         </div>
       </section>
@@ -85,7 +78,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span class="hub-icon">📅</span>
             <span class="eyebrow">Calendar</span>
             <strong>{{ data.totalBookings }} bookings</strong>
-            <small>Quick booking, status board and appointment actions</small>
             <b>Open calendar</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/pos">
@@ -120,14 +112,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span class="hub-icon">🌐</span>
             <span class="eyebrow">Online booking</span>
             <strong>Workflow</strong>
-            <small>Requested → confirmed → arrived → completed → billed</small>
             <b>Open workflow</b>
           </a>
           <a class="dashboard-hub-card" routerLink="/memberships">
             <span class="hub-icon">💎</span>
             <span class="eyebrow">Memberships</span>
             <strong>{{ data.membershipRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>Plans, renewals and prepaid balance</small>
             <b>Open memberships</b>
           </a>
         </div>
@@ -144,19 +134,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="quick-grid">
             <a class="action-card" routerLink="/appointments">
               <strong>Walk-in booking</strong>
-              <span>Create arrival and assign staff.</span>
             </a>
             <a class="action-card" routerLink="/pos">
               <strong>Fast POS checkout</strong>
-              <span>Bill service or product quickly.</span>
             </a>
             <a class="action-card" routerLink="/inventory">
               <strong>Purchase entry</strong>
-              <span>Add stock or review alerts.</span>
             </a>
             <a class="action-card" routerLink="/marketing">
               <strong>Client win-back</strong>
-              <span>Open campaign tools.</span>
             </a>
           </div>
         </section>
@@ -172,7 +158,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="summary-tile">
             <strong>{{ data.staffPerformance[0]?.name || 'No staff activity yet' }}</strong>
             <span>Top staff · {{ data.staffPerformance[0]?.bookings || 0 }} bookings</span>
-            <small>Full ranking and incentive details are inside Staff.</small>
           </div>
         </section>
 
@@ -187,7 +172,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="summary-tile">
             <strong>{{ data.lowStockAlerts[0]?.name || 'Inventory healthy' }}</strong>
             <span>{{ data.lowStockAlerts[0]?.stock ?? 'All products above threshold' }}</span>
-            <small>Open Inventory for product-wise stock and reorder actions.</small>
           </div>
         </section>
 

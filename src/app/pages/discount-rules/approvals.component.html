@@ -3,7 +3,6 @@
     <div>
       <span class="eyebrow">Happy Hours E3</span>
       <h2>Discount Rule Approvals</h2>
-      <p>Review rule activation requests that exceeded the creator role limit.</p>
     </div>
     <a class="ghost-button" routerLink="/discount-rules">Back to rules</a>
   </div>
@@ -13,7 +12,6 @@
 
   <section class="panel locked-panel" *ngIf="!canApprove()">
     <h3>Approval inbox restricted</h3>
-    <p>Regional head, admin, or owner role is required for approving discount rules.</p>
     <strong>Current role: {{ state.userRole() }}</strong>
   </section>
 

@@ -65,7 +65,6 @@ type ActiveModuleTabs = {
             <div>
               <span class="eyebrow">Secure sign in</span>
               <h1>Aura Salon OS</h1>
-              <p>Use your owner-created email or staff login ID to open the correct tenant and branch workspace.</p>
             </div>
           </header>
 
@@ -149,7 +148,6 @@ type ActiveModuleTabs = {
             <span class="brand-mark" aria-hidden="true">AS</span>
             <span>
               <strong>Aura Shine</strong>
-              <small>Enterprise CRM / POS</small>
             </span>
           </a>
 
@@ -208,7 +206,6 @@ type ActiveModuleTabs = {
             </div>
 
             <ng-template #sidebarSearchHint>
-              <p class="sidebar-search-hint">Search any module or page</p>
             </ng-template>
           </section>
         </div>
@@ -288,7 +285,6 @@ type ActiveModuleTabs = {
         <section class="sidebar-callout">
           <span class="eyebrow">{{ i18n.t('shell.sidebarTenant', 'SaaS tenant') }}</span>
           <strong>{{ state.tenantScopeLabel() }}</strong>
-          <p>{{ i18n.t('shell.scopeCopy', 'Tenant, branch and role headers scope every API call.') }}</p>
         </section>
       </aside>
 
