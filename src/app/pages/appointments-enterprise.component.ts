@@ -1015,22 +1015,23 @@ const STATUS_TONES: Record<string, string> = {
     .lane-block.shift { background: rgba(254, 215, 170, .82); color: #7c2d12; pointer-events: none; }
     .lane-block.blocked { background: repeating-linear-gradient(135deg, rgba(148,163,184,.25), rgba(148,163,184,.25) 8px, rgba(226,232,240,.7) 8px, rgba(226,232,240,.7) 16px); color: #334155; cursor: pointer; }
     .lane-block.roster-closed { background: repeating-linear-gradient(135deg, rgba(148,163,184,.2), rgba(148,163,184,.2) 8px, rgba(241,245,249,.82) 8px, rgba(241,245,249,.82) 16px); color: #64748b; cursor: not-allowed; }
-    .appointment-card { position: absolute; left: 8px; right: 8px; z-index: 4; border-radius: 8px; border: 1px solid #475569; padding: 8px 10px; text-align: left; color: #172033; overflow: hidden; cursor: grab; box-shadow: 0 10px 20px rgba(15,23,42,.12); }
-    .scheduler-grid--compact .appointment-card { left: 5px; right: 5px; padding: 5px 7px; border-radius: 7px; }
+    .appointment-card { position: absolute !important; left: 8px !important; right: 8px !important; z-index: 4 !important; border-radius: 8px !important; border: 1px solid #475569 !important; padding: 8px 10px; text-align: left; color: #172033; overflow: hidden !important; cursor: grab; box-shadow: 0 10px 20px rgba(15,23,42,.12) !important; isolation: auto !important; transform: none !important; }
+    .scheduler-grid--compact .appointment-card { left: 5px !important; right: 5px !important; padding: 5px 7px; border-radius: 7px !important; }
     .appointment-card strong, .appointment-card b, .appointment-card span, .appointment-card small { display: block; line-height: 1.2; }
     .appointment-card strong { font-size: 12px; }
     .appointment-card b { font-size: 15px; margin-top: 4px; }
     .appointment-card span, .appointment-card small { font-size: 12px; }
     .scheduler-grid--compact .appointment-card b { font-size: 12px; margin-top: 2px; }
     .scheduler-grid--compact .appointment-card span, .scheduler-grid--compact .appointment-card small { font-size: 11px; }
-    .appointment-card.blue { background: #bfdbfe; border-color: #2563eb; }
-    .appointment-card.indigo { background: #c7d2fe; border-color: #4f46e5; }
-    .appointment-card.teal { background: #99f6e4; border-color: #0f766e; }
-    .appointment-card.amber { background: #fde68a; border-color: #d97706; }
-    .appointment-card.violet { background: #ddd6fe; border-color: #7c3aed; }
-    .appointment-card.green, .appointment-card.emerald { background: #bbf7d0; border-color: #16a34a; }
-    .appointment-card.red { background: #fecaca; border-color: #dc2626; }
-    .appointment-card.slate { background: #e2e8f0; border-color: #64748b; }
+    .appointment-card::before, .appointment-card::after { content: none !important; }
+    .appointment-card.blue { background: #bfdbfe !important; border-color: #2563eb !important; border-left-color: #2563eb !important; }
+    .appointment-card.indigo { background: #c7d2fe !important; border-color: #4f46e5 !important; border-left-color: #4f46e5 !important; }
+    .appointment-card.teal { background: #99f6e4 !important; border-color: #0f766e !important; border-left-color: #0f766e !important; }
+    .appointment-card.amber { background: #fde68a !important; border-color: #d97706 !important; border-left-color: #d97706 !important; }
+    .appointment-card.violet { background: #ddd6fe !important; border-color: #7c3aed !important; border-left-color: #7c3aed !important; }
+    .appointment-card.green, .appointment-card.emerald { background: #bbf7d0 !important; border-color: #16a34a !important; border-left-color: #16a34a !important; }
+    .appointment-card.red { background: #fecaca !important; border-color: #dc2626 !important; border-left-color: #dc2626 !important; }
+    .appointment-card.slate { background: #e2e8f0 !important; border-color: #64748b !important; border-left-color: #64748b !important; }
     .resize-handle { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; background: rgba(15,23,42,.15); }
     .current-time-badge { position: absolute; left: 7px; z-index: 12; transform: translateY(-50%); border: 1px solid #ff2f2f; border-radius: 999px; background: #fff; color: #f02b2b; padding: 2px 7px; font-size: 11px; font-weight: 900; }
     .current-time-line { position: absolute; left: 0; right: 0; z-index: 3; height: 2px; background: #ff2f2f; box-shadow: 0 0 0 1px rgba(255,47,47,.1); pointer-events: none; }
