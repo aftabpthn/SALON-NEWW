@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
-  selector: 'aura-button',
+  selector: 'aura-legacy-button',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -45,7 +45,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
     }
   `]
 })
-export class AuraButtonComponent {
+export class LegacyAuraButtonComponent {
   @Input() variant: 'primary' | 'ghost' | 'dark' = 'ghost';
   @Input() type: 'button' | 'submit' | 'reset' = 'button';
   @Input() disabled = false;

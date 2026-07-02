@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
 
 @Component({
-  selector: 'aura-drawer',
+  selector: 'aura-legacy-drawer',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -86,7 +86,7 @@ import { Component, EventEmitter, HostListener, Input, Output } from '@angular/c
     }
   `]
 })
-export class AuraDrawerComponent {
+export class LegacyAuraDrawerComponent {
   @Input() open = false;
   @Input() title = '';
   @Input() eyebrow = '';
