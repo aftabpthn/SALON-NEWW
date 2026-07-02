@@ -41,6 +41,7 @@ type IncentiveSlabDraft = {
   incentiveAmount: number;
 };
 type AttendancePunchType = 'clock_in' | 'clock_out' | 'full_day';
+type AttendanceDashboardViewKey = 'overview' | 'ops' | 'exceptions' | 'entry' | 'biometric' | 'governance' | 'evidence';
 type StaffListStatusFilter = 'all' | 'active' | 'inactive';
 type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salary' | 'designation' | 'status' | 'joiningDate';
 
@@ -1324,7 +1325,27 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </aside>
       </div>
 
-      <section class="panel attendance-command" *ngIf="section === 'attendance-dashboard'">
+      <div class="attendance-dashboard-workspace" *ngIf="section === 'attendance-dashboard'">
+        <aside class="attendance-dashboard-side-nav" aria-label="Attendance dashboard pages">
+          <button
+            *ngFor="let view of attendanceDashboardViews"
+            class="attendance-dashboard-nav-card"
+            type="button"
+            [class.active]="activeAttendanceDashboardView() === view.key"
+            (click)="setAttendanceDashboardView(view.key)"
+          >
+            <span class="attendance-dashboard-nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <i>{{ view.badge }}</i>
+          </button>
+        </aside>
+
+        <main class="attendance-dashboard-detail">
+
+      <section class="panel attendance-command" *ngIf="visibleAttendanceDashboardView('overview')">
         <input #attendanceCommandUploadInput class="hidden-file" type="file" accept=".csv,text/csv" (change)="uploadAttendanceCsv($event)" />
         <div class="panel-heading">
           <div>
@@ -1382,7 +1403,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         <div class="state success" *ngIf="attendanceMessage()">{{ attendanceMessage() }}</div>
       </section>
 
-      <section class="attendance-ops-grid" *ngIf="section === 'attendance-dashboard'">
+      <section class="attendance-ops-grid" *ngIf="visibleAttendanceDashboardView('ops')">
         <article class="attendance-op-card" *ngFor="let card of attendanceOpsCards()" [ngClass]="card.tone">
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
@@ -1390,7 +1411,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </article>
       </section>
 
-      <section class="panel attendance-exception-panel" *ngIf="section === 'attendance-dashboard'">
+      <section class="panel attendance-exception-panel" *ngIf="visibleAttendanceDashboardView('exceptions')">
         <div class="panel-heading">
           <div>
             <h2>Attendance Exceptions</h2>
@@ -1412,7 +1433,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
       </section>
 
-      <section class="attendance-workspace" *ngIf="section === 'attendance-dashboard'">
+      <section class="attendance-workspace" *ngIf="visibleAttendanceDashboardView('entry')">
         <article class="panel physical-panel">
           <div class="panel-heading">
             <div>
@@ -1575,7 +1596,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </article>
       </section>
 
-      <section class="attendance-workspace attendance-wide" *ngIf="section === 'attendance-dashboard'">
+      <section class="attendance-workspace attendance-wide" *ngIf="visibleAttendanceDashboardView('biometric')">
         <article class="panel">
           <div class="panel-heading">
             <div>
@@ -1654,7 +1675,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </article>
       </section>
 
-      <section class="attendance-workspace attendance-wide" *ngIf="section === 'attendance-dashboard'">
+      <section class="attendance-workspace attendance-wide" *ngIf="visibleAttendanceDashboardView('governance')">
         <article class="panel">
           <div class="panel-heading">
             <div>
@@ -1740,7 +1761,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </article>
       </section>
 
-      <section class="panel attendance-register-panel" *ngIf="section === 'attendance-dashboard'">
+      <section class="panel attendance-register-panel" *ngIf="visibleAttendanceDashboardView('evidence')">
         <div class="panel-heading attendance-register-heading">
           <div>
             <h2>Live Attendance Evidence</h2>
@@ -1781,6 +1802,9 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
           <span>Page 1 of 1</span>
         </div>
       </section>
+
+        </main>
+      </div>
 
       <section class="panel roster-register-panel" *ngIf="section === 'roster-calendar'">
         <div class="panel-heading roster-register-heading">
@@ -2624,6 +2648,108 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .live-panel-links a { border: 1px solid #cbd8d2; border-radius: 4px; color: #0f6eb3; font-size: 12px; font-weight: 900; min-height: 32px; padding: 8px 9px; text-align: center; text-decoration: none; }
     .drawer-action-buttons { display: grid; gap: 10px; }
     .drawer-action-buttons .refresh, .drawer-action-buttons .primary { width: 100%; }
+      .attendance-dashboard-workspace {
+        display: grid;
+        grid-template-columns: 315px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .attendance-dashboard-side-nav,
+      .attendance-dashboard-detail {
+        display: grid;
+        gap: 12px;
+      }
+
+      .attendance-dashboard-side-nav {
+        position: sticky;
+        top: 82px;
+        align-self: start;
+      }
+
+      .attendance-dashboard-nav-card {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 88px;
+        padding: 14px;
+        border: 1px solid #d9e5de;
+        border-left: 3px solid #0f766e;
+        border-radius: 8px;
+        color: #10231d;
+        background: #fff;
+        box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+        cursor: pointer;
+        text-align: left;
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .attendance-dashboard-nav-card:hover {
+        transform: translateY(-2px);
+        border-color: #0f766e;
+        box-shadow: 0 8px 22px rgba(12, 26, 43, 0.1);
+      }
+
+      .attendance-dashboard-nav-card.active {
+        border-color: #0f766e;
+        background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
+        box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
+      }
+
+      .attendance-dashboard-nav-card strong,
+      .attendance-dashboard-nav-card small,
+      .attendance-dashboard-nav-card i {
+        display: block;
+      }
+
+      .attendance-dashboard-nav-card strong {
+        font-size: 0.96rem;
+        line-height: 1.2;
+      }
+
+      .attendance-dashboard-nav-card small {
+        margin-top: 4px;
+        color: #64748b;
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1.25;
+      }
+
+      .attendance-dashboard-nav-card i {
+        padding: 3px 8px;
+        border-radius: 999px;
+        color: #0f766e;
+        background: #eef8f5;
+        font-size: 0.68rem;
+        font-style: normal;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .attendance-dashboard-nav-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 8px;
+        color: #0f766e;
+        background: rgba(20, 184, 166, 0.12);
+        font-weight: 900;
+      }
+
+      @media (max-width: 1180px) {
+        .attendance-dashboard-workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .attendance-dashboard-side-nav {
+          position: static;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
     @media (max-width: 900px) {
       .staff-clean-shell { grid-template-columns: 1fr; }
       .staff-clean-shell > .staff-unified-side,
@@ -2690,6 +2816,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       .heatmap { grid-template-columns: repeat(7, minmax(22px, 1fr)); }
       .action-empty .primary, .action-empty .refresh { width: 100%; }
       input, select, textarea { min-height: 44px; }
+      .attendance-dashboard-side-nav { grid-template-columns: 1fr; }
       .live-context { grid-template-columns: 1fr; }
       .context-links { justify-content: flex-start; }
       .drawer { width: 100%; height: 100%; border-radius: 0; padding: 0 14px 16px; }
@@ -2759,6 +2886,17 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   readonly salaryEditorError = signal('');
   readonly salaryEditorMessage = signal('');
   readonly attendanceDate = signal(new Date().toISOString().slice(0, 10));
+  readonly activeAttendanceDashboardView = signal<AttendanceDashboardViewKey>('overview');
+
+  readonly attendanceDashboardViews: Array<{ key: AttendanceDashboardViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'Controls, KPIs and live attendance status', icon: 'OV', badge: 'Open' },
+    { key: 'ops', label: 'Operations', description: 'Daily ops cards and attendance coverage', icon: 'OP', badge: 'Live' },
+    { key: 'exceptions', label: 'Exceptions', description: 'Risk signals and payroll preview actions', icon: 'EX', badge: 'Risk' },
+    { key: 'entry', label: 'Entry methods', description: 'Physical entry, camera punch and devices', icon: 'EN', badge: 'Punch' },
+    { key: 'biometric', label: 'Biometric sync', description: 'Gateway and staff device mapping', icon: 'BI', badge: 'Sync' },
+    { key: 'governance', label: 'Consent & payroll', description: 'Consent, retention and payroll risk review', icon: 'GV', badge: 'Guard' },
+    { key: 'evidence', label: 'Evidence log', description: 'Live attendance rows and source evidence', icon: 'EV', badge: 'Audit' }
+  ];
   readonly attendanceError = signal('');
   readonly attendanceMessage = signal('');
   readonly cameraActive = signal(false);
@@ -2788,6 +2926,15 @@ export class StaffOsSectionComponent implements OnInit, OnDestroy {
   readonly incentiveSlabs = signal<IncentiveSlabDraft[]>([this.defaultIncentiveSlab(0, 25000, 5)]);
   readonly detailTab = signal<StaffDetailTab>('core');
   readonly branchOptions = computed(() => this.orderedBranchOptions());
+  setAttendanceDashboardView(view: AttendanceDashboardViewKey): void {
+    this.activeAttendanceDashboardView.set(view);
+  }
+
+  visibleAttendanceDashboardView(view: AttendanceDashboardViewKey): boolean {
+    const active = this.activeAttendanceDashboardView();
+    return active === 'overview' || active === view;
+  }
+
   readonly detailTabs: Array<{ id: StaffDetailTab; label: string }> = [
     { id: 'core', label: 'General' },
     { id: 'contact', label: 'Contact' },
