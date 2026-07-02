@@ -131,15 +131,15 @@ type CareContext = {
     </section>
   `,
   styles: [`
-    :host { display: block; }
-    .care-shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; min-height: calc(100vh - 88px); padding-top: 8px; color: #172033; min-width: 0; overflow: hidden; }
-    .care-hero { display: flex; justify-content: space-between; gap: 18px; align-items: stretch; padding: 16px 18px; border: 1px solid #dfe7ef; border-radius: 8px; background: linear-gradient(135deg, #ffffff, #f4faf8); box-shadow: 0 10px 24px rgba(15, 23, 42, .07); scroll-margin-top: 88px; }
+    :host { display: block; height: calc(100vh - 44px); min-height: 0; overflow: hidden; }
+    .care-shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; padding-top: 6px; color: #172033; min-width: 0; overflow: hidden; }
+    .care-hero { display: flex; justify-content: space-between; gap: 18px; align-items: stretch; padding: 14px 18px; border: 1px solid #dfe7ef; border-radius: 8px; background: linear-gradient(135deg, #ffffff, #f4faf8); box-shadow: 0 10px 24px rgba(15, 23, 42, .07); scroll-margin-top: 88px; }
     .eyebrow { display: block; color: #0f766e; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: .08em; }
     h1, h2, p { margin: 0; }
-    h1 { font-size: 30px; letter-spacing: 0; }
+    h1 { font-size: 28px; letter-spacing: 0; }
     h2 { font-size: 18px; letter-spacing: 0; }
-    .care-hero p { max-width: 820px; margin-top: 6px; color: #5f6f83; line-height: 1.45; }
-    .hero-status { min-width: 230px; display: grid; align-content: center; gap: 4px; padding: 12px 14px; border: 1px solid #dbe5ee; border-radius: 8px; background: #fff; }
+    .care-hero p { max-width: 860px; margin-top: 4px; color: #5f6f83; line-height: 1.4; }
+    .hero-status { min-width: 230px; display: grid; align-content: center; gap: 3px; padding: 10px 14px; border: 1px solid #dbe5ee; border-radius: 8px; background: #fff; }
     .hero-status span, .hero-status small, .panel-head span, .metric-card span, .metric-card small { color: #64748b; }
     .hero-status strong { font-size: 18px; }
     .care-grid { display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(220px, 260px); gap: 12px; align-items: stretch; min-width: 0; min-height: 0; }
@@ -148,13 +148,13 @@ type CareContext = {
     .panel-head button, .quick-row button, .playbook button { border: 1px solid #dbe5ee; background: #f8fafc; color: #172033; border-radius: 8px; padding: 9px 11px; font-weight: 700; cursor: pointer; }
     select, input, textarea { width: 100%; min-width: 0; border: 1px solid #dbe5ee; border-radius: 8px; padding: 10px 12px; font: inherit; color: #172033; background: #fff; }
     select { max-width: 360px; }
-    .context-panel, .insight-panel { height: calc(100vh - 236px); overflow-y: auto; overflow-x: hidden; }
+    .context-panel, .insight-panel { height: 100%; overflow-y: auto; overflow-x: hidden; }
     .knowledge-list, .guardrail-box, .insight-panel, .playbook { display: grid; gap: 10px; padding: 14px; }
     .knowledge-list article { display: grid; gap: 5px; padding: 12px; border: 1px solid #edf2f7; border-radius: 8px; background: #fbfdff; }
     .knowledge-list p { color: #64748b; font-size: 13px; line-height: 1.45; }
     .guardrail-box { margin: 0 14px 14px; border: 1px solid #fde2b8; background: #fffbeb; border-radius: 8px; }
     .guardrail-box span { color: #92400e; font-size: 13px; }
-    .chat-panel { height: calc(100vh - 236px); min-height: 560px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; }
+    .chat-panel { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; }
     .quick-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; overflow: visible; padding: 10px 14px; border-bottom: 1px solid #edf2f7; }
     .quick-row button { min-height: 36px; text-align: left; white-space: normal; line-height: 1.2; font-size: 13px; padding: 8px 10px; }
     .message-list { display: grid; gap: 12px; align-content: start; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 16px 22px; background: #f8fafc; }
@@ -179,7 +179,7 @@ type CareContext = {
     .playbook button { display: grid; gap: 3px; text-align: left; }
     .playbook small { color: #64748b; }
     @media (max-width: 1280px) { .care-grid { grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); } .insight-panel { display: none; } .quick-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @media (max-width: 980px) { .care-shell { overflow: visible; } .care-grid { grid-template-columns: 1fr; } .context-panel, .insight-panel, .chat-panel { height: auto; max-height: none; } .chat-panel { min-height: 640px; } .quick-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 980px) { :host { height: auto; overflow: visible; } .care-shell { overflow: visible; } .care-grid { grid-template-columns: 1fr; } .context-panel, .insight-panel, .chat-panel { height: auto; max-height: none; } .chat-panel { min-height: 640px; } .quick-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 720px) { .care-hero { flex-direction: column; } h1 { font-size: 28px; } .quick-row { grid-template-columns: 1fr; } .composer { grid-template-columns: 1fr; } .composer textarea, .composer button { grid-column: auto; grid-row: auto; } }
   `]
 })
@@ -288,6 +288,7 @@ export class CustomerCareAiComponent implements OnInit {
     return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   }
 }
+
 
 
 
