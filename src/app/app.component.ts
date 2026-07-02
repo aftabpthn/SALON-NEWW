@@ -816,7 +816,18 @@ export class AppComponent implements OnDestroy {
           keywords: 'invoice paid due received billing refunds reconciliation daily closing',
           children: [
             { path: '/pos/invoices', label: 'POS Invoices', icon: 'PI', keywords: 'invoice paid due received' },
-            { path: '/billing', label: 'Enterprise Billing', icon: 'EB', keywords: 'billing refunds reconciliation daily closing enterprise' }
+            {
+              path: '/billing',
+              label: 'Enterprise Billing',
+              icon: 'EB',
+              keywords: 'billing refunds reconciliation daily closing enterprise',
+              children: [
+                { path: '/billing/core-money-flow', label: 'Core Money Flow', icon: 'CM', keywords: 'billing readiness money flow ledger outbox' },
+                { path: '/billing/refunds', label: 'Refunds', icon: 'RF', keywords: 'refund void credit note approval' },
+                { path: '/billing/daily-closing', label: 'Daily Closing', icon: 'DC', keywords: 'cash card upi bank day close' },
+                { path: '/billing/reconciliation', label: 'Reconciliation', icon: 'RC', keywords: 'payment settlement invoice reconciliation' }
+              ]
+            }
           ]
         },
         {
@@ -1273,6 +1284,9 @@ export class AppComponent implements OnDestroy {
     if (previous && previous !== this.activeRoute()) {
       return `Back to ${this.pageLabelForUrl(previous) || 'previous page'}`;
     }
+    const fallback = this.backFallbackRoute(this.activeRoute());
+    if (fallback && this.routePath(this.activeRoute()).startsWith('/billing')) return 'Back to invoices';
+    if (fallback) return 'Back to ' + (this.pageLabelForUrl(fallback) || 'previous page');
     return 'Back to Home';
   });
 
@@ -1393,6 +1407,11 @@ export class AppComponent implements OnDestroy {
     const previous = this.popBackRoute(current);
     if (previous) {
       this.navigateBackTo(previous, current);
+      return;
+    }
+    const fallback = this.backFallbackRoute(current);
+    if (fallback) {
+      this.navigateBackTo(fallback, current);
       return;
     }
     if (!this.isHomePath(this.routePath(current))) {
@@ -1907,6 +1926,12 @@ export class AppComponent implements OnDestroy {
         this.isBackNavigation = false;
       }
     });
+  }
+
+  private backFallbackRoute(url: string): string {
+    const path = this.routePath(url);
+    if (path.startsWith('/billing')) return '/pos/invoices';
+    return '';
   }
 
   private syncPreviousRouteFromHistory(): void {
