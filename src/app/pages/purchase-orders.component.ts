@@ -21,6 +21,8 @@ type DraftItem = {
   expiryDate: string;
 };
 
+type PurchaseOrderViewKey = 'overview' | 'entry' | 'receive' | 'suggestions' | 'workflow' | 'detail' | 'message';
+
 type ReceiveItem = {
   itemId: string;
   productId: string;
@@ -58,15 +60,35 @@ type ReceiveItem = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-      <section class="po-kpis">
+      <div class="po-workspace">
+        <aside class="po-side-nav" aria-label="Purchase order pages">
+          <button
+            *ngFor="let view of purchaseOrderViews"
+            class="po-nav-card"
+            type="button"
+            [class.active]="activePurchaseOrderView() === view.key"
+            (click)="setPurchaseOrderView(view.key)"
+          >
+            <span class="po-nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <i>{{ view.badge }}</i>
+          </button>
+        </aside>
+
+        <main class="po-detail-pane">
+
+      <section class="po-kpis" *ngIf="visiblePurchaseOrderView('overview')">
         <article class="metric-card teal"><span>AI suggestions</span><strong>{{ suggestions().length }}</strong></article>
         <article class="metric-card amber"><span>Draft PO</span><strong>{{ draftRows().length }}</strong></article>
         <article class="metric-card blue"><span>Approved / sent</span><strong>{{ approvedRows().length }}</strong></article>
         <article class="metric-card red"><span>Projected spend</span><strong>{{ projectedSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
-      <div class="po-layout">
-        <section class="panel">
+      <div class="po-layout" *ngIf="visiblePurchaseOrderView('entry') || visiblePurchaseOrderView('receive')">
+        <section class="panel" *ngIf="visiblePurchaseOrderView('entry')">
           <div class="section-title">
             <div><h2>Product purchase entry</h2></div>
             <button class="ghost-button mini" type="button" (click)="addDraftLine()">Add item</button>
@@ -166,7 +188,7 @@ type ReceiveItem = {
           </form>
         </section>
 
-        <section class="panel">
+        <section class="panel" *ngIf="visiblePurchaseOrderView('receive')">
           <div class="section-title">
             <div><h2>Receive approved PO into FIFO stock</h2></div>
           </div>
@@ -220,7 +242,7 @@ type ReceiveItem = {
         </section>
       </div>
 
-      <section class="panel">
+      <section class="panel" *ngIf="visiblePurchaseOrderView('suggestions')">
         <div class="section-title"><div><h2>Suggested purchase orders</h2></div></div>
         <div class="table-wrap">
           <table>
@@ -241,7 +263,7 @@ type ReceiveItem = {
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" *ngIf="visiblePurchaseOrderView('workflow')">
         <div class="section-title"><div><h2>Draft, approve, order, receive</h2></div></div>
         <div class="table-wrap">
           <table>
@@ -273,7 +295,7 @@ type ReceiveItem = {
         </div>
       </section>
 
-      <section class="panel po-detail" *ngIf="selectedPo() as po" id="po-print-area">
+      <section class="panel po-detail" *ngIf="visiblePurchaseOrderView('detail') && selectedPo() as po" id="po-print-area">
         <div class="section-title">
           <div><h2>{{ po.poNumber || po.id }}</h2></div>
           <div class="hero-actions">
@@ -316,10 +338,12 @@ type ReceiveItem = {
         </div>
       </section>
 
-      <section class="panel" *ngIf="whatsappDraft()">
+      <section class="panel" *ngIf="whatsappDraft() && visiblePurchaseOrderView('message')">
         <div class="section-title"><div><h2>Approval-safe draft message</h2></div></div>
         <div class="draft-box">{{ whatsappDraft() }}</div>
       </section>
+        </main>
+      </div>
     </section>
   `,
   styles: [`
@@ -334,6 +358,97 @@ type ReceiveItem = {
       flex-wrap: wrap;
       gap: 8px;
       justify-content: flex-end;
+    }
+
+    .po-workspace {
+      display: grid;
+      grid-template-columns: 315px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .po-side-nav,
+    .po-detail-pane {
+      display: grid;
+      gap: 12px;
+    }
+
+    .po-side-nav {
+      position: sticky;
+      top: 82px;
+      align-self: start;
+    }
+
+    .po-nav-card {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 88px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--color-primary);
+      border-radius: 8px;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+      cursor: pointer;
+      text-align: left;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .po-nav-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--color-primary);
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.1);
+    }
+
+    .po-nav-card.active {
+      border-color: var(--color-primary);
+      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(79, 70, 229, 0.12), rgba(245, 158, 11, 0.12));
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
+    }
+
+    .po-nav-card strong,
+    .po-nav-card small,
+    .po-nav-card i {
+      display: block;
+    }
+
+    .po-nav-card strong {
+      font-size: 0.96rem;
+      line-height: 1.2;
+    }
+
+    .po-nav-card small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .po-nav-card i {
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: var(--color-primary-strong);
+      background: rgba(79, 70, 229, 0.08);
+      font-size: 0.68rem;
+      font-style: normal;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .po-nav-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      color: var(--color-primary-strong);
+      background: rgba(20, 184, 166, 0.12);
+      font-weight: 900;
     }
 
     .po-kpis,
@@ -518,6 +633,15 @@ type ReceiveItem = {
     }
 
     @media (max-width: 1180px) {
+      .po-workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .po-side-nav {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .po-kpis,
       .po-layout,
       .detail-grid,
@@ -531,7 +655,8 @@ type ReceiveItem = {
       .po-layout,
       .po-form,
       .detail-grid,
-      .totals-grid {
+      .totals-grid,
+      .po-side-nav {
         grid-template-columns: 1fr;
       }
     }
@@ -551,6 +676,17 @@ export class PurchaseOrdersComponent implements OnInit {
   readonly error = signal('');
   readonly success = signal('');
   readonly whatsappDraft = signal('');
+  readonly activePurchaseOrderView = signal<PurchaseOrderViewKey>('overview');
+
+  readonly purchaseOrderViews: Array<{ key: PurchaseOrderViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'AI suggestions, drafts and spend KPIs', icon: 'OV', badge: 'Open' },
+    { key: 'entry', label: 'Product entry', description: 'Create supplier purchase order drafts', icon: 'PE', badge: 'Draft' },
+    { key: 'receive', label: 'Receive GRN', description: 'Receive approved PO into FIFO stock', icon: 'GR', badge: 'Stock' },
+    { key: 'suggestions', label: 'AI suggestions', description: 'Low-stock reorder recommendations', icon: 'AI', badge: 'Smart' },
+    { key: 'workflow', label: 'PO workflow', description: 'Approve, send, receive and close POs', icon: 'WF', badge: 'Ops' },
+    { key: 'detail', label: 'PO detail', description: 'Selected PO totals, lines and warnings', icon: 'DT', badge: 'Audit' },
+    { key: 'message', label: 'Supplier message', description: 'Approval-safe WhatsApp draft', icon: 'WA', badge: 'Send' }
+  ];
 
   readonly suggestions = computed(() => ((this.intelligence()?.['suggestions'] || []) as ApiRecord[]));
   readonly draftRows = computed(() => this.recommendations().filter((row) => (row.status || 'draft') === 'draft'));
@@ -586,6 +722,15 @@ export class PurchaseOrdersComponent implements OnInit {
   });
 
   constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
+
+  setPurchaseOrderView(view: PurchaseOrderViewKey): void {
+    this.activePurchaseOrderView.set(view);
+  }
+
+  visiblePurchaseOrderView(view: PurchaseOrderViewKey): boolean {
+    const active = this.activePurchaseOrderView();
+    return active === 'overview' || active === view;
+  }
 
   ngOnInit(): void {
     this.load();
