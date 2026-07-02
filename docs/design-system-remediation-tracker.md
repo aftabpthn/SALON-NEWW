@@ -7,6 +7,7 @@ Source: `C:\Users\ADMIN\.codex\attachments\3fac217b-b697-4dfb-9443-44a7d6242a64\
 - Duplicate Angular selectors were resolved by keeping modern Aura components on `aura-*` selectors and renaming legacy components to `aura-legacy-*` selectors/classes.
 - Shared UI exports now expose modern Aura components and legacy aliases without same-name class/type collisions.
 - Additional button/drawer selector ambiguity was removed by keeping modern `aura-button` and `aura-drawer` canonical and renaming legacy versions to `aura-legacy-button` and `aura-legacy-drawer`.
+- A canonical Aura component catalog now documents modern selectors, legacy shims, barrel imports, and card migration rules.
 - Global Aura token aliases now bridge the active `--color-*` runtime variables into `--aura-*` variables.
 - Root layout/type/card aliases exist for `--radius-*`, `--space-*`, `--font-size-*`, `--metric-card-*`, `--kpi-*`, and `--card-*` tokens.
 - A canonical standalone `aura-card` component exists with `tone`, `variant`, `padding`, `radius`, `shadow`, `hover`, and `interactive` inputs.
