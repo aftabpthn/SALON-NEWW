@@ -47,6 +47,7 @@ import { ensureMigrationApprovalSchema } from "./services/migration.service.js";
 import { getSchemaMigrationHealth, initializeSchemaMigrationHealth } from "./services/schema-migration-health.service.js";
 import { ensureDashboardSchema } from "./services/dashboard-schema.service.js";
 import { ensureCustomerAuthSchema } from "./services/customer-auth-schema.service.js";
+import { ensureCustomerCareAiSchema } from "./services/customer-care-ai-schema.service.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { authenticateJwt } from "./middleware/auth.js";
 import { mobileApiContext } from "./middleware/mobile-response.js";
@@ -241,6 +242,7 @@ export function createApp() {
   ensureLegacyRevenueSchema();
   ensureDashboardSchema();
   ensureCustomerAuthSchema();
+  ensureCustomerCareAiSchema();
   ensureWaitlistSchema();
   ensureTwoFactorSchema();
   ensureSecurityAlertsSchema();
@@ -650,4 +652,6 @@ function resolveClientDist() {
   ];
   return candidates.find((candidate) => existsSync(join(candidate, "index.html"))) || "";
 }
+
+
 
