@@ -816,18 +816,7 @@ export class AppComponent implements OnDestroy {
           keywords: 'invoice paid due received billing refunds reconciliation daily closing',
           children: [
             { path: '/pos/invoices', label: 'POS Invoices', icon: 'PI', keywords: 'invoice paid due received' },
-            {
-              path: '/billing',
-              label: 'Enterprise Billing',
-              icon: 'EB',
-              keywords: 'billing refunds reconciliation daily closing enterprise',
-              children: [
-                { path: '/billing/core-money-flow', label: 'Core Money Flow', icon: 'CM', keywords: 'billing readiness money flow ledger outbox' },
-                { path: '/billing/refunds', label: 'Refunds', icon: 'RF', keywords: 'refund void credit note approval' },
-                { path: '/billing/daily-closing', label: 'Daily Closing', icon: 'DC', keywords: 'cash card upi bank day close' },
-                { path: '/billing/reconciliation', label: 'Reconciliation', icon: 'RC', keywords: 'payment settlement invoice reconciliation' }
-              ]
-            }
+            { path: '/billing', label: 'Enterprise Billing', icon: 'EB', keywords: 'billing refunds reconciliation daily closing enterprise' }
           ]
         },
         {
@@ -1815,7 +1804,7 @@ export class AppComponent implements OnDestroy {
     for (const group of this.navGroups) {
       for (const item of group.items) {
         if (!item.children?.length) continue;
-        if (item.children.some((child) => cleanUrl === child.path)) {
+        if (item.children.some((child) => cleanUrl === child.path || cleanUrl.startsWith(`${child.path}/`))) {
           return { group, item };
         }
       }
