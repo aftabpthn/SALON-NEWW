@@ -6,6 +6,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+type ActivityViewKey = 'overview' | 'alerts' | 'insights' | 'filters' | 'review' | 'client' | 'register' | 'activity';
 
 interface AppointmentActivityRow {
   id: string;
@@ -138,7 +139,27 @@ interface ClientScoreRow {
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="metric-grid" *ngIf="!loading()">
+      <div class="activity-workspace">
+        <aside class="activity-side-nav" aria-label="Appointment activity pages">
+          <button
+            *ngFor="let view of activityViews"
+            class="activity-nav-card"
+            type="button"
+            [class.active]="activeActivityView() === view.key"
+            (click)="setActivityView(view.key)"
+          >
+            <span class="activity-nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <i>{{ view.badge }}</i>
+          </button>
+        </aside>
+
+        <main class="activity-detail">
+
+      <div class="metric-grid" *ngIf="!loading() && visibleActivityView('overview')">
         <article class="metric-card" *ngFor="let card of kpiCards" [ngClass]="card.tone">
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
@@ -146,7 +167,7 @@ interface ClientScoreRow {
         </article>
       </div>
 
-      <section class="owner-command-grid" *ngIf="!loading()">
+      <section class="owner-command-grid" *ngIf="!loading() && visibleActivityView('overview')">
         <article class="panel owner-summary-panel">
           <div class="section-title activity-title">
             <div>
@@ -175,7 +196,7 @@ interface ClientScoreRow {
         </article>
       </section>
 
-      <section class="panel smart-alert-panel" *ngIf="!loading() && smartAlerts.length">
+      <section class="panel smart-alert-panel" *ngIf="!loading() && smartAlerts.length && visibleActivityView('alerts')">
         <div class="section-title activity-title">
           <div>
             <h3>Live alerts to fix today</h3>
@@ -193,7 +214,7 @@ interface ClientScoreRow {
         </div>
       </section>
 
-      <section class="insight-grid" *ngIf="!loading()">
+      <section class="insight-grid" *ngIf="!loading() && visibleActivityView('insights')">
         <article class="panel insight-panel">
           <div class="section-title activity-title">
             <div>
@@ -245,7 +266,7 @@ interface ClientScoreRow {
         </article>
       </section>
 
-      <section class="panel filter-panel" *ngIf="!loading()">
+      <section class="panel filter-panel" *ngIf="!loading() && visibleActivityView('filters')">
         <div class="section-title activity-title">
           <div>
             <h3>Search appointment audit trail</h3>
@@ -341,7 +362,7 @@ interface ClientScoreRow {
         </div>
       </section>
 
-      <section class="report-panel" *ngIf="!loading()">
+      <section class="report-panel" *ngIf="!loading() && visibleActivityView('review')">
         <div class="section-title activity-title">
           <div>
             <h3>Cancellation, reschedule and no-show review</h3>
@@ -374,7 +395,7 @@ interface ClientScoreRow {
         </div>
       </section>
 
-      <section class="client-reliability-panel" *ngIf="clientHistory() as history">
+      <section class="client-reliability-panel" *ngIf="visibleActivityView('client') && clientHistory() as history">
         <div class="section-title activity-title">
           <div>
             <h3>{{ history.client?.name || 'Selected client' }}</h3>
@@ -395,7 +416,7 @@ interface ClientScoreRow {
         </div>
       </section>
 
-      <section class="panel table-panel register-panel" *ngIf="!loading()">
+      <section class="panel table-panel register-panel" *ngIf="!loading() && visibleActivityView('register')">
         <div class="section-title activity-title">
           <div>
             <h3>Full appointment history</h3>
@@ -465,7 +486,7 @@ interface ClientScoreRow {
         </ng-template>
       </section>
 
-      <section class="panel table-panel" *ngIf="!loading()">
+      <section class="panel table-panel" *ngIf="!loading() && visibleActivityView('activity')">
         <div class="section-title activity-title">
           <div>
             <h3>Status and edit activity</h3>
@@ -524,6 +545,9 @@ interface ClientScoreRow {
           </div>
         </ng-template>
       </section>
+
+        </main>
+      </div>
 
       <aside class="detail-drawer" *ngIf="selectedRegister() as register">
         <header>
@@ -696,6 +720,97 @@ interface ClientScoreRow {
       border-radius: 6px;
       padding: 0 12px;
       box-shadow: none;
+    }
+
+    .activity-workspace {
+      display: grid;
+      grid-template-columns: 315px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .activity-side-nav,
+    .activity-detail {
+      display: grid;
+      gap: 10px;
+    }
+
+    .activity-side-nav {
+      position: sticky;
+      top: 82px;
+      align-self: start;
+    }
+
+    .activity-nav-card {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 88px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--teal);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+      cursor: pointer;
+      text-align: left;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .activity-nav-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--teal);
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.1);
+    }
+
+    .activity-nav-card.active {
+      border-color: var(--teal);
+      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
+    }
+
+    .activity-nav-card strong,
+    .activity-nav-card small,
+    .activity-nav-card i {
+      display: block;
+    }
+
+    .activity-nav-card strong {
+      font-size: 0.96rem;
+      line-height: 1.2;
+    }
+
+    .activity-nav-card small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .activity-nav-card i {
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: var(--teal);
+      background: var(--surface-2);
+      font-size: 0.68rem;
+      font-style: normal;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .activity-nav-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      color: var(--teal);
+      background: rgba(20, 184, 166, 0.12);
+      font-weight: 900;
     }
 
     .metric-grid {
@@ -1049,6 +1164,17 @@ interface ClientScoreRow {
       border-radius: 8px;
     }
 
+    @media (max-width: 1180px) {
+      .activity-workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .activity-side-nav {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
     @media (max-width: 980px) {
       .module-hero,
       .section-title,
@@ -1060,7 +1186,8 @@ interface ClientScoreRow {
       .metric-grid,
       .filter-grid,
       .owner-command-grid,
-      .insight-grid {
+      .insight-grid,
+      .activity-side-nav {
         grid-template-columns: 1fr;
       }
 
@@ -1073,6 +1200,18 @@ interface ClientScoreRow {
 export class AppointmentActivityComponent implements OnInit {
   loading = signal(false);
   error = signal('');
+  activeActivityView = signal<ActivityViewKey>('overview');
+
+  readonly activityViews: Array<{ key: ActivityViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'KPIs and owner command summary', icon: 'OV', badge: 'Open' },
+    { key: 'alerts', label: 'Live alerts', description: 'No-show, due and follow-up fixes', icon: 'AL', badge: 'Today' },
+    { key: 'insights', label: 'Staff & clients', description: 'Staff performance and risky clients', icon: 'SC', badge: 'Ops' },
+    { key: 'filters', label: 'Audit filters', description: 'Search and server filter controls', icon: 'FT', badge: 'Find' },
+    { key: 'review', label: 'Review summary', description: 'Cancellation, reschedule and no-show report', icon: 'RV', badge: 'Report' },
+    { key: 'client', label: 'Client reliability', description: 'Selected client score and suggestions', icon: 'CL', badge: 'CRM' },
+    { key: 'register', label: 'Full register', description: 'Booked-to-billed appointment history', icon: 'RG', badge: 'Audit' },
+    { key: 'activity', label: 'Status activity', description: 'Edit, status and risk timeline rows', icon: 'AC', badge: 'Log' }
+  ];
   rows = signal<AppointmentActivityRow[]>([]);
   filteredRows = signal<AppointmentActivityRow[]>([]);
   selected = signal<AppointmentActivityRow | null>(null);
@@ -1111,6 +1250,15 @@ export class AppointmentActivityComponent implements OnInit {
   exportRows: ApiRecord[] = [];
 
   constructor(private readonly api: ApiService) {}
+
+  setActivityView(view: ActivityViewKey): void {
+    this.activeActivityView.set(view);
+  }
+
+  visibleActivityView(view: ActivityViewKey): boolean {
+    const active = this.activeActivityView();
+    return active === 'overview' || active === view;
+  }
 
   ngOnInit(): void {
     this.refreshAll();
