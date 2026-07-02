@@ -1,0 +1,66 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.aura-card {
+  --aura-card-tone: var(--aura-card-accent, var(--aura-primary));
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--aura-border);
+  border-radius: var(--card-border-radius, var(--aura-radius-lg));
+  background: var(--aura-card);
+  color: var(--aura-text);
+  box-shadow: var(--card-shadow, var(--aura-shadow-xs));
+  transition: border-color var(--card-transition, var(--aura-transition-base)), box-shadow var(--card-transition, var(--aura-transition-base)), transform var(--card-transition, var(--aura-transition-base));
+}
+
+.aura-card--padding-none { padding: 0; }
+.aura-card--padding-sm { padding: var(--aura-space-3); }
+.aura-card--padding-md { padding: var(--card-padding, var(--aura-space-4)); }
+.aura-card--padding-lg { padding: var(--aura-space-6); }
+
+.aura-card--radius-sm { border-radius: var(--aura-radius-sm); }
+.aura-card--radius-md { border-radius: var(--aura-radius-md); }
+.aura-card--radius-lg { border-radius: var(--card-border-radius, var(--aura-radius-lg)); }
+
+.aura-card--shadow-none { box-shadow: none; }
+.aura-card--shadow-xs { box-shadow: var(--aura-shadow-xs); }
+.aura-card--shadow-card { box-shadow: var(--aura-shadow-card); }
+.aura-card--shadow-soft { box-shadow: var(--aura-shadow-soft); }
+
+.aura-card--variant-muted { background: var(--aura-card-muted); }
+.aura-card--variant-outlined { background: transparent; box-shadow: none; }
+.aura-card--variant-elevated { box-shadow: var(--aura-shadow-card); }
+
+.aura-card--tone-primary { --aura-card-tone: var(--aura-primary); }
+.aura-card--tone-success { --aura-card-tone: var(--aura-success); }
+.aura-card--tone-warning { --aura-card-tone: var(--aura-warning); }
+.aura-card--tone-danger { --aura-card-tone: var(--aura-danger); }
+.aura-card--tone-info { --aura-card-tone: var(--aura-info); }
+.aura-card--tone-rose { --aura-card-tone: var(--aura-rose); }
+
+.aura-card--tone-primary,
+.aura-card--tone-success,
+.aura-card--tone-warning,
+.aura-card--tone-danger,
+.aura-card--tone-info,
+.aura-card--tone-rose {
+  border-top-color: var(--aura-card-tone);
+}
+
+.aura-card--hover:hover,
+.aura-card--interactive:hover {
+  border-color: color-mix(in srgb, var(--aura-card-tone) 42%, var(--aura-border));
+  box-shadow: var(--card-hover-shadow, var(--aura-shadow-card));
+  transform: translateY(-2px);
+}
+
+.aura-card--interactive {
+  cursor: pointer;
+}
+
+.aura-card--interactive:focus-within {
+  outline: 0;
+  box-shadow: var(--aura-focus);
+}
