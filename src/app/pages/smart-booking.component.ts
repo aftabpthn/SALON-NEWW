@@ -5,6 +5,8 @@ import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
 
+type SmartBookingViewKey = 'overview' | 'recommend' | 'queue' | 'slots' | 'waitlist' | 'qr';
+
 @Component({
   selector: 'app-smart-booking',
   standalone: true,
@@ -20,7 +22,27 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
+      <div class="smart-booking-workspace">
+        <aside class="smart-booking-side-nav" aria-label="Smart booking pages">
+          <button
+            *ngFor="let view of smartBookingViews"
+            class="smart-booking-nav-card"
+            type="button"
+            [class.active]="activeSmartBookingView() === view.key"
+            (click)="setSmartBookingView(view.key)"
+          >
+            <span class="smart-booking-nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <i>{{ view.badge }}</i>
+          </button>
+        </aside>
+
+        <main class="smart-booking-detail">
+
+      <div class="metrics-grid" *ngIf="visibleSmartBookingView('overview') && summary()?.metrics as metrics">
         <aura-kpi-card tone="teal" target="/kpi-details/smart-booking/open-bookings"><span>Open bookings</span><strong>{{ metrics.openBookings }}</strong></aura-kpi-card>
         <aura-kpi-card tone="amber" target="/kpi-details/smart-booking/waitlist"><span>Waitlist</span><strong>{{ metrics.waitlist }}</strong></aura-kpi-card>
         <aura-kpi-card tone="blue" target="/kpi-details/smart-booking/online-requests"><span>Online requests</span><strong>{{ metrics.onlineRequests }}</strong></aura-kpi-card>
@@ -30,7 +52,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       </div>
 
       <div class="dashboard-grid">
-        <section class="form-panel">
+        <section class="form-panel" *ngIf="visibleSmartBookingView('recommend')">
           <h3>Recommend smart slots</h3>
           <form [formGroup]="bookingForm" (ngSubmit)="recommend()">
             <label class="field">
@@ -57,7 +79,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </form>
         </section>
 
-        <section class="panel">
+        <section class="panel" *ngIf="visibleSmartBookingView('queue')">
           <div class="section-title"><h2>Queue prediction</h2></div>
           <div class="summary-lines" *ngIf="summary()?.prediction as prediction">
             <div><span>Waiting</span><strong>{{ prediction.waiting }}</strong></div>
@@ -74,7 +96,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </section>
       </div>
 
-      <section class="panel" *ngIf="recommendations().length">
+      <section class="panel" *ngIf="recommendations().length && visibleSmartBookingView('slots')">
         <div class="section-title">
           <div><h2>Available slots</h2></div>
         </div>
@@ -96,7 +118,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       </section>
 
       <div class="dashboard-grid">
-        <section class="panel">
+        <section class="panel" *ngIf="visibleSmartBookingView('waitlist')">
           <div class="section-title"><h2>Waitlist management</h2></div>
           <div class="rank-list">
             <article *ngFor="let item of summary()?.waitlist || []">
@@ -106,7 +128,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" *ngIf="visibleSmartBookingView('qr')">
           <div class="section-title"><h2>QR check-in</h2></div>
           <form class="pos-form" [formGroup]="qrForm" (ngSubmit)="qrCheckIn()">
             <label class="field">
@@ -122,8 +144,119 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <pre class="result-json" *ngIf="result()">{{ result() | json }}</pre>
         </section>
       </div>
+        </main>
+      </div>
     </section>
-  `
+  `,
+  styles: [`
+    .smart-booking-workspace {
+      display: grid;
+      grid-template-columns: 315px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .smart-booking-side-nav,
+    .smart-booking-detail {
+      display: grid;
+      gap: 10px;
+    }
+
+    .smart-booking-side-nav {
+      position: sticky;
+      top: 82px;
+      align-self: start;
+    }
+
+    .smart-booking-nav-card {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 88px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--color-primary);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+      cursor: pointer;
+      text-align: left;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .smart-booking-nav-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--color-primary);
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.1);
+    }
+
+    .smart-booking-nav-card.active {
+      border-color: var(--color-primary);
+      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(99, 102, 241, 0.12), rgba(245, 158, 11, 0.12));
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
+    }
+
+    .smart-booking-nav-card strong,
+    .smart-booking-nav-card small,
+    .smart-booking-nav-card i {
+      display: block;
+    }
+
+    .smart-booking-nav-card strong {
+      font-size: 0.96rem;
+      line-height: 1.2;
+    }
+
+    .smart-booking-nav-card small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .smart-booking-nav-card i {
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: var(--color-primary-strong);
+      background: var(--surface-2);
+      font-size: 0.68rem;
+      font-style: normal;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .smart-booking-nav-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      color: var(--color-primary-strong);
+      background: rgba(20, 184, 166, 0.12);
+      font-weight: 900;
+    }
+
+    @media (max-width: 1180px) {
+      .smart-booking-workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .smart-booking-side-nav {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .smart-booking-side-nav {
+        grid-template-columns: 1fr;
+      }
+    }
+  `]
 })
 export class SmartBookingComponent implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);
@@ -134,6 +267,16 @@ export class SmartBookingComponent implements OnInit {
   readonly result = signal<ApiRecord | null>(null);
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly activeSmartBookingView = signal<SmartBookingViewKey>('overview');
+
+  readonly smartBookingViews: Array<{ key: SmartBookingViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'Smart booking KPIs and status', icon: 'OV', badge: 'Open' },
+    { key: 'recommend', label: 'Smart slots', description: 'Recommend staff, chair and time', icon: 'RS', badge: 'AI' },
+    { key: 'queue', label: 'Queue prediction', description: 'Wait pressure and next actions', icon: 'QP', badge: 'Live' },
+    { key: 'slots', label: 'Available slots', description: 'Ranked slot recommendations', icon: 'AS', badge: 'Book' },
+    { key: 'waitlist', label: 'Waitlist', description: 'Promote waiting clients', icon: 'WL', badge: 'Ops' },
+    { key: 'qr', label: 'QR check-in', description: 'Check in by appointment or QR code', icon: 'QR', badge: 'Front' }
+  ];
 
   readonly bookingForm = this.fb.group({
     clientId: ['', Validators.required],
@@ -144,6 +287,15 @@ export class SmartBookingComponent implements OnInit {
   readonly qrForm = this.fb.group({ code: ['', Validators.required], branchId: ['', Validators.required] });
 
   constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
+
+  setSmartBookingView(view: SmartBookingViewKey): void {
+    this.activeSmartBookingView.set(view);
+  }
+
+  visibleSmartBookingView(view: SmartBookingViewKey): boolean {
+    const active = this.activeSmartBookingView();
+    return active === 'overview' || active === view;
+  }
 
   ngOnInit(): void {
     this.loadLists();
