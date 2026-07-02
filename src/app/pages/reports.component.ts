@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+
+type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory' | 'reports' | 'insights' | 'drilldowns';
 @Component({
   selector: 'app-reports',
   standalone: true,
@@ -70,23 +72,30 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <!-- ═══════ NAV TABS ═══════ -->
-      <nav class="page-tabs">
-        <a class="tab is-active" href="#overview">Overview</a>
-        <a class="tab" href="#revenue">Revenue</a>
-        <a class="tab" href="#bookings">Bookings</a>
-        <a class="tab" href="#clients">Clients</a>
-        <a class="tab" href="#staff">Staff</a>
-        <a class="tab" href="#inventory">Inventory</a>
-        <a class="tab" href="#reports">Reports</a>
-        <a class="tab" href="#insights">AI Insights</a>
-        <a class="tab" href="#schedules">Schedules</a>
-      </nav>
+      <div class="report-workspace">
+        <aside class="report-side-nav" aria-label="Report pages">
+          <button
+            *ngFor="let view of reportViews"
+            class="report-nav-card"
+            type="button"
+            [class.active]="activeReportView() === view.key"
+            (click)="setReportView(view.key)"
+          >
+            <span class="report-nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <i>{{ view.badge }}</i>
+          </button>
+        </aside>
+
+        <main class="report-detail">
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: EXECUTIVE KPI DASHBOARD                      -->
       <!-- ═══════════════════════════════════════════════════════ -->
-      <section id="overview" class="sec">
+      <section id="overview" class="sec" *ngIf="visibleReportView('overview')">
         <!-- Analytics KPIs -->
         <ng-container *ngIf="analyticsCommand() as a">
           <div class="kpi-grid">
@@ -143,6 +152,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: EXECUTIVE ANALYTICS (2-col)                  -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('revenue')">
       @defer (on viewport) {
       <section id="revenue" class="sec">
         <div class="sec-h">
@@ -204,10 +214,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-chart"></div>
         </section>
       }
+      </ng-container>
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: FINANCIAL + BOOKING + CLIENT DASHBOARD        -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('bookings')">
       @defer (on viewport) {
       <section id="bookings" class="sec">
         <div class="sec-h">
@@ -276,10 +288,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-grid"></div>
         </section>
       }
+      </ng-container>
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: STAFF DASHBOARD                              -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('staff')">
       @defer (on viewport) {
       <section id="staff" class="sec">
         <ng-container *ngIf="report() as r">
@@ -316,10 +330,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-table"></div>
         </section>
       }
+      </ng-container>
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: INVENTORY + AI INSIGHTS                       -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('inventory')">
       @defer (on viewport) {
       <section id="inventory" class="sec">
         <ng-container *ngIf="report() as r">
@@ -348,10 +364,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-grid"></div>
         </section>
       }
+      </ng-container>
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: REPORT LIBRARY (tiles) + CONNECTED REPORTS    -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('reports')">
       @defer (on viewport) {
       <section id="reports" class="sec">
         <div class="sec-h">
@@ -399,10 +417,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-grid"></div>
         </section>
       }
+      </ng-container>
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: AI INSIGHTS + SCHEDULED REPORTS (2-col)       -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('insights')">
       @defer (on viewport) {
       <section id="insights" class="sec">
         <ng-container *ngIf="analyticsCommand() as a">
@@ -488,10 +508,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-table"></div>
         </section>
       }
+      </ng-container>
 
       <!-- ═══════════════════════════════════════════════════════ -->
       <!--  SECTION: DRILLDOWNS TABLE                            -->
       <!-- ═══════════════════════════════════════════════════════ -->
+      <ng-container *ngIf="visibleReportView('drilldowns')">
       @defer (on viewport) {
       <section id="drilldowns" class="sec">
         <ng-container *ngIf="analyticsCommand() as a">
@@ -517,6 +539,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="defer-skeleton defer-skeleton-table"></div>
         </section>
       }
+      </ng-container>
+        </main>
+      </div>
 
       <!-- ═══════ FOOTER ACTIONS ═══════ -->
       <div class="page-footer">
@@ -628,24 +653,23 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
     .pf-chip:hover { background: var(--color-surface-muted); color: var(--ink); }
 
-    /* ─── NAV TABS ─── */
-    .page-tabs {
-      display: flex; gap: 3px; padding: 5px; border-radius: 14px;
-      background: rgba(244,245,250,0.85); backdrop-filter: blur(8px);
-      border: 1px solid rgba(79,70,229,0.04);
-      overflow-x: auto; position: sticky; top: 134px; z-index: 18;
+    /* ─── REPORT WORKSPACE ─── */
+    .report-workspace { display: grid; grid-template-columns: 315px minmax(0, 1fr); gap: 12px; align-items: start; }
+    .report-side-nav { position: sticky; top: 148px; display: grid; gap: 10px; align-self: start; }
+    .report-detail { display: grid; gap: 12px; min-width: 0; }
+    .report-nav-card {
+      display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+      width: 100%; min-height: 88px; padding: 14px; border: 1px solid var(--line); border-left: 3px solid var(--color-primary);
+      border-radius: 12px; color: var(--ink); background: var(--surface); box-shadow: 0 4px 12px rgba(12,26,43,0.06);
+      text-align: left; transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
     }
-    .tab {
-      padding: 8px 20px; border-radius: 10px; font-size: 0.82rem; font-weight: 600; color: var(--muted);
-      white-space: nowrap; transition: all 160ms cubic-bezier(0.16,1,0.3,1);
-      position: relative;
-    }
-    .tab:hover { color: var(--ink); background: rgba(255,255,255,0.7); }
-    .tab.is-active { color: var(--color-primary); background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(255,255,255,0.8); }
-    .tab.is-active::after {
-      content: ''; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
-      width: 20px; height: 3px; border-radius: 3px; background: var(--color-primary);
-    }
+    .report-nav-card:hover { transform: translateY(-2px); border-color: rgba(79,70,229,0.28); box-shadow: 0 8px 22px rgba(12,26,43,0.1); }
+    .report-nav-card.active { border-color: var(--color-primary); background: linear-gradient(90deg, rgba(20,184,166,0.16), rgba(99,102,241,0.12), rgba(236,72,153,0.12)); box-shadow: 0 8px 22px rgba(12,26,43,0.12); }
+    .report-nav-card strong, .report-nav-card small, .report-nav-card i { display: block; }
+    .report-nav-card strong { font-size: 0.95rem; line-height: 1.2; }
+    .report-nav-card small { margin-top: 4px; color: var(--muted); font-size: 0.72rem; font-weight: 700; line-height: 1.25; }
+    .report-nav-card i { padding: 3px 8px; border-radius: 999px; color: var(--color-primary-strong); background: var(--color-surface-muted); font-size: 0.68rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .report-nav-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 9px; color: var(--color-primary-strong); background: rgba(20,184,166,0.12); font-weight: 900; }
 
     /* ─── SECTION ─── */
     .sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 170px; padding: 24px 20px; border-radius: 16px; background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
@@ -906,16 +930,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .pf-left { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
     .pf-right { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
-    /* ─── SCROLLBAR ─── */
-    .page-tabs::-webkit-scrollbar { height: 4px; }
-    .page-tabs::-webkit-scrollbar-track { background: transparent; }
-    .page-tabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
-
     /* ─── RESPONSIVE ─── */
     @media (max-width: 1200px) {
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .snap-grid { grid-template-columns: repeat(2, 1fr); }
       .lib-grid { grid-template-columns: repeat(2, 1fr); }
+      .report-workspace { grid-template-columns: 1fr; }
+      .report-side-nav { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 900px) {
       .ea-grid { grid-template-columns: 1fr; }
@@ -933,6 +954,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
       .tab { padding: 7px 14px; font-size: 0.78rem; }
       .page-filters { flex-direction: column; align-items: stretch; }
       .pf-group input { min-width: auto; width: 100%; }
+      .report-side-nav { grid-template-columns: 1fr; }
+      .report-nav-card { grid-template-columns: 44px minmax(0, 1fr) auto; min-height: 78px; }
+      .report-nav-icon { width: 44px; height: 44px; }
     }
   `]
 })
@@ -942,6 +966,19 @@ export class ReportsComponent implements OnInit {
   readonly branches = signal<ApiRecord[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly activeReportView = signal<ReportViewKey>('overview');
+
+  readonly reportViews: Array<{ key: ReportViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'Executive KPIs and summary', icon: 'OV', badge: 'Open' },
+    { key: 'revenue', label: 'Revenue', description: 'Revenue trend and financial pulse', icon: 'RV', badge: 'Finance' },
+    { key: 'bookings', label: 'Bookings & clients', description: 'Daily closing, bookings and CRM pulse', icon: 'BC', badge: 'Ops' },
+    { key: 'staff', label: 'Staff performance', description: 'Top staff revenue and commissions', icon: 'ST', badge: 'Team' },
+    { key: 'inventory', label: 'Inventory', description: 'Stock value and low-stock alerts', icon: 'IN', badge: 'Stock' },
+    { key: 'reports', label: 'Report library', description: 'Connected report shortcuts', icon: 'RL', badge: 'Links' },
+    { key: 'insights', label: 'AI & schedules', description: 'Recommendations and report digests', icon: 'AI', badge: 'Smart' },
+    { key: 'drilldowns', label: 'Drilldowns', description: 'KPI detail report mapping', icon: 'DD', badge: 'Audit' }
+  ];
+
   readonly topStaff = computed(() => ((this.report()?.['staff'] as ApiRecord[] | undefined) || []).slice(0, 8));
   readonly quickLinks = computed(() => {
     const links = (this.report()?.['quickLinks'] as ApiRecord[] | undefined) || [];
@@ -991,6 +1028,15 @@ export class ReportsComponent implements OnInit {
   }
   toggleSchedule(id: string): void {
     this.expandedSchedule.set(this.expandedSchedule() === id ? null : id);
+  }
+
+  setReportView(view: ReportViewKey): void {
+    this.activeReportView.set(view);
+  }
+
+  visibleReportView(view: ReportViewKey): boolean {
+    const active = this.activeReportView();
+    return active === 'overview' || active === view;
   }
 
   constructor(private readonly api: ApiService) {
