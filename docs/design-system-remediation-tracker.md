@@ -13,6 +13,7 @@ Source: `C:\Users\ADMIN\.codex\attachments\3fac217b-b697-4dfb-9443-44a7d6242a64\
 - A card migration inventory records current legacy card-class footprint and safe migration order.
 - A CSS split plan defines the future token, Aura primitive, layout, legacy-card, and feature-legacy layers plus extraction gates.
 - An accessibility QA checklist covers keyboard, focus, contrast, semantics, card migration, shell preservation, and theme checks.
+- A performance budget plan records current build warnings, future primitive CSS targets, and enforcement sequencing after CSS splitting.
 - Global Aura token aliases now bridge the active `--color-*` runtime variables into `--aura-*` variables.
 - Root layout/type/card aliases exist for `--radius-*`, `--space-*`, `--font-size-*`, `--metric-card-*`, `--kpi-*`, and `--card-*` tokens.
 - A canonical standalone `aura-card` component exists with `tone`, `variant`, `padding`, `radius`, `shadow`, `hover`, and `interactive` inputs.
@@ -33,4 +34,3 @@ Source: `C:\Users\ADMIN\.codex\attachments\3fac217b-b697-4dfb-9443-44a7d6242a64\
 ## Remaining Work
 
 - Migrate page-level card classes to `aura-card` or `.aura-card--*` utilities in small batches.
-- Add performance gates after CSS splitting; current global CSS remains over the desired long-term target.
