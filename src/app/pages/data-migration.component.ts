@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../core/api.service';
 
@@ -146,7 +147,7 @@ type MigrationRecoveryReport = {
 @Component({
   selector: 'app-data-migration',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <section class="migration-shell">
       <header class="command-header">
@@ -187,6 +188,24 @@ type MigrationRecoveryReport = {
         </article>
       </section>
 
+      <section class="migration-page-workspace">
+        <aside class="migration-side-nav" aria-label="Data migration pages">
+          <a
+            class="migration-nav-card"
+            *ngFor="let page of migrationPages"
+            [routerLink]="page.route"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: page.exact }"
+          >
+            <span class="migration-nav-icon">{{ page.icon }}</span>
+            <span><strong>{{ page.label }}</strong><small>{{ page.description }}</small></span>
+            <em>{{ page.badge }}</em>
+          </a>
+        </aside>
+        <main class="migration-page-detail">
+          <router-outlet></router-outlet>
+        </main>
+      </section>
 
       <section class="normalizer-files" *ngIf="entityTotalCards().length">
         <article *ngFor="let item of entityTotalCards()">
@@ -871,6 +890,17 @@ type MigrationRecoveryReport = {
   styles: [`
     :host { display: block; }
     .migration-shell { display: grid; gap: 18px; color: #172033; }
+    .migration-shell > :not(.migration-page-workspace) { display: none; }
+    .migration-page-workspace { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+    .migration-side-nav { position: sticky; top: 92px; display: grid; gap: 10px; }
+    .migration-nav-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 11px; align-items: center; min-height: 92px; padding: 13px; border: 1px solid #d7e6e2; border-left: 4px solid #0b8f7c; border-radius: 8px; background: #fff; color: #172033; text-decoration: none; box-shadow: 0 12px 26px rgba(15,23,42,.07); cursor: pointer; }
+    .migration-nav-card:hover, .migration-nav-card.active { background: linear-gradient(135deg, #e8fbf7, #eef4ff); border-color: #9fc3dc; transform: translateY(-1px); }
+    .migration-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #e8f7f4; color: #0b6f61; font-weight: 950; font-size: 12px; }
+    .migration-nav-card strong, .migration-nav-card small { display: block; }
+    .migration-nav-card small { margin-top: 4px; color: #64748b; font-size: 12px; font-weight: 700; line-height: 1.3; }
+    .migration-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #e8f7f4; color: #0b6f61; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .migration-page-detail { min-width: 0; display: block; }
+    .migration-page-detail .migration-shell { padding: 0; }
     .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; align-items: stretch; padding: 22px; border: 1px solid #d7e6e2; border-radius: 8px; background: linear-gradient(120deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 18px 40px rgba(15,23,42,.08); }
     .command-header h1 { margin: 6px 0; font-size: 34px; line-height: 1.05; letter-spacing: 0; }
     .command-header p { margin: 0; max-width: 900px; color: #64748b; font-size: 15px; line-height: 1.55; }
@@ -1037,10 +1067,12 @@ type MigrationRecoveryReport = {
     .result-box { border: 1px solid #d7e6e2; border-radius: 8px; padding: 12px; display: grid; gap: 6px; background: #f8fffd; }
     @media (max-width: 1100px) {
       .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip { grid-template-columns: 1fr 1fr; }
+      .migration-page-workspace { grid-template-columns: 1fr; }
+      .migration-side-nav { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
-      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid, .recovery-grid { grid-template-columns: 1fr; }
+      .command-header, .workspace-grid, .grid.two, .grid.three, .control-strip, .control-strip.compact, .migration-page-workspace, .migration-side-nav, .form-grid, .pipeline, .recon-list, .expected-grid, .approval-list article, .proof-grid, .recovery-grid { grid-template-columns: 1fr; }
       .command-header h1 { font-size: 28px; }
       .panel-head { align-items: flex-start; flex-direction: column; }
       .mapping-toolbar, .mapping-list article, .duplicate-list article, .ops-queue, .worker-settings, .normalizer-head { grid-template-columns: 1fr; }
@@ -1049,6 +1081,17 @@ type MigrationRecoveryReport = {
   `]
 })
 export class DataMigrationComponent implements OnInit, OnDestroy {
+  readonly migrationPages = [
+    { route: '/data-migration', label: 'Overview', description: 'Readiness and migration modules', icon: 'OV', badge: 'All', exact: true },
+    { route: '/data-migration/launch', label: 'Launch', description: 'Upload source and start scan', icon: 'LA', badge: 'Start', exact: true },
+    { route: '/data-migration/ai-mapping', label: 'AI Mapping', description: 'Map columns and resolve fields', icon: 'AI', badge: 'Map', exact: true },
+    { route: '/data-migration/import-worker', label: 'Import Worker', description: 'Chunk queue and worker status', icon: 'IW', badge: 'Queue', exact: true },
+    { route: '/data-migration/validation', label: 'Validation', description: 'Reconciliation and blockers', icon: 'VA', badge: 'QA', exact: true },
+    { route: '/data-migration/approval', label: 'Approval', description: 'Review gate and approvals', icon: 'AP', badge: 'Gate', exact: true },
+    { route: '/data-migration/go-live', label: 'Go Live', description: 'Final checklist and cutover', icon: 'GL', badge: 'Live', exact: true },
+    { route: '/data-migration/assistant', label: 'Assistant', description: 'Migration issue guidance', icon: 'AS', badge: 'Help', exact: true },
+    { route: '/data-migration/history', label: 'History', description: 'Jobs, rollback and audit', icon: 'HI', badge: 'Log', exact: true }
+  ];
   readonly sourceOptions = [
     { value: 'zenoti', label: 'Zenoti' },
     { value: 'salonist', label: 'Salonist' },
@@ -3377,3 +3420,4 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     return `${row.sourceSheet || 'sheet'}:${row.sourceRowNumber || row.targetId || row.sourceExternalId || 'row'}`;
   }
 }
+
