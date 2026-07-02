@@ -27,6 +27,7 @@ Scope: static scan of `src/app` TypeScript and HTML files for legacy card class 
 - Offline support action-card batch: offline-support, offline-readiness, offline-appointment-protection, and offline-billing-protection now pair legacy `action-card` with `aura-card aura-card--type-action` without removing existing classes.
 - Status-card readiness/report batch: appointment detail list report and pricing level 6 readiness now pair legacy `status-card` classes with `aura-card` plus status/tone utilities without removing existing classes.
 - Summary-card booking/client report batch: booking wizard and client report detail now pair legacy `summary-card` classes with `aura-card` without removing existing classes.
+- Client-card engagement rail batch: engagement command center now pairs legacy `client-card` rail panels with `aura-card` without removing existing classes.
 
 ## Rules
 

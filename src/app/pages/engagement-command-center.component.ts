@@ -423,7 +423,7 @@ interface EngagementDetail extends ApiRecord {
 
         <aside class="client-rail">
           <ng-container *ngIf="selectedThread()?.clientId; else noClient">
-            <section class="client-card">
+            <section class="client-card aura-card">
               <h3>{{ clientProfile()?.name || selectedThread()?.displayName || 'Linked client' }}</h3>
               <p>{{ clientProfile()?.phone || selectedThread()?.phone || 'Phone not captured' }}</p>
               <p class="muted-line">{{ clientProfile()?.email || selectedThread()?.email || 'Email not captured' }}</p>
@@ -433,7 +433,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
             </section>
 
-            <section class="client-card">
+            <section class="client-card aura-card">
               <div class="info-grid">
                 <div><strong>{{ client360()?.membership?.summaryText || 'None' }}</strong></div>
                 <div><strong>{{ client360()?.package?.summaryText || 'None' }}</strong></div>
@@ -444,7 +444,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
             </section>
 
-            <section class="client-card">
+            <section class="client-card aura-card">
               <div class="mini-list">
                 <article>
                   <strong>Last visit</strong>
@@ -461,7 +461,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
             </section>
 
-            <section class="client-card">
+            <section class="client-card aura-card">
               <div class="mini-list">
                 <article *ngFor="let invoice of pastInvoices().slice(0, 4)">
                   <strong>{{ invoice.invoiceNumber || invoice.id }}</strong>
@@ -474,7 +474,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
             </section>
 
-            <section class="client-card">
+            <section class="client-card aura-card">
               <div class="info-grid">
                 <div><strong>{{ listLabels(preferredStaff(), 'name') || 'None' }}</strong></div>
                 <div><strong>{{ listLabels(preferredServices(), 'name') || 'None' }}</strong></div>
@@ -483,7 +483,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
             </section>
 
-            <section class="client-card">
+            <section class="client-card aura-card">
               <p>{{ clientProfile()?.notes || clientProfile()?.preferences || 'No notes captured yet.' }}</p>
               <p class="muted-line">{{ client360()?.files?.placeholder || 'Files placeholder ready.' }}</p>
               <div class="alert-list">
@@ -495,7 +495,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
             </section>
 
-            <section class="client-card ai-summary">
+            <section class="client-card aura-card ai-summary">
               <div class="card-header-row">
                 <button class="ghost-button mini" type="button" (click)="openAiSummaryDrawer()" [disabled]="aiSummaryGenerating()">Review</button>
               </div>
@@ -1429,7 +1429,7 @@ interface EngagementDetail extends ApiRecord {
       </ng-template>
 
       <ng-template #noClient>
-        <section class="client-card no-client">
+        <section class="client-card aura-card no-client">
           <h3>Thread is not linked to a client</h3>
         </section>
       </ng-template>
