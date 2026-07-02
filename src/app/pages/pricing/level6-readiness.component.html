@@ -32,19 +32,19 @@
   </section>
 
   <section class="status-grid" *ngIf="report()">
-    <article class="status-card ready">
+    <article class="status-card ready aura-card aura-card--status-completed">
       <span>Ready</span>
       <strong>{{ countFor('ready') }}</strong>
     </article>
-    <article class="status-card collecting">
+    <article class="status-card collecting aura-card aura-card--status-pending">
       <span>Collecting</span>
       <strong>{{ countFor('collecting') }}</strong>
     </article>
-    <article class="status-card blocked">
+    <article class="status-card blocked aura-card aura-card--status-cancelled">
       <span>Blocked</span>
       <strong>{{ countFor('blocked') }}</strong>
     </article>
-    <article class="status-card premature">
+    <article class="status-card premature aura-card aura-card--tone-warning">
       <span>Premature</span>
       <strong>{{ countFor('premature') }}</strong>
     </article>

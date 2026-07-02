@@ -73,7 +73,7 @@ type AppointmentDetailReport = {
 
       <ng-container *ngIf="report() as data">
         <section class="status-strip">
-          <article *ngFor="let card of statusCards" class="status-card" [ngClass]="card.tone">
+          <article *ngFor="let card of statusCards" class="status-card aura-card" [ngClass]="[card.tone, card.auraStatus]">
             <strong>{{ numberValue(data.summary[card.key]) }}</strong>
             <span>{{ card.label }}</span>
           </article>
@@ -195,14 +195,14 @@ export class AppointmentDetailListReportComponent implements OnInit {
   readonly report = signal<AppointmentDetailReport | null>(null);
 
   readonly statusCards = [
-    { key: 'total', label: 'Total', tone: '' },
-    { key: 'confirmed', label: 'Confirmed', tone: 'confirmed' },
-    { key: 'arrived', label: 'Arrived', tone: 'arrived' },
-    { key: 'started', label: 'Start', tone: 'started' },
-    { key: 'completed', label: 'Completed', tone: 'completed' },
-    { key: 'cancelled', label: 'Cancel', tone: 'cancelled' },
-    { key: 'notCame', label: 'Not Came', tone: 'not-came' },
-    { key: 'notConfirmed', label: 'Not Confirmed', tone: 'not-confirmed' }
+    { key: 'total', label: 'Total', tone: '', auraStatus: 'aura-card--tone-slate' },
+    { key: 'confirmed', label: 'Confirmed', tone: 'confirmed', auraStatus: 'aura-card--status-pending' },
+    { key: 'arrived', label: 'Arrived', tone: 'arrived', auraStatus: 'aura-card--tone-info' },
+    { key: 'started', label: 'Start', tone: 'started', auraStatus: 'aura-card--status-pending' },
+    { key: 'completed', label: 'Completed', tone: 'completed', auraStatus: 'aura-card--status-completed' },
+    { key: 'cancelled', label: 'Cancel', tone: 'cancelled', auraStatus: 'aura-card--status-cancelled' },
+    { key: 'notCame', label: 'Not Came', tone: 'not-came', auraStatus: 'aura-card--tone-warning' },
+    { key: 'notConfirmed', label: 'Not Confirmed', tone: 'not-confirmed', auraStatus: 'aura-card--status-pending' }
   ];
 
   from = this.daysAgo(7);
