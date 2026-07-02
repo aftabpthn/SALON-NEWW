@@ -31,7 +31,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <a class="ghost-button" routerLink="/offline/sync-queue">Open sync queue</a>
         </div>
         <div class="quick-grid">
-          <article class="action-card" *ngFor="let item of cacheStrategy"><strong>{{ item }}</strong><span>Recommended for every branch device before network drops.</span></article>
+          <article class="action-card aura-card aura-card--type-action" *ngFor="let item of cacheStrategy"><strong>{{ item }}</strong><span>Recommended for every branch device before network drops.</span></article>
         </div>
       </section>
 

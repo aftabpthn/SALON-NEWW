@@ -31,7 +31,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title"><h2>Protection checks</h2></div>
           <div class="quick-grid">
-            <article class="action-card" *ngFor="let check of checks"><strong>{{ check }}</strong><span>Checked during offline billing workflow.</span></article>
+            <article class="action-card aura-card aura-card--type-action" *ngFor="let check of checks"><strong>{{ check }}</strong><span>Checked during offline billing workflow.</span></article>
           </div>
         </section>
       </div>

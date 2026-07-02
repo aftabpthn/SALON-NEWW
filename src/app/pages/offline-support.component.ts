@@ -36,7 +36,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <span class="badge">Separated pages</span>
         </div>
         <div class="quick-grid">
-          <a class="action-card" *ngFor="let module of modules" [routerLink]="module.path">
+          <a class="action-card aura-card aura-card--type-action" *ngFor="let module of modules" [routerLink]="module.path">
             <strong>{{ module.title }}</strong>
             <span>{{ module.detail }}</span>
             <small>{{ module.signal }}</small>
@@ -48,11 +48,11 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <section class="panel">
           <div class="section-title"><h2>Readiness snapshot</h2></div>
           <div class="quick-grid">
-            <article class="action-card">
+            <article class="action-card aura-card aura-card--type-action">
               <strong>{{ readinessScore() }}</strong>
               <span>{{ readinessLabel() }}</span>
             </article>
-            <article class="action-card">
+            <article class="action-card aura-card aura-card--type-action">
               <strong>{{ summary()?.snapshots?.[0]?.createdAt ? (summary()?.snapshots?.[0]?.createdAt | date: 'short') : 'No cache yet' }}</strong>
               <span>Latest cache snapshot</span>
             </article>
@@ -61,7 +61,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <section class="panel">
           <div class="section-title"><h2>Offline guidance</h2></div>
           <div class="quick-grid">
-            <article class="action-card" *ngFor="let item of guidance()"><strong>{{ item }}</strong><span>Operational rule</span></article>
+            <article class="action-card aura-card aura-card--type-action" *ngFor="let item of guidance()"><strong>{{ item }}</strong><span>Operational rule</span></article>
           </div>
         </section>
       </div>

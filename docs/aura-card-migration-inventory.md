@@ -22,6 +22,10 @@ Scope: static scan of `src/app` TypeScript and HTML files for legacy card class 
 | `product-card` | 1 | 2 | Migrate with product/POS page QA. |
 | `booking-card` | 0 | 0 | No current `src/app` matches in this scan. |
 
+## Migrated Batches
+
+- Offline support action-card batch: offline-support, offline-readiness, offline-appointment-protection, and offline-billing-protection now pair legacy `action-card` with `aura-card aura-card--type-action` without removing existing classes.
+
 ## Rules
 
 - Do not remove old classes during first migration; add Aura utility classes beside them.
