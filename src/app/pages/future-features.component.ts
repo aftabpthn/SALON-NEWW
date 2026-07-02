@@ -14,6 +14,8 @@ type WorkflowOption = {
   summary: string;
 };
 
+type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'workflows' | 'output' | 'insights' | 'history';
+
 @Component({
   selector: 'app-future-features',
   standalone: true,
@@ -49,8 +51,27 @@ type WorkflowOption = {
         <aura-kpi-card tone="violet" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
       </div>
 
-      <div class="future-command-grid" *ngIf="!loading()">
-        <section class="panel live-spine-panel">
+      <div class="future-workspace">
+        <aside class="future-side-nav" aria-label="Future feature sections">
+          <button
+            class="future-nav-card"
+            type="button"
+            *ngFor="let view of futureFeatureViews"
+            [class.active]="activeFutureFeatureView() === view.key"
+            (click)="setFutureFeatureView(view.key)"
+          >
+            <span class="future-nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <em>{{ view.badge }}</em>
+          </button>
+        </aside>
+
+        <main class="future-detail">
+      <div class="future-command-grid" [class.focused]="activeFutureFeatureView() !== 'overview'" *ngIf="!loading() && (visibleFutureFeatureView('sources') || visibleFutureFeatureView('runner') || visibleFutureFeatureView('actions'))">
+        <section class="panel live-spine-panel" *ngIf="visibleFutureFeatureView('sources')">
           <div class="section-title">
             <div>
               <h2>Where AI gets real data</h2>
@@ -69,7 +90,7 @@ type WorkflowOption = {
           </div>
         </section>
 
-        <section class="panel launch-panel">
+        <section class="panel launch-panel" *ngIf="visibleFutureFeatureView('runner')">
           <div class="section-title">
             <div>
               <h2>Run future feature with source trace</h2>
@@ -110,7 +131,7 @@ type WorkflowOption = {
           </form>
         </section>
 
-        <section class="panel action-rail-panel">
+        <section class="panel action-rail-panel" *ngIf="visibleFutureFeatureView('actions')">
           <div class="section-title">
             <div>
               <h2>Where output goes next</h2>
@@ -128,7 +149,7 @@ type WorkflowOption = {
         </section>
       </div>
 
-      <section class="panel">
+      <section class="panel" *ngIf="visibleFutureFeatureView('workflows')">
         <div class="section-title">
           <div>
             <h2>10 AI workflows connected to live operational modules</h2>
@@ -150,7 +171,7 @@ type WorkflowOption = {
         </div>
       </section>
 
-      <section class="panel" *ngIf="output()">
+      <section class="panel" *ngIf="output() && visibleFutureFeatureView('output')">
         <div class="section-title">
           <div>
             <h2>{{ output()?.title }}</h2>
@@ -175,7 +196,7 @@ type WorkflowOption = {
         </div>
       </section>
 
-      <div class="dashboard-grid">
+      <div class="dashboard-grid" *ngIf="visibleFutureFeatureView('insights')">
         <section class="panel">
           <div class="section-title"><h2>Growth advisor preview</h2></div>
           <ng-container *ngIf="summary()?.advisorPreview as advisor">
@@ -204,7 +225,7 @@ type WorkflowOption = {
         </section>
       </div>
 
-      <section class="panel">
+      <section class="panel" *ngIf="visibleFutureFeatureView('history')">
         <div class="section-title"><h2>Innovation run history</h2></div>
         <div class="table-wrap">
           <table>
@@ -221,6 +242,8 @@ type WorkflowOption = {
           </table>
         </div>
       </section>
+        </main>
+      </div>
     </section>
   `,
   styles: [`
@@ -324,11 +347,98 @@ type WorkflowOption = {
       text-decoration: none;
     }
 
+    .future-workspace {
+      display: grid;
+      grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .future-side-nav {
+      position: sticky;
+      top: 92px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .future-nav-card {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      min-height: 96px;
+      padding: 14px;
+      border: 1px solid rgba(15, 118, 110, .14);
+      border-left: 4px solid rgba(15, 118, 110, .55);
+      border-radius: 18px;
+      background: linear-gradient(135deg, #ffffff, #f8fffc);
+      color: var(--ink);
+      text-align: left;
+      box-shadow: 0 14px 34px rgba(15, 23, 42, .07);
+      cursor: pointer;
+      transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+
+    .future-nav-card:hover,
+    .future-nav-card.active {
+      transform: translateY(-2px);
+      border-color: rgba(15, 118, 110, .42);
+      background: linear-gradient(135deg, rgba(196, 244, 235, .88), rgba(229, 241, 255, .92));
+      box-shadow: 0 18px 42px rgba(15, 23, 42, .1);
+    }
+
+    .future-nav-icon {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: rgba(15, 118, 110, .1);
+      color: var(--teal);
+      font-size: .78rem;
+      font-weight: 950;
+    }
+
+    .future-nav-card strong,
+    .future-nav-card small {
+      display: block;
+    }
+
+    .future-nav-card small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .future-nav-card em {
+      align-self: start;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, .1);
+      color: var(--teal);
+      font-size: .68rem;
+      font-style: normal;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .future-detail {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
     .future-command-grid {
       display: grid;
       grid-template-columns: minmax(260px, .72fr) minmax(420px, 1.18fr) minmax(280px, .78fr);
       gap: 16px;
       align-items: start;
+    }
+
+    .future-command-grid.focused {
+      grid-template-columns: 1fr;
     }
 
     .source-stack,
@@ -458,12 +568,18 @@ type WorkflowOption = {
     }
 
     @media (max-width: 1180px) {
+      .future-workspace,
       .future-command-grid,
       .output-grid {
         grid-template-columns: 1fr;
       }
 
       .workflow-map-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .future-side-nav {
+        position: static;
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -477,6 +593,7 @@ type WorkflowOption = {
         justify-content: start;
       }
 
+      .future-side-nav,
       .interconnect-strip,
       .workflow-map-grid {
         grid-template-columns: 1fr;
@@ -490,6 +607,17 @@ export class FutureFeaturesComponent implements OnInit {
   readonly loading = signal(false);
   readonly error = signal('');
   readonly selectedType = signal('growth-advisor');
+  readonly activeFutureFeatureView = signal<FutureFeatureViewKey>('overview');
+  readonly futureFeatureViews: Array<{ key: FutureFeatureViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'All connected future feature blocks', icon: 'OV', badge: 'All' },
+    { key: 'sources', label: 'Live data spine', description: 'Real source modules feeding AI', icon: 'LS', badge: 'Live' },
+    { key: 'runner', label: 'Run workflow', description: 'Prompt with source trace', icon: 'RW', badge: 'AI' },
+    { key: 'actions', label: 'Action rail', description: 'Where generated outputs route', icon: 'AR', badge: 'Next' },
+    { key: 'workflows', label: 'Workflow map', description: 'Operational AI workflow catalog', icon: 'WM', badge: 'Map' },
+    { key: 'output', label: 'Output trace', description: 'Latest run evidence and routes', icon: 'OT', badge: 'Run' },
+    { key: 'insights', label: 'Previews', description: 'Growth, voice and kiosk signals', icon: 'PV', badge: 'View' },
+    { key: 'history', label: 'Run history', description: 'Persisted innovation run log', icon: 'RH', badge: 'Log' }
+  ];
 
   readonly workflows: WorkflowOption[] = [
     { type: 'growth-advisor', label: 'AI salon growth advisor', category: 'Growth', prompt: 'Create next best actions for salon growth this week using live CRM, POS, inventory and booking data.', summary: 'Growth plan' },
@@ -520,6 +648,13 @@ export class FutureFeaturesComponent implements OnInit {
     this.load();
   }
 
+  setFutureFeatureView(view: FutureFeatureViewKey): void {
+    this.activeFutureFeatureView.set(view);
+  }
+
+  visibleFutureFeatureView(view: FutureFeatureViewKey): boolean {
+    return this.activeFutureFeatureView() === 'overview' || this.activeFutureFeatureView() === view;
+  }
   load(): void {
     this.loading.set(true);
     this.error.set('');
