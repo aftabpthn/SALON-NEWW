@@ -184,6 +184,7 @@ export const routes: Routes = [
     }
   },
   { path: 'marketing', loadComponent: () => import('./pages/ai-marketing-automation.component').then(m => m.AiMarketingAutomationComponent), title: 'AI Marketing Automation', data: { preload: true, preloadPriority: 8 } },
+  { path: 'marketing/birthdays', loadComponent: () => import('./pages/birthday-campaign.component').then(m => m.BirthdayCampaignComponent), title: 'Birthday AI Campaigns' },
   { path: 'growth-rank-bot', loadComponent: () => import('./pages/growth-rank-bot.component').then(m => m.GrowthRankBotComponent), title: 'AI Rank Bot' },
   { path: 'whatsapp', loadComponent: () => import('./pages/whatsapp-automation.component').then(m => m.WhatsAppAutomationComponent), title: 'WhatsApp Automation' },
     { path: 'message-templates', loadComponent: () => import('./pages/message-template-studio.component').then(m => m.MessageTemplateStudioComponent), title: 'Message Templates' },
@@ -494,5 +495,6 @@ export const routes: Routes = [
   },
   { path: '**', redirectTo: 'home' }
 ];
+
 
 

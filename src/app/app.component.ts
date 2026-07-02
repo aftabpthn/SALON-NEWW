@@ -1022,6 +1022,7 @@ export class AppComponent implements OnDestroy {
           keywords: 'campaign marketing engagement whatsapp messages reviews growth ai rank bot',
           children: [
             { path: '/marketing', label: 'Marketing', icon: 'W', keywords: 'campaign marketing automation' },
+            { path: '/marketing/birthdays', label: 'Birthdays', icon: 'BD', keywords: 'birthday campaign ai whatsapp sms offers clients' },
             { path: '/engagement', label: 'Engagement Center', icon: 'EC', keywords: 'unified inbox hyperconnect client engagement whatsapp email calls' },
             { path: '/whatsapp', label: 'WhatsApp', icon: 'WA', keywords: 'whatsapp campaign chat' },
             { path: '/message-logs', label: 'Messages', icon: 'ML', keywords: 'message logs communication' },
@@ -2013,3 +2014,4 @@ export class AppComponent implements OnDestroy {
     return 'Unexpected application error';
   }
 }
+
