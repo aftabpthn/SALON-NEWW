@@ -1,6 +1,8 @@
 import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
+
+type AnalyticsViewKey = 'overview' | 'revenue-forecast' | 'heatmap' | 'staff-productivity' | 'churn-risk' | 'lifetime-value' | 'memberships' | 'conversion-funnel' | 'branches' | 'ai-insights' | 'history';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
@@ -74,8 +76,27 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </form>
       </section>
 
+      <div class="analytics-workspace">
+        <aside class="analytics-side-nav" aria-label="Analytics pages">
+          <button
+            *ngFor="let view of analyticsViews"
+            class="analytics-nav-card"
+            type="button"
+            [class.active]="activeView() === view.key"
+            (click)="setAnalyticsView(view.key)"
+          >
+            <span class="nav-icon">{{ view.icon }}</span>
+            <span>
+              <strong>{{ view.label }}</strong>
+              <small>{{ view.description }}</small>
+            </span>
+            <i>{{ view.badge }}</i>
+          </button>
+        </aside>
+
+        <main class="analytics-detail">
       <ng-container *ngIf="metrics() as metrics">
-        <div class="metrics-grid">
+        <div class="metrics-grid" *ngIf="visible('overview')">
           <aura-kpi-card tone="teal" target="/kpi-details/analytics/14-day-forecast">
             <span>14-day forecast</span>
             <strong>{{ metrics.revenueForecast.projected14DayRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
@@ -117,7 +138,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </aura-kpi-card>
         </div>
 
-        <section class="panel">
+        <section class="panel" *ngIf="visible('ai-insights')">
           <div class="section-title">
             <div>
               <h2>Generated snapshot {{ snapshot()?.id }}</h2>
@@ -131,8 +152,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
-        <div class="dashboard-grid">
-          <section class="panel">
+        <div class="dashboard-grid" *ngIf="visible('revenue-forecast') || visible('conversion-funnel')">
+          <section class="panel" *ngIf="visible('revenue-forecast')">
             <div class="section-title"><h2>Revenue forecast</h2></div>
             <div class="chart-bars">
               <div *ngFor="let point of metrics.revenueForecast.forecast14Days">
@@ -143,7 +164,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel" *ngIf="visible('conversion-funnel')">
             <div class="section-title"><h2>Conversion funnel</h2></div>
             <div class="summary-lines">
               <div *ngFor="let stage of metrics.conversionFunnel.stages">
@@ -154,7 +175,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel" *ngIf="visible('heatmap')">
           <div class="section-title">
             <div>
               <h2>Booking and revenue intensity by day and hour</h2>
@@ -168,8 +189,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
-        <div class="dashboard-grid">
-          <section class="panel">
+        <div class="dashboard-grid" *ngIf="visible('staff-productivity') || visible('churn-risk')">
+          <section class="panel" *ngIf="visible('staff-productivity')">
             <div class="section-title"><h2>Staff productivity scoring</h2></div>
             <div class="table-wrap">
               <table>
@@ -187,7 +208,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel" *ngIf="visible('churn-risk')">
             <div class="section-title"><h2>Churn analysis</h2></div>
             <div class="rank-list">
               <article *ngFor="let client of metrics.churn.clients">
@@ -204,8 +225,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </section>
         </div>
 
-        <div class="dashboard-grid">
-          <section class="panel">
+        <div class="dashboard-grid" *ngIf="visible('lifetime-value') || visible('memberships')">
+          <section class="panel" *ngIf="visible('lifetime-value')">
             <div class="section-title"><h2>Lifetime value</h2></div>
             <div class="table-wrap">
               <table>
@@ -223,7 +244,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel" *ngIf="visible('memberships')">
             <div class="section-title"><h2>Membership performance</h2></div>
             <div class="summary-lines">
               <div><span>Credits sold</span><strong>{{ metrics.membershipPerformance.creditsSold }}</strong></div>
@@ -234,7 +255,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel" *ngIf="visible('branches')">
           <div class="section-title"><h2>Branch comparison</h2></div>
           <div class="table-wrap">
             <table>
@@ -255,7 +276,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </section>
       </ng-container>
 
-      <section class="panel">
+      <section class="panel" *ngIf="visible('history')">
         <div class="section-title">
           <div>
             <h2>Analytics run history</h2>
@@ -277,6 +298,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </table>
         </div>
       </section>
+        </main>
+      </div>
     </section>
   `,
   styles: [`
@@ -373,9 +396,91 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
     .quick-grid,
     .metrics-grid,
-    .dashboard-grid {
+    .dashboard-grid,
+    .analytics-workspace {
       display: grid;
       gap: 10px;
+    }
+
+    .analytics-workspace {
+      grid-template-columns: 315px minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .analytics-side-nav,
+    .analytics-detail {
+      display: grid;
+      gap: 10px;
+    }
+
+    .analytics-side-nav {
+      position: sticky;
+      top: 82px;
+      align-self: start;
+    }
+
+    .analytics-nav-card {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 88px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--color-primary);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06);
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .analytics-nav-card.active {
+      border-color: var(--color-primary);
+      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(236, 72, 153, 0.14));
+      box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
+    }
+
+    .analytics-nav-card strong,
+    .analytics-nav-card small,
+    .analytics-nav-card i {
+      display: block;
+    }
+
+    .analytics-nav-card strong {
+      font-size: 0.98rem;
+      line-height: 1.2;
+    }
+
+    .analytics-nav-card small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+    }
+
+    .analytics-nav-card i {
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: var(--color-primary-strong);
+      background: var(--surface-2);
+      font-size: 0.7rem;
+      font-style: normal;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .nav-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      color: var(--color-primary-strong);
+      background: rgba(20, 184, 166, 0.12);
+      font-weight: 900;
     }
 
     .quick-grid {
@@ -600,6 +705,15 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       .form-panel form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .analytics-workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .analytics-side-nav {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     @media (max-width: 760px) {
@@ -612,7 +726,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
       .metrics-grid,
       .dashboard-grid,
-      .form-panel form {
+      .form-panel form,
+      .analytics-side-nav {
         grid-template-columns: 1fr;
       }
 
@@ -631,6 +746,21 @@ export class AnalyticsEngineComponent implements OnInit {
   readonly branches = signal<ApiRecord[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly activeView = signal<AnalyticsViewKey>('overview');
+
+  readonly analyticsViews: Array<{ key: AnalyticsViewKey; label: string; description: string; icon: string; badge: string }> = [
+    { key: 'overview', label: 'Overview', description: 'All analytics KPIs and highlights', icon: 'OV', badge: 'Open' },
+    { key: 'revenue-forecast', label: 'Revenue forecast', description: '14-day projection and trends', icon: 'RF', badge: 'AI' },
+    { key: 'heatmap', label: 'Peak hours', description: 'Day and hour intensity map', icon: 'PH', badge: 'Live' },
+    { key: 'staff-productivity', label: 'Staff productivity', description: 'Revenue, booking and completion scores', icon: 'SP', badge: 'Team' },
+    { key: 'churn-risk', label: 'Churn risk', description: 'High-risk clients and next action', icon: 'CR', badge: 'AI' },
+    { key: 'lifetime-value', label: 'Lifetime value', description: 'Top clients and projected value', icon: 'LV', badge: 'CRM' },
+    { key: 'memberships', label: 'Memberships', description: 'Credits, renewals and redemption', icon: 'MB', badge: 'Plan' },
+    { key: 'conversion-funnel', label: 'Conversion funnel', description: 'Lead to paid conversion stages', icon: 'CF', badge: 'Sales' },
+    { key: 'branches', label: 'Branch comparison', description: 'Multi-branch revenue and operations', icon: 'BR', badge: 'Ops' },
+    { key: 'ai-insights', label: 'AI insights', description: 'Snapshot recommendations and actions', icon: 'AI', badge: 'Smart' },
+    { key: 'history', label: 'Run history', description: 'Generated analytics snapshots', icon: 'HI', badge: 'Audit' }
+  ];
 
   readonly filterForm = this.fb.group({
     periodStart: [this.defaultStart()],
@@ -714,6 +844,15 @@ export class AnalyticsEngineComponent implements OnInit {
       next: () => this.loadCommandCenter(),
       error: (error) => this.error.set(this.api.errorText(error))
     });
+  }
+
+  setAnalyticsView(view: AnalyticsViewKey): void {
+    this.activeView.set(view);
+  }
+
+  visible(view: AnalyticsViewKey): boolean {
+    const active = this.activeView();
+    return active === 'overview' || active === view;
   }
 
   funnelStage(stage: string): ApiRecord | null {
