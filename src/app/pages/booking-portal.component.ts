@@ -132,7 +132,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
           <span class="badge">{{ publicProfile.categories?.length || 0 }} categories</span>
         </div>
         <div class="catalog-grid">
-          <article class="service-card" *ngFor="let service of services().slice(0, 12)">
+          <article class="service-card aura-card" *ngFor="let service of services().slice(0, 12)">
             <span>{{ service.category || 'Service' }}</span>
             <strong>{{ service.name }}</strong>
             <small>{{ service.durationMinutes || 0 }} min</small>

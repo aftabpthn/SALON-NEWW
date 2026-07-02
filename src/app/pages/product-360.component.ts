@@ -32,7 +32,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="product-layout">
-          <section class="panel product-card">
+          <section class="panel product-card aura-card">
             <div class="product-avatar">{{ initials(item.name) }}</div>
             <h2>{{ item.name }}</h2>
             <p>{{ item.category || 'Uncategorised' }} · {{ item.usageType || 'retail' }}</p>
