@@ -422,7 +422,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
 
           <div class="report-grid">
-            <article class="report-card wide">
+            <article class="report-card aura-card wide">
               <header><h4>Growth Action Report</h4><span>{{ dhandaGrowthDone(audit) }} of 35 actions completed</span><button class="report-link" type="button" (click)="openGrowthReport('growth', 'tasks')">Open</button></header>
               <div class="growth-action-list">
                 <article *ngFor="let task of dhandaSocialTasks(audit)">
@@ -436,7 +436,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </div>
             </article>
 
-            <article class="report-card">
+            <article class="report-card aura-card">
               <header><h4>Review Reply Report</h4><span>{{ dhandaReviewSummary(audit).rating }} rating · {{ dhandaReviewSummary(audit).count }} reviews</span><button class="report-link" type="button" (click)="openGrowthReport('reviews', 'copilot')">Open</button></header>
               <div class="status-list">
                 <article *ngFor="let reply of dhandaAiReplies(audit)">
@@ -448,7 +448,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div class="empty-state" *ngIf="!dhandaAiReplies(audit).length">Review engine data is pending. Reply report will appear after review rows sync.</div>
             </article>
 
-            <article class="report-card">
+            <article class="report-card aura-card">
               <header><h4>Customer Review Request Report</h4><span>sent / open / reminded</span><button class="report-link" type="button" (click)="openGrowthReport('customers', 'roi')">Open</button></header>
               <div class="request-report">
                 <article><span>Sent</span><strong>{{ dhandaCustomerStats(audit).sent }}</strong></article>
@@ -465,7 +465,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div class="empty-state" *ngIf="!dhandaCustomers(audit).length">Lead/customer attribution is pending. Customer report will appear after campaign ROI or attribution events are added.</div>
             </article>
 
-            <article class="report-card wide">
+            <article class="report-card aura-card wide">
               <header><h4>Keyword Rank Report</h4><span>search number + keyword + current rank</span><button class="report-link" type="button" (click)="openGrowthReport('keywords', 'ranks')">Open</button></header>
               <div class="table-wrap compact">
                 <table *ngIf="dhandaKeywords(audit).length">
@@ -483,7 +483,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </div>
             </article>
 
-            <article class="report-card">
+            <article class="report-card aura-card">
               <header><h4>Competitor Analysis Report</h4><span>rating + counter action</span><button class="report-link" type="button" (click)="openGrowthReport('competitors', 'competitor')">Open</button></header>
               <div class="mini-table report-table">
                 <div *ngFor="let row of dhandaCompetitors(audit)">
@@ -495,7 +495,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div class="empty-state" *ngIf="!dhandaCompetitors(audit).length">Competitor watch is empty. Report will appear after competitor alerts or signals are added.</div>
             </article>
 
-            <article class="report-card">
+            <article class="report-card aura-card">
               <header><h4>Post Media Report</h4><span>upload / poster / approval planner</span><button class="report-link" type="button" (click)="openGrowthReport('posts', 'planner')">Open</button></header>
               <div class="status-list">
                 <article *ngFor="let item of dhandaPostPlanner(audit)">
@@ -507,7 +507,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div class="empty-state" *ngIf="!dhandaPostPlanner(audit).length">Publishing planner is empty. Post/media report will appear after content is scheduled.</div>
             </article>
 
-            <article class="report-card wide">
+            <article class="report-card aura-card wide">
               <header><h4>Monthly Performance Report</h4><span>summary cards + chart insight</span><button class="report-link" type="button" (click)="openGrowthReport('performance', 'report')">Open</button></header>
               <div class="report-metrics">
                 <article *ngFor="let item of dhandaReportCards(audit)">
@@ -525,7 +525,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </div>
             </article>
 
-            <article class="report-card wide">
+            <article class="report-card aura-card wide">
               <header><h4>Social Calendar Report</h4><span>generated / approved / posted</span><button class="report-link" type="button" (click)="openGrowthReport('calendar', 'planner')">Open</button></header>
               <div class="calendar-board">
                 <span *ngFor="let item of dhandaCalendarPlan(audit)" [class.posted]="item.status === 'posted'" [class.approved]="item.status === 'approved'">
