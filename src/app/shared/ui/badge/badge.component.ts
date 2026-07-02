@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
 @Component({
-  selector: 'aura-badge',
+  selector: 'aura-legacy-badge',
   standalone: true,
   imports: [CommonModule],
   template: `<span class="aura-badge" [class]="tone"><ng-content></ng-content>{{ label }}</span>`,
@@ -28,7 +28,7 @@ import { Component, Input } from '@angular/core';
     .info { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
   `]
 })
-export class AuraBadgeComponent {
+export class LegacyAuraBadgeComponent {
   @Input() label = '';
   @Input() tone: 'neutral' | 'success' | 'warning' | 'danger' | 'info' = 'neutral';
 }

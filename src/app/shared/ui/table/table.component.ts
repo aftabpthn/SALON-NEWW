@@ -1,18 +1,18 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { ApiRecord } from '../../../core/api.service';
-import { AuraEmptyComponent } from '../empty/empty.component';
+import { LegacyAuraEmptyComponent } from '../empty/empty.component';
 
-export type AuraTableColumn = {
+export type LegacyAuraTableColumn = {
   key: string;
   label: string;
   type?: 'text' | 'currency' | 'badge' | 'number' | 'date';
 };
 
 @Component({
-  selector: 'aura-table',
+  selector: 'aura-legacy-table',
   standalone: true,
-  imports: [CommonModule, AuraEmptyComponent],
+  imports: [CommonModule, LegacyAuraEmptyComponent],
   template: `
     <div class="aura-table-wrap">
       <table>
@@ -42,7 +42,7 @@ export type AuraTableColumn = {
           </tr>
         </tbody>
       </table>
-      <aura-empty *ngIf="!rows.length" title="No records" message="Create a record or adjust filters."></aura-empty>
+      <aura-legacy-empty *ngIf="!rows.length" title="No records" message="Create a record or adjust filters."></aura-legacy-empty>
     </div>
   `,
   styles: [`
@@ -101,8 +101,8 @@ export type AuraTableColumn = {
     }
   `]
 })
-export class AuraTableComponent {
-  @Input() columns: AuraTableColumn[] = [];
+export class LegacyAuraTableComponent {
+  @Input() columns: LegacyAuraTableColumn[] = [];
   @Input() rows: ApiRecord[] = [];
   @Input() selectable = false;
   @Input() actions = true;
@@ -129,7 +129,7 @@ export class AuraTableComponent {
     return [...this.rows].sort((a, b) => String(a[this.sortKey] ?? '').localeCompare(String(b[this.sortKey] ?? '')) * direction);
   }
 
-  valueFor(row: ApiRecord, col: AuraTableColumn): string | number {
+  valueFor(row: ApiRecord, col: LegacyAuraTableColumn): string | number {
     const value = row[col.key];
     if (value === null || value === undefined || value === '') return '—';
     if (col.type === 'currency') return `₹${Number(value || 0).toLocaleString('en-IN')}`;

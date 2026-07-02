@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
 @Component({
-  selector: 'aura-page-header',
+  selector: 'aura-legacy-page-header',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -64,7 +64,7 @@ import { Component, Input } from '@angular/core';
     }
   `]
 })
-export class AuraPageHeaderComponent {
+export class LegacyAuraPageHeaderComponent {
   @Input() breadcrumb = '';
   @Input() title = '';
   @Input() subtitle = '';

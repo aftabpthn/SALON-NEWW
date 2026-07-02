@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
 @Component({
-  selector: 'aura-skeleton',
+  selector: 'aura-legacy-skeleton',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -44,7 +44,7 @@ import { Component, Input } from '@angular/core';
     '[style.--aura-skeleton-cols]': 'columns'
   }
 })
-export class AuraSkeletonComponent {
+export class LegacyAuraSkeletonComponent {
   @Input() rows = 6;
   @Input() columns = 4;
   @Input() variant: 'plain' | 'table' = 'plain';

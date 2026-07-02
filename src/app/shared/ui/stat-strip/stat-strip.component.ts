@@ -1,7 +1,7 @@
 import { CommonModule, NgClass } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
-export type AuraStat = {
+export type LegacyAuraStat = {
   label: string;
   value: string | number;
   hint?: string;
@@ -10,7 +10,7 @@ export type AuraStat = {
 };
 
 @Component({
-  selector: 'aura-stat-strip',
+  selector: 'aura-legacy-stat-strip',
   standalone: true,
   imports: [CommonModule, NgClass],
   template: `
@@ -78,7 +78,7 @@ export type AuraStat = {
     }
   `]
 })
-export class AuraStatStripComponent {
+export class LegacyAuraStatStripComponent {
   @Input() label = 'Key metrics';
-  @Input() stats: AuraStat[] = [];
+  @Input() stats: LegacyAuraStat[] = [];
 }

@@ -62,7 +62,7 @@
   --aura-space-4: var(--space-4);
   --aura-space-5: var(--space-5);
   --aura-space-6: 24px;
-  --aura-radius-sm: 4px;
+  --aura-radius-sm: var(--radius-xs);
   --aura-radius-md: var(--radius-sm);
   --aura-radius-lg: var(--radius-md);
   --aura-radius-full: 999px;
@@ -100,6 +100,13 @@
   --aura-overview-muted: var(--color-muted);
   --aura-overview-primary: var(--color-primary);
   --aura-overview-shadow: var(--aura-shadow-card);
+  --metric-card-min-height: 100px;
+  --metric-card-radius: 10px;
+  --metric-card-background: var(--surface);
+  --metric-card-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  --metric-card-hover-shadow: 0 4px 16px rgba(15, 118, 110, 0.08);
+  --metric-card-transition: box-shadow 140ms ease, transform 140ms ease;
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --space-1: 4px;
@@ -889,7 +896,7 @@ h3 {
 
 .metric-card {
   position: relative;
-  min-height: 100px;
+  min-height: var(--metric-card-min-height);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -899,14 +906,14 @@ h3 {
   color: var(--ink);
   text-decoration: none;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  transition: box-shadow 140ms ease, transform 140ms ease;
+  border-radius: var(--metric-card-radius);
+  background: var(--metric-card-background);
+  box-shadow: var(--metric-card-shadow);
+  transition: var(--metric-card-transition);
 }
 
 .metric-card:where(a):hover {
-  box-shadow: 0 4px 16px rgba(15, 118, 110, 0.08);
+  box-shadow: var(--metric-card-hover-shadow);
   transform: translateY(-2px);
 }
 
@@ -5101,13 +5108,19 @@ body::before {
 
 .metric-card,
 aura-kpi-card .metric-card {
-  min-height: 118px;
-  border-radius: 20px;
-  background:
+  --metric-card-min-height: 118px;
+  --metric-card-radius: 20px;
+  --metric-card-background:
     linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 248, 0.94)),
     var(--surface);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.07);
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  --metric-card-shadow: 0 18px 45px rgba(15, 23, 42, 0.07);
+  --metric-card-hover-shadow: var(--shadow-lg);
+  --metric-card-transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  min-height: var(--metric-card-min-height);
+  border-radius: var(--metric-card-radius);
+  background: var(--metric-card-background);
+  box-shadow: var(--metric-card-shadow);
+  transition: var(--metric-card-transition);
 }
 
 .metric-card:hover,
@@ -5115,7 +5128,7 @@ aura-kpi-card .metric-card:hover,
 .dashboard-hub-card:hover,
 .action-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--metric-card-hover-shadow, var(--shadow-lg));
 }
 
 .metric-card strong {

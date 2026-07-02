@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
-  selector: 'aura-empty',
+  selector: 'aura-legacy-empty',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -44,7 +44,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
     }
   `]
 })
-export class AuraEmptyComponent {
+export class LegacyAuraEmptyComponent {
   @Input() icon = 'A';
   @Input() title = 'No records found';
   @Input() message = 'Create a record or change filters to see results.';

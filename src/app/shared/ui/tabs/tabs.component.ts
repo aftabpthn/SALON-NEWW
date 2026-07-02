@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
-export type AuraTab = {
+export type LegacyAuraTab = {
   id: string;
   label: string;
   count?: number | string;
@@ -9,7 +9,7 @@ export type AuraTab = {
 };
 
 @Component({
-  selector: 'aura-tabs',
+  selector: 'aura-legacy-tabs',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -67,12 +67,12 @@ export type AuraTab = {
     }
   `]
 })
-export class AuraTabsComponent {
-  @Input() tabs: AuraTab[] = [];
+export class LegacyAuraTabsComponent {
+  @Input() tabs: LegacyAuraTab[] = [];
   @Input() active = '';
   @Output() activeChange = new EventEmitter<string>();
 
-  select(tab: AuraTab): void {
+  select(tab: LegacyAuraTab): void {
     if (tab.disabled) return;
     this.activeChange.emit(tab.id);
   }
