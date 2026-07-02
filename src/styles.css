@@ -283,14 +283,15 @@
 :where(.aura-card.aura-card--variant-outlined) { background: transparent; box-shadow: none; }
 :where(.aura-card.aura-card--variant-elevated) { box-shadow: var(--aura-shadow-card); }
 
-:where(.aura-card.aura-card--tone-primary, .aura-card.aura-card--type-action, .aura-card.aura-card--type-metric) { --aura-card-tone: var(--aura-primary); }
+:where(.aura-card.aura-card--tone-primary, .aura-card.aura-card--tone-teal, .aura-card.aura-card--tone-violet, .aura-card.aura-card--type-action, .aura-card.aura-card--type-metric) { --aura-card-tone: var(--aura-primary); }
 :where(.aura-card.aura-card--tone-green, .aura-card.aura-card--tone-success, .aura-card.aura-card--status-completed) { --aura-card-tone: var(--aura-success); }
 :where(.aura-card.aura-card--tone-amber, .aura-card.aura-card--tone-warning, .aura-card.aura-card--status-pending) { --aura-card-tone: var(--aura-warning); }
 :where(.aura-card.aura-card--tone-red, .aura-card.aura-card--tone-danger, .aura-card.aura-card--status-cancelled, .aura-card.aura-card--status-canceled) { --aura-card-tone: var(--aura-danger); }
 :where(.aura-card.aura-card--tone-info, .aura-card.aura-card--tone-blue) { --aura-card-tone: var(--aura-info); }
 :where(.aura-card.aura-card--tone-rose) { --aura-card-tone: var(--aura-rose); }
+:where(.aura-card.aura-card--tone-slate) { --aura-card-tone: #475569; }
 
-:where(.aura-card.aura-card--tone-primary, .aura-card.aura-card--tone-green, .aura-card.aura-card--tone-success, .aura-card.aura-card--tone-amber, .aura-card.aura-card--tone-warning, .aura-card.aura-card--tone-red, .aura-card.aura-card--tone-danger, .aura-card.aura-card--tone-info, .aura-card.aura-card--tone-blue, .aura-card.aura-card--tone-rose, .aura-card.aura-card--type-action, .aura-card.aura-card--type-metric, .aura-card[class*='aura-card--status-']) {
+:where(.aura-card.aura-card--tone-primary, .aura-card.aura-card--tone-teal, .aura-card.aura-card--tone-violet, .aura-card.aura-card--tone-green, .aura-card.aura-card--tone-success, .aura-card.aura-card--tone-amber, .aura-card.aura-card--tone-warning, .aura-card.aura-card--tone-red, .aura-card.aura-card--tone-danger, .aura-card.aura-card--tone-info, .aura-card.aura-card--tone-blue, .aura-card.aura-card--tone-rose, .aura-card.aura-card--tone-slate, .aura-card.aura-card--type-action, .aura-card.aura-card--type-metric, .aura-card[class*='aura-card--status-']) {
   border-top-color: var(--aura-card-tone);
 }
 

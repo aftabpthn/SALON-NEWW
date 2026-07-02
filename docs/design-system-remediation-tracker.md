@@ -11,12 +11,14 @@ Source: `C:\Users\ADMIN\.codex\attachments\3fac217b-b697-4dfb-9443-44a7d6242a64\
 - A canonical standalone `aura-card` component exists with `tone`, `variant`, `padding`, `radius`, `shadow`, `hover`, and `interactive` inputs.
 - Global `.aura-card--*` utility classes exist for incremental class-based migrations.
 - `aura-kpi-card` now opts into the shared utility surface with `metric-card aura-card aura-card--type-metric aura-card--hover aura-card--interactive`, preserving legacy CSS behavior while joining the new card system.
+- `app-metric-card` now emits the same `metric-card aura-card aura-card--type-metric aura-card--hover` bridge and pairs legacy tones with `aura-card--tone-*` aliases.
 
 ## Migration Rules
 
 - Do not remove legacy card classes during migration; pair them with `.aura-card` utilities first.
 - Prefer `aura-card` for new framed surfaces and repeated cards.
 - For existing KPI surfaces, keep `metric-card` until the owning page has been visually checked, then add `aura-card aura-card--type-metric` and a tone alias.
+- Legacy metric tones map forward as `teal`, `violet`, `slate`, `green`, `amber`, `red`, `blue`, and `rose` utility aliases; keep the legacy tone class while migrating.
 - For action cards, use `aura-card aura-card--type-action` before removing any old `.action-card` styling.
 - For booking/status cards, add `aura-card--status-pending`, `aura-card--status-completed`, `aura-card--status-cancelled`, or `aura-card--status-canceled` alongside the old status class.
 - Page migrations must be incremental and verified with build plus visual inspection for the affected page.

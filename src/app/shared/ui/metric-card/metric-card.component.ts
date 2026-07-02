@@ -6,7 +6,7 @@ import { Component, Input } from '@angular/core';
   standalone: true,
   imports: [CommonModule, CurrencyPipe],
   template: `
-    <article class="metric-card" [ngClass]="tone">
+    <article class="metric-card aura-card aura-card--type-metric aura-card--hover" [ngClass]="toneClasses">
       <span>{{ label }}</span>
       <strong>{{ value }}</strong>
       <small>{{ hint }}</small>
@@ -18,4 +18,8 @@ export class MetricCardComponent {
   @Input() value: string | number = '';
   @Input() hint = '';
   @Input() tone = 'teal';
+
+  get toneClasses(): string[] {
+    return [this.tone, `aura-card--tone-${this.tone}`].filter(Boolean);
+  }
 }

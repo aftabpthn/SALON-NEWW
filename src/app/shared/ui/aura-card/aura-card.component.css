@@ -33,7 +33,9 @@
 .aura-card--variant-outlined { background: transparent; box-shadow: none; }
 .aura-card--variant-elevated { box-shadow: var(--aura-shadow-card); }
 
-.aura-card--tone-primary { --aura-card-tone: var(--aura-primary); }
+.aura-card--tone-primary,
+.aura-card--tone-teal,
+.aura-card--tone-violet { --aura-card-tone: var(--aura-primary); }
 .aura-card--tone-success,
 .aura-card--tone-green { --aura-card-tone: var(--aura-success); }
 .aura-card--tone-warning,
@@ -43,8 +45,11 @@
 .aura-card--tone-info,
 .aura-card--tone-blue { --aura-card-tone: var(--aura-info); }
 .aura-card--tone-rose { --aura-card-tone: var(--aura-rose); }
+.aura-card--tone-slate { --aura-card-tone: #475569; }
 
 .aura-card--tone-primary,
+.aura-card--tone-teal,
+.aura-card--tone-violet,
 .aura-card--tone-success,
 .aura-card--tone-green,
 .aura-card--tone-warning,
@@ -53,7 +58,8 @@
 .aura-card--tone-red,
 .aura-card--tone-info,
 .aura-card--tone-blue,
-.aura-card--tone-rose {
+.aura-card--tone-rose,
+.aura-card--tone-slate {
   border-top-color: var(--aura-card-tone);
 }
 

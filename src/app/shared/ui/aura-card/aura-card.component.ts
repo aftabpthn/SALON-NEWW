@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
-export type AuraCardTone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'rose' | 'green' | 'amber' | 'red' | 'blue';
+export type AuraCardTone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'rose' | 'green' | 'amber' | 'red' | 'blue' | 'teal' | 'violet' | 'slate';
 export type AuraCardVariant = 'surface' | 'muted' | 'outlined' | 'elevated';
 export type AuraCardPadding = 'none' | 'sm' | 'md' | 'lg';
 export type AuraCardRadius = 'sm' | 'md' | 'lg';
