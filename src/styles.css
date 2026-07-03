@@ -12316,3 +12316,173 @@ app-market-intelligence :where(.branch-dot) {
   }
 }
 /* End AuraSalon discount and pricing operations polish layer. */
+
+/* AuraSalon shell interaction polish layer. */
+.app-shell {
+  --shell-rail-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 247, 243, 0.94));
+  --shell-rail-border: var(--aura-border-soft, rgba(75, 18, 56, 0.12));
+}
+
+.topbar {
+  isolation: isolate;
+  min-width: 0;
+  box-shadow: 0 10px 28px rgba(75, 18, 56, 0.055) !important;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 143, 159, 0.55), transparent);
+  pointer-events: none;
+}
+
+.topbar-brand-title {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.topbar-brand-title h1 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-actions {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.topbar-actions aura-workspace-switcher {
+  min-width: min(100%, 420px);
+  max-width: 100%;
+}
+
+.topbar-actions .dark-button {
+  white-space: nowrap;
+}
+
+.topbar-divider {
+  align-self: stretch;
+  width: 1px;
+  min-height: 32px;
+  background: var(--aura-border-soft, rgba(75, 18, 56, 0.12));
+}
+
+.sidebar-search-flyout {
+  border-color: var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
+  border-radius: 14px !important;
+  background: var(--aura-surface-strong, #fff) !important;
+  box-shadow: var(--aura-shadow-lg, 0 18px 44px rgba(75, 18, 56, 0.12)) !important;
+}
+
+.sidebar-search-result,
+.nav-section-trigger,
+.nav-subitem,
+.nav-subgroup-title,
+.sidebar-care-ai-action {
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.sidebar-search-result:hover,
+.sidebar-search-result.active,
+.nav-section-trigger:hover,
+.nav-subitem:hover,
+.nav-subgroup-title:hover,
+.sidebar-care-ai-action:hover {
+  transform: translateY(-1px);
+}
+
+.workspace-route-shell--with-local-nav {
+  border-color: var(--shell-rail-border) !important;
+  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  background: var(--aura-surface-raised, rgba(255, 255, 255, 0.94)) !important;
+  box-shadow: 0 10px 26px rgba(75, 18, 56, 0.055) !important;
+  overflow: clip;
+}
+
+.workspace-local-rail {
+  border-right-color: var(--shell-rail-border) !important;
+  background: var(--shell-rail-bg) !important;
+}
+
+.workspace-local-rail-head {
+  border-bottom-color: var(--shell-rail-border) !important;
+}
+
+.workspace-local-rail-head strong,
+.workspace-local-nav a {
+  color: var(--aura-text, #1f2933) !important;
+  letter-spacing: 0;
+}
+
+.workspace-local-nav a {
+  border-radius: 10px !important;
+}
+
+.workspace-local-nav a.active,
+.workspace-local-nav a:hover,
+.workspace-local-nav a:focus-visible {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 26%, var(--shell-rail-border)) !important;
+  color: var(--aura-primary, #4b1238) !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 72%, white 28%) !important;
+  box-shadow: inset 3px 0 0 var(--aura-primary, #4b1238), 0 8px 18px rgba(75, 18, 56, 0.08) !important;
+}
+
+.workspace-route-content > .workspace-module-tabs {
+  border-bottom-color: var(--shell-rail-border) !important;
+  background: color-mix(in srgb, var(--aura-bg, #faf7f2) 72%, white 28%) !important;
+}
+
+@media (max-width: 1180px) {
+  .topbar-actions {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+  }
+
+  .topbar-actions aura-workspace-switcher {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    gap: 10px !important;
+  }
+
+  .topbar-brand-title,
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .topbar-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar-divider {
+    display: none;
+  }
+
+  .topbar-actions .dark-button,
+  .topbar-actions aura-header-actions {
+    width: 100%;
+  }
+
+  .workspace-route-shell--with-local-nav {
+    border-radius: 12px !important;
+    overflow: visible;
+  }
+
+  .workspace-local-rail {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--shell-rail-border) !important;
+  }
+
+  .workspace-local-nav {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr)) !important;
+  }
+}
+/* End AuraSalon shell interaction polish layer. */
