@@ -53,6 +53,7 @@ export const routes: Routes = [
     { path: 'sign-off-controls', loadComponent: () => import('./pages/data-migration-section.component').then(m => m.DataMigrationSectionComponent), title: 'Sign-off Controls' },
     { path: 'quality-sandbox-approval-gate', loadComponent: () => import('./pages/data-migration-section.component').then(m => m.DataMigrationSectionComponent), title: 'Quality, Sandbox & Approval Gate' },
     { path: 'ask-why-rows-failed', loadComponent: () => import('./pages/data-migration-section.component').then(m => m.DataMigrationSectionComponent), title: 'Ask Why Rows Failed' },
+    { path: 'purchase-bill-history', loadComponent: () => import('./pages/data-migration-section.component').then(m => m.DataMigrationSectionComponent), title: 'Historical Purchase Bill Migration' },
     { path: 'jobs-audits-rollback-history', loadComponent: () => import('./pages/data-migration-section.component').then(m => m.DataMigrationSectionComponent), title: 'Jobs, Audits and Rollback History' }
   ] },
   { path: 'offline', loadComponent: () => import('./pages/offline-support.component').then(m => m.OfflineSupportComponent), title: 'Offline Support' },

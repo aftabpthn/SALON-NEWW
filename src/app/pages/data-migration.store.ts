@@ -49,6 +49,7 @@ export class DataMigrationStore {
     { value: 'services', label: 'Services' },
     { value: 'products', label: 'Products' },
     { value: 'inventory', label: 'Inventory' },
+    { value: 'purchaseBills', label: 'Purchase Bills (history only)' },
     { value: 'vendors', label: 'Vendors' },
     { value: 'expenses', label: 'Expenses' },
     { value: 'memberships', label: 'Memberships' },

@@ -215,6 +215,26 @@ type MigrationRecoveryReport = {
       </section>
 
       <section class="workspace-grid">
+        <article class="panel import-panel" *ngIf="showMigrationSection('purchase-bill-history')">
+          <div class="panel-head">
+            <div>
+              <h2>Historical purchase bill migration</h2>
+              <p>Import old vendor bills into purchase bill history only. Supplier details and product line items are preserved, but product masters, batches and inventory stock are not created.</p>
+            </div>
+            <span class="status-pill">History only</span>
+          </div>
+          <div class="control-strip compact">
+            <article><span>Target</span><strong>Purchase bill drafts</strong><small>Status: historical_imported</small></article>
+            <article><span>Inventory effect</span><strong>0 stock movement</strong><small>No old purchase quantity appears in live inventory</small></article>
+            <article><span>Vendor detail</span><strong>Name, GSTIN, phone</strong><small>Email and address are also retained when mapped</small></article>
+          </div>
+          <div class="action-row">
+            <button class="primary-button" type="button" (click)="selectHistoricalPurchaseBillMigration()">Use purchase bill template</button>
+            <a class="ghost-button" routerLink="/inventory/purchase-bill-drafts">View migrated bills</a>
+          </div>
+          <p class="estimate-text">Required columns: branch, supplier name, bill number, product name and quantity. Optional columns preserve GST, SKU, batch, expiry and vendor contact details.</p>
+        </article>
+
         <article class="panel import-panel" *ngIf="showMigrationSection('controlled-migration-launch')">
           <div class="panel-head">
             <div>
@@ -1089,6 +1109,7 @@ type MigrationRecoveryReport = {
 export class DataMigrationComponent implements OnInit, OnDestroy {
   readonly migrationPages = [
     { route: '/data-migration/controlled-migration-launch', section: 'controlled-migration-launch', label: 'Controlled migration launch', description: 'Source upload, analyzer, dry run and import actions', icon: 'CL', badge: 'Start', exact: true },
+    { route: '/data-migration/purchase-bill-history', section: 'purchase-bill-history', label: 'Purchase bill history', description: 'Migrate old vendor bills as history without adding inventory stock', icon: 'PB', badge: 'No stock', exact: true },
     { route: '/data-migration/import-blockers', section: 'import-blockers', label: 'Import blockers', description: 'Critical errors, warnings, duplicates and adapter readiness', icon: 'IB', badge: 'Risk', exact: true },
     { route: '/data-migration/chunked-import-queue', section: 'chunked-import-queue', label: 'Chunked import queue', description: 'Large import job, chunks, worker tick and resume controls', icon: 'CQ', badge: 'Queue', exact: true },
     { route: '/data-migration/reconciliation-sign-off', section: 'reconciliation-sign-off', label: 'Reconciliation sign-off', description: 'Proof checks, reconciliation evidence and export', icon: 'RS', badge: 'Proof', exact: true },
@@ -1134,6 +1155,7 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
     { value: 'services', label: 'Services' },
     { value: 'products', label: 'Products' },
     { value: 'inventory', label: 'Inventory' },
+    { value: 'purchaseBills', label: 'Purchase Bills (history only)' },
     { value: 'vendors', label: 'Vendors' },
     { value: 'expenses', label: 'Expenses' },
     { value: 'memberships', label: 'Memberships' },
@@ -1513,6 +1535,13 @@ export class DataMigrationComponent implements OnInit, OnDestroy {
   refreshSourceContext(): void {
     this.message.set(`${this.selectedSourceLabel()} adapter selected.`);
     this.rebuildMappingDraft();
+  }
+
+  selectHistoricalPurchaseBillMigration(): void {
+    this.resource = 'purchaseBills';
+    this.selectedMappingId = '';
+    this.rebuildMappingDraft();
+    this.message.set('Purchase bill history template selected. Import will preserve vendor and item lines without adding stock to inventory.');
   }
 
   onResourceChange(): void {

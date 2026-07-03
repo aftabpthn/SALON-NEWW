@@ -35,6 +35,7 @@ const RESOURCE_ORDER = [
   "staff",
   "services",
   "products",
+  "purchaseBills",
   "vendors",
   "expenses",
   "memberships",
@@ -51,6 +52,7 @@ const RESOURCE_ALIASES = {
   services: ["service", "services", "menu", "service master"],
   products: ["product", "products", "items", "stock item", "inventory product"],
   inventory: ["inventory", "stock", "stock movement", "opening stock", "stock ledger"],
+  purchaseBills: ["purchase bill", "purchase bills", "purchase invoice", "purchase invoices", "vendor bill", "vendor bills", "supplier bill", "supplier bills", "old purchase bill", "historical purchase bill"],
   vendors: ["vendor", "vendors", "supplier", "suppliers"],
   expenses: ["expense", "expenses", "purchase expense", "petty cash"],
   memberships: ["membership", "memberships", "package", "packages", "package balance"],
@@ -80,6 +82,23 @@ const FIELD_ALIASES = {
   durationMinutes: ["duration", "duration minutes", "service time", "time"],
   sku: ["sku", "barcode", "item code", "product code"],
   supplier: ["supplier", "vendor", "brand"],
+  supplierName: ["supplier name", "vendor name", "party name", "bill from"],
+  supplierGstin: ["supplier gstin", "vendor gstin", "party gstin", "gstin", "gst no", "gst number"],
+  supplierPhone: ["supplier phone", "vendor phone", "supplier mobile", "vendor mobile", "contact number"],
+  supplierEmail: ["supplier email", "vendor email", "email"],
+  supplierAddress: ["supplier address", "vendor address", "address"],
+  billNo: ["bill no", "bill number", "purchase bill no", "invoice no", "invoice number", "supplier invoice no", "vendor invoice no"],
+  billDate: ["bill date", "purchase bill date", "invoice date", "supplier invoice date", "date"],
+  stockUnit: ["stock unit", "inventory unit", "unit"],
+  purchaseUnit: ["purchase unit", "billing unit", "unit"],
+  conversionFactor: ["conversion factor", "pack size", "unit conversion"],
+  mrp: ["mrp", "maximum retail price"],
+  gstRate: ["gst rate", "gst percent", "tax rate", "tax percent"],
+  cgstAmount: ["cgst", "cgst amount"],
+  sgstAmount: ["sgst", "sgst amount"],
+  igstAmount: ["igst", "igst amount"],
+  lineTotal: ["line total", "item total", "amount", "total"],
+  batchNumber: ["batch", "batch no", "batch number", "lot no"],
   stock: ["stock", "quantity", "qty", "current stock", "available qty", "opening stock"],
   lowStockThreshold: ["low stock", "minimum stock", "min stock", "reorder level"],
   unitCost: ["cost", "unit cost", "purchase price", "buying price"],
@@ -153,6 +172,11 @@ const RESOURCE_TEMPLATES = {
     table: "inventory_transactions",
     required: ["productId", "branchId", "type", "quantity"],
     fields: ["originalRecordId", "productId", "productName", "sku", "branchId", "branchName", "type", "quantity", "unitCost", "reason", "createdAt"]
+  },
+  purchaseBills: {
+    table: "purchase_bill_drafts",
+    required: ["branchId", "supplierName", "billNo", "productName", "quantity"],
+    fields: ["originalRecordId", "branchId", "branchName", "supplierName", "supplierGstin", "supplierPhone", "supplierEmail", "supplierAddress", "billNo", "billDate", "productName", "sku", "category", "quantity", "stockUnit", "purchaseUnit", "conversionFactor", "unitCost", "mrp", "gstRate", "taxAmount", "cgstAmount", "sgstAmount", "igstAmount", "lineTotal", "batchNumber", "expiryDate", "notes", "createdAt"]
   },
   vendors: {
     table: "suppliers",
@@ -2000,6 +2024,40 @@ function buildPayload(resource, fields, { branchId }) {
       createdAt: createdAt || undefined
     };
   }
+  if (resource === "purchaseBills") {
+    const quantity = numberValue(fields.quantity ?? fields.stock, 0);
+    const unitCost = money(fields.unitCost);
+    const taxableAmount = money(fields.lineTotal || fields.total || (quantity * unitCost));
+    return {
+      branchId,
+      supplierName: cleanText(fields.supplierName || fields.vendor || fields.supplier),
+      supplierGstin: cleanText(fields.supplierGstin || fields.gstin),
+      supplierPhone: normalizePhone(fields.supplierPhone || fields.phone),
+      supplierEmail: cleanText(fields.supplierEmail || fields.email),
+      supplierAddress: cleanText(fields.supplierAddress || fields.address),
+      billNo: cleanText(fields.billNo || fields.invoiceNumber || fields.reference || fields.originalRecordId),
+      billDate: dateOnly(fields.billDate || fields.createdAt) || dateOnly(createdAt),
+      productName: cleanText(fields.productName || fields.name || fields.lineItem),
+      sku: cleanText(fields.sku),
+      category: cleanText(fields.category) || "Imported",
+      quantity,
+      stockUnit: cleanText(fields.stockUnit) || "pcs",
+      purchaseUnit: cleanText(fields.purchaseUnit || fields.stockUnit) || "pcs",
+      conversionFactor: numberValue(fields.conversionFactor, 1) || 1,
+      unitCost,
+      mrp: money(fields.mrp || fields.price),
+      gstRate: numberValue(fields.gstRate, 18),
+      taxAmount: money(fields.taxAmount || fields.gstAmount),
+      cgstAmount: money(fields.cgstAmount),
+      sgstAmount: money(fields.sgstAmount),
+      igstAmount: money(fields.igstAmount),
+      lineTotal: taxableAmount,
+      batchNumber: cleanText(fields.batchNumber),
+      expiryDate: dateOnly(fields.expiryDate),
+      notes: cleanText(fields.notes),
+      createdAt: createdAt || undefined
+    };
+  }
   if (resource === "vendors") {
     return {
       name: cleanText(fields.name || fields.vendor || fields.supplier),
@@ -2386,6 +2444,10 @@ function importOne(row, { access, batchId, sourceSoftware, migrationMode, contex
     product.stock = Number(product.stock || 0) + Number(payload.quantity || 0);
     return { action: "created", targetId: created.id, status: row.status, message: "Inventory movement imported" };
   }
+  if (row.resource === "purchaseBills") {
+    const created = importHistoricalPurchaseBill(row, payload, { access, batchId, sourceSoftware, meta });
+    return { action: "created", targetId: created.id, status: row.status, message: "Historical purchase bill line imported without stock movement" };
+  }
   if (row.resource === "vendors") {
     const existing = context.vendors.find((item) => same(item.name, payload.name));
     if (existing) return { action: "skipped", targetId: existing.id, status: "warning", message: "Vendor already exists" };
@@ -2449,6 +2511,147 @@ function importOne(row, { access, batchId, sourceSoftware, migrationMode, contex
     return { action: "created", targetId: created.id, status: row.status, message: "Payment imported" };
   }
   return { action: "skipped", targetId: "", status: "warning", message: "Unsupported resource" };
+}
+
+function importHistoricalPurchaseBill(row, payload, options) {
+  const { access, batchId, sourceSoftware, meta } = options;
+  const branchId = payload.branchId || access.branchId || "";
+  const supplierKey = historicalPurchaseSupplierKey(payload);
+  const billNo = payload.billNo || row.sourceExternalId;
+  const draft = db.prepare(`
+    SELECT * FROM purchase_bill_drafts
+    WHERE tenant_id = @tenantId AND branch_id = @branchId
+      AND supplier_key = @supplierKey AND bill_no = @billNo
+      AND status = 'historical_imported'
+    ORDER BY created_at DESC LIMIT 1
+  `).get({ tenantId: access.tenantId, branchId, supplierKey, billNo });
+  const draftId = draft?.id || makeId("pbdmig");
+  const stamp = payload.createdAt || now();
+  const lineTotal = money(payload.lineTotal || (Number(payload.quantity || 0) * Number(payload.unitCost || 0)));
+  const taxAmount = money(payload.taxAmount || payload.gstAmount || (Number(payload.cgstAmount || 0) + Number(payload.sgstAmount || 0) + Number(payload.igstAmount || 0)));
+  if (!draft) {
+    db.prepare(`
+      INSERT INTO purchase_bill_drafts (
+        id, tenant_id, branch_id, supplier_id, supplier_key, supplier_name, supplier_gstin,
+        supplier_phone, supplier_email, supplier_address, purchase_order_id, po_match_json,
+        bill_no, bill_date, status, source_type, ai_provider, ai_confidence,
+        subtotal, gst_amount, cgst_amount, sgst_amount, igst_amount, total_amount,
+        mismatch_amount, validation_status, image_path, original_file_name, raw_text,
+        extraction_json, warnings_json, confirmed_at, confirmed_by, confirmed_inventory_json,
+        version, created_at, updated_at
+      ) VALUES (
+        @id, @tenantId, @branchId, '', @supplierKey, @supplierName, @supplierGstin,
+        @supplierPhone, @supplierEmail, @supplierAddress, '', '{}',
+        @billNo, @billDate, 'historical_imported', 'migration_history', @sourceSoftware, 1,
+        0, 0, 0, 0, 0, 0,
+        0, 'historical_no_stock', '', @fileName, @rawText,
+        @extractionJson, @warningsJson, @confirmedAt, @confirmedBy, '[]',
+        1, @createdAt, @updatedAt
+      )
+    `).run({
+      id: draftId,
+      tenantId: access.tenantId,
+      branchId,
+      supplierKey,
+      supplierName: payload.supplierName,
+      supplierGstin: payload.supplierGstin,
+      supplierPhone: payload.supplierPhone,
+      supplierEmail: payload.supplierEmail,
+      supplierAddress: payload.supplierAddress,
+      billNo,
+      billDate: payload.billDate || dateOnly(stamp),
+      sourceSoftware,
+      fileName: row.sourceSheet || "migration",
+      rawText: payload.notes || "Historical purchase bill migrated without stock movement.",
+      extractionJson: JSON.stringify({ migration: meta, sourceExternalId: row.sourceExternalId, sourceSoftware }),
+      warningsJson: JSON.stringify(["Historical migration only: products are stored as bill lines and stock is not received."]),
+      confirmedAt: stamp,
+      confirmedBy: access.userId || access.role || "migration",
+      createdAt: stamp,
+      updatedAt: now()
+    });
+  }
+  const lineNo = Number(db.prepare("SELECT COALESCE(MAX(line_no), 0) nextLine FROM purchase_bill_draft_items WHERE tenant_id = @tenantId AND draft_id = @draftId").get({ tenantId: access.tenantId, draftId })?.nextLine || 0) + 1;
+  const conversionFactor = numberValue(payload.conversionFactor, 1) || 1;
+  const stockQty = Number(payload.quantity || 0) * conversionFactor;
+  const itemId = makeId("pbdimli");
+  db.prepare(`
+    INSERT INTO purchase_bill_draft_items (
+      id, tenant_id, branch_id, draft_id, line_no, product_id, matched_product_id,
+      match_status, match_confidence, is_new_product, raw_name, product_name,
+      category_id, category_name, usage_type, stock_unit, purchase_unit, pack_size,
+      conversion_factor, qty, stock_qty, unit_cost, mrp, hsn_sac, discount_percent,
+      discount_amount, gst_percent, taxable_amount, gst_amount, cgst_amount,
+      sgst_amount, igst_amount, line_total, batch_number, expiry_date, supplier_sku,
+      warnings_json, match_suggestions_json, status, version, created_at, updated_at
+    ) VALUES (
+      @id, @tenantId, @branchId, @draftId, @lineNo, '', '',
+      'historical_line', 0, 1, @rawName, @productName,
+      '', @categoryName, 'retail', @stockUnit, @purchaseUnit, 1,
+      @conversionFactor, @qty, @stockQty, @unitCost, @mrp, '', 0,
+      0, @gstPercent, @taxableAmount, @gstAmount, @cgstAmount,
+      @sgstAmount, @igstAmount, @lineTotal, @batchNumber, @expiryDate, @supplierSku,
+      @warningsJson, '[]', 'historical_imported', 1, @createdAt, @updatedAt
+    )
+  `).run({
+    id: itemId,
+    tenantId: access.tenantId,
+    branchId,
+    draftId,
+    lineNo,
+    rawName: payload.productName,
+    productName: payload.productName,
+    categoryName: payload.category || "Imported",
+    stockUnit: payload.stockUnit || "pcs",
+    purchaseUnit: payload.purchaseUnit || payload.stockUnit || "pcs",
+    conversionFactor,
+    qty: numberValue(payload.quantity, 0),
+    stockQty,
+    unitCost: money(payload.unitCost),
+    mrp: money(payload.mrp),
+    gstPercent: numberValue(payload.gstRate, 18),
+    taxableAmount: Math.max(0, lineTotal - taxAmount),
+    gstAmount: taxAmount,
+    cgstAmount: money(payload.cgstAmount),
+    sgstAmount: money(payload.sgstAmount),
+    igstAmount: money(payload.igstAmount),
+    lineTotal,
+    batchNumber: payload.batchNumber || `HIST-${billNo || draftId}-${lineNo}`,
+    expiryDate: payload.expiryDate || "",
+    supplierSku: payload.sku || "",
+    warningsJson: JSON.stringify(["Historical bill line only; no product master or inventory stock was created."]),
+    createdAt: stamp,
+    updatedAt: now()
+  });
+  db.prepare(`
+    UPDATE purchase_bill_drafts
+       SET subtotal = subtotal + @taxableAmount,
+           gst_amount = gst_amount + @gstAmount,
+           cgst_amount = cgst_amount + @cgstAmount,
+           sgst_amount = sgst_amount + @sgstAmount,
+           igst_amount = igst_amount + @igstAmount,
+           total_amount = total_amount + @lineTotal,
+           updated_at = @updatedAt
+     WHERE tenant_id = @tenantId AND id = @draftId
+  `).run({
+    tenantId: access.tenantId,
+    draftId,
+    taxableAmount: Math.max(0, lineTotal - taxAmount),
+    gstAmount: taxAmount,
+    cgstAmount: money(payload.cgstAmount),
+    sgstAmount: money(payload.sgstAmount),
+    igstAmount: money(payload.igstAmount),
+    lineTotal,
+    updatedAt: now()
+  });
+  return { id: draftId, itemId };
+}
+
+function historicalPurchaseSupplierKey(payload = {}) {
+  return [payload.supplierGstin, payload.supplierName, payload.supplierPhone]
+    .map((value) => cleanText(value).toLowerCase())
+    .filter(Boolean)
+    .join("|") || "unknown-supplier";
 }
 
 function createImportedSale(payload, context, access, meta) {
@@ -3729,6 +3932,7 @@ function canonicalResource(resource) {
   const cleaned = cleanKey(resource);
   if (!cleaned || cleaned === "auto") return "";
   if (RESOURCE_TEMPLATES[cleaned]) return cleaned;
+  if (cleaned === "purchasebills") return "purchaseBills";
   for (const [key, aliases] of Object.entries(RESOURCE_ALIASES)) {
     if (aliases.some((alias) => cleanKey(alias) === cleaned)) return key;
   }

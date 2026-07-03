@@ -104,6 +104,7 @@ type UploadFile = {
               <option value="">All</option>
               <option value="draft">Draft</option>
               <option value="confirmed">Confirmed</option>
+              <option value="historical_imported">Historical import</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
