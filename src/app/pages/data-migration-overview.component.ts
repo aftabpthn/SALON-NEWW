@@ -79,13 +79,13 @@ import { DataMigrationStore } from './data-migration.store';
     .control-strip strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
     .module-card { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; cursor: pointer; transition: box-shadow .15s, border-color .15s; }
-    .module-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-color: #0f8f7f; }
+    .module-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-color: #5A153F; }
     .module-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
     .module-body { flex: 1; min-width: 0; display: grid; gap: 3px; }
     .module-body strong { font-size: 14px; color: #172033; }
     .module-body span { font-size: 12px; color: #64748b; line-height: 1.4; }
-    .module-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; background: #e8f7f4; color: #0f766e; white-space: nowrap; }
-    .module-badge.ready { background: #e8f7f4; color: #0f766e; }
+    .module-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; background: #F1E8EE; color: #4B1238; white-space: nowrap; }
+    .module-badge.ready { background: #F1E8EE; color: #4B1238; }
     .module-badge.pending { background: #fffbeb; color: #b45309; }
     .module-card button { flex-shrink: 0; }
     button { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #172033; }

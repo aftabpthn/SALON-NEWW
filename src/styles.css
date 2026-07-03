@@ -53,8 +53,8 @@
   --aura-fs-md: 15px;
   --aura-fs-lg: 18px;
   --aura-fs-xl: 22px;
-  --aura-fw-medium: 600;
-  --aura-fw-semibold: 700;
+  --aura-fw-medium: 500;
+  --aura-fw-semibold: 600;
   --aura-lh-tight: 1.3;
   --aura-space-1: var(--space-1);
   --aura-space-2: var(--space-2);
@@ -154,6 +154,7 @@
   --line: #E7DED6;
   --teal: #4B1238;
   --teal-2: #6D1B4D;
+  --teal-deep: #2D0B21;
   --blue: #4B1238;
   --amber: #F59E0B;
   --red: #E11D48;
@@ -354,7 +355,7 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    linear-gradient(180deg, rgba(15, 118, 110, 0.055), transparent 310px),
+    linear-gradient(180deg, rgba(75, 18, 56, 0.04), transparent 310px),
     var(--bg);
 }
 
@@ -713,7 +714,7 @@ a {
 }
 
 .app-shell.sidebar-is-compact {
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -1008,7 +1009,7 @@ h3 {
 }
 
 .metric-card.active-filter-card {
-  border-color: rgba(15, 118, 110, 0.42);
+  border-color: rgba(75, 18, 56, 0.25);
   background: var(--color-primary-soft);
 }
 
@@ -1019,7 +1020,7 @@ h3 {
   gap: 10px;
   margin-bottom: 14px;
   padding: 10px 12px;
-  border: 1px solid rgba(15, 118, 110, 0.24);
+  border: 1px solid rgba(75, 18, 56, 0.18);
   border-radius: 8px;
   background: var(--color-primary-soft);
 }
@@ -1049,7 +1050,7 @@ h3 {
 .metric-card span {
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.2;
   text-transform: none;
   white-space: nowrap;
@@ -1076,35 +1077,43 @@ h3 {
 }
 
 .metric-card.teal {
-  border-top: 4px solid var(--teal);
+  border-left: 3px solid var(--teal);
+  border-top-color: var(--line);
 }
 
 .metric-card.blue {
-  border-top: 4px solid var(--blue);
+  border-left: 3px solid var(--blue);
+  border-top-color: var(--line);
 }
 
 .metric-card.amber {
-  border-top: 4px solid var(--amber);
+  border-left: 3px solid var(--amber);
+  border-top-color: var(--line);
 }
 
 .metric-card.red {
-  border-top: 4px solid var(--red);
+  border-left: 3px solid var(--red);
+  border-top-color: var(--line);
 }
 
 .metric-card.green {
-  border-top: 4px solid var(--green);
+  border-left: 3px solid var(--green);
+  border-top-color: var(--line);
 }
 
 .metric-card.violet {
-  border-top: 4px solid var(--violet);
+  border-left: 3px solid var(--violet);
+  border-top-color: var(--line);
 }
 
 .metric-card.slate {
-  border-top: 4px solid #475569;
+  border-left: 3px solid #475569;
+  border-top-color: var(--line);
 }
 
 .metric-card.rose {
-  border-top: 4px solid var(--rose);
+  border-left: 3px solid var(--rose);
+  border-top-color: var(--line);
 }
 
 .dashboard-grid {
@@ -1224,7 +1233,7 @@ h3 {
   display: block;
   align-self: end;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, var(--teal), #63a88a);
+  background: linear-gradient(180deg, var(--teal), rgba(75, 18, 56, 0.55));
 }
 
 .chart-bars strong {
@@ -1275,10 +1284,10 @@ h3 {
   grid-template-columns: minmax(220px, 1.25fr) repeat(4, minmax(150px, 1fr));
   gap: 12px;
   padding: 14px;
-  border: 1px solid rgba(15, 118, 110, 0.2);
+  border: 1px solid rgba(75, 18, 56, 0.12);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.06), transparent 72%),
+    linear-gradient(135deg, rgba(75, 18, 56, 0.04), transparent 72%),
     var(--surface);
   box-shadow: var(--shadow);
 }
@@ -1296,7 +1305,7 @@ h3 {
 }
 
 .client-crm-tile.identity {
-  border-left: 4px solid var(--teal);
+  border-left: 3px solid var(--teal);
 }
 
 .client-crm-tile span,
@@ -1465,7 +1474,7 @@ h3 {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--teal), #4f9c73);
+  background: linear-gradient(90deg, var(--teal), rgba(75, 18, 56, 0.5));
 }
 
 .primary-button,
@@ -1496,7 +1505,7 @@ h3 {
 .primary-button:focus-visible,
 .dark-button:focus-visible,
 .ghost-button:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
@@ -1890,9 +1899,9 @@ td small {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 999px;
-  color: #0c4c47;
-  background: #d9f2ee;
-  font-weight: 900;
+  color: #4B1238;
+  background: rgba(75, 18, 56, 0.08);
+  font-weight: 700;
 }
 
 .avatar.large {
@@ -3533,9 +3542,9 @@ td small {
   justify-self: end;
   padding: 3px 8px;
   border-radius: 999px;
-  background: #e8f7f4;
+  background: rgba(75, 18, 56, 0.08);
   color: var(--primary);
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .split-total.warning-text {
@@ -3557,13 +3566,13 @@ td small {
 }
 
 .app-shell.sidebar-is-compact .enterprise-sidebar {
-  width: 56px;
+  width: 64px;
 }
 
 /* ── Tablet responsive ─────────────────── */
 @media (max-width: 1260px) {
   .app-shell {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
   }
   .app-shell .sidebar-panel {
     display: none;
@@ -3632,7 +3641,7 @@ td small {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.05), transparent 70%),
+    linear-gradient(135deg, rgba(75, 18, 56, 0.04), transparent 70%),
     #fff;
 }
 
@@ -4080,7 +4089,7 @@ body::before {
 }
 
 .app-shell.sidebar-is-compact {
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .workspace {
@@ -4103,7 +4112,7 @@ body::before {
   grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
   align-items: center;
   min-height: auto;
-  margin: 0 0 16px;
+  margin: 0;
   padding: 10px 14px;
   border: 0;
   border-bottom: 1px solid rgba(15, 118, 110, 0.12);
@@ -4272,8 +4281,8 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 56px;
-  min-width: 56px;
+  width: 64px;
+  min-width: 64px;
   flex-shrink: 0;
   padding: 12px 0;
   gap: 8px;
@@ -5822,8 +5831,8 @@ app-staff-os-section .context-links { justify-content: flex-start; }
 }
 
 .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
-  width: 56px;
-  max-width: 56px;
+  width: 64px;
+  max-width: 64px;
   padding: 12px 7px;
   gap: 10px;
 }
@@ -6188,8 +6197,8 @@ app-staff-os-section .context-links { justify-content: flex-start; }
 }
 
 .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar {
-  width: 56px !important;
-  max-width: 56px !important;
+  width: 64px !important;
+  max-width: 64px !important;
   padding: 12px 7px !important;
 }
 
@@ -8257,7 +8266,7 @@ body,
 
 .workspace,
 .enterprise-workspace {
-  padding-bottom: 32px !important;
+  padding-bottom: 0 !important;
 }
 
 .command-topbar,
@@ -8799,7 +8808,7 @@ body,
   top: 50% !important;
   transform: translateY(-50%) !important;
   min-height: 28px !important;
-  max-width: 56px !important;
+  max-width: 64px !important;
   padding: 0 8px !important;
   border-radius: 8px !important;
   border: 1px solid rgba(75, 18, 56, 0.12) !important;
@@ -8969,7 +8978,7 @@ body,
 }
 /* Local module rail polish: fixed narrow width with readable circular initials. */
 .workspace-route-shell--local-rail-collapsed .workspace-local-rail {
-  background: linear-gradient(180deg, #fffaf6 0%, #ffffff 100%) !important;
+  background: #fffaf8 !important;
   border-right: 1px solid rgba(75, 18, 56, 0.14) !important;
 }
 
@@ -9165,7 +9174,7 @@ body,
 /* Local rail overlap fix: reserve the narrow rail column and keep route content visible. */
 .workspace-route-shell.workspace-route-shell--with-local-nav {
   display: grid !important;
-  grid-template-columns: 204px minmax(0, 1fr) !important;
+  grid-template-columns: 180px minmax(0, 1fr) !important;
   align-items: start !important;
   column-gap: 0 !important;
   width: 100% !important;
@@ -9193,7 +9202,7 @@ body,
   min-width: 0 !important;
   max-width: 100% !important;
   overflow: hidden !important;
-  padding-left: 12px !important;
+  padding: 0 !important;
 }
 
 .workspace-route-shell.workspace-route-shell--with-local-nav.workspace-route-shell--local-rail-collapsed,
@@ -9276,7 +9285,7 @@ body,
 .workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content {
   align-content: start !important;
   row-gap: 0 !important;
-  padding-top: 0 !important;
+  padding: 0 !important;
 }
 
 .workspace-route-shell.workspace-route-shell--with-local-nav .workspace-route-content > .workspace-module-tabs {
@@ -10353,7 +10362,7 @@ app-dashboard .dashboard-command-panel .hub-icon {
   --aura-overview-border: #e2e8f0;
   --aura-overview-text: #172033;
   --aura-overview-muted: #64748b;
-  --aura-overview-primary: #0f766e;
+  --aura-overview-primary: #4B1238;
   --aura-overview-shadow: 0 8px 22px rgba(15, 23, 42, 0.055);
 }
 
@@ -11291,7 +11300,7 @@ body {
 }
 
 .workspace {
-  padding: 0 clamp(14px, 2vw, 30px) 30px !important;
+  padding: 0 !important;
 }
 
 .topbar {
@@ -11299,8 +11308,8 @@ body {
   top: 0;
   z-index: 22;
   min-height: 66px !important;
-  margin: 0 calc(clamp(14px, 2vw, 30px) * -1) 18px !important;
-  padding: 10px clamp(14px, 2vw, 30px) !important;
+  margin: 0 !important;
+  padding: 10px 14px !important;
   display: flex !important;
   align-items: center;
   justify-content: space-between;
@@ -11746,7 +11755,7 @@ app-dashboard .dashboard-greeting {
   min-height: 96px;
   padding: 20px 22px !important;
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background:
     linear-gradient(135deg, rgba(255,255,255,0.98), rgba(252,247,243,0.94)),
     var(--aura-surface-strong, #fff) !important;
@@ -11776,7 +11785,7 @@ app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-t
   min-height: 112px;
   padding: 16px 18px !important;
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.98), rgba(252,249,246,0.94)),
     #fff !important;
@@ -11794,13 +11803,13 @@ app-dashboard :where(.metric-value, .summary-tile strong) {
 }
 
 app-dashboard :where(.dashboard-panel, .dashboard-command-panel, .dashboard-summary-grid > .panel) {
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   overflow: clip;
 }
 
 app-appointments :where(.calendar-action-row, .calendar-panel, .date-strip-panel) {
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background: var(--aura-surface-raised, rgba(255,255,255,0.94)) !important;
   box-shadow: 0 10px 26px rgba(75, 18, 56, 0.06) !important;
 }
@@ -11841,7 +11850,7 @@ app-pos .pos-layout {
 
 app-pos :where(.pos-layout > .panel, .checkout-panel, .form-panel, .package-redeem-panel, .membership-redemption-panel) {
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background: var(--aura-surface-raised, rgba(255,255,255,0.94)) !important;
   box-shadow: 0 10px 26px rgba(75, 18, 56, 0.06) !important;
 }
@@ -11856,7 +11865,7 @@ app-pos :where(.pos-form, .checkout-panel) {
 }
 
 app-pos :where(.table-wrap) {
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   overflow-x: auto;
 }
 
@@ -11874,13 +11883,14 @@ app-clients .client-database-panel .table-toolbar {
   gap: 12px !important;
   padding: 14px !important;
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background: color-mix(in srgb, var(--aura-bg, #faf7f2) 72%, white 28%) !important;
+  padding: 0 !important;
   box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06) !important;
 }
 
 app-clients :where(.client-database-panel .table-wrap, .clients-crm-table) {
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
 }
 
 app-clients .clients-crm-table :where(th, td) {
@@ -11898,7 +11908,7 @@ app-inventory .inventory-shell {
 
 app-inventory :where(.zenoti-table-shell, .operations-panel, .product-panel, .autopilot-panel, .pos-intelligence-panel, .panel) {
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background: var(--aura-surface-raised, rgba(255,255,255,0.94)) !important;
   box-shadow: 0 10px 26px rgba(75, 18, 56, 0.06) !important;
 }
@@ -11983,8 +11993,8 @@ app-inventory :where(.zenoti-table-footer, .section-title, .panel-heading) {
 :where(app-staff-os-section, app-reports, app-reports-enterprise, app-balance-sheet, app-finance-engine, app-financial-summary-report, app-invoice-reports, app-profit-intelligence, app-memberships, app-packages, app-reputation-command-center-page, app-reviews-inbox-page, app-command-center-page, app-super-admin, app-white-label, app-ai-marketing-automation, app-whatsapp-automation, app-engagement-command-center, app-business-details, app-marketplace-settings, app-marketplace-integrations) :where(.panel, .billing-panel, .cc-panel, .score-panel, .alerts-panel, .feed-panel, .analytics-panel, .request-panel, .filter-panel, .review-list, .detail-panel, .page-heading, .kpi-card, .platform-card, .staff-workspace-panel, .staff-register-panel, .staff-workspace-detail, .staff-category-rail, .staff-list-toolbar, .staff-register-kpis article, .control-card, .form-panel, .report-card, .settings-card) {
   min-width: 0;
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
-  background: var(--aura-surface-raised, rgba(255, 255, 255, 0.94)) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
   color: var(--aura-text, #1f2933) !important;
   box-shadow: 0 10px 26px rgba(75, 18, 56, 0.06) !important;
   overflow: clip;
@@ -12014,7 +12024,7 @@ app-staff-os-section :where(.staff-shell-header, .staff-list-toolbar, .staff-reg
 app-staff-os-section :where(.staff-register-scroll, .table-wrap, .compact-table) {
   overflow-x: auto;
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background: #fff !important;
   box-shadow: 0 8px 22px rgba(75, 18, 56, 0.045) !important;
 }
@@ -12050,7 +12060,7 @@ app-staff-os-section :where(.primary, .refresh, .row-action, button, a.refresh) 
 :where(app-reports, app-reports-enterprise, app-balance-sheet, app-finance-engine, app-financial-summary-report, app-invoice-reports, app-profit-intelligence) :where(.table-wrap, .report-table, .ledger-table, .compact-table) {
   overflow-x: auto;
   border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   background: #fff !important;
   box-shadow: 0 8px 22px rgba(75, 18, 56, 0.045) !important;
 }
@@ -12072,7 +12082,7 @@ app-staff-os-section :where(.primary, .refresh, .row-action, button, a.refresh) 
 
 :where(app-reputation-command-center-page, app-reviews-inbox-page) :where(.table-wrap) {
   overflow-x: auto;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
 }
 
 app-command-center-page :where(.cc-grid, .cc-panel-grid) {
@@ -12090,11 +12100,11 @@ app-command-center-page :where(.cc-item, .cc-row, .cc-card) {
 }
 
 :where(app-memberships, app-packages, app-super-admin, app-white-label, app-ai-marketing-automation, app-whatsapp-automation, app-engagement-command-center, app-business-details, app-marketplace-settings, app-marketplace-integrations) :where(.table-wrap, table) {
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
 }
 
 :where(app-booking-portal, app-booking-wizard) :where(.portal-shell, .booking-shell, .booking-card, .service-card, .staff-card, .time-card, .summary-card, .portal-panel) {
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
+  border-radius: 0 !important;
   border-color: var(--aura-border-soft, rgba(75, 18, 56, 0.12)) !important;
   box-shadow: 0 10px 26px rgba(75, 18, 56, 0.06) !important;
 }
@@ -12397,15 +12407,16 @@ app-market-intelligence :where(.branch-dot) {
 
 .workspace-route-shell--with-local-nav {
   border-color: var(--shell-rail-border) !important;
-  border-radius: var(--aura-card-radius-premium, 14px) !important;
-  background: var(--aura-surface-raised, rgba(255, 255, 255, 0.94)) !important;
-  box-shadow: 0 10px 26px rgba(75, 18, 56, 0.055) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   overflow: clip;
 }
 
 .workspace-local-rail {
   border-right-color: var(--shell-rail-border) !important;
   background: var(--shell-rail-bg) !important;
+  padding: 0 !important;
 }
 
 .workspace-local-rail-head {
@@ -12434,6 +12445,7 @@ app-market-intelligence :where(.branch-dot) {
 .workspace-route-content > .workspace-module-tabs {
   border-bottom-color: var(--shell-rail-border) !important;
   background: color-mix(in srgb, var(--aura-bg, #faf7f2) 72%, white 28%) !important;
+  padding: 0 !important;
 }
 
 @media (max-width: 1180px) {
@@ -14063,8 +14075,8 @@ app-data-migration :where(.migration-nav-icon) {
 }
 
 :where(app-apps-launchpad, app-analytics-engine, app-workflow-engine, app-message-template-studio) :where(.primary-button, .dark-button) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
   color: #fff;
 }
 
@@ -14120,7 +14132,7 @@ app-apps-launchpad .suite-search input,
 
 app-apps-launchpad .suite-search input:focus,
 :where(app-analytics-engine, app-workflow-engine, app-message-template-studio, app-public-feedback) :where(input, select, textarea):focus {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 70%, white 30%);
   outline: 3px solid rgba(143, 40, 107, 0.12);
 }
 
@@ -14138,10 +14150,10 @@ app-analytics-engine .analytics-nav-card {
 app-apps-launchpad .suite-tabs button.active,
 app-message-template-studio .tab-rail button.active,
 app-message-template-studio .segmented button.active {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 26%, white 74%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 26%, white 74%);
   background: linear-gradient(135deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.10));
   color: var(--aura-primary-strong, #4b1238);
-  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--aura-primary, #4B1238) 70%, white 30%);
 }
 
 app-apps-launchpad .suite-group {
@@ -14156,7 +14168,7 @@ app-apps-launchpad .apps-grid {
 app-apps-launchpad .app-card {
   min-height: 190px;
   border: 1px solid var(--platform-border);
-  border-top: 4px solid var(--aura-primary, #8f286b);
+  border-top: 4px solid var(--aura-primary, #4B1238);
   border-radius: var(--platform-radius);
   background: linear-gradient(180deg, #fff 0%, color-mix(in srgb, var(--platform-soft) 75%, white 25%) 100%);
   box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
@@ -14166,7 +14178,7 @@ app-apps-launchpad .app-card:hover,
 app-apps-launchpad .app-card:focus-visible,
 app-analytics-engine .analytics-nav-card:hover,
 app-analytics-engine .analytics-nav-card:focus-visible {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 32%, white 68%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 32%, white 68%);
   box-shadow: 0 16px 34px rgba(75, 18, 56, 0.12);
 }
 
@@ -14175,15 +14187,15 @@ app-analytics-engine .nav-icon {
   width: 42px;
   height: 38px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #ed6c92);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #ed6c92);
   color: #fff;
 }
 
 app-apps-launchpad .status-pill,
 app-analytics-engine .analytics-nav-card i,
 :where(app-analytics-engine, app-workflow-engine, app-message-template-studio) .badge {
-  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 9%, white 91%);
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4B1238) 18%, white 82%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 9%, white 91%);
   color: var(--aura-primary-strong, #4b1238);
 }
 
@@ -14206,8 +14218,8 @@ app-analytics-engine .analytics-nav-card {
 }
 
 app-analytics-engine .analytics-nav-card.active {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 35%, white 65%);
-  border-left-color: var(--aura-primary, #8f286b);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 35%, white 65%);
+  border-left-color: var(--aura-primary, #4B1238);
   background: linear-gradient(90deg, rgba(143, 40, 107, 0.13), rgba(237, 108, 146, 0.08));
 }
 
@@ -14218,7 +14230,7 @@ app-analytics-engine .chart-bars {
 }
 
 app-analytics-engine .chart-bars i {
-  background: linear-gradient(180deg, #ed6c92, var(--aura-primary, #8f286b));
+  background: linear-gradient(180deg, #ed6c92, var(--aura-primary, #4B1238));
 }
 
 app-analytics-engine .rank-list article,
@@ -14315,18 +14327,18 @@ app-message-template-studio .template-card {
 
 app-message-template-studio .chips button,
 app-message-template-studio .provider-map b {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 20%, white 80%);
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 20%, white 80%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 8%, white 92%);
   color: var(--aura-primary-strong, #4b1238);
 }
 
 app-message-template-studio .preview-box {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 30%, white 70%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 30%, white 70%);
   background: linear-gradient(180deg, #fff7fb, #fff);
 }
 
 app-message-template-studio .switch span {
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
 }
 
 app-message-template-studio .switch input:not(:checked) + span {
@@ -14362,7 +14374,7 @@ app-public-feedback .field span {
 app-public-feedback .primary {
   min-height: 46px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
   color: #fff;
   box-shadow: 0 12px 24px rgba(75, 18, 56, 0.16);
 }
@@ -14484,9 +14496,9 @@ app-public-feedback .state {
   min-height: 34px;
   max-width: 100%;
   overflow-wrap: anywhere;
-  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4B1238) 18%, white 82%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 8%, white 92%);
   color: var(--aura-primary-strong, #4b1238);
   padding: 6px 12px;
   text-align: left;
@@ -14523,15 +14535,15 @@ app-compliance-section-page .tabs a,
 app-compliance-section-page .tabs a:hover,
 app-compliance-section-page .tabs a:focus-visible,
 :where(app-compliance-section-page, app-staff-my-work) :where(.desk-tabs button:hover, .workdesk button:hover, .register-heading button:hover) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 34%, white 66%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 34%, white 66%);
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(75, 18, 56, 0.10);
 }
 
 :where(app-compliance-section-page, app-staff-my-work) :where(.workdesk button, .register-heading button),
 app-compliance-section-page .desk-tabs button:first-child {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
   color: #fff;
 }
 
@@ -14547,7 +14559,7 @@ app-compliance-section-page .desk-tabs button:first-child {
   min-height: 98px;
   border: 1px solid var(--ops-border);
   border-top: 0;
-  border-left: 4px solid var(--aura-primary, #8f286b);
+  border-left: 4px solid var(--aura-primary, #4B1238);
   border-radius: var(--ops-radius);
   background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--ops-soft) 76%, white 24%));
   box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
@@ -14555,7 +14567,7 @@ app-compliance-section-page .desk-tabs button:first-child {
 }
 
 :where(app-compliance-section-page, app-staff-my-work) :where(.metrics article:first-child, .metrics-grid article:first-child) {
-  border-left: 4px solid var(--aura-primary, #8f286b);
+  border-left: 4px solid var(--aura-primary, #4B1238);
 }
 
 :where(app-compliance-section-page, app-staff-my-work) :where(.metrics strong, .metrics-grid strong) {
@@ -14593,7 +14605,7 @@ app-staff-my-work .filters {
 }
 
 :where(app-compliance-section-page, app-staff-my-work) :where(input:focus, select:focus, button:focus-visible, a:focus-visible) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 70%, white 30%);
   outline: 3px solid rgba(143, 40, 107, 0.12);
 }
 
@@ -14625,7 +14637,7 @@ app-staff-my-work .filters {
 }
 
 :where(app-compliance-section-page, app-staff-my-work) tbody tr:hover {
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 5%, white 95%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 5%, white 95%);
 }
 
 :where(app-compliance-section-page, app-staff-my-work) :where(.badge) {
@@ -14781,7 +14793,7 @@ app-staff-my-work .filters {
   align-content: space-between;
   border: 1px solid var(--growth-border);
   border-top: 0;
-  border-left: 4px solid var(--aura-primary, #8f286b);
+  border-left: 4px solid var(--aura-primary, #4B1238);
   border-radius: var(--growth-radius);
   background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--growth-soft) 76%, white 24%));
   box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
@@ -14839,29 +14851,29 @@ app-birthday-campaign .client-list button:hover,
 app-birthday-campaign .client-list button.active,
 app-birthday-campaign .suggestion:hover,
 app-birthday-campaign .suggestion.active {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 34%, white 66%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 34%, white 66%);
   background: linear-gradient(135deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.08));
   box-shadow: 0 14px 30px rgba(75, 18, 56, 0.12);
   transform: translateY(-1px);
 }
 
 app-saas-onboarding .saas-nav-card.active {
-  border-left-color: var(--aura-primary, #8f286b);
+  border-left-color: var(--aura-primary, #4B1238);
 }
 
 app-saas-onboarding .saas-nav-icon,
 app-birthday-campaign .avatar {
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #ed6c92);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #ed6c92);
   color: #fff;
 }
 
 app-saas-onboarding .saas-nav-card em,
 app-birthday-campaign .client-list em,
 :where(app-saas-onboarding, app-birthday-campaign) .badge {
-  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4B1238) 18%, white 82%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 8%, white 92%);
   color: var(--aura-primary-strong, #4b1238);
 }
 
@@ -14881,8 +14893,8 @@ app-birthday-campaign .client-list em,
 }
 
 :where(app-saas-onboarding, app-birthday-campaign) :where(.primary-button, .zenoti-button.primary, button.primary, button[type='submit']) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
   color: #fff;
 }
 
@@ -14901,7 +14913,7 @@ app-birthday-campaign .client-list em,
 }
 
 :where(app-saas-onboarding, app-birthday-campaign) :where(input:focus, select:focus, textarea:focus, button:focus-visible) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 70%, white 30%);
   outline: 3px solid rgba(143, 40, 107, 0.12);
 }
 
@@ -14941,7 +14953,7 @@ app-saas-onboarding .stage-track {
 }
 
 app-saas-onboarding .stage-track span {
-  background: linear-gradient(90deg, var(--aura-primary, #8f286b), #ed6c92);
+  background: linear-gradient(90deg, var(--aura-primary, #4B1238), #ed6c92);
 }
 
 app-birthday-campaign .header-actions {
@@ -14954,8 +14966,8 @@ app-birthday-campaign .filter-row {
 }
 
 app-birthday-campaign .filter-row button.active {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
   color: #fff;
 }
 
@@ -15070,9 +15082,9 @@ app-purchase-bill-drafts .hero-insights span,
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4B1238) 18%, white 82%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 8%, white 92%);
   color: var(--aura-primary-strong, #4b1238);
   padding: 4px 10px;
   font-weight: 900;
@@ -15109,26 +15121,26 @@ app-purchase-orders .po-nav-card:hover,
 app-purchase-orders .po-nav-card.active,
 app-purchase-bill-drafts .draft-list button:hover,
 app-purchase-bill-drafts .draft-list button.active {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 34%, white 66%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 34%, white 66%);
   background: linear-gradient(135deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.08));
   box-shadow: 0 14px 30px rgba(75, 18, 56, 0.12);
   transform: translateY(-1px);
 }
 
 app-purchase-orders .po-nav-card.active {
-  border-left-color: var(--aura-primary, #8f286b);
+  border-left-color: var(--aura-primary, #4B1238);
 }
 
 app-purchase-orders .po-nav-icon {
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #ed6c92);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #ed6c92);
   color: #fff;
 }
 
 app-purchase-orders .po-nav-card i {
-  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4B1238) 18%, white 82%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 8%, white 92%);
   color: var(--aura-primary-strong, #4b1238);
 }
 
@@ -15145,7 +15157,7 @@ app-purchase-orders .po-nav-card i {
 
 :where(app-purchase-orders, app-purchase-bill-drafts) :where(.metric-card, .command-card, .line-readiness article) {
   min-height: 102px;
-  border-left: 4px solid var(--aura-primary, #8f286b);
+  border-left: 4px solid var(--aura-primary, #4B1238);
   background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--procure-soft) 76%, white 24%));
 }
 
@@ -15186,8 +15198,8 @@ app-purchase-orders .po-nav-card i {
 }
 
 :where(app-purchase-orders, app-purchase-bill-drafts) :where(.primary-button, button.primary, button[type='submit']) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
-  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #4B1238), #3c1434);
   color: #fff;
 }
 
@@ -15211,7 +15223,7 @@ app-purchase-orders .po-nav-card i {
 }
 
 :where(app-purchase-orders, app-purchase-bill-drafts) :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible) {
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 70%, white 30%);
   outline: 3px solid rgba(143, 40, 107, 0.12);
 }
 
@@ -15247,7 +15259,7 @@ app-purchase-orders .po-nav-card i {
 }
 
 :where(app-purchase-orders, app-purchase-bill-drafts) tbody tr:hover {
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 5%, white 95%);
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 5%, white 95%);
 }
 
 app-purchase-orders .supplier-strip,
@@ -15406,7 +15418,7 @@ app-purchase-bill-drafts .warning-list {
   .card
 ):where(:hover, :focus-within) {
   transform: translateY(-1px) !important;
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 24%, white 76%) !important;
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 24%, white 76%) !important;
   box-shadow: var(--aura-clean-shadow-hover) !important;
 }
 
@@ -15425,7 +15437,7 @@ app-purchase-bill-drafts .warning-list {
 ):where(.metric-card, .kpi-card, .summary-card, .action-card, .quick-card, .control-card, .kanban-card, .ai-card, .report-card, .score-card, .metric, .card) {
   background: var(--aura-clean-surface) !important;
   border-top: 0 !important;
-  border-left: 4px solid color-mix(in srgb, var(--aura-primary, #8f286b) 74%, white 26%) !important;
+  border-left: 4px solid color-mix(in srgb, var(--aura-primary, #4B1238) 74%, white 26%) !important;
 }
 
 .workspace > router-outlet + * :where(
@@ -15456,9 +15468,9 @@ app-purchase-bill-drafts .warning-list {
   .swatch
 ) {
   border-radius: 10px !important;
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 12%, white 88%) !important;
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 12%, white 88%) !important;
   color: var(--aura-primary-strong, #4b1238) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aura-primary, #8f286b) 16%, white 84%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aura-primary, #4B1238) 16%, white 84%);
 }
 
 .workspace > router-outlet + * :where(
@@ -15474,9 +15486,9 @@ app-purchase-bill-drafts .warning-list {
   .event-chip
 ) {
   min-height: 24px;
-  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 16%, white 84%) !important;
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4B1238) 16%, white 84%) !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 7%, white 93%) !important;
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 7%, white 93%) !important;
   color: var(--aura-primary-strong, #4b1238) !important;
   font-weight: 750 !important;
   letter-spacing: 0 !important;
@@ -15535,7 +15547,7 @@ app-purchase-bill-drafts .warning-list {
 }
 
 .workspace > router-outlet + * :where(tbody tr:hover, .table-row:hover, .data-row:hover, .account-row:hover) {
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 4%, white 96%) !important;
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 4%, white 96%) !important;
 }
 
 .workspace > router-outlet + * :where(.action-cell, .table-actions, .row-actions, .cell-actions) {
@@ -15581,7 +15593,7 @@ app-purchase-bill-drafts .warning-list {
 .workspace > router-outlet + * :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible) {
   outline: 3px solid rgba(143, 40, 107, 0.13) !important;
   outline-offset: 1px;
-  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 55%, white 45%) !important;
+  border-color: color-mix(in srgb, var(--aura-primary, #4B1238) 55%, white 45%) !important;
 }
 
 .workspace > router-outlet + * :where(
@@ -15637,9 +15649,9 @@ app-purchase-bill-drafts .warning-list {
 }
 
 :where(.sidebar, .app-sidebar, .side-nav, .rail, .inner-rail, .workspace-rail) :where(a.active, button.active, .active, .selected, [aria-current='page']) {
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 9%, white 91%) !important;
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 9%, white 91%) !important;
   color: var(--aura-primary-strong, #4b1238) !important;
-  box-shadow: inset 3px 0 0 var(--aura-primary, #8f286b) !important;
+  box-shadow: inset 3px 0 0 var(--aura-primary, #4B1238) !important;
 }
 
 .workspace > router-outlet + * :where(.tab-rail, .tabs, .segmented, .category-tabs, .desk-tabs, .staff-shell-nav, .suite-tabs, .filter-row) {
@@ -15657,9 +15669,9 @@ app-purchase-bill-drafts .warning-list {
 }
 
 .workspace > router-outlet + * :where(.tab-rail button.active, .tabs a.active, .segmented button.active, .category-tabs button.active, .desk-tabs button.active, .staff-shell-nav a.active, .suite-tabs button.active, .filter-row button.active) {
-  background: color-mix(in srgb, var(--aura-primary, #8f286b) 9%, white 91%) !important;
+  background: color-mix(in srgb, var(--aura-primary, #4B1238) 9%, white 91%) !important;
   color: var(--aura-primary-strong, #4b1238) !important;
-  box-shadow: inset 0 -2px 0 var(--aura-primary, #8f286b) !important;
+  box-shadow: inset 0 -2px 0 var(--aura-primary, #4B1238) !important;
 }
 
 .workspace > router-outlet + * :where(.module-hero, .page-heading, .page-header, .page-title, .studio-hero, .apps-header) {
@@ -15682,7 +15694,7 @@ app-purchase-bill-drafts .warning-list {
 .workspace > router-outlet + * :where(.appointment-card, .booking-card, .event-card, .slot-card) {
   border-radius: 10px !important;
   background: #fff !important;
-  border-left: 4px solid color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%) !important;
+  border-left: 4px solid color-mix(in srgb, var(--aura-primary, #4B1238) 70%, white 30%) !important;
   box-shadow: 0 6px 16px rgba(75, 18, 56, 0.06) !important;
 }
 

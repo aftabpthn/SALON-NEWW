@@ -179,26 +179,27 @@ type AiPageCard = {
   styles: [`
     :host {
       display: block;
-      --ai-bg: #f6f8f9;
+      --ai-bg: #fbf8f6;
       --ai-card: #ffffff;
-      --ai-card-soft: #f8fafc;
+      --ai-card-soft: #fbf7f4;
       --ai-ink: #172033;
       --ai-muted: #64748b;
-      --ai-line: #e2e8f0;
-      --ai-primary: #0f766e;
-      --ai-primary-soft: rgba(15, 118, 110, 0.09);
+      --ai-line: #eadfd9;
+      --ai-primary: #6d1247;
+      --ai-primary-soft: rgba(109, 18, 71, 0.08);
       --ai-amber: #b7791f;
       --ai-red: #b42318;
-      --ai-green: #15803d;
-      --ai-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+      --ai-green: #7a4b28;
+      --ai-shadow: 0 12px 28px rgba(45, 24, 34, 0.07);
     }
 
     .ai-command-page {
-      width: min(100%, 1760px);
-      margin: 0 auto;
-      padding: 4px 0 22px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0 0 18px;
       display: grid;
-      gap: 12px;
+      gap: 14px;
       color: var(--ai-ink);
       background: var(--ai-bg);
       overflow-x: hidden;
@@ -224,7 +225,7 @@ type AiPageCard = {
       width: 100%;
       overflow: auto;
       border: 1px solid var(--ai-line);
-      border-radius: 10px;
+      border-radius: 0;
       background: #fff;
     }
 
@@ -254,7 +255,7 @@ type AiPageCard = {
 
     .ai-kpi {
       border: 1px solid var(--ai-line);
-      border-radius: 12px;
+      border-radius: 0;
       background: var(--ai-card);
       box-shadow: var(--ai-shadow);
     }
@@ -268,6 +269,7 @@ type AiPageCard = {
       align-items: center;
       gap: 14px;
       padding: 18px 20px;
+      border-radius: 14px;
     }
 
     .hero-orbit { display: none; }
@@ -352,7 +354,7 @@ type AiPageCard = {
     .badge {
       color: var(--ai-primary);
       background: rgba(255, 255, 255, 0.58);
-      border-color: rgba(15, 118, 110, 0.18);
+      border-color: rgba(109, 18, 71, 0.16);
     }
 
     .task-badges .warn,
@@ -364,18 +366,20 @@ type AiPageCard = {
     .ai-kpi-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      gap: 12px;
+      width: 100%;
+      min-width: 0;
     }
 
     .ai-page-layout {
-      width: calc(100% - 28px);
-      justify-self: center;
+      width: 100%;
+      justify-self: stretch;
       display: grid;
-      grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
-      gap: 14px;
+      grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+      gap: 16px;
       align-items: start;
       min-width: 0;
-      padding: 6px 0 22px;
+      padding: 0;
     }
 
     .ai-page-card-grid {
@@ -387,7 +391,7 @@ type AiPageCard = {
       min-width: 0;
       max-height: calc(100vh - 92px);
       overflow: auto;
-      padding-right: 4px;
+      padding-right: 0;
     }
 
     .ai-page-layout .ai-open-page {
@@ -436,7 +440,7 @@ type AiPageCard = {
       align-items: start;
       gap: 11px;
       border: 1px solid var(--ai-line);
-      border-radius: 12px;
+      border-radius: 0;
       padding: 16px;
       color: var(--ai-ink);
       background: #fff;
@@ -447,35 +451,35 @@ type AiPageCard = {
     }
 
     .ai-command-page .ai-page-card--mint {
-      background: linear-gradient(105deg, #bff4e7 0%, #d4f4fb 100%);
-      border-color: #a6e7dd;
+      background: #fff;
+      border-color: var(--ai-line);
     }
 
     .ai-command-page .ai-page-card--rose {
-      background: linear-gradient(105deg, #efd1f5 0%, #ffd3ed 100%);
-      border-color: #ecc4ed;
+      background: #fff;
+      border-color: var(--ai-line);
     }
 
     .ai-command-page .ai-page-card--sky {
-      background: linear-gradient(105deg, #cfe7fb 0%, #d9f3fb 100%);
-      border-color: #bddff3;
+      background: #fff;
+      border-color: var(--ai-line);
     }
 
     .ai-command-page .ai-page-card--green {
-      background: linear-gradient(105deg, #c9f7df 0%, #d7f6e7 100%);
-      border-color: #b7e9ce;
+      background: #fff;
+      border-color: var(--ai-line);
     }
 
     .ai-command-page .ai-page-card:hover,
     .ai-command-page .ai-page-card:focus-visible,
     .ai-command-page .ai-page-card.active {
-      border-color: rgba(15, 118, 110, 0.55);
+      border-color: rgba(109, 18, 71, 0.32);
       outline: none;
     }
 
     .ai-command-page .ai-page-card.active {
-      background: #f7fffd;
-      box-shadow: inset 3px 0 0 var(--ai-primary), 0 10px 24px rgba(15, 118, 110, 0.08);
+      background: #fffaf8;
+      box-shadow: inset 3px 0 0 var(--ai-primary), 0 12px 24px rgba(109, 18, 71, 0.08);
     }
 
     .ai-page-card-icon {
@@ -483,7 +487,7 @@ type AiPageCard = {
       height: 48px;
       display: grid;
       place-items: center;
-      border-radius: 12px;
+      border-radius: 0;
       color: var(--ai-primary);
       background: var(--ai-primary-soft);
       font-size: 0.84rem;
@@ -638,7 +642,7 @@ type AiPageCard = {
       width: 100%;
       min-width: 0;
       border: 1px solid var(--ai-line);
-      border-radius: 10px;
+      border-radius: 0;
       padding: 10px 11px;
       background: #fff;
       color: var(--ai-ink);
@@ -652,8 +656,8 @@ type AiPageCard = {
     .field input:focus,
     .field select:focus,
     .field textarea:focus {
-      border-color: rgba(15, 118, 110, 0.45);
-      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.09);
+      border-color: rgba(109, 18, 71, 0.28);
+      box-shadow: 0 0 0 3px rgba(109, 18, 71, 0.08);
     }
 
     .category-tabs {
@@ -696,7 +700,7 @@ type AiPageCard = {
       grid-template-columns: 1fr;
       gap: 8px;
       max-height: calc(100vh - 255px);
-      padding-right: 4px;
+      padding-right: 0;
     }
 
     .ai-open-workflow-list.workflow-list {
@@ -713,7 +717,7 @@ type AiPageCard = {
       align-items: start;
       gap: 9px;
       border: 1px solid var(--ai-line);
-      border-radius: 10px;
+      border-radius: 0;
       padding: 10px;
       color: var(--ai-ink);
       background: #fff;
@@ -725,16 +729,16 @@ type AiPageCard = {
 
     .workflow-card:hover,
     .workflow-card:focus-visible {
-      border-color: rgba(15, 118, 110, 0.45);
+      border-color: rgba(109, 18, 71, 0.28);
       box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
       outline: none;
       transform: translateY(-1px);
     }
 
     .workflow-card.active {
-      border-color: rgba(15, 118, 110, 0.65);
-      background: #f7fffd;
-      box-shadow: inset 3px 0 0 var(--ai-primary), 0 10px 20px rgba(15, 118, 110, 0.1);
+      border-color: rgba(109, 18, 71, 0.38);
+      background: #fffaf8;
+      box-shadow: inset 3px 0 0 var(--ai-primary), 0 12px 22px rgba(109, 18, 71, 0.08);
     }
 
     .workflow-card.disabled {
@@ -812,7 +816,7 @@ type AiPageCard = {
       height: 34px;
       display: grid;
       place-items: center;
-      border-radius: 10px;
+      border-radius: 0;
       color: var(--ai-primary);
       background: var(--ai-primary-soft);
       font-size: 0.84rem;
@@ -868,8 +872,8 @@ type AiPageCard = {
     .safety-strip {
       display: grid;
       gap: 4px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
-      border-radius: 10px;
+      border: 1px solid rgba(109, 18, 71, 0.16);
+      border-radius: 0;
       padding: 10px 11px;
       background: var(--ai-primary-soft);
       color: var(--ai-muted);
@@ -930,7 +934,7 @@ type AiPageCard = {
     .action-card,
     .empty-command {
       border: 1px solid var(--ai-line);
-      border-radius: 10px;
+      border-radius: 0;
       background: #fff;
       box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
     }
@@ -1049,7 +1053,7 @@ type AiPageCard = {
 
     .raw-json {
       border: 1px solid var(--ai-line);
-      border-radius: 10px;
+      border-radius: 0;
       background: var(--ai-card-soft);
       overflow: hidden;
     }
@@ -1175,7 +1179,7 @@ type AiPageCard = {
       width: 100%;
       overflow: auto;
       border: 1px solid var(--ai-line);
-      border-radius: 10px;
+      border-radius: 0;
       background: #fff;
     }
 
@@ -1213,6 +1217,127 @@ type AiPageCard = {
       white-space: nowrap;
     }
 
+    .ai-command-page .ai-page-card--mint,
+    .ai-command-page .ai-page-card--rose,
+    .ai-command-page .ai-page-card--sky,
+    .ai-command-page .ai-page-card--green {
+      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+      border-color: var(--ai-line);
+      box-shadow: inset 3px 0 0 rgba(109, 18, 71, 0.34), 0 12px 28px rgba(45, 24, 34, 0.055);
+    }
+
+    .ai-command-page .ai-page-card--mint,
+    .ai-command-page .ai-page-card--green {
+      box-shadow: inset 3px 0 0 rgba(181, 123, 88, 0.48), 0 12px 28px rgba(45, 24, 34, 0.055);
+    }
+
+    .ai-kpi-grid .ai-kpi {
+      position: relative;
+      overflow: hidden;
+      border-color: var(--ai-line);
+      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+      border-left-color: rgba(109, 18, 71, 0.38);
+    }
+
+    .ai-kpi-grid .ai-kpi::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 14px;
+      right: 14px;
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(109, 18, 71, 0.55), rgba(181, 123, 88, 0.4));
+    }
+
+    .ai-kpi-grid .ai-kpi:nth-child(even) {
+      border-left-color: rgba(181, 123, 88, 0.48);
+    }
+
+    .ai-kpi span,
+    .workflow-card small,
+    .workflow-card-footer span,
+    .governance-stack span,
+    .queue-stack span,
+    .action-card span,
+    .action-card small {
+      font-weight: 650;
+    }
+
+    .ai-kpi strong,
+    .workflow-card strong,
+    .ai-page-card strong,
+    .section-title h2 {
+      font-weight: 760;
+    }
+
+    .ai-open-workflow-list .workflow-card,
+    .workflow-list .workflow-card {
+      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%) !important;
+      border-color: var(--ai-line) !important;
+      border-left: 3px solid rgba(109, 18, 71, 0.3);
+      box-shadow: 0 8px 18px rgba(45, 24, 34, 0.045);
+    }
+
+    .ai-open-workflow-list .workflow-card:nth-child(2n),
+    .workflow-list .workflow-card:nth-child(2n) {
+      border-left-color: rgba(181, 123, 88, 0.42);
+    }
+
+    .ai-open-workflow-list .workflow-card.active,
+    .workflow-list .workflow-card.active {
+      background: #fffaf8 !important;
+      border-color: rgba(109, 18, 71, 0.38) !important;
+      border-left-color: var(--ai-primary);
+    }
+
+    .workflow-icon,
+    .ai-page-card-icon {
+      color: var(--ai-primary);
+      background: #f7ebe8;
+      box-shadow: inset 0 0 0 1px rgba(109, 18, 71, 0.08);
+    }
+
+    .workflow-card em,
+    .hero-signal-row span,
+    .category-tabs button,
+    .badge,
+    .panel-count,
+    .registry-flags span {
+      background: #fffaf8;
+      border-color: var(--ai-line);
+      color: #6f5f68;
+      font-weight: 720;
+    }
+
+    .category-tabs button.active,
+    .primary-button,
+    .approval-checklist article > span {
+      background: var(--ai-primary);
+      border-color: var(--ai-primary);
+      color: #fff;
+    }
+
+    .answer-card,
+    .source-strip article,
+    .result-metrics article,
+    .approval-checklist article,
+    .governance-stack article,
+    .queue-stack article,
+    .prompt-registry,
+    .mini-feed div,
+    .action-card,
+    .empty-command {
+      border-color: var(--ai-line);
+      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+      box-shadow: 0 8px 18px rgba(45, 24, 34, 0.045);
+    }
+
+    .governance-stack article,
+    .queue-stack article,
+    .answer-card {
+      border-left-color: rgba(109, 18, 71, 0.34);
+    }
     @media (max-width: 1280px) {
       .ai-workspace-grid {
         grid-template-columns: minmax(240px, 0.82fr) minmax(0, 1.18fr);
@@ -1278,7 +1403,7 @@ type AiPageCard = {
       .ai-hero,
       .panel {
         padding: 14px;
-        border-radius: 12px;
+        border-radius: 0;
       }
 
       .ai-kpi-grid,
@@ -1292,7 +1417,7 @@ type AiPageCard = {
       }
 
       .ai-page-layout {
-        width: calc(100% - 16px);
+        width: 100%;
       }
 
       .ai-page-card {

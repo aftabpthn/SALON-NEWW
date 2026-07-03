@@ -359,7 +359,7 @@ interface SegmentRow {
       font-weight: 800;
       line-height: 1;
     }
-    .platform-pill { background: #eef6f4; color: #0f766e; }
+    .platform-pill { background: #eef6f4; color: #4B1238; }
     .sentiment-pill.positive { background: #e8f7f1; color: #047857; }
     .sentiment-pill.neutral, .sentiment-pill.unknown { background: var(--surface-2); color: var(--muted); }
     .sentiment-pill.negative { background: #fff1f2; color: #be123c; }

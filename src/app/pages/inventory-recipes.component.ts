@@ -659,7 +659,7 @@ const DEFAULT_MODIFIERS = [
 
     .auto-status {
       margin-top: 6px;
-      color: #0f766e;
+      color: #4B1238;
     }
 
     .enterprise-grid.two {
@@ -876,7 +876,7 @@ const DEFAULT_MODIFIERS = [
       padding: 4px 8px;
       border-radius: 999px;
       background: #eef8f6;
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 700;
       font-size: 12px;
     }
@@ -901,7 +901,7 @@ const DEFAULT_MODIFIERS = [
     }
 
     .tab-strip button.active {
-      background: #0f766e;
+      background: #4B1238;
       color: #fff;
     }
 

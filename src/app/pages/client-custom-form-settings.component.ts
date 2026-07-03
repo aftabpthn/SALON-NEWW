@@ -308,8 +308,8 @@ const DEFAULT_FIELDS: ClientCustomField[] = [
 
     .state.success {
       color: #047857;
-      background: #ecfdf5;
-      border: 1px solid #a7f3d0;
+      background: #F3EAF0;
+      border: 1px solid #DCC4D4;
     }
 
     .state.danger {

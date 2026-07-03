@@ -15,7 +15,7 @@ export class NavigationPrefetchService {
   private readonly inFlight = new Set<string>();
 
   prefetch(path: string | undefined | null): void {
-    if (!path || !this.session.isAuthenticated()) return;
+    if (!path || !this.session.isAuthenticated() || this.shouldDeferForConnection()) return;
     const route = this.findLazyRoute(path);
     if (!route) return;
 
@@ -35,7 +35,7 @@ export class NavigationPrefetchService {
   warmHighUseRoutes(): void {
     if (!this.session.isAuthenticated()) return;
     ['/home', '/appointments', '/pos', '/clients', '/staff-os', '/inventory', '/reports', '/marketing']
-      .forEach((path, index) => setTimeout(() => this.prefetch(path), 450 + index * 300));
+      .forEach((path, index) => setTimeout(() => this.prefetch(path), 120 + index * 140));
   }
 
   private findLazyRoute(path: string): LazyRoute | null {
@@ -80,6 +80,13 @@ export class NavigationPrefetchService {
     return path.replace(/^\/+|\/+$/g, '');
   }
 
+  private shouldDeferForConnection(): boolean {
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    return Boolean(connection?.saveData || /2g/i.test(connection?.effectiveType || ''));
+  }
+
   private routeKey(route: LazyRoute): string {
     return `${route.path || ''}:${route.loadComponent ? 'component' : 'children'}`;
   }
@@ -89,7 +96,7 @@ export class NavigationPrefetchService {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
     }).requestIdleCallback;
     if (idleCallback) {
-      idleCallback(task, { timeout: 1200 });
+      idleCallback(task, { timeout: 700 });
       return;
     }
     setTimeout(task, 0);

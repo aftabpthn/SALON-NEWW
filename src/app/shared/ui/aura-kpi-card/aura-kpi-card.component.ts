@@ -44,12 +44,12 @@ type KpiTone = string | string[] | Set<string> | { [klass: string]: unknown } | 
 
     .metric-card:hover {
       transform: translateY(-2px);
-      border-color: var(--brand-600, #4f46e5);
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.45), 0 10px 24px rgba(79, 70, 229, 0.16);
+      border-color: var(--aura-primary, #4B1238);
+      box-shadow: 0 0 0 2px rgba(75, 18, 56, 0.2), 0 10px 24px rgba(75, 18, 56, 0.1);
     }
 
     .metric-card:focus-visible {
-      outline: 3px solid rgba(99, 102, 241, 0.55);
+      outline: 3px solid rgba(75, 18, 56, 0.25);
       outline-offset: 3px;
     }
 

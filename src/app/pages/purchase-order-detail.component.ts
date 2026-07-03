@@ -217,7 +217,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       display: flex;
       justify-content: space-between;
       gap: 16px;
-      border-bottom: 2px solid rgba(15, 118, 110, 0.28);
+      border-bottom: 2px solid rgba(75, 18, 56, 0.28);
       padding-bottom: 14px;
       margin-bottom: 14px;
     }

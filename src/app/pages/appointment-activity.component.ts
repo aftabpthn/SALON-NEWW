@@ -768,7 +768,7 @@ interface ClientScoreRow {
 
     .activity-nav-card.active {
       border-color: var(--teal);
-      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
+      background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
       box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
     }
 
@@ -809,7 +809,7 @@ interface ClientScoreRow {
       height: 48px;
       border-radius: 8px;
       color: var(--teal);
-      background: rgba(20, 184, 166, 0.12);
+      background: rgba(214, 79, 146, 0.12);
       font-weight: 900;
     }
 
@@ -1007,9 +1007,9 @@ interface ClientScoreRow {
 
     .suggestion-row span,
     .risk-reasons span {
-      border: 1px solid var(--success-border, #A7F3D0);
+      border: 1px solid var(--success-border, #DCC4D4);
       border-radius: 999px;
-      background: var(--success-bg, #ECFDF5);
+      background: var(--success-bg, #F3EAF0);
       color: var(--success-text, #065F46);
       padding: 6px 10px;
       font-weight: 800;
@@ -1076,7 +1076,7 @@ interface ClientScoreRow {
 
     .badge.booking,
     .risk-pill.low {
-      background: var(--success-bg, #ECFDF5);
+      background: var(--success-bg, #F3EAF0);
       color: var(--success-text, #065F46);
     }
 

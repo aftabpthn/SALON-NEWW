@@ -349,9 +349,9 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
       align-items: center;
       min-height: 30px;
       padding: 6px 12px;
-      border: 1px solid color-mix(in srgb, #0f766e 36%, var(--line));
+      border: 1px solid color-mix(in srgb, #4B1238 36%, var(--line));
       border-radius: 999px;
-      background: color-mix(in srgb, #ccfbf1 40%, var(--surface));
+      background: color-mix(in srgb, #EAD9E5 40%, var(--surface));
       color: #064e3b;
       text-decoration: none;
       font-size: 12px;
@@ -362,13 +362,13 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
 
     .api-chip-row a.active,
     .api-chip-row a:hover {
-      background: #0f766e;
+      background: #4B1238;
       color: #fff;
-      border-color: #0f766e;
+      border-color: #4B1238;
     }
 
     .api-badge.soft {
-      background: color-mix(in srgb, var(--surface) 78%, #ccfbf1);
+      background: color-mix(in srgb, var(--surface) 78%, #EAD9E5);
       color: var(--muted);
     }
 
@@ -505,8 +505,8 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
     }
 
     .mini-link {
-      border: 1px solid color-mix(in srgb, #0f766e 36%, var(--line));
-      background: color-mix(in srgb, #ccfbf1 35%, var(--surface));
+      border: 1px solid color-mix(in srgb, #4B1238 36%, var(--line));
+      background: color-mix(in srgb, #EAD9E5 35%, var(--surface));
       color: #064e3b;
     }
 

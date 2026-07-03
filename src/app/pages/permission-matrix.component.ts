@@ -159,10 +159,10 @@ const RESOURCE_GROUPS = [
     .permission-side-nav { position: sticky; top: 92px; display: grid; gap: 10px; }
     .permission-nav-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 11px; align-items: center; width: 100%; min-height: 92px; padding: 13px; border: 1px solid var(--line); border-left: 4px solid var(--teal); border-radius: 8px; background: var(--surface); color: var(--ink); text-align: left; box-shadow: var(--shadow); cursor: pointer; }
     .permission-nav-card:hover, .permission-nav-card.active { background: linear-gradient(135deg, #e8fbf7, #eef4ff); border-color: color-mix(in srgb, var(--teal) 38%, var(--line)); transform: translateY(-1px); }
-    .permission-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #e8f7f4; color: #0b6f61; font-weight: 950; font-size: 12px; }
+    .permission-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #F1E8EE; color: #3D0F2C; font-weight: 950; font-size: 12px; }
     .permission-nav-card strong, .permission-nav-card small { display: block; }
     .permission-nav-card small { margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1.3; }
-    .permission-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #e8f7f4; color: #0b6f61; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .permission-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #F1E8EE; color: #3D0F2C; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
     .permission-detail { display: grid; gap: 14px; min-width: 0; }
     .um-shell { display: grid; grid-template-columns: 286px minmax(0, 1fr) 292px; gap: 14px; align-items: start; }
     .um-shell[data-active-view]:not([data-active-view="overview"]) { grid-template-columns: minmax(0, 1fr); }

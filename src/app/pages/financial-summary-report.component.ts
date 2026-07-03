@@ -1165,7 +1165,7 @@ type WalletLedgerRow = ApiRecord & {
     .report-tabs button.active {
       color: #fff;
       background: var(--teal);
-      box-shadow: 0 8px 20px rgba(15, 118, 110, .18);
+      box-shadow: 0 8px 20px rgba(75, 18, 56, .18);
     }
 
     .icon-action {
@@ -1304,7 +1304,7 @@ type WalletLedgerRow = ApiRecord & {
     }
 
     .primary-row td {
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 900;
     }
 
@@ -1435,9 +1435,9 @@ type WalletLedgerRow = ApiRecord & {
       min-height: 28px;
       padding: 4px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(15, 118, 110, .22);
+      border: 1px solid rgba(75, 18, 56, .22);
       color: var(--teal);
-      background: rgba(15, 118, 110, .08);
+      background: rgba(75, 18, 56, .08);
       font-weight: 900;
       text-decoration: none;
       white-space: nowrap;
@@ -1709,8 +1709,8 @@ type WalletLedgerRow = ApiRecord & {
       flex: 1;
       min-width: 8px;
       border-radius: 6px 6px 0 0;
-      background: #0f766e;
-      box-shadow: 0 8px 18px rgba(15, 118, 110, .14);
+      background: #4B1238;
+      box-shadow: 0 8px 18px rgba(75, 18, 56, .14);
     }
 
     .stacked-chart {
@@ -1749,7 +1749,7 @@ type WalletLedgerRow = ApiRecord & {
 
     .service-stack,
     .net-stack {
-      background: #0f766e;
+      background: #4B1238;
     }
 
     .product-stack,
@@ -1758,7 +1758,7 @@ type WalletLedgerRow = ApiRecord & {
     }
 
     .cash-stack {
-      background: #0f766e;
+      background: #4B1238;
     }
 
     .upi-stack {
@@ -1875,7 +1875,7 @@ type WalletLedgerRow = ApiRecord & {
     }
 
     .clickable-row.active-row td {
-      background: #ecfdf5;
+      background: #F3EAF0;
     }
 
     .drilldown-row td {

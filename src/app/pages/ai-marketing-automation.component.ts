@@ -267,10 +267,10 @@ type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'registe
     .marketing-side-nav { position: sticky; top: 92px; display: grid; gap: 10px; }
     .marketing-nav-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 11px; align-items: center; width: 100%; min-height: 92px; padding: 13px; border: 1px solid #d8e1ea; border-left: 4px solid #0b8f7c; border-radius: 8px; background: #fff; color: #172033; text-align: left; box-shadow: 0 10px 24px rgba(15,23,42,.06); cursor: pointer; }
     .marketing-nav-card:hover, .marketing-nav-card.active { background: linear-gradient(135deg, #e8fbf7, #eef4ff); border-color: #9fc3dc; transform: translateY(-1px); }
-    .marketing-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #e8f7f4; color: #0b6f61; font-weight: 950; font-size: 12px; }
+    .marketing-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #F1E8EE; color: #3D0F2C; font-weight: 950; font-size: 12px; }
     .marketing-nav-card strong, .marketing-nav-card small { display: block; }
     .marketing-nav-card small { margin-top: 4px; color: #5f6f85; font-size: 12px; font-weight: 700; line-height: 1.3; }
-    .marketing-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #e8f7f4; color: #0b6f61; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .marketing-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #F1E8EE; color: #3D0F2C; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
     .marketing-detail { display: grid; gap: 8px; min-width: 0; }
     .workdesk, .register-panel { padding: 16px; background: #fff; border: 1px solid #d8e1ea; }
     .desk-heading, .register-heading { justify-content: space-between; align-items: end; margin-bottom: 12px; }
@@ -296,8 +296,31 @@ type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'registe
     .output-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
     .output-grid article { min-height: 82px; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; display: flex; flex-direction: column; justify-content: center; }
     app-state { display: block; }
-    .state.success { margin: 0 16px; padding: 12px 14px; border-radius: 8px; font-weight: 850; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
+    .state.success { margin: 0 16px; padding: 12px 14px; border-radius: 8px; font-weight: 850; color: #047857; background: #F3EAF0; border: 1px solid #DCC4D4; }
     .empty-row { text-align: center; color: #8a9aa8; padding: 24px 12px !important; font-style: italic; }
+
+    :host .page-stack,
+    :host .marketing-page { background: #f8f5f2; }
+    :host .module-hero,
+    :host .metric-strip,
+    :host .metric-strip article,
+    :host .panel,
+    :host .workdesk-card,
+    :host .marketing-side-nav,
+    :host .table-wrap,
+    :host .output-card {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+    :host .metric-strip { gap: 12px; padding: 12px; }
+    :host .metric-strip article { border-left: 3px solid rgba(154, 106, 96, 0.68) !important; border-top: 1px solid rgba(118, 85, 76, 0.13) !important; }
+    :host h1, :host h2, :host h3, :host .metric-strip strong { color: #302522 !important; font-weight: 630 !important; }
+    :host .metric-strip span, :host .metric-strip small, :host th, :host td small { color: #766763 !important; font-weight: 540 !important; }
+    :host th { position: sticky; top: 0; z-index: 1; background: #faf7f4 !important; }
+    :host tbody tr:hover td { background: #fffaf7 !important; }
     @media (max-width: 1100px) {
       .marketing-section-workspace, .metric-strip { grid-template-columns: repeat(3, 1fr); }
       .marketing-side-nav { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }

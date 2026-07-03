@@ -754,7 +754,7 @@ type ProductConsumeDraftRow = {
   `,
   styles: [`
     .invoice-line-table-wrap {
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 10px;
       overflow-x: auto;
       background: #fff;
@@ -811,7 +811,7 @@ type ProductConsumeDraftRow = {
     }
 
     .invoice-line-table .line-final {
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 800;
     }
 
@@ -823,7 +823,7 @@ type ProductConsumeDraftRow = {
     }
 
     .settlement-card {
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 10px;
       padding: 14px;
       background: linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.98));
@@ -832,7 +832,7 @@ type ProductConsumeDraftRow = {
     }
 
     .settlement-card span {
-      color: #0f766e;
+      color: #4B1238;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
@@ -886,7 +886,7 @@ type ProductConsumeDraftRow = {
     }
 
     .queue-preview-chip {
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 700;
       white-space: normal;
     }
@@ -906,14 +906,14 @@ type ProductConsumeDraftRow = {
     }
 
     .invoice-edit-button {
-      border-color: rgba(15, 118, 110, 0.35);
-      background: #f0fdfa;
-      color: #0f766e;
+      border-color: rgba(75, 18, 56, 0.35);
+      background: #F5EEF2;
+      color: #4B1238;
       font-weight: 800;
     }
 
     .billing-control-strip {
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 10px;
       padding: 14px;
       background: #fff;
@@ -935,7 +935,7 @@ type ProductConsumeDraftRow = {
     }
 
     .billing-control-card {
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 8px;
       padding: 12px;
       background: #f8fffd;
@@ -952,7 +952,7 @@ type ProductConsumeDraftRow = {
     }
 
     .billing-control-card span {
-      color: #0f766e;
+      color: #4B1238;
       font-size: 11px;
       font-weight: 800;
       text-transform: uppercase;
@@ -969,6 +969,120 @@ type ProductConsumeDraftRow = {
       line-height: 1.35;
     }
 
+
+    :host .module-hero,
+    :host .metrics-grid .metric-card,
+    :host .billing-control-strip,
+    :host .billing-control-card,
+    :host .invoice-register-layout > .panel,
+    :host .date-register-summary,
+    :host .active-filter-strip,
+    :host .table-wrap,
+    :host .invoice-detail-panel {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    :host .module-hero {
+      align-items: center;
+      padding: 18px 20px;
+    }
+
+    :host .module-hero h2,
+    :host .section-title h2,
+    :host .metric-card strong,
+    :host .billing-control-card strong,
+    :host .date-register-summary strong,
+    :host .table-link strong {
+      color: #302522 !important;
+      font-weight: 630 !important;
+    }
+
+    :host .module-hero p,
+    :host .metric-card span,
+    :host .billing-control-card span,
+    :host .billing-control-card small,
+    :host .date-register-summary span,
+    :host .row-subcopy,
+    :host .muted {
+      color: #766763 !important;
+      font-weight: 520 !important;
+    }
+
+    :host .metrics-grid .metric-card,
+    :host .billing-control-card,
+    :host .date-register-summary > div {
+      border-left: 3px solid rgba(154, 106, 96, 0.68) !important;
+    }
+
+    :host .metric-card.active-filter-card,
+    :host .billing-control-card.warn,
+    :host .active-filter-strip {
+      background: #fff7f3 !important;
+      border-color: rgba(154, 106, 96, 0.22) !important;
+    }
+
+    :host .table-toolbar {
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid rgba(118, 85, 76, 0.11);
+      border-radius: 14px;
+      background: #fffdfb;
+    }
+
+    :host .search-field input,
+    :host .field input,
+    :host .field select {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-radius: 10px !important;
+      background: #fff !important;
+    }
+
+    :host table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #faf7f4 !important;
+      color: #766763 !important;
+      font-weight: 600 !important;
+    }
+
+    :host table td {
+      border-bottom-color: rgba(118, 85, 76, 0.08) !important;
+      vertical-align: middle;
+    }
+
+    :host tbody tr:hover td,
+    :host .click-row:hover td,
+    :host .selected-row td {
+      background: #fffaf7 !important;
+    }
+
+    :host .badge,
+    :host .payment-mode-chip,
+    :host .queue-preview-chip,
+    :host .received-due-row {
+      border-color: rgba(154, 106, 96, 0.16) !important;
+      border-radius: 999px !important;
+      background: #fff7f3 !important;
+      color: #75524b !important;
+      font-weight: 620 !important;
+    }
+
+    :host .ghost-button,
+    :host .primary-button {
+      border-radius: 10px !important;
+      font-weight: 580 !important;
+    }
+
+    :host .primary-button {
+      border-color: #744a44 !important;
+      background: #744a44 !important;
+      color: #fff !important;
+    }
     @media (max-width: 960px) {
       .settlement-breakdown,
       .billing-control-grid {

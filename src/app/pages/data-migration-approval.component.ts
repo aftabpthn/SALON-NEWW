@@ -94,9 +94,9 @@ import { DataMigrationStore } from './data-migration.store';
     .card-label { color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; display: block; margin-bottom: 6px; }
     .submit-section { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; display: grid; gap: 10px; }
     .form-input { width: 100%; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }
-    .form-input:focus { border-color: #0f8f7f; outline: 2px solid rgba(15,143,127,.12); background: #ffffff; }
+    .form-input:focus { border-color: #5A153F; outline: 2px solid rgba(90,21,63,.12); background: #ffffff; }
     .note-input { font-weight: 400; resize: vertical; }
-    .btn-primary { min-height: 36px; border: 1px solid #0f8f7f; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #0f8f7f; color: #ffffff; }
+    .btn-primary { min-height: 36px; border: 1px solid #5A153F; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #5A153F; color: #ffffff; }
     .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .btn-secondary { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #172033; }
     .btn-secondary:hover { background: #f8fafc; }
@@ -109,7 +109,7 @@ import { DataMigrationStore } from './data-migration.store';
     .pending-info small { font-size: 12px; color: #64748b; }
     .pending-actions { display: flex; gap: 8px; }
     .status-pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; display: inline-block; }
-    .status-pill.good { background: #e8f7f4; color: #0f766e; }
+    .status-pill.good { background: #F1E8EE; color: #4B1238; }
     .status-pill.active { background: #fffbeb; color: #b45309; }
     .status-pill.blocked { background: #fef2f2; color: #b91c1c; }
     .approval-list { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; display: grid; gap: 8px; }
@@ -120,16 +120,16 @@ import { DataMigrationStore } from './data-migration.store';
     .approval-meta small { font-size: 11px; color: #64748b; }
     .approval-actions { display: flex; gap: 6px; }
     .btn-small { min-height: 28px; border-radius: 6px; padding: 0 10px; font-weight: 700; font-size: 11px; cursor: pointer; border: 1px solid #e2e8f0; background: #ffffff; }
-    .btn-small.good { background: #e8f7f4; color: #0f766e; border-color: #a7f3d0; }
+    .btn-small.good { background: #F1E8EE; color: #4B1238; border-color: #DCC4D4; }
     .btn-small.danger { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
     .empty-state { color: #64748b; font-size: 12px; padding: 8px 0; margin: 0; }
     .debug-section { padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; }
     .debug-section p { margin: 0; font-size: 12px; color: #64748b; }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #e8f7f4; color: #0f766e; border: 1px solid #a7f3d0; }
+    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
     .loading-section { display: flex; align-items: center; gap: 10px; padding: 16px; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; font-weight: 700; font-size: 13px; }
-    .spinner { width: 18px; height: 18px; border: 3px solid #e2e8f0; border-top-color: #0f8f7f; border-radius: 50%; animation: spin .6s linear infinite; }
+    .spinner { width: 18px; height: 18px; border: 3px solid #e2e8f0; border-top-color: #5A153F; border-radius: 50%; animation: spin .6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } .command-header { grid-template-columns: 1fr; } }
   `]

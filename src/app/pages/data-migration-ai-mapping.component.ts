@@ -86,11 +86,11 @@ import { DataMigrationStore } from './data-migration.store';
     .required-badge { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 999px; background: #fef2f2; color: #b91c1c; }
     .mapping-confidence { display: flex; align-items: center; }
     .confidence-badge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
-    .confidence-badge.high { background: #e8f7f4; color: #0f766e; }
+    .confidence-badge.high { background: #F1E8EE; color: #4B1238; }
     .confidence-badge.medium { background: #fffbeb; color: #b45309; }
     .confidence-badge.low { background: #fef2f2; color: #b91c1c; }
     .form-input { width: 100%; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }
-    .form-input:focus { border-color: #0f8f7f; outline: 2px solid rgba(15,143,127,.12); background: #ffffff; }
+    .form-input:focus { border-color: #5A153F; outline: 2px solid rgba(90,21,63,.12); background: #ffffff; }
     .mapping-aliases { color: #64748b; font-size: 11px; grid-column: 1 / -1; }
     @media (max-width: 760px) { .mapping-row { grid-template-columns: 1fr; } .migration-shell { padding: 10px; } }
   `]

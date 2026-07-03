@@ -1022,7 +1022,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .list-head, .editor-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     select, input, textarea { width: 100%; border: 1px solid #cbd8e4; border-radius: 3px; padding: 9px 10px; font: inherit; }
     .draft-card { text-align: left; background: white; display: grid; gap: 5px; }
-    .draft-card.active { background: #e8f4f2; border-color: #14b8a6; }
+    .draft-card.active { background: #e8f4f2; border-color: #6D1B4D; }
     .badge { width: max-content; border-radius: 999px; padding: 5px 10px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 900; }
     .badge.done { background: #dcfce7; color: #166534; }
     .editor { border: 0; box-shadow: none; padding: 16px; display: grid; gap: 14px; }
@@ -1032,7 +1032,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .row { display: grid; grid-template-columns: 1.6fr 1.1fr .7fr 1.1fr 1.3fr 1.4fr .75fr .65fr; gap: 12px; align-items: center; padding: 12px; border-bottom: 1px solid #edf4f3; min-width: 1240px; }
     .row:last-child { border-bottom: 0; }
     .line-ledger { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-    .line-ledger small { border: 1px solid #cfe1df; border-radius: 999px; padding: 4px 8px; background: #ecfdf5; color: #0f766e; font-weight: 800; text-transform: none; }
+    .line-ledger small { border: 1px solid #cfe1df; border-radius: 999px; padding: 4px 8px; background: #F3EAF0; color: #4B1238; font-weight: 800; text-transform: none; }
     .qty-unit, .range-fields { display: grid; grid-template-columns: 1fr 86px; gap: 8px; }
     .range-fields { grid-template-columns: 1fr 1fr; }
     .range-fields small { grid-column: 1 / -1; color: #b45309; font-size: 11px; font-weight: 900; }
@@ -1106,17 +1106,17 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .ledger-head small, .ledger-product small, .ledger-summary span, .history-row span { color: #64748b; }
     .container-scan { display: grid; grid-template-columns: 1.1fr 1.4fr auto; gap: 10px; align-items: end; border: 1px solid #dcebea; border-radius: 14px; padding: 12px; background: white; }
     .container-scan div { display: grid; gap: 3px; }
-    .scan-result { border: 1px solid #9bd8cf; border-radius: 14px; padding: 12px; background: #ecfdf5; display: grid; grid-template-columns: 1.4fr repeat(3, .7fr); gap: 10px; align-items: start; }
+    .scan-result { border: 1px solid #9bd8cf; border-radius: 14px; padding: 12px; background: #F3EAF0; display: grid; grid-template-columns: 1.4fr repeat(3, .7fr); gap: 10px; align-items: start; }
     .scan-result div { display: grid; gap: 4px; }
-    .scan-result span, .scan-result small { color: #0f766e; }
+    .scan-result span, .scan-result small { color: #4B1238; }
     .scan-history { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
     .scan-history small { border: 1px solid #9bd8cf; border-radius: 999px; padding: 5px 8px; background: white; }
     .ledger-product { background: white; border: 1px solid #dcebea; border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
     .ledger-summary { display: grid; grid-template-columns: 1.6fr repeat(3, minmax(90px, .5fr)); }
     .ledger-summary div { display: grid; gap: 4px; }
-    .active-container { align-items: start; border: 1px dashed #9bd8cf; border-radius: 12px; padding: 10px; background: #ecfdf5; }
+    .active-container { align-items: start; border: 1px dashed #9bd8cf; border-radius: 12px; padding: 10px; background: #F3EAF0; }
     .progress { height: 9px; min-width: 160px; border-radius: 999px; overflow: hidden; background: #d7e6e4; }
-    .progress i { display: block; height: 100%; border-radius: inherit; background: #0f766e; }
+    .progress i { display: block; height: 100%; border-radius: inherit; background: #4B1238; }
     .ledger-alerts { display: flex; flex-wrap: wrap; gap: 8px; }
     .ledger-actions { display: grid; grid-template-columns: .8fr .7fr 1fr auto; gap: 8px; align-items: center; }
     .ledger-actions.override { grid-template-columns: 1fr auto; }
@@ -1134,7 +1134,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
     .product-results { position: absolute; left: 0; right: 0; top: 72px; z-index: 5; max-height: 260px; overflow: auto; background: white; border: 1px solid #cfe1df; border-radius: 14px; box-shadow: 0 18px 45px rgba(15,23,42,.18); padding: 6px; }
     .product-results button { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border: 0; border-radius: 10px; background: white; }
     .product-results button:hover { background: #e8f4f2; }
-    .product-results small, .selected-stock { color: #0f766e; font-weight: 900; }
+    .product-results small, .selected-stock { color: #4B1238; font-weight: 900; }
     .reason-needed { border-color: #f97316; background: #fff7ed; }
     .waste-warn { border-color: #f59e0b; background: #fffbeb; }
     .waste-block { border-color: #dc2626; background: #fef2f2; }

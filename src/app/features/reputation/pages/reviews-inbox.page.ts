@@ -284,7 +284,7 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
     .analysis-grid span, .section-title span { color: #53657d; font-weight: 800; }
     .analysis-grid strong, .section-title strong { color: #0f172a; }
     .topic-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .topic-list span { background: #eef6f4; color: #0f766e; border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: 12px; }
+    .topic-list span { background: #eef6f4; color: #4B1238; border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: 12px; }
     .reply-tools select { width: auto; min-width: 120px; }
     .reply-history { display: grid; gap: 10px; margin-top: 12px; }
     .reply-history article { border: 1px solid #edf2f5; border-radius: 8px; padding: 12px; }

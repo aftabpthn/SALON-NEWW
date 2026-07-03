@@ -1574,7 +1574,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
       border: 1px solid #cfe0dc;
       border-radius: 999px;
       background: #f8fffd;
-      color: #0f766e;
+      color: #4B1238;
       cursor: pointer;
       font-weight: 900;
       min-height: 36px;
@@ -1583,7 +1583,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
 
     .notes-page-actions button:hover,
     .notes-page-actions button:focus-visible {
-      background: #0f766e;
+      background: #4B1238;
       color: #fff;
       outline: none;
     }
@@ -1967,7 +1967,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
       right: 0;
       height: 5px;
       content: '';
-      background: linear-gradient(90deg, #0f766e, #2563eb, #c2410c);
+      background: linear-gradient(90deg, #4B1238, #2563eb, #c2410c);
     }
 
     .client360-header-body {

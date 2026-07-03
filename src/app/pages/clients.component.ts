@@ -872,6 +872,165 @@ import { StateComponent } from '../shared/ui/state/state.component';
       min-width: 130px;
     }
 
+
+    :host .page-stack { background: #f8f5f2; }
+
+    :host .client-command-hero,
+    :host .salonist-kpis,
+    :host .client-database-panel,
+    :host .client-reports-panel,
+    :host .client-api-strip,
+    :host .client-report-metrics .metric-card,
+    :host .client-report-metrics .kpi-link-card,
+    :host .client-empty-state,
+    :host .client-drawer {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    :host .client-command-hero {
+      padding: 18px 20px;
+      align-items: center;
+    }
+
+    :host .client-command-hero h2,
+    :host .client-kpi-card strong,
+    :host .client-report-heading h2,
+    :host .client-report-metrics strong,
+    :host .identity-cell strong,
+    :host .wallet-cell strong,
+    :host .drawer-header h2 {
+      color: #302522 !important;
+      font-weight: 630 !important;
+    }
+
+    :host .client-report-heading p,
+    :host .client-kpi-card small,
+    :host .client-kpi-card span,
+    :host .client-database-panel .field span,
+    :host .client-database-panel .search-field span,
+    :host .clients-crm-table th,
+    :host .identity-cell small,
+    :host .wallet-cell small {
+      color: #766763 !important;
+      font-weight: 540 !important;
+    }
+
+    :host .salonist-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: 12px;
+      padding: 14px;
+    }
+
+    :host .client-kpi-card {
+      min-height: 92px;
+      border: 1px solid rgba(118, 85, 76, 0.13) !important;
+      border-left: 3px solid rgba(154, 106, 96, 0.68) !important;
+      border-radius: 13px !important;
+      background: #fff !important;
+      box-shadow: none !important;
+    }
+
+    :host .client-kpi-card:hover,
+    :host .client-kpi-card:focus-visible {
+      border-color: rgba(154, 106, 96, 0.24) !important;
+      background: #fffaf7 !important;
+      transform: translateY(-1px);
+    }
+
+    :host .kpi-icon,
+    :host .badge,
+    :host .segmented button.active,
+    :host .client-tag-segment button.active {
+      border-color: rgba(154, 106, 96, 0.16) !important;
+      border-radius: 999px !important;
+      background: #fff7f3 !important;
+      color: #75524b !important;
+      font-weight: 620 !important;
+    }
+
+    :host .client-database-panel .table-toolbar {
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid rgba(118, 85, 76, 0.11);
+      border-radius: 14px;
+      background: #fffdfb;
+    }
+
+    :host .client-database-panel .field input,
+    :host .client-database-panel .field select,
+    :host .client-database-panel .search-field input,
+    :host .client-drawer input,
+    :host .client-drawer select,
+    :host .client-drawer textarea {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-radius: 10px !important;
+      background: #fff !important;
+      box-shadow: none !important;
+    }
+
+    :host .client-database-panel .table-wrap {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+    }
+
+    :host .clients-crm-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #faf7f4 !important;
+      border-bottom-color: rgba(118, 85, 76, 0.12) !important;
+    }
+
+    :host .clients-crm-table td {
+      border-bottom-color: rgba(118, 85, 76, 0.08) !important;
+      vertical-align: middle;
+    }
+
+    :host .clickable-client-row:hover td {
+      background: #fffaf7 !important;
+    }
+
+    :host .avatar {
+      background: #fff7f3 !important;
+      color: #75524b !important;
+    }
+
+    :host .dropdown-panel,
+    :host .column-popover,
+    :host .row-action-menu {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      box-shadow: 0 24px 60px rgba(73, 51, 43, 0.18) !important;
+    }
+
+    :host .ghost-button,
+    :host .primary-button,
+    :host .dark-button,
+    :host .danger-button,
+    :host .floating-add-client {
+      border-radius: 10px !important;
+      font-weight: 580 !important;
+    }
+
+    :host .primary-button,
+    :host .dark-button,
+    :host .floating-add-client {
+      border-color: #744a44 !important;
+      background: #744a44 !important;
+      color: #fff !important;
+    }
+
+    @media (max-width: 760px) {
+      :host .salonist-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      :host .client-command-hero { align-items: stretch; }
+    }
     @media (max-width: 1380px) {
       .client-command-hero {
         grid-template-columns: 1fr;

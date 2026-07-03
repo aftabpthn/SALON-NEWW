@@ -188,6 +188,27 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .rank-list article:last-child { border-bottom: 0; }
     .rank-list span, .rank-list small { color: #64748b; font-size: 12px; }
     .result-json { margin: 12px 14px; background: #111827; color: #f8fafc; border-radius: 3px; padding: 12px; overflow: auto; }
+
+    :host .finance-engine,
+    :host .page-stack { background: #f8f5f2; }
+    :host .module-hero,
+    :host .metrics-grid,
+    :host .metrics-grid article,
+    :host .panel,
+    :host .workdesk-card,
+    :host .table-wrap {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+    :host .metrics-grid { gap: 12px; padding: 12px; }
+    :host .metrics-grid article { border-left: 3px solid rgba(154, 106, 96, 0.68) !important; border-top: 1px solid rgba(118, 85, 76, 0.13) !important; }
+    :host h1, :host h2, :host h3, :host .metrics-grid strong { color: #302522 !important; font-weight: 630 !important; }
+    :host .metrics-grid span, :host .metrics-grid small, :host th { color: #766763 !important; font-weight: 540 !important; }
+    :host th { background: #faf7f4 !important; }
+    :host tbody tr:hover td { background: #fffaf7 !important; }
     @media (max-width: 1100px) {
       .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .workdesk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

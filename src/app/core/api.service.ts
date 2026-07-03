@@ -137,7 +137,9 @@ export class ApiService {
   }
 
   report<T = ApiRecord>(path: string, params: ApiRecord = {}): Observable<T> {
-    return this.withAuth((headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/reports/${path}`, { headers, params: this.toParams(this.withBranchScope(`reports/${path}`, params)) }), this.timeoutFor(`reports/${path}`));
+    const resource = `reports/${path}`;
+    const scopedParams = this.withBranchScope(resource, params);
+    return this.cachedRead(resource, scopedParams, (headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, { headers, params: this.toParams(scopedParams) }), this.timeoutFor(resource));
   }
 
   errorText(error: unknown, fallback = 'Request failed'): string {
@@ -210,7 +212,14 @@ export class ApiService {
     if (normalized === 'permissions' || normalized === 'permission-matrix' || normalized === 'security/permission-matrix') return 5 * 60_000;
     if (normalized === 'tenants' || normalized === 'tenant-profile' || normalized === 'business-profile') return 5 * 60_000;
     if (normalized === 'business-details' || normalized.startsWith('business-details/')) return 5 * 60_000;
-    if (normalized === 'dashboard' || normalized.startsWith('dashboard/') || normalized === 'dashboard-summary' || normalized === 'home-dashboard') return 60_000;
+    if (normalized === 'dashboard' || normalized.startsWith('dashboard/') || normalized === 'dashboard-summary' || normalized === 'home-dashboard' || normalized === 'reports/dashboard') return 60_000;
+    if (normalized.startsWith('reports/')) return 45_000;
+    if (normalized === 'clients' || normalized.startsWith('clients/')) return 45_000;
+    if (normalized === 'appointments' || normalized.startsWith('appointments/') || normalized.startsWith('enterprise-scheduler/')) return 15_000;
+    if (normalized === 'products' || normalized.startsWith('products/') || normalized === 'packages' || normalized.startsWith('packages/') || normalized === 'memberships' || normalized.startsWith('memberships/')) return 2 * 60_000;
+    if (normalized === 'inventory' || normalized.startsWith('inventory/') || normalized === 'suppliers' || normalized.startsWith('suppliers/') || normalized === 'inventoryBatches') return 90_000;
+    if (normalized === 'localization/preference' || normalized === 'invoice-notifications/profile' || normalized.startsWith('settings/')) return 5 * 60_000;
+    if (normalized.endsWith('/summary') || normalized.endsWith('/dashboard') || normalized.endsWith('/overview')) return 45_000;
     return 0;
   }
 
@@ -236,6 +245,7 @@ export class ApiService {
     if (!cachedResource || !changedResource) return false;
     if (cachedResource === changedResource) return true;
     if (cachedResource.startsWith(`${changedResource}/`) || changedResource.startsWith(`${cachedResource}/`)) return true;
+    if (cachedResource.startsWith('reports/')) return true;
     if (changedResource === 'staff' || changedResource.startsWith('staff/') || changedResource.startsWith('staff-os/staff')) return cachedResource === 'staff' || cachedResource.startsWith('staff/') || cachedResource === 'staff-os/staff';
     if (changedResource.startsWith('staff-os/')) return cachedResource === 'staff-os/staff';
     if (changedResource.startsWith('branches')) return cachedResource === 'branches';

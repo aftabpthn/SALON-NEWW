@@ -23,6 +23,60 @@ import { VoidInvoiceModalComponent } from '../../ui/void-invoice-modal/void-invo
     .invoice-workspace { display: grid; gap: 16px; padding: 16px; }
     .invoice-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 0.48fr); gap: 16px; align-items: start; }
     .message-card { padding: 12px 14px; color: var(--aura-success, #16a34a); background: var(--aura-success-bg, rgba(22, 163, 74, 0.12)); }
+
+    .billing-hero {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      background: #fff !important;
+      color: #2f2522 !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    .billing-hero h1 { color: #302522 !important; font-weight: 650; }
+    .billing-hero p { color: #766763 !important; }
+
+    .hero-stat,
+    .status-card {
+      border-color: rgba(154, 106, 96, 0.16) !important;
+      background: #fff7f3 !important;
+      color: #75524b !important;
+    }
+
+    .hero-stat span,
+    .status-card span { color: #80645e !important; font-weight: 600; }
+    .hero-stat strong,
+    .status-card strong { color: #302522 !important; font-weight: 650; }
+
+    .invoice-list-card,
+    .invoice-empty-state,
+    .state-message,
+    .invoice-workspace,
+    .message-card {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      background: #fff !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    .invoice-row {
+      border-bottom-color: rgba(118, 85, 76, 0.09) !important;
+    }
+
+    .invoice-row:hover,
+    .invoice-row:focus-visible {
+      background: #fffaf7 !important;
+      transform: translateY(-1px);
+    }
+
+    .invoice-main strong,
+    .amount { color: #302522 !important; font-weight: 630; }
+    .invoice-meta span,
+    .invoice-main span { color: #766763 !important; font-weight: 520; }
+
+    .status-chip {
+      border-color: rgba(154, 106, 96, 0.16) !important;
+      background: #fff7f3 !important;
+      color: #75524b !important;
+      font-weight: 620 !important;
+    }
     @media (max-width: 860px) { .billing-hero, .invoice-actions { grid-template-columns: 1fr; display: grid; } .status-card { text-align: left; } }
   `],
   template: `

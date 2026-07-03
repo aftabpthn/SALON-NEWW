@@ -1014,7 +1014,7 @@ type PackageClientNotice = {
     :host .settlement-preview-bar {
       display: grid;
       gap: 12px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 10px;
       padding: 14px;
       margin: 14px 0 16px;
@@ -1043,7 +1043,7 @@ type PackageClientNotice = {
     }
 
     :host .settlement-preview-metrics article {
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 8px;
       padding: 12px;
       background: #fff;
@@ -1052,7 +1052,7 @@ type PackageClientNotice = {
     }
 
     :host .settlement-preview-metrics span {
-      color: #0f766e;
+      color: #4B1238;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
@@ -1078,7 +1078,7 @@ type PackageClientNotice = {
       gap: 10px;
       margin: 12px 0;
       padding: 12px;
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 10px;
       background: #f8fffd;
     }
@@ -1113,7 +1113,7 @@ type PackageClientNotice = {
     :host .membership-line-badge--credit,
     :host .membership-line-badge--unlimited {
       border-color: #9bd8c4;
-      background: #ecfdf5;
+      background: #F3EAF0;
       color: #047857;
     }
 
@@ -1188,7 +1188,7 @@ type PackageClientNotice = {
     :host .generated-settlement-card {
       display: grid;
       gap: 8px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 10px;
       padding: 12px;
       margin: 12px 0;
@@ -1238,8 +1238,8 @@ type PackageClientNotice = {
     }
 
     :host .client-crm-history-button {
-      border-color: rgba(15, 143, 127, 0.26);
-      background: #e8f7f4;
+      border-color: rgba(90, 21, 63, 0.26);
+      background: #F1E8EE;
       color: #0f3f3a;
     }
 
@@ -1268,7 +1268,7 @@ type PackageClientNotice = {
       max-height: min(340px, 42vh);
       overflow-y: auto;
       padding: 8px;
-      border: 1px solid rgba(15, 118, 110, 0.22);
+      border: 1px solid rgba(75, 18, 56, 0.22);
       border-radius: 18px;
       background: rgba(255, 255, 255, 0.98);
       box-shadow: 0 26px 70px rgba(15, 23, 42, 0.2);
@@ -1315,8 +1315,8 @@ type PackageClientNotice = {
       transform: translateY(-50%);
       border: 0;
       border-radius: 999px;
-      color: #0f766e;
-      background: rgba(15, 118, 110, 0.1);
+      color: #4B1238;
+      background: rgba(75, 18, 56, 0.1);
       font-weight: 900;
       cursor: pointer;
     }
@@ -1343,7 +1343,7 @@ type PackageClientNotice = {
     :host .client-result-card:hover,
     :host .client-result-card:focus-visible,
     :host .client-result-card.active {
-      background: rgba(15, 118, 110, 0.09);
+      background: rgba(75, 18, 56, 0.09);
       outline: 0;
     }
 
@@ -1354,7 +1354,7 @@ type PackageClientNotice = {
       place-items: center;
       border-radius: 999px;
       color: #f8fafc;
-      background: linear-gradient(135deg, #0f766e, #2563eb);
+      background: linear-gradient(135deg, #4B1238, #2563eb);
       font-weight: 900;
     }
 
@@ -1416,7 +1416,7 @@ type PackageClientNotice = {
       border: 2px solid #22c55e;
       border-radius: 8px;
       padding: 10px 14px;
-      background: #ecfdf5;
+      background: #F3EAF0;
       box-shadow: inset 4px 0 0 #16a34a;
     }
 
@@ -1537,8 +1537,8 @@ type PackageClientNotice = {
     :host .client-call-button {
       padding: 8px 12px;
       border-radius: 999px;
-      color: #0f766e;
-      background: rgba(15, 118, 110, 0.1);
+      color: #4B1238;
+      background: rgba(75, 18, 56, 0.1);
       font-size: 12px;
       font-weight: 900;
       text-decoration: none;
@@ -1576,7 +1576,7 @@ type PackageClientNotice = {
       gap: 16px;
       padding: 18px;
       overflow-y: auto;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 24px;
       background: rgba(255, 255, 255, 0.98);
       box-shadow: 0 30px 90px rgba(15, 23, 42, 0.26);
@@ -1633,7 +1633,7 @@ type PackageClientNotice = {
 
     :host .pos-search-results button:hover,
     :host .pos-search-results button:focus-visible {
-      background: rgba(15, 118, 110, 0.09);
+      background: rgba(75, 18, 56, 0.09);
       outline: 0;
     }
     :host .page-stack { gap: 18px; padding: 8px 4px 28px; background: var(--color-surface-muted); }
@@ -1689,6 +1689,163 @@ type PackageClientNotice = {
       :host .hero-actions > *, :host .payment-actions > *, :host .client-search-actions > * { flex: 1 1 auto; justify-content: center; }
       :host .pos-layout > .panel, :host .checkout-panel { padding: 14px; }
       :host .summary-lines div { padding: 9px 10px; }
+    }
+    :host .pos-layout > .panel:first-child {
+      display: grid;
+      gap: 18px;
+      background: #fffdfb;
+    }
+
+    :host .checkout-panel {
+      background: #ffffff;
+      box-shadow: 0 18px 44px rgba(73, 51, 43, 0.075);
+    }
+
+    :host .client-crm-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+    }
+
+    :host .client-crm-tile {
+      min-height: 92px;
+      padding: 14px 15px;
+      align-content: center;
+      border-left: 3px solid rgba(154, 106, 96, 0.68);
+    }
+
+    :host .client-crm-tile span {
+      color: #83736e;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+    }
+
+    :host .client-crm-tile strong {
+      font-size: 1rem;
+      letter-spacing: -0.01em;
+    }
+
+    :host .pos-client-search-row,
+    :host .catalog-picker,
+    :host .benefit-lines {
+      padding: 14px;
+      border: 1px solid rgba(118, 85, 76, 0.11);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(73, 51, 43, 0.035);
+    }
+
+    :host .catalog-picker,
+    :host .benefit-lines,
+    :host .summary-control-grid,
+    :host .tip-draft-grid,
+    :host .payment-grid {
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    }
+
+    :host .field > span {
+      color: #766763;
+      font-size: 0.69rem;
+      text-transform: uppercase;
+    }
+
+    :host .field input,
+    :host .field select,
+    :host .field textarea {
+      min-height: 40px;
+      color: #2f2522;
+    }
+
+    :host .service-search-results,
+    :host .client-search-results,
+    :host .staff-search-results {
+      border-color: rgba(118, 85, 76, 0.14);
+      box-shadow: 0 24px 60px rgba(73, 51, 43, 0.16);
+    }
+
+    :host .service-result-option,
+    :host .client-result-card {
+      min-height: 58px;
+      background: #fff;
+    }
+
+    :host .select-pill,
+    :host .client-badge,
+    :host .membership-line-badge,
+    :host .split-number {
+      border-radius: 999px;
+      background: #fff7f3;
+      color: #75524b;
+      font-weight: 620;
+    }
+
+    :host .package-billing-alert,
+    :host .package-redeem-panel,
+    :host .benefit-mapping-box,
+    :host .membership-redemption-panel,
+    :host .settlement-preview-bar,
+    :host .unpaid-receive-box,
+    :host .generated-settlement-card {
+      background: #fffdfb;
+      border-left-color: #9a6a60;
+    }
+
+    :host .summary-lines div.total,
+    :host .summary-lines .total {
+      color: #2f2522;
+      background: #fff7f3;
+    }
+
+    :host .payment-header {
+      padding: 12px 0 2px;
+      border-top: 1px solid rgba(118, 85, 76, 0.1);
+    }
+
+    :host .payment-mode-card {
+      padding: 12px;
+    }
+
+    :host .payment-mode-card span {
+      color: #6f625f;
+      font-size: 0.72rem;
+    }
+
+    :host .full-button {
+      border-radius: 12px;
+      background: #744a44;
+      box-shadow: 0 14px 28px rgba(116, 74, 68, 0.18);
+    }
+
+    :host .invoice-preview {
+      padding: 14px;
+      background: #fffdfb;
+    }
+
+    :host table {
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid rgba(118, 85, 76, 0.1);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    :host th,
+    :host td {
+      padding: 12px 10px;
+    }
+
+    :host .line-total-cell strong,
+    :host .summary-lines strong {
+      font-weight: 640;
+    }
+
+    @media (max-width: 900px) {
+      :host .catalog-picker,
+      :host .benefit-lines,
+      :host .summary-control-grid,
+      :host .tip-draft-grid,
+      :host .payment-grid {
+        grid-template-columns: 1fr;
+      }
     }
   `]
 })

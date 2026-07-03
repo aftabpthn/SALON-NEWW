@@ -770,7 +770,7 @@ export class StaffMasterDefinitionComponent implements OnInit {
       dayCount: Number(value.dayCount || 0),
       paid: Boolean(value.paid),
       availableForAppointment: Boolean(value.availableForAppointment),
-      color: value.color || '#0f766e',
+      color: value.color || '#4B1238',
       sortOrder: Number(value.sortOrder || 0)
     };
   }

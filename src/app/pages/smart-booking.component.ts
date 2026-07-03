@@ -195,7 +195,7 @@ type SmartBookingViewKey = 'overview' | 'recommend' | 'queue' | 'slots' | 'waitl
 
     .smart-booking-nav-card.active {
       border-color: var(--color-primary);
-      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(99, 102, 241, 0.12), rgba(245, 158, 11, 0.12));
+      background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(99, 102, 241, 0.12), rgba(245, 158, 11, 0.12));
       box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
     }
 
@@ -236,10 +236,59 @@ type SmartBookingViewKey = 'overview' | 'recommend' | 'queue' | 'slots' | 'waitl
       height: 48px;
       border-radius: 8px;
       color: var(--color-primary-strong);
-      background: rgba(20, 184, 166, 0.12);
+      background: rgba(214, 79, 146, 0.12);
       font-weight: 900;
     }
 
+
+    :host .smart-booking-workspace,
+    :host .smart-booking-nav-card,
+    :host .smart-booking-detail,
+    :host .panel,
+    :host .form-panel,
+    :host .metric-card,
+    :host .summary-lines,
+    :host .table-wrap {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    :host .smart-booking-nav-card {
+      border-left-color: rgba(154, 106, 96, 0.68) !important;
+    }
+
+    :host .smart-booking-nav-card.active,
+    :host .smart-booking-nav-card:hover {
+      background: #fff7f3 !important;
+      border-color: rgba(154, 106, 96, 0.24) !important;
+      transform: translateY(-1px);
+    }
+
+    :host .smart-booking-nav-icon,
+    :host .smart-booking-nav-card i,
+    :host .badge {
+      background: #fff7f3 !important;
+      color: #75524b !important;
+    }
+
+    :host h1,
+    :host h2,
+    :host h3,
+    :host .smart-booking-nav-card strong {
+      color: #302522 !important;
+      font-weight: 630 !important;
+    }
+
+    :host .smart-booking-nav-card small,
+    :host p,
+    :host label span,
+    :host th {
+      color: #766763 !important;
+      font-weight: 540 !important;
+    }
     @media (max-width: 1180px) {
       .smart-booking-workspace {
         grid-template-columns: 1fr;

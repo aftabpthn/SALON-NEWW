@@ -243,7 +243,7 @@ type StaffModuleGroup = {
       align-self: start;
       padding: 3px 8px;
       border-radius: 999px;
-      background: #ecfdf5;
+      background: #F3EAF0;
       color: #047857;
       font-size: 0.72rem;
       font-weight: 850;

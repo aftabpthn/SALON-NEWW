@@ -144,7 +144,7 @@ import { CommandCenterModule } from '../domain/command-center.models';
       cursor: pointer; transition: border-color 140ms ease, box-shadow 140ms ease;
     }
     .cc-record:hover, .cc-record.selected {
-      border-color: #0f766e; box-shadow: 0 2px 8px rgba(15, 118, 110, 0.06);
+      border-color: #4B1238; box-shadow: 0 2px 8px rgba(75, 18, 56, 0.06);
     }
     .cc-record div { display: grid; gap: 2px; }
     .cc-record strong { font-size: 13px; color: #12231d; }

@@ -271,7 +271,7 @@ type RedemptionLine = {
       padding: 0 16px;
       border: 1px solid #b7e5d8;
       border-radius: 6px;
-      background: #ecfdf5;
+      background: #F3EAF0;
       color: #075e4b;
       font-weight: 900;
     }
@@ -891,7 +891,7 @@ type RedemptionLine = {
     }
 
     .client-package-head a {
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 900;
       text-decoration: none;
     }
@@ -922,7 +922,7 @@ type RedemptionLine = {
     }
 
     .redeem-line span {
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 900;
     }
 

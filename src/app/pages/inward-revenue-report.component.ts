@@ -272,7 +272,7 @@ type ColumnDef = {
     .import-panel { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(260px, 0.7fr) auto; align-items: center; }
     .import-copy h3, .section-title h3 { margin: 0.2rem 0 0; }
     .import-copy p { margin: 0.35rem 0 0; color: var(--muted); }
-    .file-drop { min-height: 92px; display: grid; gap: 0.25rem; align-content: center; padding: 1rem; border: 1px dashed var(--teal); border-radius: 8px; background: #f8fffc; cursor: pointer; }
+    .file-drop { min-height: 92px; display: grid; gap: 0.25rem; align-content: center; padding: 1rem; border: 1px dashed var(--teal); border-radius: 8px; background: #F7EEF4; cursor: pointer; }
     .file-drop input { display: none; }
     .file-drop span { color: var(--muted); font-size: 0.86rem; }
     .filters-panel { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); align-items: end; }
@@ -286,7 +286,7 @@ type ColumnDef = {
     .column-chooser label { display: grid; grid-template-columns: auto 1fr auto; gap: 0.45rem; align-items: center; padding: 0.5rem; border: 1px solid var(--line); border-radius: 8px; }
     .column-chooser small { color: var(--muted); font-size: 0.74rem; }
     .rank-list { display: grid; gap: 0.55rem; }
-    .rank-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.7rem; align-items: center; padding: 0.7rem; border: 1px solid var(--line); border-radius: 8px; background: #f8fffc; }
+    .rank-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.7rem; align-items: center; padding: 0.7rem; border: 1px solid var(--line); border-radius: 8px; background: #F7EEF4; }
     .rank-list span { color: var(--muted); }
     .revenue-table-wrap { max-height: 620px; overflow: auto; }
     th.right, td.right { text-align: right; }
@@ -295,7 +295,7 @@ type ColumnDef = {
     .floating-detail-card { width: min(880px, 96vw); max-height: 88vh; overflow: auto; }
     .compact-info { margin-bottom: 1rem; }
     .detail-list { display: grid; gap: 0.65rem; }
-    .detail-list article { display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem; border: 1px solid var(--line); border-radius: 8px; background: #f8fffc; }
+    .detail-list article { display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem; border: 1px solid var(--line); border-radius: 8px; background: #F7EEF4; }
     .detail-list span { display: block; color: var(--muted); }
     @media (max-width: 980px) {
       .import-panel, .filters-panel, .compact-metrics { grid-template-columns: 1fr; }

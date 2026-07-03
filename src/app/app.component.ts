@@ -411,6 +411,10 @@ type ActiveModuleTabs = {
       min-width: 0;
     }
 
+    .topbar {
+      margin-bottom: 0;
+    }
+
     .topbar-brand-title {
       display: inline-flex;
       align-items: center;
@@ -422,7 +426,7 @@ type ActiveModuleTabs = {
       grid-template-columns: 204px minmax(0, 1fr);
       align-items: stretch;
       min-height: calc(100vh - 150px);
-      border: 1px solid #d7e4ec;
+      border: 1px solid #e2dad2;
       background: #fff;
     }
 
@@ -432,11 +436,11 @@ type ActiveModuleTabs = {
       }
 
       .workspace-route-shell--local-rail-collapsed {
-        grid-template-columns: 64px minmax(0, 1fr);
+        grid-template-columns: 58px minmax(0, 1fr);
       }
 
       .workspace-route-shell--local-rail-collapsed .workspace-local-rail {
-        padding: 12px 8px;
+        padding: 10px 6px;
         overflow: hidden;
       }
 
@@ -467,12 +471,14 @@ type ActiveModuleTabs = {
     }
     .workspace-route-content {
       min-width: 0;
+      background: #fbf8f6;
     }
 
     .workspace-route-shell--with-local-nav .workspace-route-content {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       align-content: start;
+      padding: 0 16px 20px 12px;
     }
 
     .workspace-route-content > .workspace-module-tabs {
@@ -491,7 +497,8 @@ type ActiveModuleTabs = {
       min-height: 52px;
       display: flex;
       align-items: center;
-      padding: 8px 10px;
+      padding: 8px 0;
+      background: #fbf8f6;
     }
 
     .workspace-local-rail {
@@ -499,8 +506,8 @@ type ActiveModuleTabs = {
       flex-direction: column;
       gap: 10px;
       padding: 12px;
-      background: linear-gradient(180deg, #ffffff 0%, #f8fbfa 100%);
-      border-right: 1px solid #d7e4ec;
+      background: linear-gradient(180deg, #ffffff 0%, #faf7f2 100%);
+      border-right: 1px solid #e2dad2;
       min-width: 0;
     }
 
@@ -510,7 +517,7 @@ type ActiveModuleTabs = {
       align-items: center;
       gap: 10px;
       padding: 8px 6px 10px;
-      border-bottom: 1px solid #e4ecef;
+      border-bottom: 1px solid #e7e2db;
     }
 
     .topbar-back-button {
@@ -522,19 +529,19 @@ type ActiveModuleTabs = {
       height: 38px;
       min-height: 38px;
       padding: 0;
-      border: 1px solid #b9d8d3;
+      border: 1px solid #d6cec6;
       border-radius: 999px;
-      color: #0f766e;
+      color: #4B1238;
       background: #fff;
-      box-shadow: 0 6px 14px rgba(15, 118, 110, 0.12);
+      box-shadow: 0 6px 14px rgba(75, 18, 56, 0.12);
       font-size: 20px;
-      font-weight: 900;
+      font-weight: 700;
       line-height: 1;
     }
 
     .workspace-local-rail-head strong {
       display: block;
-      color: #123a36;
+      color: #2c1525;
       font-size: 14px;
       line-height: 1.2;
     }
@@ -564,9 +571,9 @@ type ActiveModuleTabs = {
     .workspace-local-nav a.active,
     .workspace-local-nav a:hover,
     .workspace-local-nav a:focus-visible {
-      background: #e8f7f4;
-      color: #005f58;
-      border-color: #a9d8d1;
+      background: rgba(75, 18, 56, 0.07);
+      color: #4B1238;
+      border-color: rgba(75, 18, 56, 0.2);
       outline: none;
     }
 
@@ -577,22 +584,26 @@ type ActiveModuleTabs = {
 
       .workspace-local-rail {
         border-right: 0;
-        border-bottom: 1px solid #d7e4ec;
+        border-bottom: 1px solid #eadfd9;
       }
 
       .workspace-route-content > .workspace-module-tabs {
         position: static;
-        border-top: 1px solid rgba(15, 118, 110, 0.14);
+        border-top: 1px solid rgba(75, 18, 56, 0.1);
       }
 
       .workspace-local-nav {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       }
+
+      .workspace-route-shell--with-local-nav .workspace-route-content {
+        padding: 0 12px 18px;
+      }
     }
 
     .nav-icon--module {
-      color: #0f766e;
+      color: #4B1238;
     }
 
     .nav-icon--module .nav-icon-svg {

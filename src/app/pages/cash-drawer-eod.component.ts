@@ -743,10 +743,10 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .cash-workspace-shell { display: grid; grid-template-columns: 338px minmax(0, 1fr); gap: 16px; align-items: start; }
     .cash-category-rail { display: grid; gap: 10px; }
     .cash-category-tile {
-      width: 100%; border: 1px solid #dbe7e4; border-left: 4px solid #0f766e; background: #fff; border-radius: 8px; padding: 14px 16px;
+      width: 100%; border: 1px solid #dbe7e4; border-left: 4px solid #4B1238; background: #fff; border-radius: 8px; padding: 14px 16px;
       display: grid; gap: 5px; text-align: left; cursor: pointer; box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
     }
-    .cash-category-tile.active { background: #f2fbf8; border-color: #9bd8cc; border-left-color: #0f766e; }
+    .cash-category-tile.active { background: #f2fbf8; border-color: #9bd8cc; border-left-color: #4B1238; }
     .cash-category-tile[data-state="warn"] { border-left-color: #f59e0b; }
     .cash-category-tile[data-state="bad"] { border-left-color: #dc2626; }
     .cash-category-tile span { color: #0f172a; font-weight: 900; }
@@ -789,7 +789,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .reconciliation-panel { display: grid; gap: 14px; }
     .recon-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
     .recon-tabs button { border: 1px solid #cbd8d2; background: #fff; border-radius: 999px; padding: 8px 12px; font-weight: 900; cursor: pointer; }
-    .recon-tabs button.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+    .recon-tabs button.active { background: #4B1238; color: #fff; border-color: #4B1238; }
     .recon-grid, .deposit-list { display: grid; gap: 10px; }
     .recon-row, .deposit-row { border: 1px solid #e1e9ef; border-radius: 8px; padding: 12px; display: grid; grid-template-columns: minmax(160px, 1fr) repeat(4, minmax(110px, auto)); gap: 10px; align-items: center; }
     .recon-row.exception { border-color: #fecaca; background: #fff7f7; }
@@ -815,7 +815,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .approval-link-grid strong, .match-summary strong { display: block; color: #0f172a; margin-top: 4px; text-transform: capitalize; }
     .approval-link-actions { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 10px; align-items: end; }
     .risk-events { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
-    .risk-events article { border: 1px solid #e1e9ef; border-left: 3px solid #0f766e; border-radius: 8px; padding: 10px; background: #fff; color: #475569; }
+    .risk-events article { border: 1px solid #e1e9ef; border-left: 3px solid #4B1238; border-radius: 8px; padding: 10px; background: #fff; color: #475569; }
     .risk-events article.high { border-left-color: #b42318; background: #fff7ed; }
     .risk-events strong { display: block; color: #0f172a; margin-bottom: 4px; }
     .approval-box { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; gap: 12px; align-items: end; margin-top: 12px; }
@@ -828,7 +828,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .blockers { display: flex; gap: 8px; flex-wrap: wrap; max-width: 520px; }
     .blockers span { border: 1px solid #fecaca; background: #fff1f2; color: #9f1239; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 900; }
     .report-metrics { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); gap: 10px; }
-    .report-metrics span { border-left: 3px solid #0f766e; padding-left: 10px; color: #475569; }
+    .report-metrics span { border-left: 3px solid #4B1238; padding-left: 10px; color: #475569; }
     .report-metrics strong { display: block; color: #0f172a; margin-top: 4px; }
     .empty-state { border: 1px dashed #cbd8d2; border-radius: 8px; padding: 14px; color: #64748b; background: #f8fafc; }
     .danger { border-color: #b42318 !important; }

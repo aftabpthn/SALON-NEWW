@@ -513,8 +513,8 @@ type RosterView = 'day' | 'week' | 'month';
       margin-top: 8px;
       padding: 8px;
       border-radius: 8px;
-      border: 1px solid rgba(20, 184, 166, 0.28);
-      background: rgba(20, 184, 166, 0.11);
+      border: 1px solid rgba(214, 79, 146, 0.28);
+      background: rgba(214, 79, 146, 0.11);
       cursor: grab;
     }
 

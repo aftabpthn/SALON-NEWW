@@ -10,13 +10,20 @@ export class NavigationPreloadingStrategy implements PreloadingStrategy {
 
   preload(route: Route, load: () => Observable<unknown>): Observable<unknown> {
     if (!route.data?.['preload']) return of(null);
-    if (!this.session.isAuthenticated()) return of(null);
+    if (!this.session.isAuthenticated() || this.shouldDeferForConnection()) return of(null);
 
-    const priority = Number(route.data['preloadPriority'] ?? 5);
-    const delayMs = Math.max(0, priority) * 350;
+    const priority = Math.max(1, Number(route.data['preloadPriority'] ?? 5));
+    const delayMs = 120 + (priority - 1) * 140;
     return timer(delayMs).pipe(
       mergeMap(() => load()),
       catchError(() => of(null))
     );
+  }
+
+  private shouldDeferForConnection(): boolean {
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    return Boolean(connection?.saveData || /2g/i.test(connection?.effectiveType || ''));
   }
 }

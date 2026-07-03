@@ -102,7 +102,7 @@
 .aura-button {
   min-width: 0;
   border-radius: var(--aura-control-radius, 10px);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0;
   transition: transform 140ms ease, background var(--aura-transition-fast), border-color var(--aura-transition-fast), color var(--aura-transition-fast), box-shadow var(--aura-transition-fast);
 }
@@ -123,12 +123,12 @@
   border-color: color-mix(in srgb, var(--aura-primary-700) 82%, black 18%);
   background: linear-gradient(180deg, var(--aura-primary-700), var(--aura-primary-600));
   color: #fff;
-  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.18);
+  box-shadow: 0 6px 16px rgba(75, 18, 56, 0.14);
 }
 
 .aura-button--primary:hover:not(:disabled) {
   background: linear-gradient(180deg, var(--aura-primary-700), color-mix(in srgb, var(--aura-primary-600) 86%, black 14%));
-  box-shadow: 0 14px 28px rgba(75, 18, 56, 0.24);
+  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.2);
   transform: translateY(-1px);
 }
 
@@ -152,7 +152,7 @@
 
 .aura-button--danger {
   border-color: color-mix(in srgb, var(--aura-danger) 82%, black 18%);
-  box-shadow: 0 10px 22px rgba(225, 29, 72, 0.14);
+  box-shadow: 0 6px 16px rgba(225, 29, 72, 0.1);
 }
 
 .aura-button:focus-visible {

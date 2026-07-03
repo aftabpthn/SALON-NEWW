@@ -108,7 +108,7 @@ import { DataMigrationStore } from './data-migration.store';
     .card-label { color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; display: block; margin-bottom: 6px; }
     .filter-tabs { display: flex; gap: 6px; }
     .filter-btn { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 14px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #64748b; }
-    .filter-btn.active { background: #0f8f7f; color: #ffffff; border-color: #0f8f7f; }
+    .filter-btn.active { background: #5A153F; color: #ffffff; border-color: #5A153F; }
     .filter-btn:hover:not(.active) { background: #f8fafc; }
     .queue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
     .queue-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; padding: 14px; display: grid; gap: 4px; cursor: pointer; }
@@ -122,7 +122,7 @@ import { DataMigrationStore } from './data-migration.store';
     .preview-info { display: flex; align-items: center; gap: 8px; }
     .preview-info strong { font-size: 13px; }
     .status-pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
-    .status-pill.good { background: #e8f7f4; color: #0f766e; }
+    .status-pill.good { background: #F1E8EE; color: #4B1238; }
     .status-pill.active { background: #fffbeb; color: #b45309; }
     .status-pill.blocked { background: #fef2f2; color: #b91c1c; }
     .dup-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; flex-wrap: wrap; }
@@ -131,14 +131,14 @@ import { DataMigrationStore } from './data-migration.store';
     .dup-info small { font-size: 11px; color: #64748b; }
     .dup-actions { display: flex; gap: 6px; }
     .decision-btn { min-height: 30px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0 10px; font-weight: 700; font-size: 11px; cursor: pointer; background: #ffffff; color: #172033; }
-    .decision-btn.active { background: #0f8f7f; color: #ffffff; border-color: #0f8f7f; }
+    .decision-btn.active { background: #5A153F; color: #ffffff; border-color: #5A153F; }
     .expected-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .expected-field { display: grid; gap: 4px; }
     .expected-field label { font-size: 12px; font-weight: 700; color: #172033; }
     .form-input { width: 100%; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }
-    .form-input:focus { border-color: #0f8f7f; outline: 2px solid rgba(15,143,127,.12); background: #ffffff; }
+    .form-input:focus { border-color: #5A153F; outline: 2px solid rgba(90,21,63,.12); background: #ffffff; }
     .recon-actions { display: flex; gap: 10px; }
-    .btn-primary { min-height: 36px; border: 1px solid #0f8f7f; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #0f8f7f; color: #ffffff; }
+    .btn-primary { min-height: 36px; border: 1px solid #5A153F; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #5A153F; color: #ffffff; }
     .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .btn-secondary { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #172033; }
     .btn-secondary:hover { background: #f8fafc; }
@@ -152,7 +152,7 @@ import { DataMigrationStore } from './data-migration.store';
     .export-strip { display: flex; gap: 10px; flex-wrap: wrap; }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #e8f7f4; color: #0f766e; border: 1px solid #a7f3d0; }
+    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } }
   `]
 })

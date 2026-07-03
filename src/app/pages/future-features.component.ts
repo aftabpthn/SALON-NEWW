@@ -262,11 +262,11 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       gap: 24px;
       overflow: hidden;
       padding: clamp(26px, 4vw, 42px);
-      border: 1px solid rgba(15, 118, 110, .16);
+      border: 1px solid rgba(75, 18, 56, .16);
       border-radius: 32px;
       background:
         radial-gradient(circle at 82% 20%, rgba(196, 132, 26, .24), transparent 28%),
-        radial-gradient(circle at 12% 88%, rgba(15, 118, 110, .18), transparent 34%),
+        radial-gradient(circle at 12% 88%, rgba(75, 18, 56, .18), transparent 34%),
         linear-gradient(135deg, #f8fffb 0%, #eef8f6 52%, #fff8ea 100%);
       box-shadow: 0 26px 70px rgba(15, 23, 42, .11);
     }
@@ -275,7 +275,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       position: absolute;
       width: 220px;
       height: 220px;
-      border: 1px solid rgba(15, 118, 110, .16);
+      border: 1px solid rgba(75, 18, 56, .16);
       border-radius: 999px;
       pointer-events: none;
     }
@@ -338,7 +338,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       align-items: center;
       min-height: 34px;
       padding: 0 12px;
-      border: 1px solid rgba(15, 118, 110, .16);
+      border: 1px solid rgba(75, 18, 56, .16);
       border-radius: 999px;
       background: rgba(255, 255, 255, .82);
       color: #123b36;
@@ -369,10 +369,10 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       width: 100%;
       min-height: 96px;
       padding: 14px;
-      border: 1px solid rgba(15, 118, 110, .14);
-      border-left: 4px solid rgba(15, 118, 110, .55);
+      border: 1px solid rgba(75, 18, 56, .14);
+      border-left: 4px solid rgba(75, 18, 56, .55);
       border-radius: 18px;
-      background: linear-gradient(135deg, #ffffff, #f8fffc);
+      background: linear-gradient(135deg, #ffffff, #F7EEF4);
       color: var(--ink);
       text-align: left;
       box-shadow: 0 14px 34px rgba(15, 23, 42, .07);
@@ -383,7 +383,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
     .future-nav-card:hover,
     .future-nav-card.active {
       transform: translateY(-2px);
-      border-color: rgba(15, 118, 110, .42);
+      border-color: rgba(75, 18, 56, .42);
       background: linear-gradient(135deg, rgba(196, 244, 235, .88), rgba(229, 241, 255, .92));
       box-shadow: 0 18px 42px rgba(15, 23, 42, .1);
     }
@@ -394,7 +394,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       width: 48px;
       height: 48px;
       border-radius: 14px;
-      background: rgba(15, 118, 110, .1);
+      background: rgba(75, 18, 56, .1);
       color: var(--teal);
       font-size: .78rem;
       font-weight: 950;
@@ -417,7 +417,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       align-self: start;
       padding: 5px 8px;
       border-radius: 999px;
-      background: rgba(15, 118, 110, .1);
+      background: rgba(75, 18, 56, .1);
       color: var(--teal);
       font-size: .68rem;
       font-style: normal;
@@ -454,9 +454,9 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       gap: 12px;
       align-items: center;
       padding: 13px;
-      border: 1px solid rgba(15, 118, 110, .12);
+      border: 1px solid rgba(75, 18, 56, .12);
       border-radius: 18px;
-      background: linear-gradient(135deg, #ffffff, #f8fffc);
+      background: linear-gradient(135deg, #ffffff, #F7EEF4);
       color: inherit;
       text-decoration: none;
       transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
@@ -466,7 +466,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
     .action-link:hover,
     .workflow-map-card:hover {
       transform: translateY(-2px);
-      border-color: rgba(15, 118, 110, .32);
+      border-color: rgba(75, 18, 56, .32);
       box-shadow: 0 16px 36px rgba(15, 23, 42, .09);
     }
 
@@ -510,9 +510,9 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       display: grid;
       gap: 8px;
       padding: 14px;
-      border: 1px solid rgba(15, 118, 110, .13);
+      border: 1px solid rgba(75, 18, 56, .13);
       border-radius: 18px;
-      background: #f8fffc;
+      background: #F7EEF4;
     }
 
     .workflow-map-grid {
@@ -526,7 +526,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       gap: 10px;
       min-height: 180px;
       padding: 16px;
-      border: 1px solid rgba(15, 118, 110, .13);
+      border: 1px solid rgba(75, 18, 56, .13);
       border-radius: 22px;
       background: #fff;
       cursor: pointer;
@@ -534,8 +534,8 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
     }
 
     .workflow-map-card.active {
-      border-color: rgba(15, 118, 110, .52);
-      background: linear-gradient(135deg, rgba(15, 118, 110, .12), #fff);
+      border-color: rgba(75, 18, 56, .52);
+      background: linear-gradient(135deg, rgba(75, 18, 56, .12), #fff);
     }
 
     .workflow-card-head {

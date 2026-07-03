@@ -225,8 +225,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       justify-content: flex-end;
     }
     .rule-chips span {
-      background: #ecfdf5;
-      border: 1px solid #a7f3d0;
+      background: #F3EAF0;
+      border: 1px solid #DCC4D4;
       border-radius: 999px;
       color: #047857;
       font-weight: 800;

@@ -81,8 +81,8 @@ import { DataMigrationStore } from './data-migration.store';
     .ask-section { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; display: grid; gap: 10px; }
     .ask-input-row { display: flex; gap: 10px; }
     .form-input { flex: 1; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }
-    .form-input:focus { border-color: #0f8f7f; outline: 2px solid rgba(15,143,127,.12); background: #ffffff; }
-    .btn-primary { min-height: 36px; border: 1px solid #0f8f7f; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #0f8f7f; color: #ffffff; flex-shrink: 0; }
+    .form-input:focus { border-color: #5A153F; outline: 2px solid rgba(90,21,63,.12); background: #ffffff; }
+    .btn-primary { min-height: 36px; border: 1px solid #5A153F; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #5A153F; color: #ffffff; flex-shrink: 0; }
     .btn-primary:hover { background: #0d7d6f; }
     .answer-card { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fffd; }
     .answer-card p { margin: 0; font-size: 13px; line-height: 1.5; color: #172033; }
@@ -90,14 +90,14 @@ import { DataMigrationStore } from './data-migration.store';
     .anomaly-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; padding: 14px; display: grid; gap: 4px; }
     .anomaly-card strong { font-size: 22px; }
     .anomaly-card small { color: #64748b; font-size: 12px; }
-    .anomaly-card.good { border-color: #e8f7f4; }
+    .anomaly-card.good { border-color: #F1E8EE; }
     .anomaly-card.warning { border-color: #fffbeb; background: #fffbeb; }
     .anomaly-card.danger { border-color: #fef2f2; background: #fef2f2; }
     .stats-section { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; display: grid; gap: 10px; }
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
     .stat-item { display: grid; gap: 2px; text-align: center; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; }
     .stat-value { font-size: 22px; font-weight: 800; line-height: 1; }
-    .stat-value.good { color: #0f766e; }
+    .stat-value.good { color: #4B1238; }
     .stat-value.danger { color: #b91c1c; }
     .stat-value.warning { color: #b45309; }
     .stat-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -106,7 +106,7 @@ import { DataMigrationStore } from './data-migration.store';
     .btn-secondary:hover { background: #f8fafc; }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #e8f7f4; color: #0f766e; border: 1px solid #a7f3d0; }
+    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } }
   `]
 })

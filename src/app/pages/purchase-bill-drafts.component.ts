@@ -445,7 +445,7 @@ type UploadFile = {
 
     .draft-list button.active {
       border-color: var(--teal);
-      box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.1);
+      box-shadow: 0 0 0 2px rgba(75, 18, 56, 0.1);
     }
 
     .draft-list strong,

@@ -349,8 +349,8 @@ type ServiceProductLockDraft = {
 
     .service-category-panel button.active,
     .service-category-panel button:hover {
-      border-color: #0f766e;
-      background: #ecfdf5;
+      border-color: #4B1238;
+      background: #F3EAF0;
     }
 
     .rate-filter-block {

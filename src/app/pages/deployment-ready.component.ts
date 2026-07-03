@@ -83,7 +83,153 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
       <pre class="result-json" *ngIf="result()">{{ result() | json }}</pre>
     </section>
-  `
+  `,
+  styles: [`
+    :host { display: block; min-width: 0; }
+
+    .module-hero {
+      align-items: flex-start !important;
+      gap: 18px !important;
+    }
+
+    .module-hero > div:first-child {
+      min-width: 0;
+    }
+
+    .module-hero h2 {
+      max-width: 1120px;
+      line-height: 1.12;
+    }
+
+    .hero-actions {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-end !important;
+      gap: 8px !important;
+      flex-wrap: nowrap !important;
+      min-width: max-content;
+    }
+
+    .hero-actions button,
+    .form-actions button {
+      min-height: 36px !important;
+      height: 36px !important;
+      padding: 0 16px !important;
+      border-radius: 10px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 6px !important;
+      line-height: 1 !important;
+      white-space: nowrap !important;
+      font-size: 0.82rem !important;
+      font-weight: 800 !important;
+    }
+
+    .rank-list article {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto !important;
+      align-items: center !important;
+      gap: 14px !important;
+      min-height: 70px !important;
+      padding: 14px 16px !important;
+    }
+
+    .rank-list article > div {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .rank-list article > div span {
+      line-height: 1.35;
+    }
+
+    .badge {
+      width: auto !important;
+      min-width: 70px !important;
+      height: 34px !important;
+      min-height: 34px !important;
+      padding: 0 14px !important;
+      border-radius: 999px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      justify-self: end !important;
+      align-self: center !important;
+      line-height: 1 !important;
+      white-space: nowrap !important;
+      text-align: center !important;
+      font-size: 0.72rem !important;
+      font-weight: 900 !important;
+      letter-spacing: 0 !important;
+      text-transform: lowercase !important;
+      background: #fff7ed !important;
+      color: #9a3412 !important;
+      border: 1px solid #fed7aa !important;
+      box-shadow: none !important;
+    }
+
+    .badge.success {
+      background: #dff7ee !important;
+      color: #0f5f56 !important;
+      border-color: #bde9dc !important;
+    }
+
+    td .badge {
+      min-width: 84px !important;
+      height: 30px !important;
+      min-height: 30px !important;
+      font-size: 0.7rem !important;
+    }
+
+    .form-actions {
+      display: flex !important;
+      justify-content: flex-end !important;
+      align-items: center !important;
+      gap: 8px !important;
+    }
+
+    :host-context([data-theme="dark"]) .badge {
+      background: rgba(251, 146, 60, 0.16) !important;
+      color: #fed7aa !important;
+      border-color: rgba(251, 146, 60, 0.32) !important;
+    }
+
+    :host-context([data-theme="dark"]) .badge.success {
+      background: rgba(214, 79, 146, 0.18) !important;
+      color: #D4B8CC !important;
+      border-color: rgba(45, 212, 191, 0.36) !important;
+    }
+
+    @media (max-width: 900px) {
+      .module-hero {
+        align-items: stretch !important;
+      }
+
+      .hero-actions {
+        justify-content: flex-start !important;
+        flex-wrap: wrap !important;
+        min-width: 0;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .rank-list article {
+        grid-template-columns: 1fr !important;
+        align-items: start !important;
+      }
+
+      .badge {
+        justify-self: start !important;
+      }
+
+      .hero-actions button,
+      .form-actions button {
+        flex: 1 1 100%;
+      }
+    }
+  `]
 })
 export class DeploymentReadyComponent implements OnInit {
   readonly summary = signal<ApiRecord | null>(null);

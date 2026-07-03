@@ -132,6 +132,7 @@ tbody tr:hover td {
   min-width: 32px;
   min-height: 32px;
   border-radius: 9px;
+  font-weight: 600;
 }
 
 tr:focus-within .aura-table__row-actions {

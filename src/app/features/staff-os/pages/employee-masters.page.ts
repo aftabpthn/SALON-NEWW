@@ -192,7 +192,7 @@ const payrollFlow = [
     .eyebrow { margin: 0 0 5px; color: #547066; font-size: 12px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
     h1 { margin: 0; font-size: 30px; letter-spacing: 0; }
     .primary, .refresh { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; display: inline-flex; font-weight: 850; min-height: 38px; padding: 9px 12px; text-decoration: none; }
-    .primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .primary { background: #4B1238; border-color: #4B1238; color: #fff; }
     .refresh { background: #fff; color: #34483f; cursor: pointer; }
     .metrics { display: grid; grid-template-columns: repeat(8, minmax(120px, 1fr)); gap: 12px; }
     .metrics article, .state { border: 1px solid #d9e5de; border-radius: 8px; background: #fff; padding: 14px; }

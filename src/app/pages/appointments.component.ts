@@ -1099,7 +1099,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     }
 
     .month-date-strip button.today:not(.active) {
-      border-color: rgba(15, 118, 110, 0.34);
+      border-color: rgba(75, 18, 56, 0.34);
     }
 
     .month-date-strip span,
@@ -1218,7 +1218,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     .smart-slot-grid button.selected {
       border-color: var(--teal);
       background: #e7f7f2;
-      box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+      box-shadow: 0 0 0 2px rgba(75, 18, 56, 0.12);
     }
 
     .smart-slot-grid button b {
@@ -1296,8 +1296,8 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     }
 
     .appointment-kpis .waitlist-kpi-action {
-      border-color: rgba(15, 118, 110, 0.34);
-      background: linear-gradient(135deg, #ecfdf5, #ffffff);
+      border-color: rgba(75, 18, 56, 0.34);
+      background: linear-gradient(135deg, #F3EAF0, #ffffff);
     }
 
     .appointment-kpis .waitlist-kpi-action span,
@@ -1584,7 +1584,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       transform: translateY(-50%);
       max-width: calc(100% - 20px);
       overflow: hidden;
-      border: 1px solid rgba(15, 118, 110, 0.36);
+      border: 1px solid rgba(75, 18, 56, 0.36);
       border-radius: 4px;
       background: #fffbe8;
       color: var(--ink);
@@ -1767,7 +1767,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     .queue-list button,
     .waitlist-list button {
       width: 100%;
-      border: 1px solid rgba(15, 118, 110, 0.24);
+      border: 1px solid rgba(75, 18, 56, 0.24);
       border-radius: 8px;
       background: #d4f1e8;
       color: var(--ink);
@@ -1903,7 +1903,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     .queue-list button:hover,
     .waitlist-list button:hover {
       transform: translateY(-1px);
-      box-shadow: 0 12px 22px rgba(15, 118, 110, 0.12);
+      box-shadow: 0 12px 22px rgba(75, 18, 56, 0.12);
     }
 
     .appointment-card.late {
@@ -2033,7 +2033,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       gap: 2px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: linear-gradient(135deg, rgba(15, 118, 110, calc(var(--heat) * 0.13)), #fff);
+      background: linear-gradient(135deg, rgba(75, 18, 56, calc(var(--heat) * 0.13)), #fff);
       padding: 10px;
       text-align: left;
     }
@@ -2221,7 +2221,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     }
 
     .slot-summary div {
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 9px;
       background: #effaf7;
       padding: 10px;
@@ -2369,7 +2369,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
 
     .quick-time-row button {
       min-height: 32px;
-      border: 1px solid rgba(15, 118, 110, 0.22);
+      border: 1px solid rgba(75, 18, 56, 0.22);
       border-radius: 999px;
       background: #f3fbf8;
       color: var(--teal-2);
@@ -2433,7 +2433,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
     }
 
     .sms-desk {
-      border-color: rgba(15, 118, 110, 0.24);
+      border-color: rgba(75, 18, 56, 0.24);
       background: linear-gradient(135deg, #f7fffc, #fff);
     }
 

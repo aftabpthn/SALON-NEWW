@@ -664,12 +664,12 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       text-align: left; transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
     }
     .report-nav-card:hover { transform: translateY(-2px); border-color: rgba(79,70,229,0.28); box-shadow: 0 8px 22px rgba(12,26,43,0.1); }
-    .report-nav-card.active { border-color: var(--color-primary); background: linear-gradient(90deg, rgba(20,184,166,0.16), rgba(99,102,241,0.12), rgba(236,72,153,0.12)); box-shadow: 0 8px 22px rgba(12,26,43,0.12); }
+    .report-nav-card.active { border-color: var(--color-primary); background: linear-gradient(90deg, rgba(214,79,146,0.16), rgba(99,102,241,0.12), rgba(236,72,153,0.12)); box-shadow: 0 8px 22px rgba(12,26,43,0.12); }
     .report-nav-card strong, .report-nav-card small, .report-nav-card i { display: block; }
     .report-nav-card strong { font-size: 0.95rem; line-height: 1.2; }
     .report-nav-card small { margin-top: 4px; color: var(--muted); font-size: 0.72rem; font-weight: 700; line-height: 1.25; }
     .report-nav-card i { padding: 3px 8px; border-radius: 999px; color: var(--color-primary-strong); background: var(--color-surface-muted); font-size: 0.68rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
-    .report-nav-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 9px; color: var(--color-primary-strong); background: rgba(20,184,166,0.12); font-weight: 900; }
+    .report-nav-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 9px; color: var(--color-primary-strong); background: rgba(214,79,146,0.12); font-weight: 900; }
 
     /* ─── SECTION ─── */
     .sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 170px; padding: 24px 20px; border-radius: 16px; background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
@@ -1250,6 +1250,167 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       background: #fffaf7;
       border-color: rgba(143, 92, 84, 0.18);
       border-left-color: #8f5c54;
+    }
+
+    .page-head,
+    .page-filters,
+    .sec,
+    .kpi-card,
+    .snap-card,
+    .ea-chart-card,
+    .ea-side-card,
+    .inv-card,
+    .lib-card,
+    .is-card,
+    .tbl-wrap,
+    .page-footer,
+    .report-nav-card {
+      background: #fff !important;
+      background-image: none !important;
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045);
+    }
+
+    .page-head {
+      position: sticky;
+      top: 0;
+      z-index: 24;
+    }
+
+    .page-filters {
+      top: 78px;
+      z-index: 23;
+    }
+
+    .report-nav-card.active {
+      background: #fffaf7 !important;
+      border-left-color: #9a6a60 !important;
+    }
+
+    .report-nav-card,
+    .kpi-card,
+    .snap-card,
+    .lib-card,
+    .is-ins-item {
+      transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+    }
+
+    .report-nav-card:hover,
+    .kpi-card:hover,
+    .snap-card:hover,
+    .ea-side-card:hover,
+    .inv-card:hover,
+    .lib-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(73, 51, 43, 0.065);
+    }
+
+    .kpi-card,
+    .snap-card,
+    .ea-side-card,
+    .inv-card {
+      border-left: 3px solid rgba(154, 106, 96, 0.72) !important;
+    }
+
+    .kpi-icon,
+    .lib-card-icon,
+    .report-nav-icon,
+    .snap-stat,
+    .staff-rank,
+    .role-badge,
+    .count-badge,
+    .sec-badge,
+    .pf-badge {
+      background: #fff7f3 !important;
+      color: #75524b !important;
+      box-shadow: none !important;
+    }
+
+    .kpi-icon svg,
+    .lib-card-icon svg,
+    .snap-h svg,
+    .is-card-h svg,
+    .ph-branch svg,
+    .ph-date svg {
+      color: #8a6259 !important;
+      stroke: #8a6259 !important;
+    }
+
+    .page-head h1,
+    .sec-h h2,
+    .sec-h h3,
+    .kpi-val,
+    .ea-side-card strong,
+    .inv-card strong,
+    .snap-stat strong,
+    .lib-card-body strong,
+    .is-ins-item strong {
+      color: #302522;
+      font-weight: 630;
+    }
+
+    .eye,
+    .pf-group label,
+    .report-nav-card small,
+    .kpi-label,
+    .snap-h span,
+    .ea-chart-h span,
+    .inv-label,
+    .tbl th {
+      color: #766763;
+      font-weight: 560;
+    }
+
+    .tbl th {
+      background: #faf7f4 !important;
+      border-bottom-color: rgba(118, 85, 76, 0.12);
+    }
+
+    .tbl td {
+      border-bottom-color: rgba(118, 85, 76, 0.08);
+      line-height: 1.45;
+    }
+
+    .tbl tbody tr:hover td,
+    .tbl tbody tr:active td {
+      background: #fffaf7;
+    }
+
+    .stg,
+    .compl-badge,
+    .sch-badge {
+      background: #fff7f3 !important;
+      border-color: rgba(154, 106, 96, 0.15) !important;
+      color: #75524b !important;
+    }
+
+    .ea-chart-card {
+      min-height: 230px;
+    }
+
+    .ea-bar,
+    .ea-bar.is-peak,
+    .ea-bar:hover {
+      background: linear-gradient(180deg, rgba(154, 106, 96, 0.58), rgba(154, 106, 96, 0.12)) !important;
+    }
+
+    @media (max-width: 760px) {
+      .page-head,
+      .page-filters {
+        position: static;
+      }
+
+      .page-head-r,
+      .ph-actions,
+      .pf-chips {
+        width: 100%;
+      }
+
+      .ph-actions > *,
+      .pf-chips > * {
+        flex: 1 1 auto;
+        justify-content: center;
+      }
     }
     /* ─── RESPONSIVE ─── */
     @media (max-width: 1200px) {

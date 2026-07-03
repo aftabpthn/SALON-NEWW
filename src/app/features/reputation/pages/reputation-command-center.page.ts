@@ -542,7 +542,7 @@ interface StaffPreview {
       border: 1px solid #c7e8df;
       border-radius: 8px;
       background: #f4fbf8;
-      color: #0f766e;
+      color: #4B1238;
       padding: 10px 12px;
       font-weight: 800;
     }
@@ -700,7 +700,7 @@ interface StaffPreview {
     .connect-hero p { margin: 4px 0 0; color: #53657d; line-height: 1.45; }
     .platform-icon.large { width: 58px; height: 58px; border-radius: 14px; flex: 0 0 auto; }
     .setup-warning { border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; border-radius: 8px; padding: 12px; font-weight: 800; line-height: 1.45; }
-    .setup-message { margin: 0; border: 1px solid #c7e8df; background: #f4fbf8; color: #0f766e; border-radius: 8px; padding: 12px; font-weight: 800; line-height: 1.45; }
+    .setup-message { margin: 0; border: 1px solid #c7e8df; background: #f4fbf8; color: #4B1238; border-radius: 8px; padding: 12px; font-weight: 800; line-height: 1.45; }
     .platform-setup-drawer section { border-top: 1px solid #edf2f5; padding-top: 16px; display: grid; gap: 10px; }
     .setup-form { grid-template-columns: 1fr; }
     .saved-connection { border: 1px solid #dbe4e8; border-radius: 8px; padding: 12px; display: grid; gap: 4px; background: #f8fafc; }

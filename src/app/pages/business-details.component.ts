@@ -1202,6 +1202,69 @@ type ContactVerificationResponse = ContactVerification & {
       accent-color: #2f9bf0;
     }
     .preview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+
+    :host .settings-nav,
+    :host .settings-hero,
+    :host .settings-section,
+    :host .panel,
+    :host .sms-route-card,
+    :host .switch-card,
+    :host .radio-card,
+    :host .preview-card,
+    :host .form-card {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    :host .settings-nav a.active,
+    :host .settings-nav a:hover {
+      background: #fff7f3 !important;
+      color: #75524b !important;
+    }
+
+    :host .settings-hero h1,
+    :host .settings-section h2,
+    :host .section-intro h2,
+    :host .panel h3 {
+      color: #302522 !important;
+      font-weight: 630 !important;
+    }
+
+    :host .settings-hero p,
+    :host .section-intro p,
+    :host .switch-card small,
+    :host .radio-card small,
+    :host .panel p,
+    :host label span {
+      color: #766763 !important;
+      font-weight: 540 !important;
+    }
+
+    :host input,
+    :host select,
+    :host textarea {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-radius: 10px !important;
+      background: #fff !important;
+      box-shadow: none !important;
+    }
+
+    :host button,
+    :host .primary-button,
+    :host .ghost-button {
+      border-radius: 10px !important;
+      font-weight: 580 !important;
+    }
+
+    :host .primary-button,
+    :host button[type='submit'] {
+      border-color: #744a44 !important;
+      background: #744a44 !important;
+      color: #fff !important;
+    }
     @media (max-width: 980px) {
       .settings-grid, .sms-command-grid, .form-grid.two, .form-grid.three, .preview-grid, .public-profile-grid, .hours-editor { grid-template-columns: 1fr; }
       .module-hero { align-items: flex-start; flex-direction: column; }

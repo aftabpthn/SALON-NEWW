@@ -157,7 +157,7 @@ type BulkField = keyof EditableBulkEmployeeRow;
     h1 { font-size: 30px; letter-spacing: 0; margin: 0; }
     .refresh, .primary { border: 1px solid #cbd8d2; border-radius: 6px; cursor: pointer; font-weight: 850; min-height: 38px; padding: 9px 12px; text-decoration: none; }
     .refresh { background: #fff; color: #34483f; }
-    .primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .primary { background: #4B1238; border-color: #4B1238; color: #fff; }
     .compact { min-height: 34px; padding: 7px 10px; }
     button:disabled { cursor: not-allowed; opacity: .58; }
     .filter-bar, .metrics article, .state, .grid-shell, .job-panel { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; }

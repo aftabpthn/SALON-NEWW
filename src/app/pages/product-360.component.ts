@@ -410,7 +410,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .recommendation-card {
       display: grid;
       gap: 8px;
-      border-color: rgba(15, 118, 110, 0.28);
+      border-color: rgba(75, 18, 56, 0.28);
       background: #f4fbf9;
     }
 

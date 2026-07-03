@@ -148,7 +148,7 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
     .confirm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
     .summary-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: grid; gap: 6px; background: #fff; }
     .summary-card small { color: var(--muted); }
-    .command-card.active { border-color: var(--teal); background: #eefaf8; }
+    .command-card.active { border-color: var(--teal); background: #F1E8EE; }
     .wizard-footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
     @media (max-width: 800px) {
       .wizard-grid, .confirm-grid { grid-template-columns: 1fr; }

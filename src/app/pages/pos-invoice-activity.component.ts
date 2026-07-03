@@ -1331,9 +1331,9 @@ interface InvoiceActivityRow {
     }
 
     .edit-action {
-      border-color: rgba(15, 118, 110, 0.35);
-      background: #f0fdfa;
-      color: #0f766e;
+      border-color: rgba(75, 18, 56, 0.35);
+      background: #F5EEF2;
+      color: #4B1238;
       font-weight: 800;
     }
 
@@ -1342,9 +1342,9 @@ interface InvoiceActivityRow {
       gap: 16px;
       margin-top: 18px;
       padding: 18px;
-      border: 1px solid rgba(15, 118, 110, 0.28);
+      border: 1px solid rgba(75, 18, 56, 0.28);
       border-radius: var(--radius-lg);
-      background: linear-gradient(135deg, rgba(15, 118, 110, 0.06), transparent 55%), #fff;
+      background: linear-gradient(135deg, rgba(75, 18, 56, 0.06), transparent 55%), #fff;
       box-shadow: var(--shadow-md);
     }
 
@@ -1419,7 +1419,7 @@ interface InvoiceActivityRow {
       display: grid;
       gap: 14px;
       padding: 16px;
-      border: 1px solid rgba(15, 118, 110, 0.22);
+      border: 1px solid rgba(75, 18, 56, 0.22);
       border-radius: var(--radius-md);
       background: #f7fffd;
     }

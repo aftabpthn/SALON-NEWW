@@ -1454,7 +1454,7 @@ interface EngagementDetail extends ApiRecord {
     .thread-top, .thread-meta, .conversation-header, .composer-footer, .timeline-topline { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
     .thread-card p { margin: 0; color: #53657d; font-size: 13px; line-height: 1.35; }
     .thread-meta { color: #607083; font-size: 12px; flex-wrap: wrap; justify-content: flex-start; }
-    .channel-pill, .badge, .tag-row span, .unread, .sla { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; background: #eef5f3; color: #0f766e; }
+    .channel-pill, .badge, .tag-row span, .unread, .sla { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; background: #eef5f3; color: #4B1238; }
     .unread { background: #e7f0ff; color: #2855a7; }
     .sla, .badge.danger { background: #fdecec; color: #b42318; }
     .badge.pending { background: #fff3d1; color: #8a5a00; }
@@ -1469,7 +1469,7 @@ interface EngagementDetail extends ApiRecord {
     .timeline-item > div { border: 1px solid #e0e8e5; background: #fff; border-radius: 8px; padding: 12px; }
     .timeline-item.outbound > div { background: #eaf7f4; border-color: #bfe5dd; }
     .timeline-item.event > div { background: #f8fafc; }
-    .timeline-dot { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: #eef5f3; color: #0f766e; font-size: 12px; font-weight: 900; }
+    .timeline-dot { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: #eef5f3; color: #4B1238; font-size: 12px; font-weight: 900; }
     .timeline-item p { margin: 6px 0 0; color: #1f2937; white-space: pre-wrap; }
     .chip-row, .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     .composer { border-top: 1px solid #e3ebe8; padding: 14px; display: grid; gap: 10px; background: #fff; }
@@ -1607,7 +1607,7 @@ interface EngagementDetail extends ApiRecord {
     .audit-table-row:last-child { border-bottom: 0; }
     .audit-table-row span { color: #526173; }
     .priority-pill { border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 900; text-transform: uppercase; background: #e7f7ef; color: #067647; white-space: nowrap; }
-    .priority-pill.normal { background: #eef5f3; color: #0f766e; }
+    .priority-pill.normal { background: #eef5f3; color: #4B1238; }
     .priority-pill.high { background: #fff3d1; color: #8a5a00; }
     .priority-pill.urgent { background: #fdecec; color: #b42318; }
     .summary-list { display: grid; gap: 8px; }

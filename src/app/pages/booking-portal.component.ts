@@ -232,7 +232,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       gap: 16px;
       align-items: stretch;
       padding: 22px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 8px;
       background: #f8fffd;
     }
@@ -256,7 +256,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       margin-top: 16px;
     }
     .link-badge {
-      color: #0f766e;
+      color: #4B1238;
       text-decoration: none;
     }
     .profile-aside {
@@ -265,10 +265,10 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       gap: 4px;
       min-width: 0;
       padding: 16px;
-      border-left: 1px solid rgba(15, 118, 110, 0.18);
+      border-left: 1px solid rgba(75, 18, 56, 0.18);
     }
     .profile-aside strong {
-      color: #0f766e;
+      color: #4B1238;
       font-size: 2rem;
       line-height: 1;
     }
@@ -306,12 +306,12 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
     }
     .pick-card:hover,
     .staff-card:hover {
-      border-color: rgba(15, 118, 110, 0.55);
+      border-color: rgba(75, 18, 56, 0.55);
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
     }
     .pick-card span,
     .service-card span {
-      color: #0f766e;
+      color: #4B1238;
       font-size: .75rem;
       font-weight: 900;
       text-transform: uppercase;
@@ -336,7 +336,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       line-height: 1.35;
     }
     .command-card.active {
-      border-color: rgba(15, 118, 110, 0.6);
+      border-color: rgba(75, 18, 56, 0.6);
       background: #e8f5f3;
       box-shadow: inset 0 3px 0 var(--teal);
     }
@@ -390,13 +390,36 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       overflow-wrap: anywhere;
       text-transform: none;
     }
+
+    :host .booking-portal,
+    :host .booking-page { background: #f8f5f2; }
+    :host .portal-hero,
+    :host .booking-hero,
+    :host .booking-card,
+    :host .booking-panel,
+    :host .summary-card,
+    :host .service-card,
+    :host .staff-card,
+    :host .slot-card,
+    :host form {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+    :host h1, :host h2, :host h3, :host strong { color: #302522; font-weight: 630; }
+    :host p, :host span, :host small, :host label { color: #766763; }
+    :host input, :host select, :host textarea { border-color: rgba(118, 85, 76, 0.14) !important; border-radius: 10px !important; background: #fff !important; }
+    :host button { border-radius: 10px !important; font-weight: 580 !important; }
+    :host .primary-button, :host button[type='submit'] { background: #744a44 !important; border-color: #744a44 !important; color: #fff !important; }
     @media (max-width: 760px) {
       .public-profile {
         grid-template-columns: 1fr;
       }
       .profile-aside {
         border-left: 0;
-        border-top: 1px solid rgba(15, 118, 110, 0.18);
+        border-top: 1px solid rgba(75, 18, 56, 0.18);
       }
       .profile-main h1 {
         font-size: 2.4rem;

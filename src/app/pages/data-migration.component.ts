@@ -919,10 +919,10 @@ type MigrationRecoveryReport = {
     .migration-side-nav { grid-column: 1; grid-row: 3 / span 80; position: sticky; top: 92px; display: grid; gap: 10px; align-self: start; }
     .migration-nav-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 11px; align-items: center; min-height: 92px; padding: 13px; border: 1px solid #d7e6e2; border-left: 4px solid #0b8f7c; border-radius: 8px; background: #fff; color: #172033; text-decoration: none; box-shadow: 0 12px 26px rgba(15,23,42,.07); cursor: pointer; }
     .migration-nav-card:hover, .migration-nav-card.active { background: linear-gradient(135deg, #e8fbf7, #eef4ff); border-color: #9fc3dc; transform: translateY(-1px); }
-    .migration-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #e8f7f4; color: #0b6f61; font-weight: 950; font-size: 12px; }
+    .migration-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #F1E8EE; color: #3D0F2C; font-weight: 950; font-size: 12px; }
     .migration-nav-card strong, .migration-nav-card small { display: block; }
     .migration-nav-card small { margin-top: 4px; color: #64748b; font-size: 12px; font-weight: 700; line-height: 1.3; }
-    .migration-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #e8f7f4; color: #0b6f61; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .migration-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #F1E8EE; color: #3D0F2C; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
     .migration-page-detail { grid-column: 2; min-width: 0; display: block; }
     .migration-page-detail .migration-shell { padding: 0; }
     .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; align-items: stretch; padding: 22px; border: 1px solid #d7e6e2; border-radius: 8px; background: linear-gradient(120deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 18px 40px rgba(15,23,42,.08); }
@@ -946,14 +946,14 @@ type MigrationRecoveryReport = {
     .panel { padding: 18px; min-width: 0; }
     .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 14px; }
     .panel-head h2 { margin: 3px 0 0; font-size: 20px; letter-spacing: 0; }
-    .status-pill, .badge { border-radius: 999px; background: #e8f7f4; color: #0f766e; padding: 6px 10px; font-size: 12px; font-weight: 900; white-space: nowrap; }
+    .status-pill, .badge { border-radius: 999px; background: #F1E8EE; color: #4B1238; padding: 6px 10px; font-size: 12px; font-weight: 900; white-space: nowrap; }
     .status-pill.danger { background: #fef2f2; color: #b91c1c; }
     .badge.warning { background: #fffbeb; color: #b45309; }
     .badge.danger { background: #fef2f2; color: #b91c1c; }
     .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     label { display: grid; gap: 6px; color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     input, select, textarea { width: 100%; min-height: 42px; border: 1px solid #cfe0dc; border-radius: 8px; background: #f8fffd; padding: 10px 11px; color: #172033; font-weight: 800; box-sizing: border-box; }
-    input:focus, select:focus, textarea:focus { border-color: #0f8f7f; outline: 3px solid rgba(15,143,127,.14); background: #ffffff; }
+    input:focus, select:focus, textarea:focus { border-color: #5A153F; outline: 3px solid rgba(90,21,63,.14); background: #ffffff; }
     textarea { resize: vertical; font-family: inherit; text-transform: none; }
     .file-drop { grid-column: 1 / -1; border: 1px dashed #93c5fd; border-radius: 8px; padding: 12px; background: #f8fbff; }
     .file-drop small, .muted { color: #64748b; text-transform: none; font-weight: 700; }
@@ -978,10 +978,10 @@ type MigrationRecoveryReport = {
     .migration-progress-panel > div:first-child { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
     .migration-progress-panel small { grid-column: 1 / -1; }
     .progress-track { height: 10px; border-radius: 999px; background: #dbeafe; overflow: hidden; }
-    .progress-track span { display: block; height: 100%; min-width: 4px; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #0f8f7f); transition: width .25s ease; }
+    .progress-track span { display: block; height: 100%; min-width: 4px; border-radius: inherit; background: linear-gradient(90deg, #2563eb, #5A153F); transition: width .25s ease; }
     button { min-height: 40px; border: 1px solid #cfe0dc; border-radius: 8px; padding: 0 14px; font-weight: 900; cursor: pointer; background: #ffffff; color: #172033; }
     button:disabled { opacity: .55; cursor: not-allowed; }
-    .primary-button { background: #0f8f7f; color: #ffffff; border-color: #0f8f7f; }
+    .primary-button { background: #5A153F; color: #ffffff; border-color: #5A153F; }
     .secondary-button { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
     .ghost-button { background: #ffffff; }
     .danger-button { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
@@ -1015,12 +1015,12 @@ type MigrationRecoveryReport = {
     .duplicate-list small { color: #64748b; }
     .decision-actions { display: inline-flex; border: 1px solid #cfe0dc; border-radius: 8px; overflow: hidden; }
     .decision-actions button { border: 0; border-radius: 0; min-height: 34px; }
-    .decision-actions button.active { background: #0f8f7f; color: #ffffff; }
+    .decision-actions button.active { background: #5A153F; color: #ffffff; }
     .ops-queue { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .ops-queue button { min-height: 92px; display: grid; gap: 4px; align-content: center; text-align: left; border-left: 4px solid #94a3b8; }
     .ops-queue button.warning { border-left-color: #f59e0b; background: #fffbeb; }
     .ops-queue button.danger { border-left-color: #ef4444; background: #fef2f2; }
-    .ops-queue button.active { outline: 3px solid rgba(15,143,127,.16); }
+    .ops-queue button.active { outline: 3px solid rgba(90,21,63,.16); }
     .ops-queue strong { font-size: 26px; }
     .ops-queue span, .ops-queue small { color: #64748b; }
     .entity-stack article { padding: 10px; display: grid; gap: 6px; }
@@ -1054,7 +1054,7 @@ type MigrationRecoveryReport = {
     .diag-panel { margin-top: 12px; padding: 10px 12px; border: 1px solid #d7e6e2; border-radius: 8px; background: #f8fffd; }
     .diag-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
     .diag-head strong { font-size: 13px; }
-    .diag-badge { font-size: 11px; font-family: ui-monospace, monospace; padding: 2px 8px; border-radius: 999px; background: #e0f2ee; color: #0f766e; }
+    .diag-badge { font-size: 11px; font-family: ui-monospace, monospace; padding: 2px 8px; border-radius: 999px; background: #e0f2ee; color: #4B1238; }
     .diag-badge.warn { background: #fef3c7; color: #b45309; }
     .diag-stale { margin: 0 0 6px; font-size: 12px; color: #b45309; font-weight: 600; }
     .diag-grid { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 12px; }
@@ -1077,7 +1077,7 @@ type MigrationRecoveryReport = {
     tr.selected td { background: #eff6ff; }
     .segmented { display: inline-flex; border: 1px solid #cfe0dc; border-radius: 8px; overflow: hidden; }
     .segmented button { border: 0; border-radius: 0; min-height: 34px; background: #ffffff; }
-    .segmented button.active { background: #0f8f7f; color: #ffffff; }
+    .segmented button.active { background: #5A153F; color: #ffffff; }
     .table-wrap { overflow: auto; border: 1px solid #d7e6e2; border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; min-width: 760px; }
     th, td { padding: 11px 12px; border-bottom: 1px solid #edf2f7; text-align: left; vertical-align: top; }

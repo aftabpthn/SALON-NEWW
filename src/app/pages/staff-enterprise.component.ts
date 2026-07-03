@@ -597,8 +597,8 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     }
 
     .primary-button {
-      background: #0f766e;
-      border-color: #0f766e;
+      background: #4B1238;
+      border-color: #4B1238;
       color: #ffffff;
     }
 
@@ -659,7 +659,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
       height: 18px;
       border-radius: 999px;
       border: 3px solid #cbd5e1;
-      border-top-color: #0f766e;
+      border-top-color: #4B1238;
       animation: spin 0.8s linear infinite;
     }
 
@@ -708,7 +708,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
       letter-spacing: 0;
     }
 
-    .kpi-card.teal { border-top-color: #0f766e; }
+    .kpi-card.teal { border-top-color: #4B1238; }
     .kpi-card.green { border-top-color: #16a34a; }
     .kpi-card.amber { border-top-color: #b7791f; }
     .kpi-card.red { border-top-color: #dc2626; }
@@ -780,7 +780,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     .module-link-card.amber { border-left-color: #b7791f; }
     .module-link-card.red { border-left-color: #dc2626; }
     .module-link-card.violet { border-left-color: #7c3aed; }
-    .module-link-card.teal { border-left-color: #0f766e; }
+    .module-link-card.teal { border-left-color: #4B1238; }
 
     .command-list,
     .signal-list,
@@ -935,8 +935,8 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     .audit-row:hover,
     .profit-row:hover,
     .twin-card:hover {
-      border-color: #0f766e;
-      background: #f0fdfa;
+      border-color: #4B1238;
+      background: #F5EEF2;
     }
 
     .badge {

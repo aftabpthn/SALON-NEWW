@@ -98,17 +98,17 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
     }
     .share-hero { min-height: 260px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center; padding: 32px; background: linear-gradient(135deg, #f8fffd 0%, #ffffff 55%, #f4efe0 100%); }
     .share-copy { display: grid; gap: 12px; max-width: 840px; }
-    .eyebrow { color: #0f766e; font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+    .eyebrow { color: #4B1238; font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
     h1, h2 { margin: 0; letter-spacing: 0; color: #111827; }
     h1 { font-size: 42px; line-height: 1.08; }
     h2 { font-size: 24px; }
     p { margin: 0; color: #64748b; font-size: 16px; line-height: 1.55; }
     .outlet-meta { display: flex; flex-wrap: wrap; gap: 8px; }
-    .outlet-meta span { min-height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; background: #e9f8f3; color: #0f766e; font-size: 12px; font-weight: 900; }
+    .outlet-meta span { min-height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; background: #e9f8f3; color: #4B1238; font-size: 12px; font-weight: 900; }
     .outlet-meta .offline { background: #fff1f2; color: #be123c; }
     .share-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; min-width: 360px; }
     a, button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border-radius: 8px; border: 1px solid #cfe0dc; color: #172033; text-decoration: none; font: inherit; font-weight: 900; cursor: pointer; background: #ffffff; }
-    .primary { background: #0f8f7f; border-color: #0f8f7f; color: #ffffff; }
+    .primary { background: #5A153F; border-color: #5A153F; color: #ffffff; }
     .secondary { background: #ffffff; }
     .link-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: #d7e6e2; }
     .link-panel article { display: grid; gap: 10px; padding: 18px; background: #ffffff; }

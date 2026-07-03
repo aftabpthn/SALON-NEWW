@@ -319,7 +319,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .draft-box {
       white-space: pre-wrap;
       background: #f4fbf9;
-      border-color: rgba(15, 118, 110, 0.28);
+      border-color: rgba(75, 18, 56, 0.28);
       line-height: 1.5;
     }
 

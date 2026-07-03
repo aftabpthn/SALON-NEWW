@@ -156,14 +156,15 @@ type PenaltyPreviewRow = {
     .topbar-actions, .actions { align-items: center; justify-content: flex-end; flex-wrap: wrap; }
     .eyebrow { color: #547066; font-size: 12px; font-weight: 850; letter-spacing: .08em; margin: 0 0 5px; text-transform: uppercase; }
     h1 { font-size: 30px; letter-spacing: 0; margin: 0; }
-    .shell { display: grid; grid-template-columns: minmax(340px, .75fr) minmax(520px, 1.25fr); gap: 16px; align-items: start; }
+    .shell { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+    .list-panel, .form-panel { width: 100%; }
     .list-panel, .form-panel, .state { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; }
     .list-panel, .form-panel { display: grid; gap: 14px; padding: 16px; }
     .state { color: #61746c; padding: 14px; }
     .error { color: #a52828; border-color: #e7b1b1; }
     .refresh, .primary, .definition-tabs button { border: 1px solid #cbd8d2; border-radius: 6px; cursor: pointer; font-weight: 850; min-height: 38px; padding: 9px 12px; text-decoration: none; }
     .refresh, .definition-tabs button { background: #fff; color: #34483f; }
-    .primary, .definition-tabs button.active { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .primary, .definition-tabs button.active { background: #4B1238; border-color: #4B1238; color: #fff; }
     .danger { color: #a52828; }
     .definition-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     label { color: #34483f; display: grid; font-size: 13px; font-weight: 850; gap: 6px; }
@@ -713,7 +714,7 @@ export class AllowanceDeductionPage {}
     input[type='checkbox'] { height: 18px; padding: 0; width: 18px; }
     .refresh, .primary { border: 1px solid #cbd8d2; border-radius: 6px; cursor: pointer; font-weight: 850; min-height: 38px; padding: 9px 12px; text-decoration: none; }
     .refresh { background: #fff; color: #34483f; }
-    .primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .primary { background: #4B1238; border-color: #4B1238; color: #fff; }
     .state { color: #61746c; }
     .error { color: #a52828; border-color: #e7b1b1; }
     .actions { border-top: 1px solid #edf2ef; padding-top: 12px; }

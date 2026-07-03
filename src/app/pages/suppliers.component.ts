@@ -527,7 +527,7 @@ interface SupplierCommandRow {
     }
 
     .filter-chip.active {
-      border-color: rgba(15, 118, 110, 0.34);
+      border-color: rgba(75, 18, 56, 0.34);
       background: var(--color-primary-soft);
       color: var(--teal);
     }
@@ -617,7 +617,7 @@ interface SupplierCommandRow {
       width: 14px;
       min-height: 8px;
       border-radius: 6px 6px 2px 2px;
-      background: linear-gradient(180deg, #0f766e, #6ee7b7);
+      background: linear-gradient(180deg, #4B1238, #6ee7b7);
     }
 
     .supplier-form {
@@ -759,7 +759,7 @@ interface SupplierCommandRow {
     }
 
     .draft-box {
-      border: 1px solid rgba(15, 118, 110, 0.28);
+      border: 1px solid rgba(75, 18, 56, 0.28);
       border-radius: 12px;
       padding: 14px;
       background: #f4fbf9;

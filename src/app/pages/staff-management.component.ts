@@ -416,7 +416,7 @@ type StaffDirectoryRow = ApiRecord & {
     }
 
     .staff-workspace-tabs button.active {
-      border-color: rgba(15, 118, 110, 0.45);
+      border-color: rgba(75, 18, 56, 0.45);
       background: var(--teal);
       color: #fff;
     }
@@ -546,9 +546,9 @@ type StaffDirectoryRow = ApiRecord & {
       align-items: center;
       min-height: 28px;
       padding: 0 8px;
-      border: 1px solid rgba(15, 118, 110, 0.22);
+      border: 1px solid rgba(75, 18, 56, 0.22);
       border-radius: 999px;
-      background: #f0fdfa;
+      background: #F5EEF2;
       color: var(--teal);
       font-size: 0.74rem;
       font-weight: 850;

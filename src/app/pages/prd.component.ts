@@ -25,7 +25,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <section class="panel">
           <div class="section-title"><h2>User roles</h2></div>
           <div class="quick-grid">
-            <article class="action-card" *ngFor="let role of roles"><strong>{{ role.name }}</strong><span>{{ role.scope }}</span></article>
+            <article class="action-card aura-card aura-card--type-action" *ngFor="let role of roles"><strong>{{ role.name }}</strong><span>{{ role.scope }}</span></article>
           </div>
         </section>
         <section class="panel">
@@ -46,7 +46,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <section class="panel">
         <div class="section-title"><h2>Business rules and edge cases</h2></div>
         <div class="quick-grid">
-          <article class="action-card" *ngFor="let rule of rules"><strong>{{ rule }}</strong><span>Implemented guardrail</span></article>
+          <article class="action-card aura-card aura-card--type-action" *ngFor="let rule of rules"><strong>{{ rule }}</strong><span>Implemented guardrail</span></article>
         </div>
       </section>
     </section>

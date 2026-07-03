@@ -783,6 +783,32 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       padding: 10px 0;
     }
 
+
+    :host .page-stack,
+    :host .inventory-page { background: #f8f5f2; }
+    :host .module-hero,
+    :host .panel,
+    :host .metric-card,
+    :host .inventory-card,
+    :host .workspace-card,
+    :host .table-wrap,
+    :host .form-panel,
+    :host .summary-card {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+    :host .metric-card,
+    :host .inventory-card,
+    :host .workspace-card { border-left: 3px solid rgba(154, 106, 96, 0.68) !important; }
+    :host h1, :host h2, :host h3, :host .metric-card strong, :host .inventory-card strong { color: #302522 !important; font-weight: 630 !important; }
+    :host .metric-card span, :host .section-title span, :host th, :host td small { color: #766763 !important; font-weight: 540 !important; }
+    :host th { position: sticky; top: 0; z-index: 1; background: #faf7f4 !important; }
+    :host td { border-bottom-color: rgba(118, 85, 76, 0.08) !important; }
+    :host tbody tr:hover td { background: #fffaf7 !important; }
+    :host .badge, :host .chip, :host .status-chip { border-radius: 999px !important; background: #fff7f3 !important; color: #75524b !important; }
     @media (max-width: 1180px) {
       .inventory-kpis,
       .inventory-command-board,
@@ -1197,6 +1223,32 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       text-align: center;
     }
 
+
+    :host .page-stack,
+    :host .inventory-page { background: #f8f5f2; }
+    :host .module-hero,
+    :host .panel,
+    :host .metric-card,
+    :host .inventory-card,
+    :host .workspace-card,
+    :host .table-wrap,
+    :host .form-panel,
+    :host .summary-card {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+    :host .metric-card,
+    :host .inventory-card,
+    :host .workspace-card { border-left: 3px solid rgba(154, 106, 96, 0.68) !important; }
+    :host h1, :host h2, :host h3, :host .metric-card strong, :host .inventory-card strong { color: #302522 !important; font-weight: 630 !important; }
+    :host .metric-card span, :host .section-title span, :host th, :host td small { color: #766763 !important; font-weight: 540 !important; }
+    :host th { position: sticky; top: 0; z-index: 1; background: #faf7f4 !important; }
+    :host td { border-bottom-color: rgba(118, 85, 76, 0.08) !important; }
+    :host tbody tr:hover td { background: #fffaf7 !important; }
+    :host .badge, :host .chip, :host .status-chip { border-radius: 999px !important; background: #fff7f3 !important; color: #75524b !important; }
     @media (max-width: 1180px) {
       .zenoti-center-bar,
       .zenoti-page-heading,

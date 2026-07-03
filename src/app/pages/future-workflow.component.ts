@@ -211,8 +211,8 @@ type WorkflowConfig = {
 
     button {
       width: fit-content;
-      border-color: #0f766e;
-      background: #0f766e;
+      border-color: #4B1238;
+      background: #4B1238;
       color: #ffffff;
       cursor: pointer;
     }
@@ -322,7 +322,7 @@ type WorkflowConfig = {
     }
 
     .success-line {
-      color: #0f766e;
+      color: #4B1238;
       font-weight: 800;
     }
 

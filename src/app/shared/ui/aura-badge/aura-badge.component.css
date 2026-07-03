@@ -61,3 +61,54 @@
   border-radius: var(--aura-radius-full);
   background: currentColor;
 }
+
+/* Premium badge refinement. */
+.aura-badge {
+  border: 1px solid transparent;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.aura-badge--sm {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+.aura-badge--md {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.aura-badge--neutral {
+  border-color: var(--aura-gray-200);
+}
+
+.aura-badge--primary {
+  border-color: color-mix(in srgb, var(--aura-primary) 18%, transparent);
+}
+
+.aura-badge--success {
+  border-color: color-mix(in srgb, var(--aura-success) 18%, transparent);
+}
+
+.aura-badge--warning {
+  border-color: color-mix(in srgb, var(--aura-warning) 18%, transparent);
+}
+
+.aura-badge--danger {
+  border-color: color-mix(in srgb, var(--aura-danger) 18%, transparent);
+}
+
+.aura-badge--info {
+  border-color: color-mix(in srgb, var(--aura-info) 18%, transparent);
+}
+
+:host-context(:root[data-theme="dark"]) .aura-badge--neutral {
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+:host-context(:root[data-theme="dark"]) .aura-badge--primary {
+  border-color: rgba(240, 168, 194, 0.22);
+}
+/* End premium badge refinement. */

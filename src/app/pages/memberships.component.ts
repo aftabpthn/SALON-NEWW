@@ -1645,14 +1645,14 @@ type PlanLifecycleDialog = {
 
     .membership-tabs button:hover {
       background: #eef7f5;
-      color: #0f766e;
+      color: #4B1238;
     }
 
     .membership-tabs button.active {
-      border-color: rgba(15, 118, 110, 0.28);
-      background: #0f766e;
+      border-color: rgba(75, 18, 56, 0.28);
+      background: #4B1238;
       color: #fff;
-      box-shadow: 0 8px 20px rgba(15, 118, 110, 0.18);
+      box-shadow: 0 8px 20px rgba(75, 18, 56, 0.18);
     }
 
     .membership-tabs span {
@@ -1711,9 +1711,9 @@ type PlanLifecycleDialog = {
     .membership-summary-strip button:hover,
     .membership-summary-strip button:focus-visible,
     .membership-summary-strip button.active {
-      border-color: rgba(13, 148, 136, 0.42);
-      background: #ecfdf5;
-      box-shadow: 0 10px 22px rgba(13, 148, 136, 0.12);
+      border-color: rgba(109, 27, 77, 0.42);
+      background: #F3EAF0;
+      box-shadow: 0 10px 22px rgba(109, 27, 77, 0.12);
       outline: none;
       transform: translateY(-1px);
     }
@@ -1725,8 +1725,8 @@ type PlanLifecycleDialog = {
 
     .compact-count-strip article:hover,
     .compact-count-strip article:focus-visible {
-      border-color: rgba(13, 148, 136, 0.42);
-      box-shadow: 0 10px 22px rgba(13, 148, 136, 0.12);
+      border-color: rgba(109, 27, 77, 0.42);
+      box-shadow: 0 10px 22px rgba(109, 27, 77, 0.12);
       outline: none;
       transform: translateY(-1px);
     }
@@ -1753,7 +1753,7 @@ type PlanLifecycleDialog = {
 
     .membership-stats .metric-card {
       min-height: 112px;
-      border-top: 3px solid #0f766e;
+      border-top: 3px solid #4B1238;
       box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05);
     }
 
@@ -1778,8 +1778,8 @@ type PlanLifecycleDialog = {
     .overview-card.primary {
       color: #fff;
       background:
-        linear-gradient(135deg, rgba(15, 118, 110, 0.96), rgba(20, 83, 45, 0.92)),
-        #0f766e;
+        linear-gradient(135deg, rgba(75, 18, 56, 0.96), rgba(20, 83, 45, 0.92)),
+        #4B1238;
     }
 
     .overview-card.primary .eyebrow,
@@ -1851,9 +1851,9 @@ type PlanLifecycleDialog = {
     }
 
     .plan-switch-grid button.active {
-      border-color: #0f766e;
-      background: #ecfdf5;
-      box-shadow: 0 12px 28px rgba(15, 118, 110, 0.12);
+      border-color: #4B1238;
+      background: #F3EAF0;
+      box-shadow: 0 12px 28px rgba(75, 18, 56, 0.12);
     }
 
     .plan-switch-grid span,
@@ -1869,7 +1869,7 @@ type PlanLifecycleDialog = {
     }
 
     .plan-table tr.active-row td {
-      background: #ecfdf5;
+      background: #F3EAF0;
     }
 
     .package-detail-card {
@@ -2326,7 +2326,7 @@ type PlanLifecycleDialog = {
       align-items: center;
       border-radius: 999px;
       background: #eaf7f4;
-      color: #0f766e;
+      color: #4B1238;
       font-size: 0.78rem;
       font-weight: 800;
       padding: 5px 8px;
@@ -2385,9 +2385,9 @@ type PlanLifecycleDialog = {
     }
 
     .report-section-tabs button.active {
-      background: #0f766e;
+      background: #4B1238;
       color: #fff;
-      box-shadow: 0 14px 26px rgba(15, 118, 110, 0.22);
+      box-shadow: 0 14px 26px rgba(75, 18, 56, 0.22);
     }
 
     .report-section-tabs span {

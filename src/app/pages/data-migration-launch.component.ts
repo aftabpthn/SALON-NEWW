@@ -96,7 +96,7 @@ import { DataMigrationStore } from './data-migration.store';
         </article>
         <article class="card">
           <span class="card-label">Valid</span>
-          <strong style="color:#0f766e;">{{ store.summary()?.validRows }}</strong>
+          <strong style="color:#4B1238;">{{ store.summary()?.validRows }}</strong>
         </article>
         <article class="card">
           <span class="card-label">Errors</span>
@@ -131,45 +131,45 @@ import { DataMigrationStore } from './data-migration.store';
     .card strong { font-size: 18px; }
     .card small { color: #64748b; font-size: 12px; }
     .form-input { width: 100%; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }
-    .form-input:focus { border-color: #0f8f7f; outline: 2px solid rgba(15,143,127,.12); background: #ffffff; }
+    .form-input:focus { border-color: #5A153F; outline: 2px solid rgba(90,21,63,.12); background: #ffffff; }
     .toggle-row { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; }
     .toggle-label { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; cursor: pointer; }
     .pipeline-strip { display: grid; gap: 8px; }
     .step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
     .step-key { font-size: 13px; font-weight: 800; color: #64748b; }
-    .step.done { border-color: #0f8f7f; }
+    .step.done { border-color: #5A153F; }
     .step.active { border-color: #2563eb; }
     .step.blocked { border-color: #f59e0b; }
     .step-body { display: grid; gap: 2px; }
     .step-body strong { font-size: 13px; }
     .step-body small { font-size: 11px; color: #64748b; }
     .status-pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
-    .status-pill.good { background: #e8f7f4; color: #0f766e; }
+    .status-pill.good { background: #F1E8EE; color: #4B1238; }
     .status-pill.active { background: #eff6ff; color: #1d4ed8; }
     .status-pill.blocked { background: #fef2f2; color: #b91c1c; }
     .risk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
     .risk-card { border-color: #e2e8f0; }
-    .risk-card.good { border-color: #e8f7f4; }
+    .risk-card.good { border-color: #F1E8EE; }
     .risk-card.warning { border-color: #fffbeb; background: #fffbeb; }
     .risk-card.danger { border-color: #fef2f2; background: #fef2f2; }
     .risk-card strong { font-size: 24px; }
     .risk-card small { color: #64748b; font-size: 12px; }
     .action-strip { display: flex; gap: 10px; flex-wrap: wrap; }
     .action-strip button { min-height: 36px; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; border: 1px solid #e2e8f0; }
-    .btn-primary { background: #0f8f7f; color: #ffffff; border-color: #0f8f7f !important; }
+    .btn-primary { background: #5A153F; color: #ffffff; border-color: #5A153F !important; }
     .btn-primary.danger { background: #b91c1c; border-color: #b91c1c !important; }
     .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .btn-secondary { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #172033; }
     .btn-secondary:hover { background: #f8fafc; }
     .progress-section { display: grid; gap: 6px; }
     .progress-bar-bg { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
-    .progress-bar-fill { height: 100%; border-radius: 999px; background: #0f8f7f; transition: width .3s; }
+    .progress-bar-fill { height: 100%; border-radius: 999px; background: #5A153F; transition: width .3s; }
     .loading-section { display: flex; align-items: center; gap: 10px; padding: 16px; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; font-weight: 700; font-size: 13px; }
-    .spinner { width: 18px; height: 18px; border: 3px solid #e2e8f0; border-top-color: #0f8f7f; border-radius: 50%; animation: spin .6s linear infinite; }
+    .spinner { width: 18px; height: 18px; border: 3px solid #e2e8f0; border-top-color: #5A153F; border-radius: 50%; animation: spin .6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #e8f7f4; color: #0f766e; border: 1px solid #a7f3d0; }
+    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } .command-header { grid-template-columns: 1fr; } }
   `]

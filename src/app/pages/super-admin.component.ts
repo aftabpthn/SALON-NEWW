@@ -226,7 +226,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <strong>{{ owner.owner }}</strong>
                   <span>{{ owner.open }} open · {{ owner.escalated }} escalated · avg SLA {{ owner.avgSla }}d</span>
                 </div>
-                <span class="badge" [style.background]="owner.escalated ? 'var(--danger,#dc2626)' : 'var(--accent,#0f766e)'" style="color:#fff">{{ owner.total }}</span>
+                <span class="badge" [style.background]="owner.escalated ? 'var(--danger,#dc2626)' : 'var(--accent,#4B1238)'" style="color:#fff">{{ owner.total }}</span>
               </article>
             </div>
             <div class="activity-list">
@@ -1561,7 +1561,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                       <span [style.width.%]="branch.percent" [style.background]="branch.percent >= 90 ? 'var(--danger,#dc2626)' : branch.percent >= 70 ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)'" style="display:block;height:100%"></span>
                     </span>
                   </div>
-                  <span class="badge" [style.background]="branch.percent >= 90 ? 'var(--danger,#dc2626)' : 'var(--accent,#0f766e)'" style="color:#fff">{{ branch.status }}</span>
+                  <span class="badge" [style.background]="branch.percent >= 90 ? 'var(--danger,#dc2626)' : 'var(--accent,#4B1238)'" style="color:#fff">{{ branch.status }}</span>
                 </article>
               </div>
 
@@ -1594,7 +1594,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                     <strong>{{ role.role }}</strong>
                     <span>{{ role.count }} users · {{ role.failedLogins }} failed logins · last {{ role.lastLogin || 'No login' }}</span>
                     <span style="display:block;height:7px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
-                      <span [style.width.%]="role.percent" style="display:block;height:100%;background:var(--accent,#0f766e)"></span>
+                      <span [style.width.%]="role.percent" style="display:block;height:100%;background:var(--accent,#4B1238)"></span>
                     </span>
                   </div>
                   <span class="badge">{{ role.percent }}%</span>
@@ -2259,7 +2259,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       width: 100%;
       min-height: 92px;
       padding: 13px;
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-left: 4px solid #0b8f7c;
       border-radius: 10px;
       background: #fff;
@@ -2273,7 +2273,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     .super-admin-nav-card:hover,
     .super-admin-nav-card.active {
       transform: translateY(-1px);
-      border-color: rgba(15, 118, 110, 0.35);
+      border-color: rgba(75, 18, 56, 0.35);
       background: linear-gradient(135deg, #e8fbf7, #eef4ff);
     }
 
@@ -2283,8 +2283,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       width: 44px;
       height: 44px;
       border-radius: 8px;
-      background: #e8f7f4;
-      color: #0b6f61;
+      background: #F1E8EE;
+      color: #3D0F2C;
       font-size: 12px;
       font-weight: 950;
     }
@@ -2306,8 +2306,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       align-self: start;
       padding: 4px 7px;
       border-radius: 999px;
-      background: #e8f7f4;
-      color: #0b6f61;
+      background: #F1E8EE;
+      color: #3D0F2C;
       font-size: 10px;
       font-style: normal;
       font-weight: 900;
@@ -2345,7 +2345,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       display: block;
     }
     .super-admin-command {
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 18px;
       padding: 18px;
       background: linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(255, 255, 255, 0.98));
@@ -2388,7 +2388,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     }
 
     .command-kpi {
-      border-left: 4px solid var(--accent, #0f766e);
+      border-left: 4px solid var(--accent, #4B1238);
     }
 
     .command-kpi.danger { border-left-color: var(--danger, #dc2626); }
@@ -2441,8 +2441,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       align-items: center;
       justify-content: center;
       border-radius: 50%;
-      background: rgba(15, 118, 110, 0.12);
-      color: var(--accent, #0f766e);
+      background: rgba(75, 18, 56, 0.12);
+      color: var(--accent, #4B1238);
       font-weight: 900;
       flex-shrink: 0;
     }
@@ -2489,7 +2489,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       justify-content: center;
       padding: 8px;
       border-radius: 14px;
-      background: rgba(15, 118, 110, 0.06);
+      background: rgba(75, 18, 56, 0.06);
     }
 
     .bar-stack span {
@@ -2572,7 +2572,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     .tenant-search input {
       width: 100%;
       min-height: 42px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 12px;
       padding: 0 12px;
       background: #fff;
@@ -2598,7 +2598,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .command-results button,
     .action-inbox-buttons button {
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 12px;
       background: #fff;
       color: var(--ink);
@@ -2632,7 +2632,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .command-empty-state {
       margin-top: 12px;
-      border: 1px dashed rgba(15, 118, 110, 0.22);
+      border: 1px dashed rgba(75, 18, 56, 0.22);
       border-radius: 12px;
       padding: 12px;
       color: var(--muted);
@@ -2649,7 +2649,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .action-note-field input {
       min-height: 42px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 12px;
       padding: 0 12px;
     }
@@ -2698,7 +2698,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .kanban-column {
       min-width: 220px;
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 14px;
       background: rgba(248, 250, 252, 0.9);
       padding: 10px;
@@ -2784,7 +2784,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     }
 
     .playbook-card {
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 14px;
       padding: 12px;
       background: rgba(255, 255, 255, 0.92);
@@ -2805,9 +2805,9 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .playbook-card button {
       margin-top: 10px;
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 999px;
-      background: var(--accent, #0f766e);
+      background: var(--accent, #4B1238);
       color: #fff;
       padding: 8px 12px;
       cursor: pointer;
@@ -2816,7 +2816,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .risk-timeline {
       margin: 14px 0;
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 14px;
       padding: 12px;
       background: rgba(248, 250, 252, 0.88);
@@ -2894,7 +2894,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     .bulk-command-bar button,
     .row-action-menu button,
     .row-action-menu a {
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 999px;
       background: #fff;
       color: var(--ink);
@@ -2917,9 +2917,9 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     .filter-strip button.active,
     .admin-form-tabs button.active,
     .drawer-tabs button.active {
-      background: var(--accent, #0f766e);
+      background: var(--accent, #4B1238);
       color: #fff;
-      box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18);
+      box-shadow: 0 10px 24px rgba(75, 18, 56, 0.18);
     }
 
     .filter-strip button.active span {
@@ -2936,7 +2936,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       flex-wrap: wrap;
       margin-bottom: 14px;
       padding: 10px;
-      border: 1px solid rgba(15, 118, 110, 0.18);
+      border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 14px;
       background: rgba(240, 253, 250, 0.98);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.09);
@@ -2975,7 +2975,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .drawer-focus-card {
       margin: 12px 0 16px;
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 14px;
       padding: 14px;
       background: rgba(240, 253, 250, 0.7);
@@ -2994,7 +2994,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 
     .super-admin-tenant-wrap {
       max-width: 100%;
-      border: 1px solid rgba(15, 118, 110, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 16px;
       overflow: auto;
     }
@@ -3096,7 +3096,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     .icon-menu-button {
       width: 38px;
       height: 34px;
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 10px;
       background: #fff;
       color: var(--ink);
@@ -3114,7 +3114,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       width: 190px;
       gap: 4px;
       padding: 8px;
-      border: 1px solid rgba(15, 118, 110, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 14px;
       background: #fff;
       box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
@@ -4413,7 +4413,7 @@ export class SuperAdminComponent implements OnInit {
   tenantBillingMetrics(tenant: ApiRecord = {}): ApiRecord[] {
     const summary = tenant.drilldown?.invoiceSummary || {};
     return [
-      { label: 'MRR', value: this.moneyText(tenant.monthlyRecurringRevenue || 0), badge: tenant.planName || 'Plan', tone: 'var(--accent,#0f766e)' },
+      { label: 'MRR', value: this.moneyText(tenant.monthlyRecurringRevenue || 0), badge: tenant.planName || 'Plan', tone: 'var(--accent,#4B1238)' },
       { label: 'Outstanding', value: this.moneyText(summary.outstanding || tenant.outstanding || 0), badge: Number(summary.outstanding || tenant.outstanding || 0) ? 'Due' : 'Clear', tone: Number(summary.outstanding || tenant.outstanding || 0) ? 'var(--danger,#dc2626)' : 'var(--success,#16a34a)' },
       { label: 'Invoices', value: `${summary.paid || 0}/${summary.total || 0}`, badge: `${summary.unpaid || 0} unpaid`, tone: Number(summary.unpaid || 0) ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)' }
     ];

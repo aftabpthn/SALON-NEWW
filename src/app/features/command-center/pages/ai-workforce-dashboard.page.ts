@@ -1706,7 +1706,7 @@ interface PolicyRow {
 
     .agent-card:hover,
     .agent-card.selected {
-      border-color: rgba(15, 118, 110, 0.45);
+      border-color: rgba(75, 18, 56, 0.45);
       background: var(--color-primary-soft);
     }
 
@@ -2065,7 +2065,7 @@ interface PolicyRow {
     }
 
     .approval-triage-strip button.active {
-      border-color: rgba(15, 118, 110, 0.45);
+      border-color: rgba(75, 18, 56, 0.45);
       background: var(--color-primary-soft);
     }
 
@@ -2092,7 +2092,7 @@ interface PolicyRow {
     }
 
     .decision-card.selected {
-      border-color: rgba(15, 118, 110, 0.45);
+      border-color: rgba(75, 18, 56, 0.45);
       background: var(--color-primary-soft);
     }
 

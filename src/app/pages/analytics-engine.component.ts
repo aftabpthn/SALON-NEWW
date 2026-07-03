@@ -386,10 +386,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       align-items: center;
       min-height: 24px;
       padding: 3px 9px;
-      border: 1px solid var(--success-border, #A7F3D0);
+      border: 1px solid var(--success-border, #DCC4D4);
       border-radius: 999px;
       color: var(--success-text, #065F46);
-      background: var(--success-bg, #ECFDF5);
+      background: var(--success-bg, #F3EAF0);
       font-size: 0.75rem;
       font-weight: 900;
     }
@@ -439,7 +439,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
     .analytics-nav-card.active {
       border-color: var(--color-primary);
-      background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(236, 72, 153, 0.14));
+      background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(236, 72, 153, 0.14));
       box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
     }
 
@@ -479,7 +479,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       height: 48px;
       border-radius: 8px;
       color: var(--color-primary-strong);
-      background: rgba(20, 184, 166, 0.12);
+      background: rgba(214, 79, 146, 0.12);
       font-weight: 900;
     }
 
@@ -867,7 +867,7 @@ export class AnalyticsEngineComponent implements OnInit {
 
   heatColor(intensity: number): string {
     const alpha = Math.min(0.9, Math.max(0.08, Number(intensity || 0) / 100));
-    return `rgba(15, 118, 110, ${alpha})`;
+    return `rgba(75, 18, 56, ${alpha})`;
   }
 
   private defaultStart(): string {

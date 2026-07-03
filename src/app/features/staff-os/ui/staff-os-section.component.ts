@@ -2149,15 +2149,15 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     h1 { font-size: 28px; }
     h2 { font-size: 18px; }
     .refresh, .primary, .icon-button { border: 1px solid #cbd8d2; background: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; min-height: 38px; font-weight: 700; }
-    .primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .primary { background: #4B1238; border-color: #4B1238; color: #fff; }
     .primary:disabled { opacity: .65; cursor: wait; }
     .icon-button { width: 38px; padding: 0; font-size: 22px; }
-    .row-action { border: 1px solid #cbd8d2; background: #fff; border-radius: 6px; padding: 7px 10px; cursor: pointer; min-height: 32px; font-weight: 800; color: #0f766e; }
+    .row-action { border: 1px solid #cbd8d2; background: #fff; border-radius: 6px; padding: 7px 10px; cursor: pointer; min-height: 32px; font-weight: 800; color: #4B1238; }
     .row-action:disabled { opacity: .65; cursor: wait; }
     .staff-shell-nav { align-items: center; background: rgba(255,255,255,.72); border: 1px solid #d9e5de; border-radius: 8px; display: flex; gap: 8px; max-width: 100%; overflow-x: auto; padding: 8px; }
     .staff-shell-nav a { align-items: center; background: #fff; border: 1px solid #d9e5de; border-radius: 7px; color: #10201a; display: grid; flex: 1 0 150px; gap: 2px 8px; grid-template-columns: auto 1fr; min-height: 52px; padding: 8px 10px; text-decoration: none; }
-    .staff-shell-nav a.active { border-color: #0f766e; background: #effaf7; box-shadow: inset 0 0 0 1px #0f766e; }
-    .staff-shell-nav span { align-items: center; background: #e8f5f2; border-radius: 8px; color: #0f766e; display: grid; font-size: 12px; font-weight: 900; height: 34px; justify-content: center; width: 34px; }
+    .staff-shell-nav a.active { border-color: #4B1238; background: #effaf7; box-shadow: inset 0 0 0 1px #4B1238; }
+    .staff-shell-nav span { align-items: center; background: #e8f5f2; border-radius: 8px; color: #4B1238; display: grid; font-size: 12px; font-weight: 900; height: 34px; justify-content: center; width: 34px; }
     .staff-shell-nav strong { font-size: 13px; line-height: 1.15; }
     .staff-shell-nav small { color: #60766d; font-size: 11px; grid-column: 2; }
     .staff-control-room { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 14px; padding: 16px; }
@@ -2167,7 +2167,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .control-filters label { color: #60766d; display: grid; font-size: 11px; font-weight: 900; gap: 5px; text-transform: uppercase; }
     .control-filters input { min-height: 38px; width: 160px; }
     .control-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    .control-card { border: 1px solid #d9e5de; border-left: 5px solid #0f766e; border-radius: 8px; color: #10201a; display: grid; gap: 6px; min-height: 94px; padding: 13px; text-decoration: none; }
+    .control-card { border: 1px solid #d9e5de; border-left: 5px solid #4B1238; border-radius: 8px; color: #10201a; display: grid; gap: 6px; min-height: 94px; padding: 13px; text-decoration: none; }
     .control-card span { color: #60766d; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .control-card strong { font-size: 25px; line-height: 1; }
     .control-card small { color: #60766d; font-weight: 700; }
@@ -2178,8 +2178,8 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .control-card.violet { border-left-color: #7c3aed; }
     .control-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
     .control-tabs a { align-items: center; border: 1px solid #d9e5de; border-radius: 999px; color: #34483f; display: flex; flex: 0 0 auto; gap: 8px; min-height: 38px; padding: 8px 12px; text-decoration: none; }
-    .control-tabs a.active { background: #0f766e; border-color: #0f766e; color: #fff; }
-    .control-tabs strong { background: #eef7f5; border-radius: 999px; color: #0f766e; min-width: 24px; padding: 3px 7px; text-align: center; }
+    .control-tabs a.active { background: #4B1238; border-color: #4B1238; color: #fff; }
+    .control-tabs strong { background: #eef7f5; border-radius: 999px; color: #4B1238; min-width: 24px; padding: 3px 7px; text-align: center; }
     .control-tabs a.active strong { background: #fff; }
     .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .metric, .panel, .state { border: 1px solid #d9e5de; background: #fff; border-radius: 8px; }
@@ -2283,7 +2283,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .workspace-heading { align-items: end; }
     .staff-workspace-shell { align-items: start; display: grid; gap: 14px; grid-template-columns: 300px minmax(0, 1fr); min-width: 0; }
     .staff-category-rail { display: grid; gap: 8px; position: sticky; top: 12px; }
-    .staff-category-tile { align-content: center; background: #fff; border: 1px solid #d9e5de; border-left: 4px solid #0f766e; border-radius: 8px; color: #10201a; cursor: pointer; display: grid; gap: 4px; min-height: 82px; padding: 12px; text-align: left; width: 100%; }
+    .staff-category-tile { align-content: center; background: #fff; border: 1px solid #d9e5de; border-left: 4px solid #4B1238; border-radius: 8px; color: #10201a; cursor: pointer; display: grid; gap: 4px; min-height: 82px; padding: 12px; text-align: left; width: 100%; }
     .staff-category-tile:hover, .staff-category-tile.active { background: #f4faf8; border-color: #b7d7cf; }
     .staff-category-tile.active { box-shadow: 0 10px 24px rgba(16, 32, 56, .08); }
     .staff-category-tile[data-state='ok'] { border-left-color: #16a34a; }
@@ -2304,7 +2304,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .workspace-kpi-grid strong { color: #10201a; font-size: 22px; overflow-wrap: anywhere; }
     .workspace-kpi-grid small { color: #60766d; }
     .workspace-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    .workspace-actions a, .workspace-actions button { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; color: #0f766e; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
+    .workspace-actions a, .workspace-actions button { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; color: #4B1238; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
     .workspace-actions .primary { color: #fff; }
     .staff-workspace-detail .table { max-height: 520px; }
     .workspace-directory-table .row { grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr) minmax(0, .95fr) minmax(0, 1fr) minmax(0, .6fr) minmax(0, 1fr) minmax(0, .65fr); }
@@ -2330,7 +2330,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .leave-actions .danger { border-color: #f1c4bd; color: #a43b2e; }
     .live-badges, .row-links { display: flex; gap: 6px; flex-wrap: wrap; }
     .mini-badge { width: fit-content; border-radius: 999px; background: #f7faf8; border: 1px solid #d9e5de; color: #40544c; padding: 3px 8px; font-size: 11px; font-weight: 800; }
-    .row-links a { border-bottom: 1px solid #99c8bd; color: #0f766e; font-size: 12px; font-weight: 800; text-decoration: none; }
+    .row-links a { border-bottom: 1px solid #99c8bd; color: #4B1238; font-size: 12px; font-weight: 800; text-decoration: none; }
     .state, .empty { padding: 14px; color: #61746c; }
     .action-empty { align-items: start; display: grid; gap: 7px; text-align: left; }
     .action-empty strong { color: #10201a; }
@@ -2346,13 +2346,13 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .task-create-form.staff-form { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; padding: 14px; }
     .task-create-form .field.full, .task-create-form .drawer-actions { grid-column: 1 / -1; }
     .task-create-form .drawer-actions { position: static; border: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; padding: 0; }
-    .form-message { color: #0f766e; font-weight: 800; }
+    .form-message { color: #4B1238; font-weight: 800; }
     .error-message { color: #b91c1c; font-weight: 800; }
     .commission-setup { align-items: center; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
     .commission-setup strong { display: block; font-size: 15px; }
     .commission-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-    .commission-actions a { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; color: #0f766e; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
-    .success { color: #0f766e; border-color: #b6d8cf; background: #f0fbf7; }
+    .commission-actions a { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; color: #4B1238; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
+    .success { color: #4B1238; border-color: #C9A8BA; background: #f0fbf7; }
     .attendance-command .panel-heading { align-items: end; }
     .attendance-command .panel-heading span { color: #60766d; display: block; margin-top: 4px; }
     .staff-attendance-mode { gap: 10px; }
@@ -2391,7 +2391,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .attendance-op-card small { color: #64748b; }
     .attendance-ops-grid { display: grid; gap: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
     .attendance-op-card { background: #fff; border: 1px solid #d8e1ea; display: grid; gap: 4px; min-height: 78px; min-width: 0; padding: 11px 12px; }
-    .attendance-op-card.green { border-left: 3px solid #0f766e; }
+    .attendance-op-card.green { border-left: 3px solid #4B1238; }
     .attendance-op-card.blue { border-left: 3px solid #0b72b5; }
     .attendance-op-card.amber { border-left: 3px solid #d97706; }
     .attendance-op-card.bad { border-left: 3px solid #dc2626; }
@@ -2402,7 +2402,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .exception-table .row.header { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
     .badge.bad { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
     .badge.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
-    .badge.good { background: #ecfdf5; border-color: #bbf7d0; color: #047857; }
+    .badge.good { background: #F3EAF0; border-color: #bbf7d0; color: #047857; }
     .staff-attendance-mode .attendance-workspace { gap: 10px; }
     .staff-attendance-mode .attendance-workspace .panel { border-color: #d8e1ea; padding: 13px; }
     .staff-attendance-mode .attendance-register-panel { border-color: #d8e1ea; overflow: hidden; padding: 0; }
@@ -2586,12 +2586,12 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .live-context span { color: #60766d; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .live-context strong { color: #10201a; font-size: 13px; overflow-wrap: anywhere; }
     .context-links { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-    .context-links a { background: #fff; border: 1px solid #cbd8d2; border-radius: 6px; color: #0f766e; font-size: 12px; font-weight: 800; min-height: 30px; padding: 6px 9px; text-decoration: none; }
+    .context-links a { background: #fff; border: 1px solid #cbd8d2; border-radius: 6px; color: #4B1238; font-size: 12px; font-weight: 800; min-height: 30px; padding: 6px 9px; text-decoration: none; }
     .staff-form { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr) 172px; gap: 12px 18px; padding-top: 18px; }
     .field { display: grid; grid-template-columns: 165px minmax(0, 1fr); align-items: center; gap: 10px; font-weight: 800; color: #34483f; font-size: 13px; }
     .field.full, .staff-form > .full, .staff-form .state { grid-column: 1 / 3; }
     .field.full { grid-template-columns: 165px minmax(0, 1fr); }
-    .login-provision { display: grid; grid-column: 1 / 3; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #b6d8cf; border-radius: 8px; background: #f0fbf7; }
+    .login-provision { display: grid; grid-column: 1 / 3; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #C9A8BA; border-radius: 8px; background: #f0fbf7; }
     .login-provision > div, .login-provision .check-field { grid-column: 1 / -1; }
     .check-field { align-items: center; border: 1px solid #edf2ef; border-radius: 8px; color: #34483f; display: grid; font-size: 13px; font-weight: 800; gap: 8px; grid-template-columns: auto 1fr; min-height: 43px; padding: 10px 11px; }
     .check-field input { width: 18px; height: 18px; padding: 0; }
@@ -2604,7 +2604,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .salary-quick-meta strong { font-size: 13px; overflow-wrap: anywhere; }
     .salary-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .salary-quick-actions .primary, .salary-quick-actions .refresh { min-height: 34px; white-space: nowrap; }
-    .incentive-command, .salary-command { align-items: center; background: #f0fbf7; border: 1px solid #b6d8cf; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
+    .incentive-command, .salary-command { align-items: center; background: #f0fbf7; border: 1px solid #C9A8BA; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
     .salary-command { background: #f8fafc; border-color: #cbd5e1; }
     .incentive-command strong, .salary-command strong { display: block; font-size: 16px; }
     .incentive-command small, .salary-command small { color: #60766d; display: block; margin-top: 4px; }
@@ -2676,7 +2676,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         min-height: 88px;
         padding: 14px;
         border: 1px solid #d9e5de;
-        border-left: 3px solid #0f766e;
+        border-left: 3px solid #4B1238;
         border-radius: 8px;
         color: #10231d;
         background: #fff;
@@ -2688,13 +2688,13 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
       .attendance-dashboard-nav-card:hover {
         transform: translateY(-2px);
-        border-color: #0f766e;
+        border-color: #4B1238;
         box-shadow: 0 8px 22px rgba(12, 26, 43, 0.1);
       }
 
       .attendance-dashboard-nav-card.active {
-        border-color: #0f766e;
-        background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
+        border-color: #4B1238;
+        background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
         box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
       }
 
@@ -2720,7 +2720,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       .attendance-dashboard-nav-card i {
         padding: 3px 8px;
         border-radius: 999px;
-        color: #0f766e;
+        color: #4B1238;
         background: #eef8f5;
         font-size: 0.68rem;
         font-style: normal;
@@ -2734,11 +2734,165 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         width: 48px;
         height: 48px;
         border-radius: 8px;
-        color: #0f766e;
-        background: rgba(20, 184, 166, 0.12);
+        color: #4B1238;
+        background: rgba(214, 79, 146, 0.12);
         font-weight: 900;
       }
 
+
+    :host .staff-os { background: #f8f5f2; color: #2f2522; }
+
+    :host .topbar,
+    :host .staff-shell-nav,
+    :host .staff-control-room,
+    :host .metric,
+    :host .panel,
+    :host .state,
+    :host .staff-clean-shell,
+    :host .staff-register-side,
+    :host .staff-workspace-detail,
+    :host .staff-category-tile,
+    :host .workspace-manual-form.staff-form,
+    :host .task-create-form.staff-form,
+    :host .attendance-workspace .panel,
+    :host .attendance-workspace .table,
+    :host .attendance-register-panel,
+    :host .roster-register-panel,
+    :host .payroll-register-panel {
+      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+    }
+
+    :host .staff-clean-shell {
+      overflow: hidden;
+    }
+
+    :host .staff-category-tile,
+    :host .metric,
+    :host .control-card,
+    :host .staff-register-kpis article,
+    :host .attendance-stats article,
+    :host .attendance-live-strip article,
+    :host .roster-kpi-strip article,
+    :host .payroll-kpi-strip article {
+      border-left: 3px solid rgba(154, 106, 96, 0.68) !important;
+      background: #fff !important;
+    }
+
+    :host .staff-category-tile.active,
+    :host .staff-category-tile:hover,
+    :host .staff-unified-side a.active,
+    :host .staff-register-side a:hover,
+    :host .staff-register-side button:hover,
+    :host .staff-register-side .active,
+    :host .staff-list-quick-nav .active,
+    :host .staff-list-quick-nav a:hover,
+    :host .staff-list-quick-nav button:hover {
+      background: #fff7f3 !important;
+      border-color: rgba(154, 106, 96, 0.24) !important;
+      color: #75524b !important;
+    }
+
+    :host h1,
+    :host h2,
+    :host h3,
+    :host .metric strong,
+    :host .control-card strong,
+    :host .staff-category-tile strong,
+    :host .staff-register-kpis strong,
+    :host .staff-name-cell strong,
+    :host .row strong {
+      color: #302522 !important;
+      font-weight: 630 !important;
+    }
+
+    :host .panel-heading,
+    :host .panel-heading span,
+    :host .metric span,
+    :host .control-card span,
+    :host .staff-category-tile small,
+    :host .staff-list-toolbar label,
+    :host .staff-register-kpis span,
+    :host .staff-register-table th,
+    :host .table .row.header,
+    :host .row small {
+      color: #766763 !important;
+      font-weight: 560 !important;
+    }
+
+    :host .refresh,
+    :host .primary,
+    :host .row-action,
+    :host .staff-action-menu summary,
+    :host .staff-row-menu summary,
+    :host .compact-action {
+      border-radius: 10px !important;
+      font-weight: 580 !important;
+    }
+
+    :host .primary,
+    :host .compact-action,
+    :host .staff-action-menu summary {
+      border-color: #744a44 !important;
+      background: #744a44 !important;
+      color: #fff !important;
+    }
+
+    :host .refresh,
+    :host .row-action,
+    :host .staff-list-quick-nav a,
+    :host .staff-list-quick-nav button {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      background: #fff !important;
+      color: #4a3b37 !important;
+    }
+
+    :host input,
+    :host select,
+    :host textarea {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-radius: 10px !important;
+      background: #fff !important;
+      box-shadow: none !important;
+    }
+
+    :host .badge,
+    :host .staff-avatar,
+    :host .staff-register-table .badge.good,
+    :host .staff-register-table .badge.warn {
+      border-color: rgba(154, 106, 96, 0.16) !important;
+      border-radius: 999px !important;
+      background: #fff7f3 !important;
+      color: #75524b !important;
+      font-weight: 620 !important;
+    }
+
+    :host .staff-register-table th,
+    :host .table .row.header {
+      background: #faf7f4 !important;
+      border-bottom-color: rgba(118, 85, 76, 0.12) !important;
+    }
+
+    :host .staff-register-table td,
+    :host .table .row {
+      border-bottom-color: rgba(118, 85, 76, 0.08) !important;
+    }
+
+    :host .staff-register-table tbody tr:hover,
+    :host .table .row:hover {
+      background: #fffaf7 !important;
+    }
+
+    :host .staff-action-menu div,
+    :host .staff-row-menu div {
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-radius: 14px !important;
+      background: #fff !important;
+      box-shadow: 0 24px 60px rgba(73, 51, 43, 0.18) !important;
+    }
       @media (max-width: 1180px) {
         .attendance-dashboard-workspace {
           grid-template-columns: 1fr;

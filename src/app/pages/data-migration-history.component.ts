@@ -133,14 +133,14 @@ import { DataMigrationStore } from './data-migration.store';
     .history-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .jobs-list { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; display: grid; gap: 8px; align-content: start; max-height: 70vh; overflow-y: auto; }
     .job-item { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcfb; cursor: pointer; display: grid; gap: 4px; transition: border-color .15s; }
-    .job-item:hover { border-color: #0f8f7f; }
-    .job-item.selected { border-color: #0f8f7f; background: #f0fdfa; }
+    .job-item:hover { border-color: #5A153F; }
+    .job-item.selected { border-color: #5A153F; background: #F5EEF2; }
     .job-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .job-header strong { font-size: 13px; }
     .job-meta { display: flex; gap: 12px; font-size: 11px; color: #64748b; }
     .job-date { font-size: 10px; color: #94a3b8; }
     .status-pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; display: inline-block; }
-    .status-pill.good { background: #e8f7f4; color: #0f766e; }
+    .status-pill.good { background: #F1E8EE; color: #4B1238; }
     .status-pill.active { background: #eff6ff; color: #1d4ed8; }
     .status-pill.blocked { background: #fef2f2; color: #b91c1c; }
     .empty-state { color: #64748b; font-size: 12px; padding: 8px 0; margin: 0; }
@@ -170,7 +170,7 @@ import { DataMigrationStore } from './data-migration.store';
     .failed-info small { font-size: 11px; color: #64748b; }
     .failed-msg { font-size: 11px; color: #64748b; flex: 1; min-width: 0; }
     .retry-badge { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 999px; }
-    .retry-badge.good { background: #e8f7f4; color: #0f766e; }
+    .retry-badge.good { background: #F1E8EE; color: #4B1238; }
     .action-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
     .action-list li { font-size: 12px; color: #172033; }
     .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -181,9 +181,9 @@ import { DataMigrationStore } from './data-migration.store';
     .btn-secondary:hover { background: #f8fafc; }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #e8f7f4; color: #0f766e; border: 1px solid #a7f3d0; }
+    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
     .loading-section { display: flex; align-items: center; gap: 10px; padding: 16px; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; font-weight: 700; font-size: 13px; }
-    .spinner { width: 18px; height: 18px; border: 3px solid #e2e8f0; border-top-color: #0f8f7f; border-radius: 50%; animation: spin .6s linear infinite; }
+    .spinner { width: 18px; height: 18px; border: 3px solid #e2e8f0; border-top-color: #5A153F; border-radius: 50%; animation: spin .6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 960px) { .history-layout { grid-template-columns: 1fr; } }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } .command-header { grid-template-columns: 1fr; } }

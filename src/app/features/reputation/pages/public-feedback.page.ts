@@ -66,17 +66,17 @@ type PublicReviewRequest = {
   styles: [`
     .feedback-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f4f7f8; color: #101827; }
     .panel { width: min(560px, 100%); background: #fff; border: 1px solid #d9e2e7; border-radius: 8px; padding: 24px; box-shadow: 0 18px 45px rgba(15,23,42,.08); }
-    .eyebrow { color: #0f766e; font-size: 12px; font-weight: 900; letter-spacing: .08em; margin: 0 0 8px; text-transform: uppercase; }
+    .eyebrow { color: #4B1238; font-size: 12px; font-weight: 900; letter-spacing: .08em; margin: 0 0 8px; text-transform: uppercase; }
     h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; }
     .lead { color: #475569; margin: 0 0 20px; }
     form { display: grid; gap: 14px; }
     .field { display: grid; gap: 7px; font-weight: 800; }
     input, select, textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; color: #111827; font: inherit; padding: 11px 12px; }
     textarea { resize: vertical; }
-    .primary { border: 0; border-radius: 8px; background: #0f766e; color: #fff; cursor: pointer; font-weight: 900; min-height: 44px; padding: 0 16px; }
+    .primary { border: 0; border-radius: 8px; background: #4B1238; color: #fff; cursor: pointer; font-weight: 900; min-height: 44px; padding: 0 16px; }
     .primary:disabled { cursor: not-allowed; opacity: .65; }
     .state { border-radius: 8px; margin: 12px 0; padding: 12px; background: #eef4f4; color: #334155; }
-    .state.success { background: #ecfdf5; color: #166534; }
+    .state.success { background: #F3EAF0; color: #166534; }
     .state.error { background: #fef2f2; color: #991b1b; }
   `]
 })

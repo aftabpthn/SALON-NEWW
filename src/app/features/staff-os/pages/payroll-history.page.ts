@@ -212,7 +212,7 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
     .badge {
       background: #eef7f4;
       border-radius: 999px;
-      color: #0f766e;
+      color: #4B1238;
       display: inline-flex;
       font-size: 12px;
       font-weight: 800;

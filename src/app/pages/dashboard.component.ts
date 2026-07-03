@@ -32,19 +32,19 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <span class="muted-text">{{ today() }}</span>
         </div>
         <div class="metrics-grid">
-          <a class="metric-card" style="border-top:3px solid #0f766e" routerLink="/kpi-details/dashboard/revenue-today">
+          <a class="metric-card teal" routerLink="/kpi-details/dashboard/revenue-today">
             <span class="metric-label">Revenue today</span>
-            <strong class="metric-value" style="color:#0f766e">{{ data.revenueToday | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong class="metric-value">{{ data.revenueToday | currency: 'INR':'symbol':'1.0-0' }}</strong>
           </a>
-          <a class="metric-card" style="border-top:3px solid #7c3aed" routerLink="/kpi-details/dashboard/revenue-this-month">
+          <a class="metric-card teal" routerLink="/kpi-details/dashboard/revenue-this-month">
             <span class="metric-label">Revenue this month</span>
-            <strong class="metric-value" style="color:#7c3aed">{{ data.revenueMonth | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong class="metric-value">{{ data.revenueMonth | currency: 'INR':'symbol':'1.0-0' }}</strong>
           </a>
-          <a class="metric-card" style="border-top:3px solid #2563eb" routerLink="/kpi-details/dashboard/total-bookings">
+          <a class="metric-card teal" routerLink="/kpi-details/dashboard/total-bookings">
             <span class="metric-label">Total bookings</span>
-            <strong class="metric-value" style="color:#2563eb">{{ data.totalBookings }}</strong>
+            <strong class="metric-value">{{ data.totalBookings }}</strong>
           </a>
-          <a class="metric-card" style="border-top:3px solid #059669" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }">
+          <a class="metric-card teal" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }">
             <span class="metric-label">Received due</span>
             <strong class="metric-value" style="color:#059669">{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }}</strong>
           </a>
@@ -760,6 +760,69 @@ import { StateComponent } from '../shared/ui/state/state.component';
       :host .dashboard-hub-grid {
         grid-template-columns: 1fr;
       }
+    }
+
+    :host .dashboard-panel .metrics-grid > a.metric-card::after {
+      content: none;
+    }
+
+    :host .dashboard-panel .metrics-grid > a.metric-card,
+    :host .dashboard-command-panel .dashboard-hub-card,
+    :host .dashboard-summary-grid > .panel,
+    :host .quick-grid .action-card,
+    :host .summary-tile,
+    :host .timeline {
+      background: #fff !important;
+      background-image: none !important;
+      border-color: rgba(118, 85, 76, 0.14) !important;
+      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045);
+    }
+
+    :host .dashboard-panel .metrics-grid > a.metric-card,
+    :host .dashboard-command-panel .dashboard-hub-card {
+      border-left-color: #9a6a60 !important;
+    }
+
+    :host .dashboard-panel .metrics-grid > a.metric-card::before {
+      background: #9a6a60;
+    }
+
+    :host .metric-value,
+    :host .dashboard-panel .metric-card .metric-value {
+      color: #3e2f2b !important;
+      font-weight: 620;
+    }
+
+    :host .metric-label,
+    :host .dashboard-command-panel .dashboard-hub-card strong,
+    :host .quick-grid .action-card strong,
+    :host .summary-tile strong {
+      font-weight: 540;
+    }
+
+    :host .dashboard-command-panel .hub-icon {
+      height: 24px;
+      min-width: 0;
+      padding: 0 8px;
+      border-color: rgba(154, 106, 96, 0.16);
+      background: #fff7f3;
+      font-size: 0.64rem;
+      font-weight: 620;
+    }
+
+    :host .dashboard-summary-grid {
+      gap: 14px;
+    }
+
+    :host .dashboard-summary-grid > .panel {
+      padding: 2px 16px 16px;
+      border-radius: 14px;
+    }
+
+    :host .timeline span {
+      background: #faf7f4;
+      border: 1px solid rgba(118, 85, 76, 0.08);
+      font-weight: 520;
     }
     @media (max-width: 1280px) {
       .metrics-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
