@@ -1694,3 +1694,361 @@ ion-button:active,
     animation: none !important;
   }
 }
+
+/* Aura Shine customer app premium SaaS polish layer. */
+:root {
+  --customer-bg-premium:
+    radial-gradient(circle at 12% 0%, rgba(109, 27, 77, 0.1), transparent 32%),
+    radial-gradient(circle at 88% 8%, rgba(232, 167, 184, 0.16), transparent 34%),
+    linear-gradient(180deg, #fffaf5 0%, #fbf5ef 48%, #f7eadf 100%);
+  --customer-surface: rgba(255, 255, 255, 0.94);
+  --customer-surface-soft: rgba(255, 250, 245, 0.9);
+  --customer-text: #241521;
+  --customer-muted: #756775;
+  --customer-border: rgba(75, 18, 56, 0.13);
+  --customer-border-strong: rgba(75, 18, 56, 0.2);
+  --customer-primary: #4b1238;
+  --customer-primary-2: #6d1b4d;
+  --customer-rose: #c98f9f;
+  --customer-shadow: 0 18px 42px rgba(75, 18, 56, 0.1);
+  --customer-shadow-soft: 0 10px 26px rgba(75, 18, 56, 0.07);
+}
+
+html,
+body,
+ion-app {
+  background: var(--customer-bg-premium) !important;
+  color: var(--customer-text) !important;
+}
+
+body {
+  background: var(--customer-bg-premium) !important;
+}
+
+ion-content {
+  --background: var(--customer-bg-premium) !important;
+  color: var(--customer-text) !important;
+}
+
+ion-toolbar {
+  --background: rgba(255, 250, 245, 0.9) !important;
+  --color: var(--customer-text) !important;
+  --border-color: var(--customer-border) !important;
+  box-shadow: 0 10px 28px rgba(75, 18, 56, 0.06);
+}
+
+ion-searchbar {
+  --background: var(--customer-surface) !important;
+  --border-radius: 16px !important;
+  --box-shadow: var(--customer-shadow-soft) !important;
+  --color: var(--customer-text) !important;
+  --placeholder-color: var(--customer-muted) !important;
+}
+
+ion-tab-bar {
+  --background: rgba(255, 250, 245, 0.94) !important;
+  --border: 1px solid var(--customer-border) !important;
+  border-color: var(--customer-border-strong) !important;
+  box-shadow: 0 22px 52px rgba(75, 18, 56, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+}
+
+ion-tab-button {
+  --color: var(--customer-muted) !important;
+  --color-selected: var(--customer-primary) !important;
+  --background-hover: rgba(232, 167, 184, 0.11) !important;
+  --background-focused: rgba(232, 167, 184, 0.13) !important;
+}
+
+ion-tab-button.tab-selected ion-icon {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-rose)) !important;
+  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.22), 0 0 0 1px rgba(255, 250, 245, 0.82) !important;
+}
+
+.page,
+.page-narrow,
+.app-container,
+.aura-container {
+  color: var(--customer-text);
+}
+
+.page-title {
+  color: var(--customer-text) !important;
+  letter-spacing: 0 !important;
+  line-height: 1.02 !important;
+}
+
+.section-title,
+h1,
+h2,
+h3,
+strong {
+  color: var(--customer-text) !important;
+  letter-spacing: 0 !important;
+}
+
+.eyebrow,
+.section-link,
+.section-heading a {
+  color: var(--customer-primary) !important;
+}
+
+.muted,
+.category,
+.address,
+.helper,
+.step-copy,
+p,
+small {
+  color: var(--customer-muted) !important;
+}
+
+.premium-card,
+.glass-card,
+.business-card,
+.state-card,
+.summary-card,
+.metric-card,
+.booking-card,
+.service-card,
+.staff-card,
+.review-card,
+.offer-card,
+.notification-card,
+.settings-menu,
+.quick-card,
+.hero-card,
+.profile-card,
+.empty,
+.slot-group,
+.search-card,
+.filter-card,
+.map-card,
+.selected-business-card,
+.selected-staff-card,
+.reschedule-card,
+.modal-card,
+.wishlist-card,
+.hero-offer,
+.wishlist-hero,
+.chat-bot-shell,
+.composer-card {
+  border-color: var(--customer-border) !important;
+  border-radius: 18px !important;
+  color: var(--customer-text) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 250, 245, 0.94)),
+    var(--customer-surface) !important;
+  box-shadow: var(--customer-shadow-soft) !important;
+}
+
+.premium-card:hover,
+.glass-card:hover,
+.business-card:hover,
+.booking-card:hover,
+.service-card:hover,
+.staff-card:hover,
+.offer-card:hover,
+.quick-card:hover {
+  border-color: var(--customer-border-strong) !important;
+  box-shadow: var(--customer-shadow) !important;
+}
+
+.primary-gradient,
+ion-button.primary-gradient {
+  --background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-primary)) !important;
+  --background-hover: linear-gradient(135deg, #7f275d, var(--customer-primary)) !important;
+  --background-activated: linear-gradient(135deg, #3f0f2f, #2f0a23) !important;
+  --color: #ffffff !important;
+  --box-shadow: 0 14px 30px rgba(75, 18, 56, 0.24) !important;
+}
+
+.secondary-button,
+ion-button.secondary-button {
+  --border-color: var(--customer-border-strong) !important;
+  --color: var(--customer-primary) !important;
+  --background: var(--customer-surface) !important;
+  --background-hover: rgba(232, 167, 184, 0.12) !important;
+  --background-focused: rgba(232, 167, 184, 0.14) !important;
+}
+
+.pill,
+.location-chip,
+.category-chip,
+.quick-chip,
+.filter-chip,
+.date-pill,
+.time-pill,
+.selected-area-row,
+.service-row,
+.summary-row,
+.info-row,
+.service-choice,
+.staff-choice,
+.date-card,
+.slot {
+  border-color: var(--customer-border) !important;
+  border-radius: 14px !important;
+  color: var(--customer-text) !important;
+  background: var(--customer-surface) !important;
+  box-shadow: 0 8px 20px rgba(75, 18, 56, 0.06) !important;
+}
+
+.pill.active,
+.pill[aria-pressed="true"],
+.category-chip.active,
+.filter-chip.active,
+.date-pill.active,
+.time-pill.active,
+.slot.selected,
+.date-card.selected,
+.service-choice.selected,
+.staff-choice.selected {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-primary)) !important;
+  box-shadow: 0 14px 30px rgba(75, 18, 56, 0.2) !important;
+}
+
+.status-pill,
+.rating-pill,
+.offer-pill,
+.countdown-pill {
+  border-color: rgba(75, 18, 56, 0.16) !important;
+  background: rgba(232, 167, 184, 0.13) !important;
+  color: var(--customer-primary) !important;
+}
+
+.offer-pill {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-rose)) !important;
+}
+
+input,
+textarea,
+select,
+.plain-input,
+ion-list,
+ion-item,
+ion-segment {
+  border-color: var(--customer-border) !important;
+  color: var(--customer-text) !important;
+  background: var(--customer-surface) !important;
+}
+
+ion-item {
+  --background: var(--customer-surface) !important;
+  --color: var(--customer-text) !important;
+  --border-color: var(--customer-border) !important;
+}
+
+ion-segment {
+  --background: var(--customer-surface) !important;
+}
+
+ion-segment-button {
+  --color: var(--customer-muted) !important;
+  --color-checked: var(--customer-primary) !important;
+  --indicator-color: var(--customer-primary) !important;
+  --background-checked: rgba(232, 167, 184, 0.15) !important;
+}
+
+.hero-search,
+.search-popover,
+.suggestion-panel,
+.location-panel,
+.bottom-action-card {
+  border-color: var(--customer-border) !important;
+  background: rgba(255, 250, 245, 0.96) !important;
+  box-shadow: var(--customer-shadow) !important;
+}
+
+.business-grid,
+.nearby-grid,
+.offer-grid,
+.records-grid,
+.quick-grid,
+.hub-grid,
+.metric-grid,
+.results,
+.customer-metrics,
+.service-grid,
+.staff-grid,
+.time-grid,
+.booking-grid {
+  gap: 14px !important;
+}
+
+.business-card .cover,
+.wishlist-card img,
+.hero-visual,
+.map-preview-card img,
+.professional-card > img {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+.empty,
+.state-card {
+  border-style: dashed !important;
+  text-align: center;
+}
+
+@media (max-width: 599px) {
+  .page,
+  .page-narrow,
+  .app-container {
+    width: min(calc(100% - 28px), var(--container-mobile)) !important;
+  }
+
+  .premium-card,
+  .glass-card,
+  .business-card,
+  .state-card,
+  .summary-card,
+  .metric-card,
+  .booking-card,
+  .service-card,
+  .staff-card,
+  .review-card,
+  .offer-card,
+  .notification-card,
+  .settings-menu,
+  .quick-card,
+  .hero-card,
+  .profile-card,
+  .empty,
+  .slot-group,
+  .search-card,
+  .filter-card,
+  .map-card,
+  .selected-business-card,
+  .selected-staff-card,
+  .reschedule-card,
+  .modal-card,
+  .wishlist-card,
+  .hero-offer,
+  .wishlist-hero,
+  .chat-bot-shell,
+  .composer-card {
+    border-radius: 16px !important;
+  }
+
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  ion-button,
+  .primary-gradient,
+  .secondary-button {
+    min-height: 46px;
+  }
+}
+
+@media (min-width: 768px) {
+  .page-title {
+    max-width: 760px;
+  }
+}
+/* End Aura Shine customer app premium SaaS polish layer. */
