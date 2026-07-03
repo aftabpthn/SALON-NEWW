@@ -13585,3 +13585,228 @@ app-super-admin :where(.super-admin-nav-card.active, .filter-strip button.active
   }
 }
 /* End AuraSalon staff and admin operations polish layer. */
+
+/* AuraSalon appointment and booking experience polish layer. */
+:where(app-appointments-enterprise, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments, app-booking-wizard, app-booking-portal, app-smart-booking, app-calendar-settings, app-offline-appointment-protection) {
+  --booking-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.94));
+  --booking-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 78%, white 22%);
+  --booking-border: var(--aura-border-soft, rgba(75, 18, 56, 0.12));
+  --booking-radius: var(--aura-card-radius-premium, 14px);
+  --booking-shadow: 0 12px 30px rgba(75, 18, 56, 0.07);
+  --booking-rose: var(--aura-rose, #e8a7b8);
+}
+
+:where(app-appointments-enterprise, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments, app-booking-wizard, app-booking-portal, app-smart-booking, app-calendar-settings, app-offline-appointment-protection) :where(.page-stack, .portal-page, .appointment-activity-page, .enterprise-scheduler, .calendar-settings-page, .settings-content) {
+  background: transparent !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-booking-wizard, app-smart-booking, app-calendar-settings, app-offline-appointment-protection) :where(.module-hero, .settings-hero, .deposit-followup-strip) {
+  border: 1px solid var(--booking-border) !important;
+  border-radius: var(--booking-radius) !important;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(232, 167, 184, 0.16), transparent 260px),
+    linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(75, 18, 56, 0.16) !important;
+}
+
+:where(app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-booking-wizard, app-smart-booking, app-calendar-settings, app-offline-appointment-protection) :where(.module-hero h1, .module-hero h2, .settings-hero h1, .deposit-followup-strip strong) {
+  color: #fff !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-booking-wizard, app-smart-booking, app-calendar-settings, app-offline-appointment-protection) :where(.module-hero p, .module-hero small, .settings-hero p, .deposit-followup-strip p) {
+  color: rgba(255, 255, 255, 0.74) !important;
+}
+
+app-booking-portal :where(.public-profile) {
+  border-color: var(--booking-border) !important;
+  border-radius: calc(var(--booking-radius) + 4px) !important;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(232, 167, 184, 0.22), transparent 280px),
+    linear-gradient(135deg, #fffaf7, #ffffff 52%, color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 36%, white 64%)) !important;
+  box-shadow: 0 18px 44px rgba(75, 18, 56, 0.1) !important;
+}
+
+app-booking-portal :where(.profile-main h1) {
+  color: var(--aura-primary, #4b1238) !important;
+  font-size: clamp(2rem, 7vw, 3.6rem) !important;
+  letter-spacing: 0 !important;
+}
+
+app-booking-portal :where(.profile-aside) {
+  border: 1px solid var(--booking-border) !important;
+  border-radius: var(--booking-radius) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: var(--booking-shadow) !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking) :where(.dashboard-grid, .quick-grid, .catalog-grid, .pick-grid, .staff-grid, .review-grid, .metrics-grid, .wizard-grid, .confirm-grid) {
+  gap: 14px !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(.panel, .form-panel, .settings-section, .settings-nav, .activity-side-nav, .smart-booking-side-nav, .activity-detail, .smart-booking-detail, .activity-nav-card, .smart-booking-nav-card, .metric-card, .summary-card, .action-card, .command-card, .pick-card, .service-card, .staff-card, .review-card, .summary-lines div, .report-grid article, .client-stats-grid article, .detail-grid article, .alert-grid article, .client-score-list article, .month-strip-band, .summary-strip article, .waitlist-summary-action, .scheduler-view-toolbar, .color-table-wrap, .settlement-notice, .table-wrap, .detail-drawer, .empty-state) {
+  border-color: var(--booking-border) !important;
+  border-radius: var(--booking-radius) !important;
+  background: var(--booking-surface) !important;
+  color: var(--aura-text, #1f2933) !important;
+  box-shadow: var(--booking-shadow) !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(.metric-card, .summary-card, .action-card, .command-card, .pick-card, .service-card, .staff-card, .review-card, .activity-nav-card, .smart-booking-nav-card, .month-strip button):where(:hover, :focus-within) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 24%, var(--booking-border)) !important;
+  box-shadow: 0 16px 34px rgba(75, 18, 56, 0.09) !important;
+  transform: translateY(-1px);
+}
+
+:where(app-appointment-activity, app-smart-booking) :where(.activity-nav-card, .smart-booking-nav-card) {
+  border-left-color: var(--aura-primary, #4b1238) !important;
+  grid-template-columns: 46px minmax(0, 1fr) auto !important;
+}
+
+:where(app-appointment-activity, app-smart-booking) :where(.activity-nav-card.active, .smart-booking-nav-card.active) {
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 70%, white 30%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+:where(app-appointment-activity, app-smart-booking) :where(.activity-nav-icon, .smart-booking-nav-icon) {
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 80%, white 20%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+:where(app-booking-wizard) :where(.wizard-steps) {
+  border-bottom-color: var(--booking-border) !important;
+  gap: 10px !important;
+}
+
+:where(app-booking-wizard) :where(.wizard-steps button) {
+  min-height: 42px !important;
+  border-color: var(--booking-border) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: var(--aura-text, #1f2933) !important;
+  font-weight: 850 !important;
+}
+
+:where(app-booking-wizard) :where(.wizard-steps button.active, .wizard-steps button.done) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 32%, var(--booking-border)) !important;
+  color: var(--aura-primary, #4b1238) !important;
+  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.09) !important;
+}
+
+:where(app-booking-wizard) :where(.wizard-steps button.active span, .wizard-steps button.done span) {
+  background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  color: #fff !important;
+}
+
+:where(app-booking-wizard) :where(.hold-timer) {
+  border-color: color-mix(in srgb, var(--aura-warning, #f59e0b) 24%, white) !important;
+  background: var(--aura-warning-bg, rgba(245, 158, 11, 0.14)) !important;
+  color: color-mix(in srgb, var(--aura-warning, #f59e0b) 72%, black 28%) !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(input, select, textarea) {
+  min-height: 42px !important;
+  border: 1px solid var(--booking-border) !important;
+  border-radius: 11px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(input, select, textarea):focus {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 44%, var(--booking-border)) !important;
+  box-shadow: 0 0 0 3px rgba(75, 18, 56, 0.1) !important;
+  outline: none !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(button, .primary-button, .ghost-button, .mini, .badge, .link-badge) {
+  border-radius: 11px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(.primary-button, button.primary, button[type='submit']) {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  box-shadow: 0 12px 24px rgba(75, 18, 56, 0.18) !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(.ghost-button, button:not(.primary):not(.primary-button):not([type='submit'])) {
+  border-color: var(--booking-border) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(.badge, .risk-pill, .problem-pill, .slot-hh-badge, .hh-tag, .trust-row span, .link-badge, .state.success) {
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4b1238) 16%, var(--booking-border)) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 78%, white 22%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+  font-weight: 850 !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise) :where(.table-wrap, .compact-table-wrap, .color-table-wrap) {
+  overflow-x: auto !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(th, .table-head) {
+  background: var(--booking-soft) !important;
+  color: color-mix(in srgb, var(--aura-text, #1f2933) 78%, var(--aura-muted, #6b7280)) !important;
+  letter-spacing: 0.02em !important;
+}
+
+:where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointment-detail-list-report, app-appointments-enterprise, app-calendar-settings) :where(td, th) {
+  border-bottom-color: var(--booking-border) !important;
+  padding: 12px 14px !important;
+}
+
+app-appointments-enterprise :where(.month-strip button.active, .scheduler-layout-option.active, .calendar-layout-button.active, .appointment-card.selected),
+app-booking-portal :where(.command-card.active, .staff-card.active),
+app-booking-wizard :where(.command-card.active) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 32%, var(--booking-border)) !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 72%, white 28%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+app-calendar-settings :where(.settings-nav a.active, .toggle-row input:checked + i, .switch-card input:checked + i) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 32%, var(--booking-border)) !important;
+  background: var(--aura-primary, #4b1238) !important;
+  color: #fff !important;
+}
+
+app-calendar-settings :where(.color-picker) {
+  min-width: 48px !important;
+  padding: 4px !important;
+}
+
+@media (max-width: 980px) {
+  :where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointments-enterprise, app-calendar-settings) :where(.dashboard-grid, .public-profile, .activity-workspace, .smart-booking-workspace, .calendar-settings-page, .scheduler-view-toolbar, .summary-strip, .month-strip-band, .module-hero, .settings-hero, .section-title, .wizard-footer, .hero-actions, .action-row, .toolbar, .time-controls, .appointment-grid) {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  :where(app-appointment-activity, app-smart-booking) :where(.activity-side-nav, .smart-booking-side-nav) {
+    position: static !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  :where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointments-enterprise, app-calendar-settings) :where(.metrics-grid, .pick-grid, .catalog-grid, .staff-grid, .review-grid, .quick-grid, .wizard-grid, .confirm-grid, .filter-grid, .report-grid, .client-stats-grid, .detail-grid, .summary-strip, .activity-side-nav, .smart-booking-side-nav, .select-grid, .time-controls, .appointment-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  :where(app-booking-portal, app-booking-wizard, app-smart-booking, app-appointment-activity, app-appointment-deposit-report, app-appointments-enterprise, app-calendar-settings) :where(button, .primary-button, .ghost-button, .mini, .form-actions a) {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  app-booking-portal :where(.portal-page) {
+    width: min(100%, calc(100% - 20px)) !important;
+    padding-block: 14px 28px !important;
+  }
+}
+/* End AuraSalon appointment and booking experience polish layer. */
