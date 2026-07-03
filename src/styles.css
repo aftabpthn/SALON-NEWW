@@ -13435,3 +13435,153 @@ app-account-master :where(.group-overlay) {
   }
 }
 /* End AuraSalon CRM and catalog commerce polish layer. */
+
+/* AuraSalon staff and admin operations polish layer. */
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-staff-appointments-report, app-staff-sales-report, app-report-staff, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers, app-report-branches) {
+  --ops-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.94));
+  --ops-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 78%, white 22%);
+  --ops-border: var(--aura-border-soft, rgba(75, 18, 56, 0.12));
+  --ops-radius: var(--aura-card-radius-premium, 14px);
+  --ops-shadow: 0 12px 30px rgba(75, 18, 56, 0.07);
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.page-stack, .staff-page, .staff-shell, .staff-list-mode, .staff-workspace-panel, .super-admin-workspace, .command-center-page, .cc-page) {
+  background: transparent !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.module-hero, .profile-command-bar, .command-bar, .page-heading, .page-header, .cc-header, .staff-hero, .staff-command-hero, .staff-profile-hero) {
+  border: 1px solid var(--ops-border) !important;
+  border-radius: var(--ops-radius) !important;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(232, 167, 184, 0.15), transparent 260px),
+    linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(75, 18, 56, 0.16) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.module-hero h1, .module-hero h2, .profile-command-bar h1, .command-bar h1, .command-bar strong, .page-heading h1, .cc-header h1, .staff-hero h1, .staff-command-hero h1) {
+  color: #fff !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.module-hero p, .module-hero small, .profile-command-bar span, .command-bar p, .command-bar span, .page-heading p, .cc-header p, .staff-hero p) {
+  color: rgba(255, 255, 255, 0.74) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers, app-report-branches) :where(.panel, .metric, .metric-card, .state, .staff-control-room, .control-card, .staff-shell-nav, .staff-clean-shell, .staff-unified-side, .staff-workspace-detail, .staff-category-tile, .workspace-kpi-grid article, .salary-editor-card, .workspace-manual-form, .task-create-form, .commission-setup, .split article, .task-grid article, .attendance-stats article, .attendance-ops-grid, .attendance-workspace, .staff-list-toolbar, .command-kpi, .ops-intel-card, .action-card, .kanban-card, .kanban-column, .super-admin-side-nav, .super-admin-detail, .super-admin-nav-card, .bulk-command-bar, .drawer-panel, .form-panel, .cc-card, .cc-detail-grid div, .cc-shell, .cc-actions, .report-card, .summary-card, .table-wrap, .empty-state) {
+  border-color: var(--ops-border) !important;
+  border-radius: var(--ops-radius) !important;
+  background: var(--ops-surface) !important;
+  color: var(--aura-text, #1f2933) !important;
+  box-shadow: var(--ops-shadow) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.metric, .metric-card, .control-card, .staff-category-tile, .workspace-kpi-grid article, .task-grid article, .attendance-stats article, .command-kpi, .ops-intel-card, .action-card, .kanban-card, .super-admin-nav-card, .cc-card):where(:hover, :focus-within) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 22%, var(--ops-border)) !important;
+  box-shadow: 0 16px 34px rgba(75, 18, 56, 0.09) !important;
+  transform: translateY(-1px);
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(input, select, textarea) {
+  min-height: 42px !important;
+  border: 1px solid var(--ops-border) !important;
+  border-radius: 11px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(input, select, textarea):focus {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 44%, var(--ops-border)) !important;
+  box-shadow: 0 0 0 3px rgba(75, 18, 56, 0.1) !important;
+  outline: none !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(button, .primary, .primary-button, .ghost-button, .refresh, .icon-button, .row-action, .cc-primary, .cc-actions button) {
+  min-height: 40px !important;
+  border-radius: 11px !important;
+  border-color: var(--ops-border) !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.primary, .primary-button, .cc-primary, button.primary, button[type='submit']) {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  box-shadow: 0 12px 24px rgba(75, 18, 56, 0.18) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.ghost-button, .refresh, .icon-button, .row-action, .cc-actions button, button:not(.primary):not([type='submit'])) {
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-os-heatmap, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-location-sharing-command-center, app-cross-branch-analytics, app-branch-offer-leaderboard, app-deployment-ready, app-future-features, app-future-workflow, app-prd, app-happy-hours-staff-incentives, app-staff-aware-offers) :where(.badge, .chip, .pill, .state, .status, .tag, .super-admin-nav-card em, .command-live span) {
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 78%, white 22%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 16%, var(--ops-border)) !important;
+  font-weight: 850 !important;
+}
+
+:where(app-staff-os-section, app-staff-enterprise, app-staff-management, app-staff-profile, app-super-admin) :where(.success, .good, .active, .complete, .paid) {
+  background-color: var(--aura-success-bg, rgba(22, 163, 74, 0.12)) !important;
+  color: var(--aura-success, #16a34a) !important;
+}
+
+:where(app-staff-os-section, app-staff-enterprise, app-staff-management, app-staff-profile, app-super-admin) :where(.warning, .pending, .trial, .paused) {
+  background-color: var(--aura-warning-bg, rgba(245, 158, 11, 0.14)) !important;
+  color: color-mix(in srgb, var(--aura-warning, #f59e0b) 74%, black 26%) !important;
+}
+
+:where(app-staff-os-section, app-staff-enterprise, app-staff-management, app-staff-profile, app-super-admin) :where(.danger, .critical, .risk, .suspended, .failed) {
+  background-color: var(--aura-danger-bg, rgba(225, 29, 72, 0.12)) !important;
+  color: var(--aura-danger, #e11d48) !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-report-staff, app-report-branches) :where(.table-wrap, .data-table, .staff-table, .ai-table-wrap, table) {
+  overflow-x: auto !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-report-staff, app-report-branches) :where(th, .table-head) {
+  background: var(--ops-soft) !important;
+  color: color-mix(in srgb, var(--aura-text, #1f2933) 78%, var(--aura-muted, #6b7280)) !important;
+  letter-spacing: 0.02em !important;
+}
+
+:where(app-staff-os-section, app-staff-master-definition, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-staff-section, app-staff-connected-modules, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center, app-report-staff, app-report-branches) :where(td, th) {
+  border-bottom-color: var(--ops-border) !important;
+  padding: 12px 14px !important;
+}
+
+app-staff-os-section :where(.staff-shell-nav a.active, .staff-unified-side a.active, .staff-category-tile.active),
+app-super-admin :where(.super-admin-nav-card.active, .filter-strip button.active) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 28%, var(--ops-border)) !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 72%, white 28%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+@media (max-width: 980px) {
+  :where(app-staff-os-section, app-staff-master-definition, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center) :where(.staff-clean-shell, .staff-workspace-shell, .staff-list-toolbar, .workspace-manual-form, .task-create-form, .commission-setup, .super-admin-workspace, .dashboard-grid, .executive-deep-grid, .inbox-deep-grid, .cc-layout, .cc-detail-grid, .page-heading, .module-hero, .command-heading, .bulk-command-bar) {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  app-staff-os-section :where(.staff-clean-shell > .staff-unified-side, .staff-clean-shell > :not(.staff-unified-side)) {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+
+@media (max-width: 620px) {
+  :where(app-staff-os-section, app-staff-master-definition, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center) :where(.metrics-grid, .command-kpi-grid, .quick-grid, .ops-intel-grid, .staff-shell-nav, .workspace-kpi-grid, .attendance-stats, .task-grid, .split, .form-grid, .settings-form-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  :where(app-staff-os-section, app-staff-master-definition, app-staff-payroll-definition, app-staff-target-incentive, app-staff-enterprise, app-staff-management, app-staff-profile, app-super-admin, app-command-center-page, app-reputation-command-center-page, app-engagement-command-center) :where(button, .primary, .primary-button, .ghost-button, .refresh, .icon-button, .row-action, .cc-primary) {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+/* End AuraSalon staff and admin operations polish layer. */
