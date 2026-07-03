@@ -13810,3 +13810,177 @@ app-calendar-settings :where(.color-picker) {
   }
 }
 /* End AuraSalon appointment and booking experience polish layer. */
+
+/* AuraSalon data migration and offline resilience polish layer. */
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) {
+  --opsflow-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.94));
+  --opsflow-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 78%, white 22%);
+  --opsflow-border: var(--aura-border-soft, rgba(75, 18, 56, 0.12));
+  --opsflow-radius: var(--aura-card-radius-premium, 14px);
+  --opsflow-shadow: 0 12px 30px rgba(75, 18, 56, 0.07);
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.migration-shell, .page-stack, .migration-page, .workspace, .offline-page) {
+  background: transparent !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation) :where(.command-header, .page-heading, .page-header, .module-hero, .hero, .migration-hero),
+:where(app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.module-hero, .page-heading, .page-header) {
+  border: 1px solid var(--opsflow-border) !important;
+  border-radius: var(--opsflow-radius) !important;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(232, 167, 184, 0.15), transparent 260px),
+    linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(75, 18, 56, 0.16) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.command-header h1, .page-heading h1, .page-header h1, .module-hero h1, .module-hero h2, .hero h1, .migration-hero h1) {
+  color: #fff !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.command-header p, .command-header small, .page-heading p, .page-header p, .module-hero p, .module-hero small, .hero p, .migration-hero p) {
+  color: rgba(255, 255, 255, 0.74) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.panel, .score-card, .control-strip article, .normalizer-card, .normalizer-files article, .migration-progress-panel, .risk-panel article, .pipeline article, .proof-grid article, .difference-list article, .entity-stack article, .recon-list article, .approval-list article, .duplicate-list article, .ops-queue button, .reconcile-table article, .checklist, .rollback-zone, .worker-panel, .proof-panel, .table-wrap, .metric-card, .action-card, .quick-grid article, .summary-card, .state, .empty-state, .migration-side-nav, .migration-page-detail, .migration-nav-card) {
+  border-color: var(--opsflow-border) !important;
+  border-radius: var(--opsflow-radius) !important;
+  background: var(--opsflow-surface) !important;
+  color: var(--aura-text, #1f2933) !important;
+  box-shadow: var(--opsflow-shadow) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation) :where(.migration-nav-card, .pipeline article, .ops-queue button, .normalizer-files article, .entity-stack article, .duplicate-list article):where(:hover, :focus-within),
+:where(app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.metric-card, .action-card, .panel):where(:hover, :focus-within) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 24%, var(--opsflow-border)) !important;
+  box-shadow: 0 16px 34px rgba(75, 18, 56, 0.09) !important;
+  transform: translateY(-1px);
+}
+
+app-data-migration :where(.migration-nav-card) {
+  grid-template-columns: 46px minmax(0, 1fr) auto !important;
+  border-left: 3px solid var(--aura-primary, #4b1238) !important;
+}
+
+app-data-migration :where(.migration-nav-card.active, .migration-nav-card[aria-current='page']) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 30%, var(--opsflow-border)) !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 72%, white 28%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+app-data-migration :where(.migration-nav-icon) {
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 80%, white 20%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(input, select, textarea) {
+  min-height: 42px !important;
+  border: 1px solid var(--opsflow-border) !important;
+  border-radius: 11px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(input, select, textarea):focus {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 44%, var(--opsflow-border)) !important;
+  box-shadow: 0 0 0 3px rgba(75, 18, 56, 0.1) !important;
+  outline: none !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(button, .primary-button, .secondary-button, .ghost-button, .danger-button, .badge, .status-pill) {
+  border-radius: 11px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.primary-button, button.primary, button[type='submit']) {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  box-shadow: 0 12px 24px rgba(75, 18, 56, 0.18) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.secondary-button, .ghost-button, button:not(.primary):not(.primary-button):not(.danger-button):not([type='submit'])) {
+  border-color: var(--opsflow-border) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.danger-button, button.danger) {
+  color: #fff !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--aura-danger, #e11d48) 82%, black 18%), var(--aura-danger, #e11d48)) !important;
+  border-color: transparent !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.badge, .status-pill, .success-text, .state.success) {
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #4b1238) 16%, var(--opsflow-border)) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 78%, white 22%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+  font-weight: 850 !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.danger, .error-text, .badge.danger, .status-pill.danger, .mismatch) {
+  border-color: color-mix(in srgb, var(--aura-danger, #e11d48) 24%, var(--opsflow-border)) !important;
+  background: var(--aura-danger-bg, rgba(225, 29, 72, 0.12)) !important;
+  color: var(--aura-danger, #e11d48) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.warning, .migration-warning, .badge.warning, .score-card.warning) {
+  border-color: color-mix(in srgb, var(--aura-warning, #f59e0b) 24%, var(--opsflow-border)) !important;
+  background: var(--aura-warning-bg, rgba(245, 158, 11, 0.14)) !important;
+  color: color-mix(in srgb, var(--aura-warning, #f59e0b) 72%, black 28%) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.table-wrap, .dense, table) {
+  overflow-x: auto !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(th, .table-head) {
+  background: var(--opsflow-soft) !important;
+  color: color-mix(in srgb, var(--aura-text, #1f2933) 78%, var(--aura-muted, #6b7280)) !important;
+  letter-spacing: 0.02em !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(td, th) {
+  border-bottom-color: var(--opsflow-border) !important;
+  padding: 12px 14px !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation) :where(.progress-track) {
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--opsflow-border) 46%, white 54%) !important;
+}
+
+:where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation) :where(.progress-track span, meter::-webkit-meter-optimum-value) {
+  background: linear-gradient(90deg, var(--aura-primary, #4b1238), var(--aura-rose, #e8a7b8)) !important;
+}
+
+@media (max-width: 980px) {
+  :where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.migration-page-workspace, .workspace-grid, .grid.two, .grid.three, .control-strip, .form-grid, .worker-settings, .proof-grid, .expected-grid, .module-hero, .command-header, .panel-head, .section-title, .action-row, .normalizer-card, .scheduler-view-toolbar) {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  app-data-migration :where(.migration-side-nav) {
+    position: static !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  :where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(.metrics-grid, .quick-grid, .control-strip, .normalizer-files, .pipeline, .risk-panel, .proof-grid, .entity-stack, .recon-list, .approval-list, .duplicate-list, .ops-queue, .migration-side-nav, .form-grid, .grid, .worker-settings) {
+    grid-template-columns: 1fr !important;
+  }
+
+  :where(app-data-migration, app-data-migration-section, app-data-migration-launch, app-data-migration-assistant, app-data-migration-import-worker, app-data-migration-history, app-data-migration-approval, app-data-migration-go-live, app-data-migration-ai-mapping, app-data-migration-overview, app-data-migration-validation, app-offline-readiness, app-offline-sync-queue, app-offline-conflict-center, app-offline-device-health, app-offline-support, app-offline-risk-alerts, app-offline-billing-protection) :where(button, .primary-button, .secondary-button, .ghost-button, .danger-button) {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+/* End AuraSalon data migration and offline resilience polish layer. */
