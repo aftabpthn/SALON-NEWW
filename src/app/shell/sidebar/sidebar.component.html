@@ -7,7 +7,7 @@
 >
   <div class="sidebar-rail" role="navigation" aria-label="Pinned modules">
     <button class="workspace-chip" type="button" [attr.aria-label]="tenantScopeLabel" [attr.data-label]="tenantScopeLabel" (click)="store.toggleMode()">
-      <span>A</span>
+      <span>AS</span>
     </button>
 
     <nav class="rail-nav">
@@ -32,9 +32,9 @@
   <section class="sidebar-panel" *ngIf="!store.isRail()">
     <header class="workspace-header">
       <button class="workspace-button" type="button" (click)="store.toggleMode()">
-        <span class="workspace-avatar">A</span>
+        <span class="workspace-avatar">AS</span>
         <span>
-          <strong>Aurashine</strong>
+          <strong>Aura Shine</strong>
           <small>{{ tenantScopeLabel }}</small>
         </span>
         <i aria-hidden="true">⌄</i>

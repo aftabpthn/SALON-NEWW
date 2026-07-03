@@ -691,3 +691,111 @@
     display: none;
   }
 }
+
+/* Aura Shine premium sidebar refinement. */
+.enterprise-sidebar {
+  color: #f7f0f4;
+  background:
+    linear-gradient(180deg, rgba(232, 167, 184, 0.08), transparent 220px),
+    #150b13;
+  border-right-color: rgba(232, 167, 184, 0.14);
+  box-shadow: 10px 0 34px rgba(75, 18, 56, 0.18);
+}
+
+.sidebar-rail {
+  background: #10070d;
+  border-right-color: rgba(232, 167, 184, 0.12);
+}
+
+.sidebar-panel {
+  background:
+    linear-gradient(180deg, rgba(109, 27, 77, 0.22), transparent 170px),
+    #170b14;
+}
+
+.workspace-chip,
+.workspace-button,
+.icon-action,
+.status-card,
+.user-card,
+.scope-grid select,
+.user-card select,
+.sidebar-search {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(232, 167, 184, 0.13);
+}
+
+.workspace-chip span,
+.workspace-avatar {
+  color: #fff;
+  background: linear-gradient(135deg, #6d1b4d, #c98f9f);
+  box-shadow: 0 8px 18px rgba(232, 167, 184, 0.18);
+}
+
+.workspace-chip span {
+  width: 26px;
+  font-size: 0.66rem;
+  letter-spacing: 0;
+}
+
+.workspace-avatar {
+  width: 25px;
+  font-size: 0.62rem;
+  letter-spacing: 0;
+}
+
+.workspace-button:hover,
+.rail-nav a:hover,
+.rail-footer button:hover,
+.icon-action:hover,
+.group-header:hover,
+.nav-row:hover,
+.nav-row.active {
+  background: rgba(232, 167, 184, 0.11);
+  color: #fff;
+}
+
+.rail-nav a.active {
+  background: rgba(232, 167, 184, 0.14);
+  box-shadow: inset 3px 0 0 #c98f9f, 0 0 0 1px rgba(232, 167, 184, 0.18);
+}
+
+.nav-row.active {
+  box-shadow: inset 2px 0 0 #c98f9f;
+  color: #fff;
+}
+
+.nav-row.active .nav-icon {
+  background: rgba(232, 167, 184, 0.15);
+  color: #ffd7e1;
+}
+
+.sidebar-search:focus-within,
+.scope-grid select:focus,
+.user-card select:focus {
+  border-color: rgba(232, 167, 184, 0.42);
+  box-shadow: 0 0 0 3px rgba(232, 167, 184, 0.14);
+}
+
+.quick-strip a {
+  color: #ffe3ea;
+  background: rgba(232, 167, 184, 0.1);
+  border-color: rgba(232, 167, 184, 0.22);
+}
+
+.quick-strip a:hover {
+  background: rgba(232, 167, 184, 0.18);
+  border-color: rgba(232, 167, 184, 0.38);
+}
+
+.tone-green .group-dot,
+.status-dot.online,
+.sidebar-resizer:hover::after,
+.is-resizing .sidebar-resizer::after {
+  background: #c98f9f;
+}
+
+.status-dot.online {
+  box-shadow: 0 0 0 3px rgba(232, 167, 184, 0.12);
+}
+/* End Aura Shine premium sidebar refinement. */
