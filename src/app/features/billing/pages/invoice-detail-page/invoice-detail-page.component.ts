@@ -11,11 +11,43 @@ import { VoidInvoiceModalComponent } from '../../ui/void-invoice-modal/void-invo
   selector: 'app-invoice-detail-page',
   standalone: true,
   imports: [CommonModule, InvoicePreviewComponent, RefundModalComponent, VoidInvoiceModalComponent],
+  styles: [`
+    .invoice-detail-page { display: grid; gap: 16px; }
+    .billing-hero, .invoice-workspace, .message-card { border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)); border-radius: var(--aura-card-radius-premium, 14px); background: var(--aura-surface-raised, #fff); box-shadow: 0 12px 30px rgba(75, 18, 56, 0.07); }
+    .billing-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 18px 20px; background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)); color: #fff; }
+    .billing-hero h1 { margin: 0; color: #fff; font-size: 1.45rem; letter-spacing: 0; }
+    .billing-hero p { margin: 6px 0 0; color: rgba(255, 255, 255, 0.74); }
+    .status-card { display: grid; gap: 2px; min-width: 132px; padding: 10px 12px; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 12px; background: rgba(255, 255, 255, 0.12); text-align: right; }
+    .status-card span { color: rgba(255, 255, 255, 0.72); font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
+    .status-card strong { color: #fff; text-transform: capitalize; }
+    .invoice-workspace { display: grid; gap: 16px; padding: 16px; }
+    .invoice-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 0.48fr); gap: 16px; align-items: start; }
+    .message-card { padding: 12px 14px; color: var(--aura-success, #16a34a); background: var(--aura-success-bg, rgba(22, 163, 74, 0.12)); }
+    @media (max-width: 860px) { .billing-hero, .invoice-actions { grid-template-columns: 1fr; display: grid; } .status-card { text-align: left; } }
+  `],
   template: `
-    <app-invoice-preview [invoice]="invoice()" />
-    <app-refund-modal (refund)="refund($event)" />
-    <app-void-invoice-modal (voidInvoice)="voidReason.set($event)" />
-    <p *ngIf="message()">{{ message() }}</p>
+    <section class="invoice-detail-page">
+      <header class="billing-hero">
+        <div>
+          <h1>Invoice details</h1>
+          <p>{{ invoice()?.invoice_no || 'Loading invoice record' }}</p>
+        </div>
+        <div class="status-card">
+          <span>Status</span>
+          <strong>{{ invoice()?.payment_status || 'Loading' }}</strong>
+        </div>
+      </header>
+
+      <section class="invoice-workspace">
+        <app-invoice-preview [invoice]="invoice()" />
+        <div class="invoice-actions">
+          <app-refund-modal (refund)="refund($event)" />
+          <app-void-invoice-modal (voidInvoice)="voidReason.set($event)" />
+        </div>
+      </section>
+
+      <p class="message-card" *ngIf="message()">{{ message() }}</p>
+    </section>
   `
 })
 export class InvoiceDetailPageComponent implements OnInit {
