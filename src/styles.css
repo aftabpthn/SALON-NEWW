@@ -14703,3 +14703,331 @@ app-staff-my-work .filters {
     gap: 4px;
   }
 }
+
+/* AuraSalon SaaS onboarding and birthday campaign polish layer. */
+:where(app-saas-onboarding, app-birthday-campaign) {
+  --growth-ink: var(--aura-ink, #231723);
+  --growth-muted: var(--aura-muted, #6f6470);
+  --growth-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.96));
+  --growth-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 82%, white 18%);
+  --growth-border: var(--aura-border-soft, rgba(75, 18, 56, 0.13));
+  --growth-radius: var(--aura-card-radius-premium, 14px);
+  --growth-shadow: 0 14px 34px rgba(75, 18, 56, 0.08);
+  color: var(--growth-ink);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.saas-workspace, .birthday-page) {
+  gap: 16px;
+  min-height: auto;
+  padding: clamp(14px, 2vw, 22px);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(237, 108, 146, 0.12), transparent 30%),
+    var(--growth-soft);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.page-heading, .page-header) {
+  position: relative;
+  overflow: hidden;
+  align-items: center;
+  padding: clamp(18px, 2.5vw, 26px);
+  border: 1px solid color-mix(in srgb, var(--growth-border) 75%, white 25%);
+  border-radius: calc(var(--growth-radius) + 4px);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(237, 108, 146, 0.18), transparent 31%),
+    linear-gradient(135deg, #fff7fb 0%, #fff 44%, #f8f2ff 100%);
+  box-shadow: var(--growth-shadow);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.page-heading)::after,
+:where(app-saas-onboarding, app-birthday-campaign) :where(.page-header)::after {
+  content: '';
+  position: absolute;
+  inset: auto -8% -48% 44%;
+  height: 170px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.10));
+  pointer-events: none;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.page-heading > *, .page-header > *) {
+  position: relative;
+  z-index: 1;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.page-heading h1, .page-header h1) {
+  margin: 0;
+  color: var(--growth-ink);
+  font-size: clamp(1.55rem, 1.25rem + 1vw, 2.35rem);
+  font-weight: 950;
+  line-height: 1.08;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.page-header p, .page-heading p, .search-field span, .field span, .eyebrow, .panel-head span, label span, .metric-strip span, .metric-strip small, .action-card small, .activity-list span, .suggestion span, .client-list small, .panel-head small) {
+  color: var(--growth-muted);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.metric-strip) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.metric-strip article) {
+  min-width: 0;
+  min-height: 104px;
+  align-content: space-between;
+  border: 1px solid var(--growth-border);
+  border-top: 0;
+  border-left: 4px solid var(--aura-primary, #8f286b);
+  border-radius: var(--growth-radius);
+  background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--growth-soft) 76%, white 24%));
+  box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
+  padding: 16px;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.metric-strip strong) {
+  color: var(--growth-ink);
+  font-size: clamp(1.35rem, 1.05rem + 0.8vw, 1.95rem);
+  line-height: 1.08;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.panel, .form-panel, .selector-panel, .selected-panel, .preview-panel, .action-card, .activity-list, .empty-state) {
+  border: 1px solid var(--growth-border);
+  border-radius: var(--growth-radius);
+  background: var(--growth-surface);
+  box-shadow: var(--growth-shadow);
+}
+
+app-saas-onboarding .saas-section-workspace,
+app-birthday-campaign .campaign-layout {
+  gap: 14px;
+}
+
+app-saas-onboarding .saas-detail,
+app-birthday-campaign .detail-stack,
+app-birthday-campaign .client-list,
+app-birthday-campaign .suggestion-grid article {
+  gap: 10px;
+}
+
+app-saas-onboarding .saas-side-nav,
+app-birthday-campaign .selector-panel {
+  top: 92px;
+}
+
+app-saas-onboarding .saas-nav-card,
+app-birthday-campaign .client-list button,
+app-birthday-campaign .suggestion {
+  border: 1px solid var(--growth-border);
+  border-radius: var(--growth-radius);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--growth-ink);
+  box-shadow: 0 8px 20px rgba(75, 18, 56, 0.06);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+app-saas-onboarding .saas-nav-card {
+  border-left: 4px solid transparent;
+}
+
+app-saas-onboarding .saas-nav-card:hover,
+app-saas-onboarding .saas-nav-card.active,
+app-birthday-campaign .client-list button:hover,
+app-birthday-campaign .client-list button.active,
+app-birthday-campaign .suggestion:hover,
+app-birthday-campaign .suggestion.active {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 34%, white 66%);
+  background: linear-gradient(135deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.08));
+  box-shadow: 0 14px 30px rgba(75, 18, 56, 0.12);
+  transform: translateY(-1px);
+}
+
+app-saas-onboarding .saas-nav-card.active {
+  border-left-color: var(--aura-primary, #8f286b);
+}
+
+app-saas-onboarding .saas-nav-icon,
+app-birthday-campaign .avatar {
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #ed6c92);
+  color: #fff;
+}
+
+app-saas-onboarding .saas-nav-card em,
+app-birthday-campaign .client-list em,
+:where(app-saas-onboarding, app-birthday-campaign) .badge {
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  color: var(--aura-primary-strong, #4b1238);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(button, .primary-button, .secondary-button, .ghost-button, .zenoti-button) {
+  min-height: 40px;
+  border: 1px solid var(--growth-border);
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(button:hover, .primary-button:hover, .secondary-button:hover, .ghost-button:hover, .zenoti-button:hover):not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.10);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.primary-button, .zenoti-button.primary, button.primary, button[type='submit']) {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  color: #fff;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(.ghost-button, .secondary-button, .zenoti-button:not(.primary), button:not(.primary):not([type='submit'])) {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--growth-ink);
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(input, select, textarea) {
+  min-height: 40px;
+  border: 1px solid var(--growth-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--growth-ink);
+  font: inherit;
+}
+
+:where(app-saas-onboarding, app-birthday-campaign) :where(input:focus, select:focus, textarea:focus, button:focus-visible) {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  outline: 3px solid rgba(143, 40, 107, 0.12);
+}
+
+app-saas-onboarding .quick-grid,
+app-birthday-campaign .suggestion-grid {
+  gap: 12px;
+}
+
+app-saas-onboarding .action-card,
+app-birthday-campaign .suggestion {
+  background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--growth-soft) 78%, white 22%));
+}
+
+app-saas-onboarding .activity-list {
+  overflow: hidden;
+}
+
+app-saas-onboarding .activity-list article {
+  border-bottom-color: color-mix(in srgb, var(--growth-border) 78%, white 22%);
+}
+
+app-saas-onboarding .dashboard-grid {
+  gap: 14px;
+  border: 0;
+}
+
+app-saas-onboarding .dashboard-grid .form-panel:first-child {
+  border-right: 1px solid var(--growth-border);
+}
+
+app-saas-onboarding form {
+  gap: 12px;
+}
+
+app-saas-onboarding .stage-track {
+  background: color-mix(in srgb, var(--growth-border) 55%, white 45%);
+}
+
+app-saas-onboarding .stage-track span {
+  background: linear-gradient(90deg, var(--aura-primary, #8f286b), #ed6c92);
+}
+
+app-birthday-campaign .header-actions {
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+app-birthday-campaign .filter-row {
+  gap: 8px;
+}
+
+app-birthday-campaign .filter-row button.active {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  color: #fff;
+}
+
+app-birthday-campaign .selected-panel,
+app-birthday-campaign .preview-panel {
+  background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--growth-soft) 70%, white 30%));
+}
+
+app-birthday-campaign .success {
+  color: #166534;
+}
+
+app-birthday-campaign .error {
+  color: #991b1b;
+}
+
+app-birthday-campaign .empty,
+app-birthday-campaign .empty-state {
+  border: 1px dashed color-mix(in srgb, var(--growth-border) 85%, white 15%);
+  border-radius: var(--growth-radius);
+  background: color-mix(in srgb, var(--growth-soft) 68%, white 32%);
+}
+
+@media (max-width: 1100px) {
+  app-saas-onboarding .saas-section-workspace,
+  app-saas-onboarding .dashboard-grid,
+  app-birthday-campaign .campaign-layout,
+  app-birthday-campaign .suggestion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  app-saas-onboarding .saas-side-nav,
+  app-birthday-campaign .selector-panel {
+    position: static;
+  }
+
+  app-saas-onboarding .saas-side-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  :where(app-saas-onboarding, app-birthday-campaign) :where(.saas-workspace, .birthday-page) {
+    padding: 12px;
+  }
+
+  :where(app-saas-onboarding, app-birthday-campaign) :where(.page-heading, .page-header, .section-title, .panel-head, .activity-list article) {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  app-saas-onboarding .saas-side-nav,
+  app-saas-onboarding form,
+  app-birthday-campaign .metric-strip,
+  app-birthday-campaign .filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  app-birthday-campaign .header-actions,
+  :where(app-saas-onboarding, app-birthday-campaign) :where(.form-actions, .channel-toggles) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  app-birthday-campaign .client-list button,
+  app-saas-onboarding .saas-nav-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  app-birthday-campaign .client-list em,
+  app-saas-onboarding .saas-nav-card em {
+    grid-column: 2;
+    width: max-content;
+  }
+}
