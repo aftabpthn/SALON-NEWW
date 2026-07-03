@@ -15031,3 +15031,305 @@ app-birthday-campaign .empty-state {
     width: max-content;
   }
 }
+
+/* AuraSalon procurement and purchase receiving polish layer. */
+:where(app-purchase-orders, app-purchase-bill-drafts, app-purchase-order-detail) {
+  --procure-ink: var(--aura-ink, #231723);
+  --procure-muted: var(--aura-muted, #6f6470);
+  --procure-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.96));
+  --procure-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 82%, white 18%);
+  --procure-border: var(--aura-border-soft, rgba(75, 18, 56, 0.13));
+  --procure-radius: var(--aura-card-radius-premium, 14px);
+  --procure-shadow: 0 14px 34px rgba(75, 18, 56, 0.08);
+  color: var(--procure-ink);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts, app-purchase-order-detail) :where(.page-stack, .purchase-orders-page, .bill-drafts-page) {
+  gap: 16px;
+  padding: clamp(14px, 2vw, 22px);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(237, 108, 146, 0.12), transparent 30%),
+    var(--procure-soft);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) app-inventory-zenoti-chrome {
+  display: block;
+  border: 1px solid color-mix(in srgb, var(--procure-border) 75%, white 25%);
+  border-radius: calc(var(--procure-radius) + 4px);
+  overflow: hidden;
+  background: linear-gradient(135deg, #fff7fb 0%, #fff 46%, #f8f2ff 100%);
+  box-shadow: var(--procure-shadow);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.hero-insights, .hero-actions, .section-actions, .form-actions, .action-cell) {
+  gap: 8px;
+}
+
+app-purchase-bill-drafts .hero-insights span,
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.badge, .pill, .state.success) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  color: var(--aura-primary-strong, #4b1238);
+  padding: 4px 10px;
+  font-weight: 900;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.po-workspace, .draft-workbench, .review-layout) {
+  gap: 14px;
+}
+
+app-purchase-orders .po-workspace {
+  grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
+}
+
+app-purchase-orders .po-side-nav {
+  gap: 9px;
+}
+
+app-purchase-orders .po-nav-card,
+app-purchase-bill-drafts .draft-list button {
+  border: 1px solid var(--procure-border);
+  border-radius: var(--procure-radius);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--procure-ink);
+  box-shadow: 0 8px 20px rgba(75, 18, 56, 0.06);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+app-purchase-orders .po-nav-card {
+  min-height: 84px;
+  border-left: 4px solid transparent;
+}
+
+app-purchase-orders .po-nav-card:hover,
+app-purchase-orders .po-nav-card.active,
+app-purchase-bill-drafts .draft-list button:hover,
+app-purchase-bill-drafts .draft-list button.active {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 34%, white 66%);
+  background: linear-gradient(135deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.08));
+  box-shadow: 0 14px 30px rgba(75, 18, 56, 0.12);
+  transform: translateY(-1px);
+}
+
+app-purchase-orders .po-nav-card.active {
+  border-left-color: var(--aura-primary, #8f286b);
+}
+
+app-purchase-orders .po-nav-icon {
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #ed6c92);
+  color: #fff;
+}
+
+app-purchase-orders .po-nav-card i {
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  color: var(--aura-primary-strong, #4b1238);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.panel, .upload-panel, .draft-list-panel, .bill-preview, .draft-editor, .metric-card, .command-card, .line-readiness article, .supplier-strip, .totals-grid span, .impact-strip span, .detail-grid div, .table-guidance, .warning-list, .file-preview, .empty-state) {
+  border: 1px solid var(--procure-border);
+  border-radius: var(--procure-radius);
+  background: var(--procure-surface);
+  box-shadow: var(--procure-shadow);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.po-kpis, .draft-kpis, .review-command-strip, .line-readiness, .totals-grid, .detail-grid, .quick-grid) {
+  gap: 12px;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.metric-card, .command-card, .line-readiness article) {
+  min-height: 102px;
+  border-left: 4px solid var(--aura-primary, #8f286b);
+  background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--procure-soft) 76%, white 24%));
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.metric-card strong, .command-card strong, .line-readiness strong) {
+  color: var(--procure-ink);
+  font-size: clamp(1.35rem, 1.05rem + 0.8vw, 1.95rem);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.metric-card span, .metric-card small, .command-card span, .command-card small, .section-title span, .field span, .po-nav-card small, .draft-list small, .detail-grid span, .detail-grid small, .line-readiness span, .line-readiness small, .table-guidance span, .warning-list span) {
+  color: var(--procure-muted);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.section-title) {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.section-title h2, .form-panel h3) {
+  margin: 0;
+  color: var(--procure-ink);
+  font-weight: 950;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(button, .primary-button, .ghost-button, .secondary-button, .mini, a.ghost-button) {
+  min-height: 38px;
+  border: 1px solid var(--procure-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(button:hover, .primary-button:hover, .ghost-button:hover, a.ghost-button:hover):not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.10);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.primary-button, button.primary, button[type='submit']) {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  color: #fff;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.ghost-button, .secondary-button, button:not(.primary):not([type='submit']), a.ghost-button) {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--procure-ink);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.danger) {
+  border-color: rgba(220, 38, 38, 0.24);
+  color: #991b1b;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(input, select, textarea, .cell-input) {
+  min-height: 38px;
+  border: 1px solid var(--procure-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--procure-ink);
+  font: inherit;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible) {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  outline: 3px solid rgba(143, 40, 107, 0.12);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.po-form, .upload-form, .header-grid) {
+  gap: 12px;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.line-table, .table-wrap) {
+  overflow: auto;
+  border: 1px solid var(--procure-border);
+  border-radius: var(--procure-radius);
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--procure-soft) 78%, white 22%);
+  color: var(--procure-muted);
+  letter-spacing: 0;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) td,
+:where(app-purchase-orders, app-purchase-bill-drafts) th {
+  border-bottom-color: color-mix(in srgb, var(--procure-border) 78%, white 22%);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) tbody tr:hover {
+  background: color-mix(in srgb, var(--aura-primary, #8f286b) 5%, white 95%);
+}
+
+app-purchase-orders .supplier-strip,
+app-purchase-orders .totals-grid span,
+app-purchase-orders .impact-strip span,
+app-purchase-bill-drafts .file-preview,
+app-purchase-bill-drafts .table-guidance {
+  background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--procure-soft) 70%, white 30%));
+}
+
+app-purchase-bill-drafts .draft-workbench {
+  grid-template-columns: minmax(340px, 0.9fr) minmax(360px, 1.1fr);
+}
+
+app-purchase-bill-drafts .draft-list {
+  gap: 9px;
+}
+
+app-purchase-bill-drafts .draft-list button {
+  min-height: 76px;
+}
+
+app-purchase-bill-drafts .review-layout {
+  grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr);
+}
+
+app-purchase-bill-drafts .bill-preview iframe,
+app-purchase-bill-drafts .bill-preview img {
+  border: 1px solid var(--procure-border);
+  border-radius: var(--procure-radius);
+  background: #fff;
+}
+
+app-purchase-bill-drafts .warning-list {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.badge.warn, .pill.warn) {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+:where(app-purchase-orders, app-purchase-bill-drafts) :where(.badge.success, .state.success) {
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(34, 197, 94, 0.10);
+  color: #166534;
+}
+
+@media (max-width: 1180px) {
+  app-purchase-orders .po-workspace,
+  app-purchase-bill-drafts .draft-workbench,
+  app-purchase-bill-drafts .review-layout {
+    grid-template-columns: 1fr;
+  }
+
+  app-purchase-orders .po-side-nav {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  :where(app-purchase-orders, app-purchase-bill-drafts, app-purchase-order-detail) :where(.page-stack, .purchase-orders-page, .bill-drafts-page) {
+    padding: 12px;
+  }
+
+  :where(app-purchase-orders, app-purchase-bill-drafts) :where(.po-side-nav, .po-kpis, .draft-kpis, .review-command-strip, .line-readiness, .po-layout, .po-form, .upload-form, .header-grid, .detail-grid, .totals-grid, .section-title, .section-actions, .form-actions) {
+    grid-template-columns: 1fr;
+  }
+
+  app-purchase-orders .po-nav-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  app-purchase-orders .po-nav-card i {
+    grid-column: 2;
+    width: max-content;
+  }
+
+  :where(app-purchase-orders, app-purchase-bill-drafts) :where(.section-title, .section-actions, .form-actions, .action-cell) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
