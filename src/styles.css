@@ -11065,3 +11065,670 @@ app-dashboard .dashboard-command-panel .hub-icon {
   border-color: rgba(240, 168, 194, 0.35) !important;
 }
 /* End workspace switcher dark-mode contrast refinement. */
+
+/* Home dashboard colorful dark mode: match light-mode card personality with dark-safe contrast. */
+:root[data-theme="dark"] app-dashboard {
+  --dashboard-color-text: #f8fafc;
+  --dashboard-color-muted: rgba(226, 232, 240, 0.78);
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile) {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(20, 184, 166, 0.32), rgba(34, 211, 238, 0.16));
+  --dashboard-dark-card-accent: #2dd4bf;
+  --dashboard-dark-card-border: rgba(45, 212, 191, 0.36);
+  --dashboard-dark-card-glow: rgba(45, 212, 191, 0.14);
+  --dashboard-dark-card-orb: rgba(45, 212, 191, 0.18);
+  background:
+    radial-gradient(circle at 92% 18%, var(--dashboard-dark-card-orb), transparent 96px),
+    var(--dashboard-dark-card-gradient),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(9, 13, 23, 0.98)) !important;
+  border-color: var(--dashboard-dark-card-border) !important;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.025), 0 0 30px var(--dashboard-dark-card-glow) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile)::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 auto 0 0 !important;
+  width: 4px !important;
+  height: auto !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--dashboard-dark-card-accent) !important;
+  opacity: 0.92 !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile)::after {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  right: -28px !important;
+  top: -30px !important;
+  width: 104px !important;
+  height: 104px !important;
+  border-radius: 999px !important;
+  background: var(--dashboard-dark-card-orb) !important;
+  filter: blur(1px) !important;
+  opacity: 0.88 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card > *, .dashboard-hub-card > *, .action-card > *, .summary-tile > *) {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card strong, .dashboard-hub-card strong, .action-card strong, .summary-tile strong, .metric-value) {
+  color: var(--dashboard-color-text) !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-label, .dashboard-hub-card small, .summary-tile span, .muted-text) {
+  color: var(--dashboard-color-muted) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-hub-card b {
+  color: #ffffff !important;
+}
+
+:root[data-theme="dark"] app-dashboard :where(.metric-card:hover, .metric-card:focus-visible, .dashboard-hub-card:hover, .dashboard-hub-card:focus-visible, .action-card:hover, .action-card:focus-visible, .summary-tile:hover) {
+  border-color: color-mix(in srgb, var(--dashboard-dark-card-accent) 72%, #ffffff 28%) !important;
+  box-shadow: 0 22px 42px rgba(0, 0, 0, 0.38), 0 0 38px var(--dashboard-dark-card-glow) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(1),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(1),
+:root[data-theme="dark"] app-dashboard .quick-grid > .action-card:nth-child(1) {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(20, 184, 166, 0.34), rgba(34, 211, 238, 0.17));
+  --dashboard-dark-card-accent: #2dd4bf;
+  --dashboard-dark-card-border: rgba(45, 212, 191, 0.42);
+  --dashboard-dark-card-glow: rgba(45, 212, 191, 0.16);
+  --dashboard-dark-card-orb: rgba(45, 212, 191, 0.20);
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(2),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(2),
+:root[data-theme="dark"] app-dashboard .quick-grid > .action-card:nth-child(2),
+:root[data-theme="dark"] app-dashboard .dashboard-summary-grid > .panel:nth-child(2) .summary-tile {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(168, 85, 247, 0.32), rgba(236, 72, 153, 0.20));
+  --dashboard-dark-card-accent: #d8b4fe;
+  --dashboard-dark-card-border: rgba(216, 180, 254, 0.38);
+  --dashboard-dark-card-glow: rgba(216, 180, 254, 0.14);
+  --dashboard-dark-card-orb: rgba(236, 72, 153, 0.20);
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(3),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(3),
+:root[data-theme="dark"] app-dashboard .quick-grid > .action-card:nth-child(3) {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(59, 130, 246, 0.34), rgba(14, 165, 233, 0.18));
+  --dashboard-dark-card-accent: #7dd3fc;
+  --dashboard-dark-card-border: rgba(125, 211, 252, 0.38);
+  --dashboard-dark-card-glow: rgba(125, 211, 252, 0.14);
+  --dashboard-dark-card-orb: rgba(59, 130, 246, 0.20);
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(4),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(4),
+:root[data-theme="dark"] app-dashboard .quick-grid > .action-card:nth-child(4),
+:root[data-theme="dark"] app-dashboard .dashboard-summary-grid > .panel:nth-child(3) .summary-tile {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(34, 197, 94, 0.31), rgba(45, 212, 191, 0.17));
+  --dashboard-dark-card-accent: #86efac;
+  --dashboard-dark-card-border: rgba(134, 239, 172, 0.36);
+  --dashboard-dark-card-glow: rgba(134, 239, 172, 0.13);
+  --dashboard-dark-card-orb: rgba(34, 197, 94, 0.19);
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(5),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(5) {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(244, 63, 94, 0.30), rgba(251, 146, 60, 0.18));
+  --dashboard-dark-card-accent: #fda4af;
+  --dashboard-dark-card-border: rgba(253, 164, 175, 0.38);
+  --dashboard-dark-card-glow: rgba(253, 164, 175, 0.14);
+  --dashboard-dark-card-orb: rgba(251, 146, 60, 0.20);
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(6),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(6),
+:root[data-theme="dark"] app-dashboard .dashboard-summary-grid > .panel:nth-child(4) .timeline {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(245, 158, 11, 0.31), rgba(251, 113, 133, 0.17));
+  --dashboard-dark-card-accent: #fcd34d;
+  --dashboard-dark-card-border: rgba(252, 211, 77, 0.36);
+  --dashboard-dark-card-glow: rgba(252, 211, 77, 0.13);
+  --dashboard-dark-card-orb: rgba(245, 158, 11, 0.20);
+}
+
+:root[data-theme="dark"] app-dashboard .metrics-grid > .metric-card:nth-child(7),
+:root[data-theme="dark"] app-dashboard .dashboard-hub-grid > .dashboard-hub-card:nth-child(7) {
+  --dashboard-dark-card-gradient: linear-gradient(135deg, rgba(6, 182, 212, 0.32), rgba(96, 165, 250, 0.18));
+  --dashboard-dark-card-accent: #67e8f9;
+  --dashboard-dark-card-border: rgba(103, 232, 249, 0.36);
+  --dashboard-dark-card-glow: rgba(103, 232, 249, 0.13);
+  --dashboard-dark-card-orb: rgba(96, 165, 250, 0.20);
+}
+
+:root[data-theme="dark"] app-dashboard .hub-icon {
+  background: color-mix(in srgb, var(--dashboard-dark-card-accent) 20%, rgba(15, 23, 42, 0.9)) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px var(--dashboard-dark-card-border), 0 8px 18px var(--dashboard-dark-card-glow) !important;
+}
+
+:root[data-theme="dark"] app-dashboard .summary-tile,
+:root[data-theme="dark"] app-dashboard .quick-grid .action-card {
+  min-height: 88px !important;
+}
+
+:root[data-theme="dark"] app-dashboard .dashboard-summary-grid > .panel:nth-child(4) .timeline {
+  background:
+    radial-gradient(circle at 92% 18%, var(--dashboard-dark-card-orb), transparent 96px),
+    var(--dashboard-dark-card-gradient),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(9, 13, 23, 0.98)) !important;
+  border-color: var(--dashboard-dark-card-border) !important;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), 0 0 30px var(--dashboard-dark-card-glow) !important;
+}
+/* End home dashboard colorful dark mode. */
+
+/* AuraSalon Enterprise premium SaaS polish layer. */
+:root {
+  --aura-shell-bg:
+    linear-gradient(180deg, rgba(109, 27, 77, 0.055), transparent 340px),
+    linear-gradient(90deg, rgba(232, 167, 184, 0.08), transparent 420px),
+    #fbf8f4;
+  --aura-surface-strong: #ffffff;
+  --aura-surface-raised: rgba(255, 255, 255, 0.94);
+  --aura-border-soft: rgba(75, 18, 56, 0.12);
+  --aura-border-strong: rgba(75, 18, 56, 0.18);
+  --aura-plum: #4b1238;
+  --aura-plum-2: #6d1b4d;
+  --aura-rose-gold: #c98f9f;
+  --aura-indigo: #4338ca;
+  --aura-content-max: 1680px;
+  --aura-page-gap: 18px;
+  --aura-card-radius-premium: 14px;
+  --aura-control-radius: 10px;
+  --aura-control-height: 40px;
+  --aura-table-header: #fbf7f2;
+  --aura-row-hover: rgba(109, 27, 77, 0.045);
+}
+
+:root[data-theme="dark"] {
+  --aura-shell-bg:
+    radial-gradient(circle at 8% 0%, rgba(240, 168, 194, 0.11), transparent 320px),
+    linear-gradient(180deg, #111827 0%, #0b1020 48%, #070b12 100%);
+  --aura-surface-strong: #111827;
+  --aura-surface-raised: rgba(17, 24, 39, 0.96);
+  --aura-border-soft: rgba(148, 163, 184, 0.22);
+  --aura-border-strong: rgba(240, 168, 194, 0.3);
+  --aura-table-header: rgba(15, 23, 42, 0.96);
+  --aura-row-hover: rgba(240, 168, 194, 0.09);
+}
+
+html {
+  background: var(--aura-bg);
+  text-rendering: geometricPrecision;
+}
+
+body {
+  color: var(--aura-text);
+  background: var(--aura-shell-bg);
+  font-family: var(--aura-font);
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 0;
+  box-shadow: var(--aura-focus);
+}
+
+:where(.app-shell, .enterprise-app-shell) {
+  background: var(--aura-shell-bg) !important;
+}
+
+:where(.workspace, .enterprise-workspace) {
+  min-width: 0;
+  background: transparent !important;
+}
+
+.workspace {
+  padding: 0 clamp(14px, 2vw, 30px) 30px !important;
+}
+
+.topbar {
+  position: sticky !important;
+  top: 0;
+  z-index: 22;
+  min-height: 66px !important;
+  margin: 0 calc(clamp(14px, 2vw, 30px) * -1) 18px !important;
+  padding: 10px clamp(14px, 2vw, 30px) !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--aura-border-soft) !important;
+  background: color-mix(in srgb, var(--aura-bg) 86%, white 14%) !important;
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.topbar h1,
+.topbar-brand-title h1 {
+  margin: 0;
+  color: var(--aura-text);
+  font-size: clamp(1rem, 0.94rem + 0.22vw, 1.18rem) !important;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.topbar-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px !important;
+  flex-wrap: wrap;
+}
+
+.dark-button,
+.primary-button,
+.ghost-button,
+.danger-button,
+.secondary-button,
+.outline-button {
+  min-height: var(--aura-control-height);
+  border-radius: var(--aura-control-radius) !important;
+  font-weight: 800;
+  letter-spacing: 0;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.primary-button,
+.dark-button {
+  border: 1px solid color-mix(in srgb, var(--aura-plum) 82%, black 18%) !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, var(--aura-plum-2), var(--aura-plum)) !important;
+  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.18);
+}
+
+.primary-button:hover,
+.dark-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(75, 18, 56, 0.24);
+}
+
+.ghost-button,
+.secondary-button,
+.outline-button {
+  border: 1px solid var(--aura-border-soft) !important;
+  color: var(--aura-text) !important;
+  background: var(--aura-surface-raised) !important;
+}
+
+.ghost-button:hover,
+.secondary-button:hover,
+.outline-button:hover {
+  border-color: var(--aura-border-strong) !important;
+  background: #fff !important;
+  transform: translateY(-1px);
+}
+
+:where(.page-stack, .module-shell, .settings-shell, .inventory-shell, .reports-shell, .billing-shell, .command-center-shell) {
+  width: min(100%, var(--aura-content-max));
+  margin-inline: auto;
+  padding: clamp(12px, 1.8vw, 24px) 0 34px !important;
+  display: flex;
+  flex-direction: column;
+  gap: var(--aura-page-gap) !important;
+  background: transparent !important;
+}
+
+:where(.page-header, .module-header, .dashboard-greeting, .section-title, .panel-heading, .table-toolbar) {
+  min-width: 0;
+}
+
+:where(.page-header, .module-header, .dashboard-greeting) {
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: var(--aura-card-radius-premium) !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(252, 247, 243, 0.94)),
+    var(--aura-surface-strong) !important;
+  box-shadow: var(--aura-shadow-xs) !important;
+}
+
+:where(.page-header h1, .module-header h1, .dashboard-greeting h1, .section-title h2, .panel-heading h3) {
+  color: var(--aura-text) !important;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+:where(.page-header p, .module-header p, .dashboard-greeting p, .section-title p, .panel-heading p, .muted-text, small) {
+  color: var(--aura-muted) !important;
+}
+
+:where(.panel, .calendar-panel, .dashboard-panel, .dashboard-command-panel, .form-panel, .client-database-panel, .client-reports-panel, .checkout-panel, .operations-panel, .product-panel, .autopilot-panel, .pos-intelligence-panel, .reports-card, .settings-card) {
+  min-width: 0;
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: var(--aura-card-radius-premium) !important;
+  background: var(--aura-surface-raised) !important;
+  box-shadow: 0 12px 30px rgba(75, 18, 56, 0.07) !important;
+  color: var(--aura-text) !important;
+  overflow: clip;
+}
+
+:where(.panel:hover, .calendar-panel:hover, .client-database-panel:hover, .checkout-panel:hover) {
+  border-color: color-mix(in srgb, var(--aura-plum) 20%, var(--aura-border-soft));
+}
+
+:where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile, aura-kpi-card .metric-card, .kpi-card, .stat-card) {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: var(--aura-card-radius-premium) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 249, 246, 0.94)),
+    var(--aura-surface-strong) !important;
+  box-shadow: var(--aura-shadow-xs) !important;
+  color: var(--aura-text) !important;
+  overflow: hidden;
+}
+
+:where(.metric-card, .dashboard-hub-card, .action-card, .summary-tile)::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--aura-plum), var(--aura-rose-gold));
+  opacity: 0.82;
+  pointer-events: none;
+}
+
+:where(.metric-card:hover, .dashboard-hub-card:hover, .action-card:hover, .summary-tile:hover) {
+  border-color: var(--aura-border-strong) !important;
+  box-shadow: var(--aura-shadow-card) !important;
+  transform: translateY(-1px);
+}
+
+:where(.metrics-grid, .dashboard-hub-grid, .quick-grid, .summary-grid, .stat-grid, .client-report-metrics) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 14px !important;
+}
+
+:where(.table-wrap, .zenoti-table-shell, .product-table, .compact-table, .aura-table-shell) {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: var(--aura-card-radius-premium) !important;
+  background: var(--aura-surface-strong) !important;
+  box-shadow: var(--aura-shadow-xs);
+}
+
+:where(table, .clients-crm-table, .zenoti-products-table, .blocked-time-table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--aura-text);
+}
+
+:where(th, td) {
+  border-bottom-color: var(--aura-border-soft) !important;
+}
+
+:where(thead th, .clients-crm-table thead th, .zenoti-products-table th, .blocked-time-table th) {
+  background: var(--aura-table-header) !important;
+  color: color-mix(in srgb, var(--aura-text) 82%, var(--aura-muted));
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+:where(tbody tr:hover td, .clients-crm-table tr:hover td, .zenoti-products-table tr:hover td) {
+  background: var(--aura-row-hover) !important;
+}
+
+:where(.badge, .status, .state, .client-badge, .chip, .pill, .scope-pill, aura-badge .aura-badge) {
+  border-radius: 999px !important;
+  border: 1px solid var(--aura-border-soft);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+:where(.field, label.field) {
+  min-width: 0;
+  gap: 6px;
+}
+
+:where(.field span, label.field > span, .form-label, .filter-label) {
+  color: color-mix(in srgb, var(--aura-text) 72%, var(--aura-muted));
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+:where(input, select, textarea) {
+  min-width: 0;
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: var(--aura-control-radius) !important;
+  color: var(--aura-text);
+  background: #fff !important;
+  box-shadow: none;
+}
+
+:where(input, select) {
+  min-height: var(--aura-control-height);
+}
+
+:where(textarea) {
+  min-height: 96px;
+  resize: vertical;
+}
+
+:where(input:focus, select:focus, textarea:focus) {
+  border-color: color-mix(in srgb, var(--aura-plum) 42%, var(--aura-border-soft)) !important;
+  box-shadow: var(--aura-focus) !important;
+}
+
+:where(.drawer-backdrop, .client-drawer-backdrop, .pos-drawer-backdrop) {
+  background: rgba(31, 41, 51, 0.34) !important;
+  backdrop-filter: blur(4px);
+}
+
+:where(.drawer, .drawer-panel, .detail-drawer, .side-drawer, .appointment-drawer, .client-drawer, .pos-drawer) {
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: 18px 0 0 18px !important;
+  background: var(--aura-surface-strong) !important;
+  box-shadow: var(--aura-shadow-drawer) !important;
+  color: var(--aura-text) !important;
+}
+
+:where(.drawer-header, .appointment-drawer header, .drawer-title) {
+  border-bottom: 1px solid var(--aura-border-soft) !important;
+  background: linear-gradient(180deg, rgba(252, 247, 243, 0.88), rgba(255, 255, 255, 0.96));
+}
+
+:where(.drawer-actions) {
+  border-top: 1px solid var(--aura-border-soft);
+  background: color-mix(in srgb, var(--aura-bg) 72%, white 28%);
+}
+
+:where(.calendar-action-row, .date-strip-panel, .smart-slot-panel, .ops-pulse-panel) {
+  border: 1px solid var(--aura-border-soft) !important;
+  border-radius: var(--aura-card-radius-premium) !important;
+  background: var(--aura-surface-raised) !important;
+  box-shadow: var(--aura-shadow-xs) !important;
+}
+
+:where(.appointment-card, .appointment-block, .resource-appointment, .month-appointment, .timeline-appointment) {
+  border-radius: 10px !important;
+  border: 1px solid color-mix(in srgb, var(--aura-plum) 20%, var(--aura-border-soft)) !important;
+  box-shadow: 0 8px 18px rgba(75, 18, 56, 0.1) !important;
+}
+
+:where(.slot-cell, .lane-cell, .calendar-slot, .time-slot) {
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+:where(.slot-cell:hover, .lane-cell:hover, .calendar-slot:hover, .time-slot:hover) {
+  background: color-mix(in srgb, var(--aura-rose-gold) 12%, white) !important;
+  box-shadow: inset 0 0 0 1px rgba(109, 27, 77, 0.14);
+}
+
+:where(app-pos, app-pos-page) :where(.pos-layout) {
+  align-items: start;
+  gap: 18px !important;
+}
+
+:where(app-pos, app-pos-page) :where(.checkout-panel) {
+  position: sticky;
+  top: 84px;
+}
+
+:where(app-pos, app-pos-page) :where(.pos-form, .checkout-panel) {
+  gap: 14px !important;
+}
+
+:where(app-pos, app-pos-page) :where(.payment-mode-grid, .quick-pay-grid, .tip-grid) button {
+  min-height: 46px;
+}
+
+:where(.empty-state, .nav-empty, aura-empty .aura-empty) {
+  border: 1px dashed var(--aura-border-strong) !important;
+  border-radius: var(--aura-card-radius-premium) !important;
+  background: color-mix(in srgb, var(--aura-bg) 70%, white 30%) !important;
+}
+
+.enterprise-sidebar.inline-app-sidebar {
+  border-right-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 10px 0 34px rgba(31, 41, 51, 0.12) !important;
+}
+
+.inline-app-sidebar .brand-mark {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--aura-plum), var(--aura-rose-gold)) !important;
+  box-shadow: 0 8px 18px rgba(232, 167, 184, 0.2);
+}
+
+.inline-app-sidebar .brand strong {
+  letter-spacing: 0;
+}
+
+.inline-app-sidebar :where(.nav-section-trigger, .nav-subitem, .nav-subgroup-title, .sidebar-care-ai-action) {
+  border-radius: 10px !important;
+}
+
+.inline-app-sidebar :where(.nav-section.active-section .nav-section-trigger, .nav-subitem.active, .nav-subgroup-title.active, .sidebar-care-ai-action.active) {
+  background: rgba(232, 167, 184, 0.12) !important;
+  color: #fff !important;
+  box-shadow: inset 3px 0 0 var(--aura-rose-gold);
+}
+
+@media (max-width: 1180px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  :where(app-pos, app-pos-page) :where(.checkout-panel) {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell.sidebar-is-compact {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace {
+    padding-inline: 12px !important;
+  }
+
+  .topbar {
+    margin-inline: -12px !important;
+    padding-inline: 12px !important;
+  }
+
+  :where(.workspace-route-shell--with-local-nav) {
+    display: block !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  :where(.workspace-local-rail) {
+    position: static !important;
+    width: 100% !important;
+    margin-bottom: 12px;
+    border-radius: var(--aura-card-radius-premium) !important;
+  }
+
+  :where(.table-toolbar, .calendar-action-row, .calendar-filter-row, .calendar-action-buttons, .calendar-toolbar-actions, .drawer-actions) {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  :where(.table-toolbar > *, .calendar-action-row > *, .calendar-filter-row > *, .calendar-action-buttons > *, .calendar-toolbar-actions > *, .drawer-actions > *) {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --aura-page-gap: 12px;
+    --aura-control-height: 42px;
+  }
+
+  :where(.page-stack, .module-shell, .settings-shell, .inventory-shell, .reports-shell, .billing-shell) {
+    padding-top: 10px !important;
+  }
+
+  :where(.page-header, .module-header, .dashboard-greeting, .panel, .calendar-panel, .dashboard-panel, .dashboard-command-panel, .client-database-panel, .checkout-panel) {
+    border-radius: 12px !important;
+  }
+
+  :where(.metrics-grid, .dashboard-hub-grid, .quick-grid, .summary-grid, .stat-grid, .client-report-metrics) {
+    grid-template-columns: 1fr !important;
+  }
+
+  :where(.drawer, .drawer-panel, .detail-drawer, .side-drawer, .appointment-drawer, .client-drawer, .pos-drawer) {
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+  }
+
+  :where(th, td) {
+    padding-inline: 10px !important;
+  }
+}
+/* End AuraSalon Enterprise premium SaaS polish layer. */
+
+/* Dark-mode control contrast for premium polish layer. */
+:root[data-theme="dark"] :where(input, select, textarea) {
+  color: var(--aura-text) !important;
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-color: var(--aura-border-soft) !important;
+}
+
+:root[data-theme="dark"] :where(input::placeholder, textarea::placeholder) {
+  color: rgba(226, 232, 240, 0.54) !important;
+}
+
+:root[data-theme="dark"] :where(.ghost-button, .secondary-button, .outline-button) {
+  background: rgba(17, 24, 39, 0.94) !important;
+  border-color: var(--aura-border-soft) !important;
+  color: var(--aura-text) !important;
+}
+
+:root[data-theme="dark"] :where(.ghost-button:hover, .secondary-button:hover, .outline-button:hover) {
+  background: rgba(30, 41, 59, 0.98) !important;
+  border-color: var(--aura-border-strong) !important;
+}
+
+:root[data-theme="dark"] :where(.drawer-header, .appointment-drawer header, .drawer-title, .drawer-actions) {
+  background: rgba(17, 24, 39, 0.98) !important;
+}
+/* End dark-mode control contrast for premium polish layer. */
