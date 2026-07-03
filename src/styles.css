@@ -13122,3 +13122,171 @@ app-ai-assistant .ai-command-page,
   }
 }
 /* End AuraSalon AI operations surface polish layer. */
+
+/* AuraSalon finance and reports workbench polish layer. */
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) {
+  --finance-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.94));
+  --finance-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 78%, white 22%);
+  --finance-border: var(--aura-border-soft, rgba(75, 18, 56, 0.12));
+  --finance-radius: var(--aura-card-radius-premium, 14px);
+  --finance-shadow: 0 12px 30px rgba(75, 18, 56, 0.07);
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.account-page, .bs, .report-page, .reports-page, .finance-page, .invoice-page, .cash-page, .page-stack) {
+  background: transparent !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.account-hero, .masthead, .page-hero, .report-hero, .reports-hero, .summary-hero, .command-bar, .page-heading, .page-header) {
+  border: 1px solid var(--finance-border) !important;
+  border-radius: var(--finance-radius) !important;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(232, 167, 184, 0.15), transparent 260px),
+    linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(75, 18, 56, 0.16) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.account-hero h1, .account-hero h2, .masthead h1, .masthead h2, .page-hero h1, .report-hero h1, .command-bar h1, .command-bar strong, .page-heading h1) {
+  color: #fff !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.account-hero p, .masthead .sub, .kicker, .command-bar p, .command-bar span, .page-hero p, .report-hero p) {
+  color: rgba(255, 255, 255, 0.74) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.account-list-panel, .account-form-panel, .metric-grid article, .group-window, .equation, .workspace-detail, .category-tile, .balance-columns > div, .detail-body > .split > div, .card, .panel, .forecast-card, .ledger-suggestion, .ledger-preview, .ready, .drill-row, .line-chart, .ai-card, .table-wrap, .scroll, .branch-context-card, .status-card, .skeleton-card, .today-card, .opportunity-card, .skeleton-chart, .report-card, .summary-card, .filter-card, .data-card) {
+  border-color: var(--finance-border) !important;
+  border-radius: var(--finance-radius) !important;
+  background: var(--finance-surface) !important;
+  color: var(--aura-text, #1f2933) !important;
+  box-shadow: var(--finance-shadow) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.metric-grid article, .category-tile, .card, .panel, .forecast-card, .drill-row, .status-card, .today-card, .opportunity-card, .report-card, .summary-card, .data-card) {
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.metric-grid article, .category-tile, .card, .panel, .forecast-card, .drill-row, .status-card, .today-card, .opportunity-card, .report-card, .summary-card, .data-card):where(:hover, :focus-within) {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 22%, var(--finance-border)) !important;
+  box-shadow: 0 16px 34px rgba(75, 18, 56, 0.09) !important;
+  transform: translateY(-1px);
+}
+
+app-account-master :where(.account-table, .group-tree),
+app-balance-sheet :where(.workspace-detail, .scroll),
+:where(app-financial-summary-report, app-invoice-reports, app-outgoing-funds-report, app-cash-drawer-eod, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.table-wrap, .table-shell, .report-table, .scroll) {
+  border-color: var(--finance-border) !important;
+  border-radius: var(--finance-radius) !important;
+  background: var(--finance-surface) !important;
+  overflow-x: auto !important;
+  box-shadow: var(--finance-shadow) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(th, .table-head, .group-tree-head) {
+  background: var(--finance-soft) !important;
+  color: color-mix(in srgb, var(--aura-text, #1f2933) 78%, var(--aura-muted, #6b7280)) !important;
+  letter-spacing: 0.02em !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(td, th, .table-head span, .account-row span, .group-tree-head span, .root-row strong, .bucket-row strong, .group-row span) {
+  border-color: var(--finance-border) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(input, select, textarea) {
+  min-height: 42px !important;
+  border: 1px solid var(--finance-border) !important;
+  border-radius: 11px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--aura-text, #1f2933) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(input, select, textarea):focus {
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 44%, var(--finance-border)) !important;
+  box-shadow: 0 0 0 3px rgba(75, 18, 56, 0.1) !important;
+  outline: none !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(button, .primary-button, .ghost-button, .tool-button, .group-button, .solid, .ghost, .link-button) {
+  min-height: 40px !important;
+  border-radius: 11px !important;
+  border-color: var(--finance-border) !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.primary-button, .primary-tool, .solid, button.primary, button[type='submit']) {
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+  box-shadow: 0 12px 24px rgba(75, 18, 56, 0.18) !important;
+}
+
+:where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-payment-modes, app-pos-invoices, app-pos-invoice-activity, app-reports, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-appointment-detail-list-report, app-appointment-deposit-report, app-commission-preview-report, app-completed-packages-report, app-expired-packages-report, app-inward-revenue-report, app-inventory-financial, app-inventory-reports, app-message-history-report, app-pending-packages-report, app-staff-appointments-report, app-staff-sales-report, app-client-report-detail) :where(.ghost-button, .tool-button:not(.primary-tool):not(.danger-tool), .group-button, .ghost, .link-button, button:not(.primary):not([type='submit'])) {
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--aura-primary, #4b1238) !important;
+}
+
+app-account-master :where(.section-band),
+app-balance-sheet :where(.tabs button.active, .sync-strip span, .coverage-tags span, .pill, .ready-chip, .tag),
+:where(app-financial-summary-report, app-invoice-reports, app-outgoing-funds-report, app-cash-drawer-eod, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export, app-staff-sales-report) :where(.badge, .chip, .pill, .status, .impact-badge, .roi-badge) {
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 78%, white 22%) !important;
+  color: var(--aura-primary, #4b1238) !important;
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 16%, var(--finance-border)) !important;
+  font-weight: 850 !important;
+}
+
+app-balance-sheet :where(.tabs) {
+  border-bottom-color: var(--finance-border) !important;
+  gap: 8px !important;
+}
+
+app-balance-sheet :where(.tabs button) {
+  border-radius: 999px !important;
+  border: 1px solid transparent !important;
+}
+
+app-balance-sheet :where(.category-tile.active, .account-row.selected, .group-row.selected) {
+  background: color-mix(in srgb, var(--aura-primary-soft, rgba(75, 18, 56, 0.1)) 72%, white 28%) !important;
+  border-color: color-mix(in srgb, var(--aura-primary, #4b1238) 28%, var(--finance-border)) !important;
+}
+
+app-account-master :where(.group-titlebar) {
+  background: linear-gradient(135deg, var(--aura-primary-hover, #6d1b4d), var(--aura-primary, #4b1238)) !important;
+}
+
+app-account-master :where(.group-overlay) {
+  background: rgba(31, 22, 33, 0.48) !important;
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 980px) {
+  app-account-master :where(.account-hero, .panel-title, .form-header, .bottom-toolbar, .group-toolbar),
+  app-balance-sheet :where(.masthead, .controls, .dates, .detail-head, .panel-head, .row-controls, .form-row, .ctl, .inline-run),
+  :where(app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export) :where(.page-heading, .page-header, .filters, .toolbar, .actions) {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  app-account-master :where(.metric-grid),
+  app-balance-sheet :where(.cards, .forecast-grid),
+  :where(app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export) :where(.report-grid, .metric-grid, .summary-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  app-account-master :where(.metric-grid, .form-grid, .top-fields, .contact-grid, .ids-grid, .group-body),
+  app-balance-sheet :where(.cards, .forecast-grid, .category-rail, .workspace-shell, .split, .balance-columns, .manual-grid, .cockpit),
+  :where(app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export) :where(.report-grid, .metric-grid, .summary-grid, .filter-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  :where(app-account-master, app-account-ledger, app-balance-sheet, app-financial-summary-report, app-invoice-reports, app-outgoing-funds-entry, app-outgoing-funds-report, app-cash-drawer-eod, app-reports-enterprise, app-report-overview, app-report-revenue, app-report-services, app-report-staff, app-report-clients, app-report-marketing, app-report-inventory, app-report-branches, app-report-ai-insights, app-report-custom-export) :where(button, .primary-button, .ghost-button, .tool-button, .group-button, .solid, .ghost, .link-button) {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+/* End AuraSalon finance and reports workbench polish layer. */
