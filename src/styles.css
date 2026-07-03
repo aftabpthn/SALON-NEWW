@@ -14416,3 +14416,290 @@ app-public-feedback .state {
     width: max-content;
   }
 }
+
+/* AuraSalon statutory compliance and staff self-service polish layer. */
+:where(app-compliance-section-page, app-staff-my-work) {
+  --ops-ink: var(--aura-ink, #231723);
+  --ops-muted: var(--aura-muted, #6f6470);
+  --ops-surface: var(--aura-surface-raised, rgba(255, 255, 255, 0.96));
+  --ops-soft: color-mix(in srgb, var(--aura-bg, #faf7f2) 82%, white 18%);
+  --ops-border: var(--aura-border-soft, rgba(75, 18, 56, 0.13));
+  --ops-radius: var(--aura-card-radius-premium, 14px);
+  --ops-shadow: 0 14px 34px rgba(75, 18, 56, 0.08);
+  color: var(--ops-ink);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.compliance-page, .staff-workspace) {
+  gap: 14px;
+  min-height: auto;
+  padding: clamp(14px, 2vw, 22px);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(237, 108, 146, 0.12), transparent 30%),
+    var(--ops-soft);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.page-title) {
+  position: relative;
+  overflow: hidden;
+  align-items: center;
+  padding: clamp(18px, 2.5vw, 26px);
+  border: 1px solid color-mix(in srgb, var(--ops-border) 75%, white 25%);
+  border-radius: calc(var(--ops-radius) + 4px);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(237, 108, 146, 0.18), transparent 32%),
+    linear-gradient(135deg, #fff7fb 0%, #fff 45%, #f8f2ff 100%);
+  box-shadow: var(--ops-shadow);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.page-title)::after {
+  content: '';
+  position: absolute;
+  inset: auto -8% -48% 48%;
+  height: 170px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(143, 40, 107, 0.12), rgba(237, 108, 146, 0.10));
+  pointer-events: none;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.page-title > *) {
+  position: relative;
+  z-index: 1;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.page-title h1) {
+  margin: 0;
+  color: var(--ops-ink);
+  font-size: clamp(1.55rem, 1.25rem + 1vw, 2.35rem);
+  font-weight: 950;
+  line-height: 1.08;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.page-title p, .page-title strong, .identity, .register-heading > span, .desk-heading span, label, .metrics span, .metrics small, .metrics-grid span, .metrics-grid small, .register-footer) {
+  color: var(--ops-muted);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.page-title strong) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid color-mix(in srgb, var(--aura-primary, #8f286b) 18%, white 82%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aura-primary, #8f286b) 8%, white 92%);
+  color: var(--aura-primary-strong, #4b1238);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.filters, .workdesk, .register-panel, .state, .metrics, .metrics-grid) {
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: var(--ops-surface);
+  box-shadow: var(--ops-shadow);
+}
+
+app-compliance-section-page .filters,
+app-staff-my-work .filters {
+  padding: 12px;
+}
+
+app-compliance-section-page .tabs {
+  gap: 8px;
+}
+
+app-compliance-section-page .tabs a,
+:where(app-compliance-section-page, app-staff-my-work) :where(.desk-tabs button, .workdesk button, .register-heading button) {
+  min-height: 38px;
+  border: 1px solid var(--ops-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ops-ink);
+  font-weight: 900;
+  text-decoration: none;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+app-compliance-section-page .tabs a:hover,
+app-compliance-section-page .tabs a:focus-visible,
+:where(app-compliance-section-page, app-staff-my-work) :where(.desk-tabs button:hover, .workdesk button:hover, .register-heading button:hover) {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 34%, white 66%);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(75, 18, 56, 0.10);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.workdesk button, .register-heading button),
+app-compliance-section-page .desk-tabs button:first-child {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 82%, black 18%);
+  background: linear-gradient(135deg, var(--aura-primary, #8f286b), #3c1434);
+  color: #fff;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.metrics, .metrics-grid) {
+  gap: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.metrics article, .metrics-grid article) {
+  min-height: 98px;
+  border: 1px solid var(--ops-border);
+  border-top: 0;
+  border-left: 4px solid var(--aura-primary, #8f286b);
+  border-radius: var(--ops-radius);
+  background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--ops-soft) 76%, white 24%));
+  box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
+  padding: 16px;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.metrics article:first-child, .metrics-grid article:first-child) {
+  border-left: 4px solid var(--aura-primary, #8f286b);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.metrics strong, .metrics-grid strong) {
+  color: var(--ops-ink);
+  font-size: clamp(1.45rem, 1.15rem + 0.8vw, 2rem);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.workdesk, .register-panel) {
+  padding: 16px;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.desk-heading, .register-heading) {
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.desk-heading h2, .register-heading h2) {
+  color: var(--ops-ink);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+app-compliance-section-page .workdesk-grid,
+app-staff-my-work .filters {
+  gap: 10px;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(input, select) {
+  min-height: 40px;
+  border: 1px solid var(--ops-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ops-ink);
+  font: inherit;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(input:focus, select:focus, button:focus-visible, a:focus-visible) {
+  border-color: color-mix(in srgb, var(--aura-primary, #8f286b) 70%, white 30%);
+  outline: 3px solid rgba(143, 40, 107, 0.12);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.table-wrap, .register-scroll) {
+  overflow: auto;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(75, 18, 56, 0.06);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--ops-soft) 78%, white 22%);
+  color: var(--ops-muted);
+  letter-spacing: 0;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) td,
+:where(app-compliance-section-page, app-staff-my-work) th {
+  border-bottom-color: color-mix(in srgb, var(--ops-border) 78%, white 22%);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) tbody tr:hover {
+  background: color-mix(in srgb, var(--aura-primary, #8f286b) 5%, white 95%);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.badge) {
+  min-height: 26px;
+  align-items: center;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.10);
+  color: #166534;
+  padding: 4px 10px;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.badge.warn) {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.state, .empty) {
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: color-mix(in srgb, var(--ops-soft) 70%, white 30%);
+  color: var(--ops-muted);
+}
+
+:where(app-compliance-section-page, app-staff-my-work) :where(.state.error, .error) {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+}
+
+:where(app-compliance-section-page, app-staff-my-work) .register-footer {
+  justify-content: space-between;
+  border-top: 1px solid color-mix(in srgb, var(--ops-border) 70%, white 30%);
+  padding-top: 10px;
+}
+
+@media (max-width: 1024px) {
+  app-staff-my-work .filters,
+  app-compliance-section-page .workdesk-grid,
+  :where(app-compliance-section-page, app-staff-my-work) :where(.metrics, .metrics-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  :where(app-compliance-section-page, app-staff-my-work) :where(.compliance-page, .staff-workspace) {
+    padding: 12px;
+  }
+
+  :where(app-compliance-section-page, app-staff-my-work) :where(.page-title, .desk-heading, .register-heading) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  app-staff-my-work .filters,
+  app-compliance-section-page .workdesk-grid,
+  :where(app-compliance-section-page, app-staff-my-work) :where(.metrics, .metrics-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  app-compliance-section-page .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  app-compliance-section-page .tabs a {
+    flex: 0 0 auto;
+  }
+
+  :where(app-compliance-section-page, app-staff-my-work) .register-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

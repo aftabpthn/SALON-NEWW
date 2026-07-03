@@ -20,6 +20,7 @@ type StaffSelfDashboard = {
 };
 
 @Component({
+  selector: 'app-staff-my-work',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
