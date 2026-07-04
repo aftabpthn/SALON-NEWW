@@ -57,7 +57,7 @@ import { Subscription } from 'rxjs';
   styles: [`
     .chart-container { height: 250px; margin-bottom: 16px; }
     .util-bar { display: inline-block; width: 60px; height: 6px; border-radius: 3px; background: var(--line); vertical-align: middle; margin-right: 6px; }
-    .util-fill { display: block; height: 100%; border-radius: 3px; background: var(--teal); }
+    .util-fill { display: block; height: 100%; border-radius: 3px; background: #4B1238; }
     .badge-red { background: #fee2e2; color: var(--red); }
     .skeleton-card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; background: var(--surface); }
     .skeleton-line { border-radius: 6px; background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
@@ -76,7 +76,7 @@ export class ReportStaffComponent implements OnInit, OnDestroy {
   readonly d = signal<any>(null);
   readonly leaderboard = computed(() => this.d()?.leaderboard || []);
   readonly leaderLabels = computed(() => this.leaderboard().map((s: any) => s.name));
-  readonly leaderDataset = computed(() => [{ label: 'Revenue', data: this.leaderboard().map((s: any) => s.revenue), backgroundColor: '#4f46e5' }]);
+  readonly leaderDataset = computed(() => [{ label: 'Revenue', data: this.leaderboard().map((s: any) => s.revenue), backgroundColor: '#4B1238' }]);
   private subs: Subscription[] = [];
 
   constructor(private service: ReportsEnterpriseService) {}

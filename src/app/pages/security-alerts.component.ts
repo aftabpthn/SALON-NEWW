@@ -59,11 +59,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .brand-mark { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: #635bff; font-weight: 900; }
     .brand-block small { display: block; color: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: 0; }
     .brand-block strong { display: block; font-size: 16px; }
-    .zenoti-button, .primary-button, .ghost-button { border: 1px solid #bfdbfe; background: #fff; color: #075985; border-radius: 4px; padding: 8px 13px; font-weight: 800; cursor: pointer; text-decoration: none; }
+    .zenoti-button, .primary-button, .ghost-button { border: 1px solid #E7DDD6; background: #fff; color: #075985; border-radius: 4px; padding: 8px 13px; font-weight: 800; cursor: pointer; text-decoration: none; }
     .zenoti-button.primary, .primary-button { background: #5A153F; border-color: #5A153F; color: #fff; }
     .zenoti-button:disabled, .ghost-button:disabled { opacity: 0.6; cursor: not-allowed; }
     .zenoti-header { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 26px 16px 12px; border: 1px solid #d7e2ea; }
-    .zenoti-header select { grid-column: 2; width: min(620px, 100%); border: 1px solid #bfdbfe; border-radius: 4px; padding: 9px 12px; font-weight: 800; background: #fff; }
+    .zenoti-header select { grid-column: 2; width: min(620px, 100%); border: 1px solid #E7DDD6; border-radius: 4px; padding: 9px 12px; font-weight: 800; background: #fff; }
     .page-heading { justify-content: space-between; padding: 14px 16px; border: 1px solid #d7e2ea; }
     .page-heading h1 { margin: 0 0 4px; font-size: 24px; }
     .page-heading span, .section-title span, small, td { color: #64748b; }
@@ -72,7 +72,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .metric-strip article:nth-child(2) { border-top-color: #b91c1c; }
     .metric-strip article:nth-child(3) { border-top-color: #b7791f; }
     .metric-strip article:nth-child(4) { border-top-color: #15803d; }
-    .metric-strip article:nth-child(5) { border-top-color: #2563eb; }
+    .metric-strip article:nth-child(5) { border-top-color: #4B1238; }
     .metric-strip article:nth-child(6) { border-top-color: #7c3aed; }
     .metric-strip span { display: block; color: #64748b; font-size: 12px; font-weight: 900; }
     .metric-strip strong { display: block; margin-top: 6px; font-size: 25px; }

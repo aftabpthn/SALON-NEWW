@@ -18,7 +18,7 @@ import { Subscription } from 'rxjs';
             <button class="ghost-button mini" (click)="exportSection()">Export</button>
           </div>
           <div class="chart-container" *ngIf="revenueTrend() as data">
-            <base-chart type="line" [labels]="data.labels" [datasets]="[{label:'Revenue', data: data.values, backgroundColor: 'rgba(79,70,229,0.1)', borderColor: '#4f46e5', fill: true, tension: 0.4}]"></base-chart>
+            <base-chart type="line" [labels]="data.labels" [datasets]="[{label:'Revenue', data: data.values, backgroundColor: 'rgba(75,18,56,0.1)', borderColor: '#4B1238', fill: true, tension: 0.4}]"></base-chart>
           </div>
         </section>
 
@@ -100,7 +100,7 @@ import { Subscription } from 'rxjs';
     .opportunity-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 4px; }
     .opportunity-card strong { font-size: 14px; }
     .opportunity-card span { font-size: 12px; color: var(--muted); }
-    .impact-badge { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 4px; background: #eef2ff; color: #4f46e5; font-size: 11px; font-weight: 700; width: fit-content; }
+    .impact-badge { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 4px; background: #F8EEF4; color: #4B1238; font-size: 11px; font-weight: 700; width: fit-content; }
     .empty-state { text-align: center; padding: 48px 16px; }
     .empty-icon { font-size: 40px; display: block; margin-bottom: 8px; }
     .empty-state strong { display: block; font-size: 16px; }

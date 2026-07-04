@@ -138,14 +138,14 @@ import { DataMigrationStore } from './data-migration.store';
     .step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
     .step-key { font-size: 13px; font-weight: 800; color: #64748b; }
     .step.done { border-color: #5A153F; }
-    .step.active { border-color: #2563eb; }
+    .step.active { border-color: #4B1238; }
     .step.blocked { border-color: #f59e0b; }
     .step-body { display: grid; gap: 2px; }
     .step-body strong { font-size: 13px; }
     .step-body small { font-size: 11px; color: #64748b; }
     .status-pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
     .status-pill.good { background: #f5f2ef; color: #4B1238; }
-    .status-pill.active { background: #eff6ff; color: #1d4ed8; }
+    .status-pill.active { background: #F8EEF4; color: #4B1238; }
     .status-pill.blocked { background: #fef2f2; color: #b91c1c; }
     .risk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
     .risk-card { border-color: #e2e8f0; }

@@ -2174,7 +2174,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .control-card.green { border-left-color: #16a34a; }
     .control-card.amber { border-left-color: #b7791f; }
     .control-card.red { border-left-color: #dc2626; }
-    .control-card.blue { border-left-color: #2563eb; }
+    .control-card.blue { border-left-color: #4B1238; }
     .control-card.violet { border-left-color: #7c3aed; }
     .control-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
     .control-tabs a { align-items: center; border: 1px solid #E7DDD6; border-radius: 999px; color: #34483f; display: flex; flex: 0 0 auto; gap: 8px; min-height: 38px; padding: 8px 12px; text-decoration: none; }
@@ -2231,7 +2231,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-register-side a:hover, .staff-register-side button:hover, .staff-register-side .active { background: #e9e9e9; color: #05070d; }
     .staff-register-side button:disabled { cursor: wait; opacity: .65; }
     .staff-register-side-group { border-top: 1px solid #eef2f6; display: grid; gap: 4px; margin-top: 8px; padding-top: 10px; }
-    .staff-register-side-group.attendance-tools { background: #f8fbff; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px; padding: 10px 8px; }
+    .staff-register-side-group.attendance-tools { background: #f8fbff; border: 1px solid #E7DDD6; border-radius: 8px; margin-top: 10px; padding: 10px 8px; }
     .staff-register-side-group.attendance-tools > span { padding-left: 4px; }
     .staff-register-side-group > span { color: #64748b; font-size: 11px; font-weight: 900; padding: 0 12px 4px; text-transform: uppercase; }
     .staff-register-main .state { border-left: 0; border-radius: 0; border-right: 0; }

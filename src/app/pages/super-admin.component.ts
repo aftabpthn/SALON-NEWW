@@ -2394,7 +2394,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
     .command-kpi.danger { border-left-color: var(--danger, #dc2626); }
     .command-kpi.warning { border-left-color: var(--warning, #f59e0b); }
     .command-kpi.success { border-left-color: var(--success, #16a34a); }
-    .command-kpi.security { border-left-color: #4f46e5; }
+    .command-kpi.security { border-left-color: #4B1238; }
 
     .command-kpi span,
     .ops-intel-card small {

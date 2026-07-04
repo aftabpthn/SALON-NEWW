@@ -90,7 +90,7 @@ export class ReportMarketingComponent implements OnInit, OnDestroy {
   readonly d = signal<any>(null);
   readonly campaigns = computed(() => this.d()?.campaigns || []);
   readonly campLabels = computed(() => this.campaigns().map((c: any) => c.name));
-  readonly campRevenueDataset = computed(() => [{ label: 'Revenue', data: this.campaigns().map((c: any) => c.revenue), backgroundColor: '#4f46e5' }]);
+  readonly campRevenueDataset = computed(() => [{ label: 'Revenue', data: this.campaigns().map((c: any) => c.revenue), backgroundColor: '#4B1238' }]);
   readonly campRoiDataset = computed(() => [{ label: 'ROI %', data: this.campaigns().map((c: any) => c.roi), backgroundColor: '#10b981' }]);
   private subs: Subscription[] = [];
 

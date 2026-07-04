@@ -267,8 +267,8 @@ const configs: Record<StaffMasterKind, MasterConfig> = {
     .eyebrow { margin: 0 0 4px; color: #6b7280; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
     .topbar-actions, .form-actions { align-items: center; flex-wrap: wrap; }
     .primary, .ghost, .danger { border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 700; min-height: 36px; padding: 8px 14px; text-decoration: none; transition: all .15s; }
-    .primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
-    .primary:hover { background: #4338ca; border-color: #4338ca; }
+    .primary { background: #4B1238; border-color: #4B1238; color: #fff; }
+    .primary:hover { background: #6B1E4B; border-color: #6B1E4B; }
     .primary:disabled { opacity: .55; cursor: not-allowed; }
     .ghost { background: #fff; color: #374151; }
     .ghost:hover { background: #f9fafb; border-color: #9ca3af; }
@@ -280,7 +280,7 @@ const configs: Record<StaffMasterKind, MasterConfig> = {
     .metric-grid article { display: grid; gap: 4px; padding: 12px 14px; }
     .metric-grid article:hover { border-color: #c7d2fe; }
     .metric-grid span { color: #6b7280; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-    .metric-grid strong { font-size: 22px; color: #4f46e5; }
+    .metric-grid strong { font-size: 22px; color: #4B1238; }
     .panel-heading span, .record-row small, .field small { color: #6b7280; }
     .state, .empty { padding: 14px; color: #6b7280; }
     .state.error { border-color: #fecaca; color: #dc2626; background: #fef2f2; }
@@ -290,26 +290,26 @@ const configs: Record<StaffMasterKind, MasterConfig> = {
     .compact-filter, .search-box, .field { display: grid; gap: 5px; color: #374151; font-size: 13px; font-weight: 700; }
     .compact-filter { min-width: 180px; }
     input, select, textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #1e1b2e; font: inherit; padding: 9px 11px; transition: border-color .15s; box-sizing: border-box; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.12); }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #4B1238; box-shadow: 0 0 0 3px rgba(75,18,56,.12); }
     input[readonly] { background: #f3f4f6; color: #6b7280; }
     input[type="color"] { min-height: 40px; padding: 3px; }
     textarea { min-height: 72px; resize: vertical; }
     .record-table { display: grid; gap: 6px; max-height: 400px; overflow: auto; }
     .record-row { align-items: center; background: #fff; border: 1px solid #eef2ff; border-radius: 8px; color: inherit; cursor: pointer; display: grid; gap: 10px; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 50px; padding: 8px 10px; text-align: left; transition: all .15s; }
     .record-row:hover { border-color: #c7d2fe; background: #f8f9ff; }
-    .record-row.active { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,.15); background: #eef2ff; }
+    .record-row.active { border-color: #4B1238; box-shadow: 0 0 0 2px rgba(75,18,56,.15); background: #F8EEF4; }
     .record-row strong, .record-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .record-row i { border-radius: 999px; background: #eef2ff; color: #4f46e5; font-size: 11px; font-style: normal; font-weight: 800; padding: 4px 8px; text-transform: uppercase; }
+    .record-row i { border-radius: 999px; background: #F8EEF4; color: #4B1238; font-size: 11px; font-style: normal; font-weight: 800; padding: 4px 8px; text-transform: uppercase; }
     .record-row i.hidden { background: #fef3c7; color: #92400e; }
     .swatch { width: 16px; height: 16px; border: 1px solid rgba(0,0,0,.1); border-radius: 4px; }
     form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .full, .form-title, .form-actions { grid-column: 1 / -1; }
     .sub-panel { border: 1px solid #e0e7ff; border-radius: 8px; background: #f8f9ff; display: grid; gap: 12px; padding: 14px; }
-    .sub-panel h3 { font-size: 14px; font-weight: 800; color: #4f46e5; }
+    .sub-panel h3 { font-size: 14px; font-weight: 800; color: #4B1238; }
     .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .check-field { align-items: center; border: 1px solid #eef2ff; border-radius: 8px; color: #374151; display: grid; font-size: 13px; font-weight: 700; gap: 8px; grid-template-columns: auto 1fr; min-height: 40px; padding: 8px 11px; }
     .check-field input, .hide-toggle input, .choice-field input { width: auto; }
-    input[type='checkbox'] { accent-color: #4f46e5; height: 16px; margin: 0; width: 16px; cursor: pointer; }
+    input[type='checkbox'] { accent-color: #4B1238; height: 16px; margin: 0; width: 16px; cursor: pointer; }
     .hide-toggle { align-items: center; color: #374151; display: inline-flex; font-size: 13px; font-weight: 700; gap: 8px; cursor: pointer; }
     .choice-field { border: 1px solid #e0e7ff; border-radius: 8px; display: flex; gap: 14px; margin: 0; padding: 10px 12px; flex-wrap: wrap; background: #f8f9ff; }
     .choice-field legend { color: #374151; font-size: 12px; font-weight: 800; padding: 0 6px; }

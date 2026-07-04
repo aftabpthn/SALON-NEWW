@@ -1118,9 +1118,9 @@ type PackageClientNotice = {
     }
 
     :host .membership-line-badge--discount {
-      border-color: #bfdbfe;
-      background: #eff6ff;
-      color: #1d4ed8;
+      border-color: #E7DDD6;
+      background: #F8EEF4;
+      color: #4B1238;
     }
 
     :host .membership-line-badge--eligible {
@@ -1396,8 +1396,8 @@ type PackageClientNotice = {
     }
 
     :host .client-badge.wallet {
-      color: #1d4ed8;
-      background: #dbeafe;
+      color: #4B1238;
+      background: #F8EEF4;
     }
 
     :host .client-badge.due,

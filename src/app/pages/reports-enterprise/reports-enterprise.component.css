@@ -34,7 +34,7 @@
 }
 .range-btn:hover { background: var(--surface-2); }
 .range-btn.active {
-  background: var(--teal);
+  background: #4B1238;
   color: #fff;
 }
 .branch-select {
@@ -94,7 +94,7 @@
   transition: all 140ms ease;
 }
 .tab-btn:hover { background: var(--surface-2); color: var(--ink); }
-.tab-btn.active { background: var(--teal); color: #fff; }
+.tab-btn.active { background: #4B1238; color: #fff; }
 .tab-icon { font-size: 15px; }
 
 .report-content {
@@ -156,7 +156,7 @@
   align-items: center;
   padding-top: 4px;
   margin-top: 4px;
-  border-top: 2px solid var(--teal);
+  border-top: 2px solid #4B1238;
   font-size: 13px;
   font-weight: 800;
   color: var(--ink);

@@ -29,8 +29,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
       cursor: pointer;
     }
     .primary {
-      border-color: var(--primary-600, #4f46e5);
-      background: var(--primary-600, #4f46e5);
+      border-color: var(--aura-primary, #4B1238);
+      background: var(--aura-primary, #4B1238);
       color: #fff;
     }
     .ghost { background: var(--surface); }

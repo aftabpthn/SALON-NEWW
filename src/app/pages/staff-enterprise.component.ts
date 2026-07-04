@@ -712,7 +712,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     .kpi-card.green { border-top-color: #16a34a; }
     .kpi-card.amber { border-top-color: #b7791f; }
     .kpi-card.red { border-top-color: #dc2626; }
-    .kpi-card.blue { border-top-color: #2563eb; }
+    .kpi-card.blue { border-top-color: #4B1238; }
     .kpi-card.violet { border-top-color: #7c3aed; }
 
     .section-band {
@@ -776,7 +776,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     }
 
     .module-link-card.green { border-left-color: #16a34a; }
-    .module-link-card.blue { border-left-color: #2563eb; }
+    .module-link-card.blue { border-left-color: #4B1238; }
     .module-link-card.amber { border-left-color: #b7791f; }
     .module-link-card.red { border-left-color: #dc2626; }
     .module-link-card.violet { border-left-color: #7c3aed; }
@@ -877,7 +877,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     }
 
     .mini-metrics span {
-      border: 1px solid #e2e8f0;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       padding: 8px;
       background: #f8fafc;
@@ -898,7 +898,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 
     .table-wrap {
       overflow: auto;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       max-height: 430px;
     }
@@ -913,7 +913,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     td {
       padding: 11px 12px;
       text-align: left;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid #E7DDD6;
       vertical-align: top;
     }
 
@@ -950,7 +950,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
       font-size: 12px;
       font-weight: 800;
       color: #334155;
-      background: #e2e8f0;
+      background: #E7DDD6;
       border: 1px solid #cbd5e1;
       text-transform: capitalize;
       white-space: nowrap;
@@ -990,8 +990,8 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
     .badge.info,
     .badge.preview,
     .badge.draft {
-      color: #1d4ed8;
-      background: #dbeafe;
+      color: #4B1238;
+      background: #F8EEF4;
       border-color: #93c5fd;
     }
 
@@ -1105,7 +1105,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
       padding: 12px;
       border-radius: 8px;
       background: #0f172a;
-      color: #e2e8f0;
+      color: #E7DDD6;
       overflow: auto;
       white-space: pre-wrap;
       word-break: break-word;

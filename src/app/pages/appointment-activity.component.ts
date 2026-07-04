@@ -840,7 +840,7 @@ interface ClientScoreRow {
 
     .metric-card.red { border-top-color: var(--danger); }
     .metric-card.amber { border-top-color: #b7791f; }
-    .metric-card.blue { border-top-color: #2563eb; }
+    .metric-card.blue { border-top-color: #4B1238; }
     .metric-card.green { border-top-color: #15803d; }
 
     .metric-card span,

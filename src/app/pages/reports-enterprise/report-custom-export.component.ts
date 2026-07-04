@@ -119,8 +119,8 @@ import { ReportsEnterpriseService, FilterState } from './reports-enterprise.serv
     .date-range-inputs span { color: var(--muted); font-size: 12px; }
     .format-options { display: flex; gap: 8px; }
     .format-option { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; transition: all 140ms ease; font-size: 13px; }
-    .format-option:hover { border-color: var(--teal); }
-    .format-option.active { border-color: var(--teal); background: #eef2ff; color: var(--teal); font-weight: 700; }
+    .format-option:hover { border-color: #4B1238; }
+    .format-option.active { border-color: #4B1238; background: #F8EEF4; color: #4B1238; font-weight: 700; }
     .format-icon { font-size: 16px; }
     .form-actions { display: flex; gap: 10px; padding-top: 8px; }
     .export-preview { margin-top: 12px; max-height: 200px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #1a1f2e; color: #e2e8f0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.6; }

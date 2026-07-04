@@ -270,7 +270,7 @@ interface SegmentRow {
     .metric-card span, .metric-card small { color: var(--muted); }
     .metric-card strong { font-size: 28px; color: var(--ink); line-height: 1; }
     .metric-card.green { border-top: 4px solid #55173D; }
-    .metric-card.blue { border-top: 4px solid #2563eb; }
+    .metric-card.blue { border-top: 4px solid #4B1238; }
     .metric-card.gold { border-top: 4px solid #ca8a04; }
     .metric-card.rose { border-top: 4px solid #e11d48; }
 

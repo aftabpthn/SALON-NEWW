@@ -258,7 +258,7 @@ type RedemptionLine = {
     }
 
     .packages-title a {
-      color: #2563eb;
+      color: #4B1238;
       font-weight: 800;
       text-decoration: none;
     }

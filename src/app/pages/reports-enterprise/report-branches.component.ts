@@ -62,7 +62,7 @@ import { Subscription } from 'rxjs';
   styles: [`
     .branch-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     .chart-container { height: 240px; }
-    .rank-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--teal); color: #fff; font-size: 12px; font-weight: 900; }
+    .rank-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #4B1238; color: #fff; font-size: 12px; font-weight: 900; }
     .growth-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }
     .growth-badge.positive { background: #d1fae5; color: var(--green); }
     .skeleton-card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; background: var(--surface); }
@@ -83,8 +83,8 @@ export class ReportBranchesComponent implements OnInit, OnDestroy {
   readonly d = signal<any>(null);
   readonly branches = computed(() => this.d()?.branches || []);
   readonly branchNames = computed(() => this.branches().map((b: any) => b.name));
-  readonly revenueDataset = computed(() => [{ label: 'Revenue', data: this.branches().map((b: any) => b.revenue), backgroundColor: ['#4f46e5','#2f5fbd','#10b981','#f59e0b'] }]);
-  readonly bookingsDataset = computed(() => [{ label: 'Bookings', data: this.branches().map((b: any) => b.bookings), backgroundColor: ['#4f46e5','#2f5fbd','#10b981','#f59e0b'] }]);
+  readonly revenueDataset = computed(() => [{ label: 'Revenue', data: this.branches().map((b: any) => b.revenue), backgroundColor: ['#4B1238','#6B1E4B','#10b981','#f59e0b'] }]);
+  readonly bookingsDataset = computed(() => [{ label: 'Bookings', data: this.branches().map((b: any) => b.bookings), backgroundColor: ['#4B1238','#6B1E4B','#10b981','#f59e0b'] }]);
   private subs: Subscription[] = [];
 
   constructor(private service: ReportsEnterpriseService) {}

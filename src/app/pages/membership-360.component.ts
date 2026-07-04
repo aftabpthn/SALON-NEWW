@@ -357,7 +357,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .timeline-dot.success { background: #55173D; }
     .timeline-dot.warning { background: #b7791f; }
     .timeline-dot.danger { background: #b42318; }
-    .timeline-dot.info { background: #2563eb; }
+    .timeline-dot.info { background: #4B1238; }
     .risk-card .badge.high,
     .risk-card .badge.critical,
     .badge.high,

@@ -95,9 +95,9 @@ export class ReportServicesComponent implements OnInit, OnDestroy {
   readonly popularLabels = computed(() => this.services().slice(0, 5).map((s: any) => s.name));
   readonly popularDataset = computed(() => [{ label: 'Bookings', data: this.services().slice(0, 5).map((s: any) => s.bookings), backgroundColor: '#10b981' }]);
   readonly topRevenueLabels = computed(() => [...this.services()].sort((a: any, b: any) => b.revenue - a.revenue).slice(0, 5).map((s: any) => s.name));
-  readonly topRevenueDataset = computed(() => [{ label: 'Revenue', data: [...this.services()].sort((a: any, b: any) => b.revenue - a.revenue).slice(0, 5).map((s: any) => s.revenue), backgroundColor: '#4f46e5' }]);
+  readonly topRevenueDataset = computed(() => [{ label: 'Revenue', data: [...this.services()].sort((a: any, b: any) => b.revenue - a.revenue).slice(0, 5).map((s: any) => s.revenue), backgroundColor: '#4B1238' }]);
   readonly catLabels = computed(() => (this.d()?.categoryBreakdown || []).map((c: any) => c.category));
-  readonly catDataset = computed(() => [{ label: 'Revenue', data: (this.d()?.categoryBreakdown || []).map((c: any) => c.revenue), backgroundColor: ['#4f46e5','#2f5fbd','#10b981','#f59e0b','#6d4cc2'] }]);
+  readonly catDataset = computed(() => [{ label: 'Revenue', data: (this.d()?.categoryBreakdown || []).map((c: any) => c.revenue), backgroundColor: ['#4B1238','#6B1E4B','#10b981','#f59e0b','#6d4cc2'] }]);
   private subs: Subscription[] = [];
 
   constructor(private service: ReportsEnterpriseService) {}

@@ -798,7 +798,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
 
     .stg { padding: 2px 8px; border-radius: 5px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; border: 1px solid transparent; }
     .stg-green { background: rgba(5,150,105,0.06); color: #059669; border-color: rgba(5,150,105,0.15); }
-    .stg-blue { background: rgba(37,99,235,0.06); color: #2563eb; border-color: rgba(37,99,235,0.15); }
+    .stg-blue { background: rgba(75,18,56,0.06); color: #4B1238; border-color: rgba(75,18,56,0.15); }
     .stg-purple { background: rgba(124,58,237,0.06); color: #7c3aed; border-color: rgba(124,58,237,0.15); }
     .stg-amber { background: rgba(217,119,6,0.06); color: #d97706; border-color: rgba(217,119,6,0.15); }
 
@@ -1610,7 +1610,7 @@ export class ReportsComponent implements OnInit {
 
   libColor(module: string): string {
     const colors: Record<string, string> = {
-      'FlexiSalon import': 'linear-gradient(135deg,#3b82f6,#2563eb)',
+      'FlexiSalon import': 'linear-gradient(135deg,#4B1238,#6B1E4B)',
       'Invoice intelligence': 'linear-gradient(135deg,#10b981,#059669)',
       'POS attribution': 'linear-gradient(135deg,#8b5cf6,#7c3aed)',
       'Payroll': 'linear-gradient(135deg,#f59e0b,#d97706)',
@@ -1619,7 +1619,7 @@ export class ReportsComponent implements OnInit {
       'Bookings': 'linear-gradient(135deg,#06b6d4,#0891b2)',
       'Clients': 'linear-gradient(135deg,#ec4899,#db2777)'
     };
-    return colors[module] || 'linear-gradient(135deg,#6366f1,#4f46e5)';
+    return colors[module] || 'linear-gradient(135deg,#4B1238,#6B1E4B)';
   }
 
   private loadBranches(): void {

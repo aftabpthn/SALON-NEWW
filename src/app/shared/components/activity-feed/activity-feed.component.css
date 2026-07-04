@@ -17,7 +17,7 @@
 
 .activity-item.is-clickable:hover {
   background: var(--surface-2);
-  border-color: var(--teal);
+  border-color: #4B1238;
 }
 
 .activity-icon {
@@ -27,7 +27,7 @@
   place-items: center;
   border-radius: 999px;
   background: #e6eeee;
-  color: var(--teal-2);
+  color: #6B1E4B;
   font-size: 12px;
   font-weight: 900;
 }

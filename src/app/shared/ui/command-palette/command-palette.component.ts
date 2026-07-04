@@ -96,7 +96,7 @@ export interface CommandEntry {
       width: min(640px, calc(100vw - 32px));
       max-height: 70vh; display: flex; flex-direction: column;
       border-radius: 18px;
-      border: 1px solid rgba(99, 102, 241, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       background: rgba(255, 255, 255, 0.96);
       box-shadow: var(--elev-3, 0 30px 80px rgba(15, 23, 42, 0.28)), 0 0 0 1px rgba(255,255,255,0.6) inset;
       overflow: hidden;
@@ -106,7 +106,7 @@ export interface CommandEntry {
       display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px;
       padding: 14px 16px; border-bottom: 1px solid rgba(15, 23, 42, 0.08);
     }
-    .cmdk-search-icon { font-size: 1.05rem; color: var(--brand-600, #4f46e5); }
+    .cmdk-search-icon { font-size: 1.05rem; color: var(--aura-primary, #4B1238); }
     .cmdk-input {
       border: 0; outline: 0; background: transparent;
       font-size: 1rem; font-weight: 600; color: #16203a;
@@ -128,16 +128,16 @@ export interface CommandEntry {
       transition: background 120ms ease, border-color 120ms ease;
     }
     .cmdk-item.active {
-      background: var(--gradient-brand-soft, rgba(99,102,241,0.1));
-      border-color: rgba(99, 102, 241, 0.22);
+      background: var(--gradient-brand-soft, rgba(75,18,56,0.1));
+      border-color: rgba(75, 18, 56, 0.22);
     }
     .cmdk-item-icon {
       width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px;
-      font-size: 0.72rem; font-weight: 800; color: var(--brand-700, #4338ca);
-      background: rgba(99, 102, 241, 0.12);
+      font-size: 0.72rem; font-weight: 800; color: var(--aura-primary, #4B1238);
+      background: rgba(75, 18, 56, 0.12);
     }
     .cmdk-item-icon.is-action {
-      color: #fff; background: var(--gradient-brand, linear-gradient(135deg,#6366f1,#7c3aed));
+      color: #fff; background: var(--gradient-brand, linear-gradient(135deg,#4B1238,#7c3aed));
     }
     .cmdk-item-copy { min-width: 0; display: grid; gap: 1px; }
     .cmdk-item-copy strong { font-size: 0.9rem; font-weight: 700; }

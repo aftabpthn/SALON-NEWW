@@ -1016,7 +1016,7 @@ const STATUS_TONES: Record<string, string> = {
     h2 { font-size: 34px; line-height: 1.05; }
     h3 { font-size: 22px; }
     p { margin: 8px 0 0; color: #64748b; max-width: 760px; }
-    .eyebrow { color: #2563eb; font-size: 12px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
+    .eyebrow { color: #4B1238; font-size: 12px; font-weight: 900; letter-spacing: 0; text-transform: uppercase; }
     .calendar-actions, .drawer-actions, .staff-window-controls, .scheduler-view-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .primary-button, .ghost-button {
       border: 1px solid #cfe0dc;
@@ -1182,8 +1182,8 @@ const STATUS_TONES: Record<string, string> = {
     .scheduler-grid--compact .appointment-card b { font-size: 12px; margin-top: 2px; }
     .scheduler-grid--compact .appointment-card span, .scheduler-grid--compact .appointment-card small { font-size: 11px; }
     .appointment-card::before, .appointment-card::after { content: none !important; }
-    .appointment-card.blue { background: #bfdbfe !important; border-color: #2563eb !important; border-left-color: #2563eb !important; }
-    .appointment-card.indigo { background: #c7d2fe !important; border-color: #4f46e5 !important; border-left-color: #4f46e5 !important; }
+    .appointment-card.blue { background: #E7DDD6 !important; border-color: #4B1238 !important; border-left-color: #4B1238 !important; }
+    .appointment-card.indigo { background: #EBD9E5 !important; border-color: #4B1238 !important; border-left-color: #4B1238 !important; }
     .appointment-card.teal { background: #D4B8CC !important; border-color: #4B1238 !important; border-left-color: #4B1238 !important; }
     .appointment-card.amber { background: #fde68a !important; border-color: #d97706 !important; border-left-color: #d97706 !important; }
     .appointment-card.violet { background: #ddd6fe !important; border-color: #7c3aed !important; border-left-color: #7c3aed !important; }
@@ -1240,8 +1240,8 @@ const STATUS_TONES: Record<string, string> = {
     .list-time, .list-client strong { font-weight: 900; }
     .list-client small { display: block; margin-top: 3px; color: #64748b; font-size: 12px; }
     .status-pill { justify-self: start; border: 1px solid #cbd5e1; border-radius: 999px; padding: 6px 10px; color: #172033; font-size: 12px; font-weight: 900; }
-    .timeline-appointment.blue, .status-pill.blue { background: #bfdbfe; border-color: #2563eb; }
-    .timeline-appointment.indigo, .status-pill.indigo { background: #c7d2fe; border-color: #4f46e5; }
+    .timeline-appointment.blue, .status-pill.blue { background: #E7DDD6; border-color: #4B1238; }
+    .timeline-appointment.indigo, .status-pill.indigo { background: #EBD9E5; border-color: #4B1238; }
     .timeline-appointment.teal, .status-pill.teal { background: #D4B8CC; border-color: #4B1238; }
     .timeline-appointment.amber, .status-pill.amber { background: #fde68a; border-color: #d97706; }
     .timeline-appointment.violet, .status-pill.violet { background: #ddd6fe; border-color: #7c3aed; }
@@ -1322,7 +1322,7 @@ const STATUS_TONES: Record<string, string> = {
     .service-chip-row { display: flex; flex-wrap: wrap; gap: 10px; }
     .chip { border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 900; }
     .chip.warm { background: #fed7aa; color: #9a3412; }
-    .chip.cool { background: #dbeafe; color: #1d4ed8; }
+    .chip.cool { background: #F8EEF4; color: #4B1238; }
     .chip.pink { background: #f5d0fe; color: #86198f; }
     .chip.teal { background: #D4B8CC; color: #2D0B21; }
     .activity-log-panel { display: grid; gap: 12px; padding: 0 22px 28px; }

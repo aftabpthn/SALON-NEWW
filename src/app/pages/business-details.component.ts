@@ -563,7 +563,7 @@ type ContactVerificationResponse = ContactVerification & {
       min-height: 220px;
       border-top: 4px solid #4A1235;
     }
-    .sms-route-card.client { border-top-color: #2563eb; }
+    .sms-route-card.client { border-top-color: #4B1238; }
     .sms-route-card.staff { border-top-color: #4A1235; }
     .sms-route-card.owner { border-top-color: #b45309; }
     .sms-route-card.logs { border-top-color: #be185d; }
@@ -592,7 +592,7 @@ type ContactVerificationResponse = ContactVerification & {
       width: fit-content;
       border-radius: 999px;
       background: #eef6ff;
-      color: #1d4ed8;
+      color: #4B1238;
       padding: 5px 9px;
       font-size: 11px;
       font-weight: 900;
@@ -603,7 +603,7 @@ type ContactVerificationResponse = ContactVerification & {
       gap: 2px;
       border-radius: 8px;
       background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #E7DDD6;
       padding: 10px;
     }
     .route-status strong {
@@ -843,7 +843,7 @@ type ContactVerificationResponse = ContactVerification & {
     .contact-chip.phone {
       background: #f7fbff;
       border-color: #bfd7ff;
-      color: #1d4ed8;
+      color: #4B1238;
     }
     .contact-chip.invalid {
       background: #fff1f0;
