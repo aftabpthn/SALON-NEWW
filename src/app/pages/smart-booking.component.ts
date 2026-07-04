@@ -43,12 +43,12 @@ type SmartBookingViewKey = 'overview' | 'recommend' | 'queue' | 'slots' | 'waitl
         <main class="smart-booking-detail">
 
       <div class="metrics-grid" *ngIf="visibleSmartBookingView('overview') && summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/smart-booking/open-bookings"><span>Open bookings</span><strong>{{ metrics.openBookings }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/smart-booking/waitlist"><span>Waitlist</span><strong>{{ metrics.waitlist }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/smart-booking/online-requests"><span>Online requests</span><strong>{{ metrics.onlineRequests }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/smart-booking/conflict-risks"><span>Conflict risks</span><strong>{{ metrics.conflictRisks }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/smart-booking/qr-check-ins"><span>QR check-ins</span><strong>{{ metrics.qrCheckinsToday }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/smart-booking/predicted-wait"><span>Predicted wait</span><strong>{{ metrics.predictedWaitMinutes }}m</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/smart-booking/open-bookings"><span>Open bookings</span><strong>{{ metrics.openBookings }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/smart-booking/waitlist"><span>Waitlist</span><strong>{{ metrics.waitlist }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/smart-booking/online-requests"><span>Online requests</span><strong>{{ metrics.onlineRequests }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/smart-booking/conflict-risks"><span>Conflict risks</span><strong>{{ metrics.conflictRisks }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/smart-booking/qr-check-ins"><span>QR check-ins</span><strong>{{ metrics.qrCheckinsToday }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/smart-booking/predicted-wait"><span>Predicted wait</span><strong>{{ metrics.predictedWaitMinutes }}m</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

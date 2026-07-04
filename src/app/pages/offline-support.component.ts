@@ -22,12 +22,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="amber" target="/kpi-details/offline/queued"><span>Queued</span><strong>{{ metrics.queued }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/offline/synced"><span>Synced</span><strong>{{ metrics.synced }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/offline/conflicts"><span>Conflicts</span><strong>{{ metrics.conflicts }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/offline/cache-snapshots"><span>Cache snapshots</span><strong>{{ metrics.cacheSnapshots }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="teal" target="/kpi-details/offline/offline-appointments"><span>Offline appointments</span><strong>{{ metrics.offlineAppointments }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/offline/offline-bills"><span>Offline bills</span><strong>{{ metrics.offlineBills }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/offline/queued"><span>Queued</span><strong>{{ metrics.queued }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/offline/synced"><span>Synced</span><strong>{{ metrics.synced }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/offline/conflicts"><span>Conflicts</span><strong>{{ metrics.conflicts }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/offline/cache-snapshots"><span>Cache snapshots</span><strong>{{ metrics.cacheSnapshots }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/offline/offline-appointments"><span>Offline appointments</span><strong>{{ metrics.offlineAppointments }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/offline/offline-bills"><span>Offline bills</span><strong>{{ metrics.offlineBills }}</strong></aura-kpi-card>
       </div>
 
       <section class="panel">

@@ -80,10 +80,10 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       </section>
 
       <div class="metrics-grid" *ngIf="context()?.paymentReady as payment">
-        <aura-kpi-card tone="teal" target="/kpi-details/booking-portal/online-payment"><span>Online payment</span><strong>{{ payment.onlinePayment ? 'Ready' : 'Disabled' }}</strong><small>{{ payment.captureMode }}</small></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/booking-portal/payment-modes"><span>Payment modes</span><strong>{{ payment.modes.length }}</strong><small>{{ payment.modes.join(', ') }}</small></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/booking-portal/services"><span>Services</span><strong>{{ services().length }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/booking-portal/staff"><span>Staff</span><strong>{{ staffForBranch().length }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/booking-portal/online-payment"><span>Online payment</span><strong>{{ payment.onlinePayment ? 'Ready' : 'Disabled' }}</strong><small>{{ payment.captureMode }}</small></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/booking-portal/payment-modes"><span>Payment modes</span><strong>{{ payment.modes.length }}</strong><small>{{ payment.modes.join(', ') }}</small></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/booking-portal/services"><span>Services</span><strong>{{ services().length }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/booking-portal/staff"><span>Staff</span><strong>{{ staffForBranch().length }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">
@@ -392,7 +392,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
     }
 
     :host .booking-portal,
-    :host .booking-page { background: #f8f5f2; }
+    :host .booking-page { background: #FAF8F6; }
     :host .portal-hero,
     :host .booking-hero,
     :host .booking-card,
@@ -402,17 +402,17 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
     :host .staff-card,
     :host .slot-card,
     :host form {
-      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-color: rgba(75, 18, 56, 0.13) !important;
       border-radius: 14px !important;
       background: #fff !important;
       background-image: none !important;
-      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+      box-shadow: 0 1px 2px rgba(75, 18, 56, 0.03), 0 10px 26px rgba(75, 18, 56, 0.045) !important;
     }
-    :host h1, :host h2, :host h3, :host strong { color: #302522; font-weight: 630; }
-    :host p, :host span, :host small, :host label { color: #766763; }
-    :host input, :host select, :host textarea { border-color: rgba(118, 85, 76, 0.14) !important; border-radius: 10px !important; background: #fff !important; }
+    :host h1, :host h2, :host h3, :host strong { color: #151827; font-weight: 630; }
+    :host p, :host span, :host small, :host label { color: #4B1238; }
+    :host input, :host select, :host textarea { border-color: rgba(75, 18, 56, 0.14) !important; border-radius: 10px !important; background: #fff !important; }
     :host button { border-radius: 10px !important; font-weight: 580 !important; }
-    :host .primary-button, :host button[type='submit'] { background: #744a44 !important; border-color: #744a44 !important; color: #fff !important; }
+    :host .primary-button, :host button[type='submit'] { background: #5A153F !important; border-color: #5A153F !important; color: #fff !important; }
     @media (max-width: 760px) {
       .public-profile {
         grid-template-columns: 1fr;

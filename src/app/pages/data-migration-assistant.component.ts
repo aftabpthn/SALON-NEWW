@@ -72,7 +72,7 @@ import { DataMigrationStore } from './data-migration.store';
   styles: [`
     :host { display: block; }
     .migration-shell { display: grid; gap: 14px; padding: 16px; color: #172033; }
-    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
+    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #faf8f6, #ffffff 62%, #f0ece9); box-shadow: 0 1px 3px rgba(75,18,56,0.04), 0 1px 6px rgba(75,18,56,0.04); }
     .command-header h1 { margin: 4px 0; font-size: 22px; line-height: 1.1; letter-spacing: -0.01em; }
     .command-header p { margin: 0; max-width: 800px; color: #64748b; font-size: 13px; line-height: 1.45; }
     .back-btn { background: none; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: #4f46e5; margin-bottom: 8px; }
@@ -84,13 +84,13 @@ import { DataMigrationStore } from './data-migration.store';
     .form-input:focus { border-color: #5A153F; outline: 2px solid rgba(90,21,63,.12); background: #ffffff; }
     .btn-primary { min-height: 36px; border: 1px solid #5A153F; border-radius: 8px; padding: 0 16px; font-weight: 700; font-size: 12px; cursor: pointer; background: #5A153F; color: #ffffff; flex-shrink: 0; }
     .btn-primary:hover { background: #451133; }
-    .answer-card { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fffd; }
+    .answer-card { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #faf8f6; }
     .answer-card p { margin: 0; font-size: 13px; line-height: 1.5; color: #172033; }
     .anomaly-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
     .anomaly-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; padding: 14px; display: grid; gap: 4px; }
     .anomaly-card strong { font-size: 22px; }
     .anomaly-card small { color: #64748b; font-size: 12px; }
-    .anomaly-card.good { border-color: #F1E8EE; }
+    .anomaly-card.good { border-color: #E7DDD6; }
     .anomaly-card.warning { border-color: #fffbeb; background: #fffbeb; }
     .anomaly-card.danger { border-color: #fef2f2; background: #fef2f2; }
     .stats-section { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; display: grid; gap: 10px; }
@@ -106,7 +106,7 @@ import { DataMigrationStore } from './data-migration.store';
     .btn-secondary:hover { background: #f8fafc; }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
+    .message.success { background: #F8EEF4; color: #4B1238; border: 1px solid #DCC4D4; }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } }
   `]
 })

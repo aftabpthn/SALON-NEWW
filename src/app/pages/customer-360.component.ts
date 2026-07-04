@@ -69,10 +69,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       </section>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/customer-360/clients"><span>Clients</span><strong>{{ metrics.clients }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/customer-360/total-ltv"><span>Total LTV</span><strong>{{ metrics.totalLtv | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/customer-360/avg-spend"><span>Avg spend</span><strong>{{ metrics.avgSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/customer-360/high-risk"><span>High risk</span><strong>{{ metrics.highRisk }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/clients"><span>Clients</span><strong>{{ metrics.clients }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/total-ltv"><span>Total LTV</span><strong>{{ metrics.totalLtv | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/avg-spend"><span>Avg spend</span><strong>{{ metrics.avgSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/high-risk"><span>High risk</span><strong>{{ metrics.highRisk }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">
@@ -126,46 +126,46 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </section>
 
         <div class="metrics-grid">
-  <aura-kpi-card tone="teal" target="/kpi-details/customer-360/last-visit"><span>Last visit</span><strong>{{ profileData.metrics.lastVisit ? (profileData.metrics.lastVisit | date: 'mediumDate') : 'Never' }}</strong><small>{{ profileData.metrics.inactiveDays }} inactive days</small></aura-kpi-card>
-  <aura-kpi-card tone="blue" target="/kpi-details/customer-360/favorite-service"><span>Favorite service</span><strong>{{ profileData.metrics.favoriteService }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="green" target="/kpi-details/customer-360/average-spend"><span>Average spend</span><strong>{{ profileData.metrics.averageSpend | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ profileData.metrics.visitCount }} visits</small></aura-kpi-card>
-  <aura-kpi-card tone="amber" target="/kpi-details/customer-360/preferred-staff"><span>Preferred staff</span><strong>{{ profileData.metrics.preferredStaffName || 'Unknown' }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="red" target="/kpi-details/customer-360/outstanding"><span>Outstanding</span><strong>{{ profileData.metrics.outstandingBalance | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="violet" target="/kpi-details/customer-360/loyalty"><span>Loyalty</span><strong>{{ profileData.metrics.loyaltyPoints }}</strong><small>{{ profileData.metrics.membershipStatus }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/last-visit"><span>Last visit</span><strong>{{ profileData.metrics.lastVisit ? (profileData.metrics.lastVisit | date: 'mediumDate') : 'Never' }}</strong><small>{{ profileData.metrics.inactiveDays }} inactive days</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/favorite-service"><span>Favorite service</span><strong>{{ profileData.metrics.favoriteService }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/average-spend"><span>Average spend</span><strong>{{ profileData.metrics.averageSpend | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ profileData.metrics.visitCount }} visits</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/preferred-staff"><span>Preferred staff</span><strong>{{ profileData.metrics.preferredStaffName || 'Unknown' }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/outstanding"><span>Outstanding</span><strong>{{ profileData.metrics.outstandingBalance | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/loyalty"><span>Loyalty</span><strong>{{ profileData.metrics.loyaltyPoints }}</strong><small>{{ profileData.metrics.membershipStatus }}</small></aura-kpi-card>
 
-  <aura-kpi-card tone="gold" target="/kpi-details/customer-360/lifetime-value"><span>Lifetime value</span><strong>{{ profileData.metrics.lifetimeValue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Since {{ profileData.metrics.firstVisitDate | date: 'MMM yyyy' }}</small></aura-kpi-card>
-  <aura-kpi-card tone="emerald" target="/kpi-details/customer-360/this-month"><span>This month</span><strong>{{ profileData.metrics.monthToDateSpend | currency: 'INR':'symbol':'1.0-0' }}</strong><small [class.positive-delta]="spendDelta >= 0" [class.negative-delta]="spendDelta < 0">{{ spendDelta >= 0 ? '▲' : '▼' }} {{ spendDelta | number: '1.0-0' }}% vs last month</small></aura-kpi-card>
-  <aura-kpi-card tone="indigo" target="/kpi-details/customer-360/highest-bill"><span>Highest bill</span><strong>{{ profileData.metrics.highestSingleBill | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="orange" target="/kpi-details/customer-360/avg-discount"><span>Avg discount</span><strong>{{ profileData.metrics.averageDiscountPercent | number: '1.0-0' }}%</strong></aura-kpi-card>
-  <aura-kpi-card tone="cyan" target="/kpi-details/customer-360/product-spend"><span>Product spend</span><strong>{{ profileData.metrics.productSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="pink" target="/kpi-details/customer-360/service-spend"><span>Service spend</span><strong>{{ profileData.metrics.serviceSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/lifetime-value"><span>Lifetime value</span><strong>{{ profileData.metrics.lifetimeValue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>Since {{ profileData.metrics.firstVisitDate | date: 'MMM yyyy' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/this-month"><span>This month</span><strong>{{ profileData.metrics.monthToDateSpend | currency: 'INR':'symbol':'1.0-0' }}</strong><small [class.positive-delta]="spendDelta >= 0" [class.negative-delta]="spendDelta < 0">{{ spendDelta >= 0 ? '▲' : '▼' }} {{ spendDelta | number: '1.0-0' }}% vs last month</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/highest-bill"><span>Highest bill</span><strong>{{ profileData.metrics.highestSingleBill | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/avg-discount"><span>Avg discount</span><strong>{{ profileData.metrics.averageDiscountPercent | number: '1.0-0' }}%</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/product-spend"><span>Product spend</span><strong>{{ profileData.metrics.productSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/service-spend"><span>Service spend</span><strong>{{ profileData.metrics.serviceSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
 
-  <aura-kpi-card tone="teal" target="/kpi-details/customer-360/visit-frequency"><span>Visit frequency</span><strong>Every {{ profileData.metrics.visitFrequencyDays }} days</strong></aura-kpi-card>
-  <aura-kpi-card tone="red" target="/kpi-details/customer-360/no-shows"><span>No-shows</span><strong>{{ profileData.metrics.noShowCount }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="amber" target="/kpi-details/customer-360/cancellations"><span>Cancellations</span><strong>{{ profileData.metrics.cancellationRate | number: '1.0-0' }}%</strong><small>{{ profileData.metrics.cancellationCount }} total cancellations</small></aura-kpi-card>
-  <aura-kpi-card tone="blue" target="/kpi-details/customer-360/visit-type"><span>Visit type</span><strong>{{ (profileData.metrics.walkInCount / (profileData.metrics.bookedCount + profileData.metrics.walkInCount) * 100) | number: '1.0-0' }}%</strong><small>{{ profileData.metrics.bookedCount }} booked · {{ profileData.metrics.walkInCount }} walk-in</small></aura-kpi-card>
-  <aura-kpi-card tone="violet" target="/kpi-details/customer-360/peak-day"><span>Peak day</span><strong>{{ profileData.metrics.peakVisitDay }}</strong><small>{{ profileData.metrics.peakVisitTime }}</small></aura-kpi-card>
-  <aura-kpi-card tone="green" target="/kpi-details/customer-360/client-since"><span>Client since</span><strong>{{ profileData.metrics.firstVisitDate | date: 'MMM yyyy' }}</strong><small>{{ profileData.metrics.visitCount }} total visits</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/visit-frequency"><span>Visit frequency</span><strong>Every {{ profileData.metrics.visitFrequencyDays }} days</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/no-shows"><span>No-shows</span><strong>{{ profileData.metrics.noShowCount }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/cancellations"><span>Cancellations</span><strong>{{ profileData.metrics.cancellationRate | number: '1.0-0' }}%</strong><small>{{ profileData.metrics.cancellationCount }} total cancellations</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/visit-type"><span>Visit type</span><strong>{{ (profileData.metrics.walkInCount / (profileData.metrics.bookedCount + profileData.metrics.walkInCount) * 100) | number: '1.0-0' }}%</strong><small>{{ profileData.metrics.bookedCount }} booked · {{ profileData.metrics.walkInCount }} walk-in</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/peak-day"><span>Peak day</span><strong>{{ profileData.metrics.peakVisitDay }}</strong><small>{{ profileData.metrics.peakVisitTime }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/client-since"><span>Client since</span><strong>{{ profileData.metrics.firstVisitDate | date: 'MMM yyyy' }}</strong><small>{{ profileData.metrics.visitCount }} total visits</small></aura-kpi-card>
 
-  <aura-kpi-card tone="blue" target="/kpi-details/customer-360/top-3-services"><span>Top 3 services</span><strong>{{ profileData.metrics.topServices[0] || '—' }}</strong><small>{{ profileData.metrics.topServices[1] || '' }}{{ profileData.metrics.topServices[2] ? ' · ' + profileData.metrics.topServices[2] : '' }}</small></aura-kpi-card>
-  <aura-kpi-card tone="orange" target="/kpi-details/customer-360/never-tried"><span>Never tried ⚡</span><strong>{{ profileData.metrics.untriedServices[0] || 'All tried!' }}</strong><small>{{ profileData.metrics.untriedServices.length > 1 ? (profileData.metrics.untriedServices.length - 1) + ' more upsell opps' : 'Upsell opportunity' }}</small></aura-kpi-card>
-  <aura-kpi-card tone="pink" target="/kpi-details/customer-360/last-product"><span>Last product</span><strong>{{ profileData.metrics.lastProductPurchased || 'None' }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="violet" target="/kpi-details/customer-360/colour-history"><span>Colour history</span><strong>{{ profileData.metrics.colorHistory[0] || 'No colour services' }}</strong><small>{{ profileData.metrics.colorHistory.length > 1 ? profileData.metrics.colorHistory.slice(1, 3).join(' → ') : 'First on record' }}</small></aura-kpi-card>
-  <aura-kpi-card [tone]="{ 'green': profileData.metrics.allergyStatus === 'Clear', 'red': profileData.metrics.allergyStatus === 'Flagged', 'amber': profileData.metrics.allergyStatus === 'Not Tested' }" target="/kpi-details/customer-360/allergy-status"><span>Allergy status</span><strong>{{ profileData.metrics.allergyStatus }}</strong><small>Patch: {{ profileData.metrics.patchTestDate ? (profileData.metrics.patchTestDate | date: 'mediumDate') : 'Never done' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/top-3-services"><span>Top 3 services</span><strong>{{ profileData.metrics.topServices[0] || '—' }}</strong><small>{{ profileData.metrics.topServices[1] || '' }}{{ profileData.metrics.topServices[2] ? ' · ' + profileData.metrics.topServices[2] : '' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/never-tried"><span>Never tried ⚡</span><strong>{{ profileData.metrics.untriedServices[0] || 'All tried!' }}</strong><small>{{ profileData.metrics.untriedServices.length > 1 ? (profileData.metrics.untriedServices.length - 1) + ' more upsell opps' : 'Upsell opportunity' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/last-product"><span>Last product</span><strong>{{ profileData.metrics.lastProductPurchased || 'None' }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/colour-history"><span>Colour history</span><strong>{{ profileData.metrics.colorHistory[0] || 'No colour services' }}</strong><small>{{ profileData.metrics.colorHistory.length > 1 ? profileData.metrics.colorHistory.slice(1, 3).join(' → ') : 'First on record' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/allergy-status"><span>Allergy status</span><strong>{{ profileData.metrics.allergyStatus }}</strong><small>Patch: {{ profileData.metrics.patchTestDate ? (profileData.metrics.patchTestDate | date: 'mediumDate') : 'Never done' }}</small></aura-kpi-card>
 
-  <aura-kpi-card tone="green" target="/kpi-details/customer-360/referrals-given"><span>Referrals given</span><strong>{{ profileData.metrics.referralCount }}</strong></aura-kpi-card>
-  <aura-kpi-card tone="gold" target="/kpi-details/customer-360/review-score"><span>Review score</span><strong>{{ profileData.metrics.reviewScore !== null ? (profileData.metrics.reviewScore | number: '1.1-1') + ' ★' : 'No review' }}</strong><small>{{ profileData.metrics.reviewCount }} reviews submitted</small></aura-kpi-card>
-  <aura-kpi-card tone="cyan" target="/kpi-details/customer-360/campaign-opens"><span>Campaign opens</span><strong>{{ profileData.metrics.campaignOpenRate | number: '1.0-0' }}%</strong><small>Last: {{ profileData.metrics.lastCampaignOpened || 'None' }}</small></aura-kpi-card>
-  <aura-kpi-card tone="pink" target="/kpi-details/customer-360/birthday"><span>Birthday @if (profileData.metrics.daysUntilBirthday !== null && profileData.metrics.daysUntilBirthday <= 7) {<span class="badge-alert">{{ profileData.metrics.daysUntilBirthday === 0 ? '🎂 Today!' : 'in ' + profileData.metrics.daysUntilBirthday + 'd' }}</span>}</span><strong>{{ profileData.metrics.birthday | date: 'd MMM' }}</strong><small>{{ profileData.metrics.anniversary ? 'Anniv: ' + (profileData.metrics.anniversary | date: 'd MMM') : 'No anniversary' }}</small></aura-kpi-card>
-  <aura-kpi-card tone="indigo" target="/kpi-details/customer-360/prefers"><span>Prefers</span><strong>{{ profileData.metrics.communicationPreference }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/referrals-given"><span>Referrals given</span><strong>{{ profileData.metrics.referralCount }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/review-score"><span>Review score</span><strong>{{ profileData.metrics.reviewScore !== null ? (profileData.metrics.reviewScore | number: '1.1-1') + ' ★' : 'No review' }}</strong><small>{{ profileData.metrics.reviewCount }} reviews submitted</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/campaign-opens"><span>Campaign opens</span><strong>{{ profileData.metrics.campaignOpenRate | number: '1.0-0' }}%</strong><small>Last: {{ profileData.metrics.lastCampaignOpened || 'None' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/birthday"><span>Birthday @if (profileData.metrics.daysUntilBirthday !== null && profileData.metrics.daysUntilBirthday <= 7) {<span class="badge-alert">{{ profileData.metrics.daysUntilBirthday === 0 ? '🎂 Today!' : 'in ' + profileData.metrics.daysUntilBirthday + 'd' }}</span>}</span><strong>{{ profileData.metrics.birthday | date: 'd MMM' }}</strong><small>{{ profileData.metrics.anniversary ? 'Anniv: ' + (profileData.metrics.anniversary | date: 'd MMM') : 'No anniversary' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/prefers"><span>Prefers</span><strong>{{ profileData.metrics.communicationPreference }}</strong></aura-kpi-card>
 
-  <aura-kpi-card [tone]="{ 'green': profileData.metrics.churnRiskScore === 'Low', 'amber': profileData.metrics.churnRiskScore === 'Medium', 'red': profileData.metrics.churnRiskScore === 'High' || profileData.metrics.churnRiskScore === 'Critical' }" target="/kpi-details/customer-360/churn-risk"><span>Churn risk</span><strong>{{ profileData.metrics.churnRiskScore }}</strong><small><span class="risk-bar"><span class="risk-fill" [style.width.%]="profileData.metrics.churnRiskPercent"></span></span> {{ profileData.metrics.churnRiskPercent }}% score</small></aura-kpi-card>
-  <aura-kpi-card tone="blue" target="/kpi-details/customer-360/sentiment"><span>Sentiment</span><strong>{{ profileData.metrics.sentimentScore }}/100</strong><small>{{ profileData.metrics.sentimentScore >= 80 ? '😊 Positive' : profileData.metrics.sentimentScore >= 50 ? '😐 Neutral' : '😟 Negative' }}</small></aura-kpi-card>
-  <aura-kpi-card tone="red" target="/kpi-details/customer-360/complaints"><span>Complaints</span><strong>{{ profileData.metrics.complaintCount }}</strong><small>{{ profileData.metrics.lastComplaintDate ? 'Last: ' + (profileData.metrics.lastComplaintDate | date: 'mediumDate') : 'No complaints' }}</small></aura-kpi-card>
-  <aura-kpi-card [tone]="{ 'green': profileData.metrics.winBackStatus === 'Active', 'teal': profileData.metrics.winBackStatus === 'Recovering', 'amber': profileData.metrics.winBackStatus === 'Lapsed', 'red': profileData.metrics.winBackStatus === 'Churned' }" target="/kpi-details/customer-360/client-status"><span>Client status</span><strong>{{ profileData.metrics.winBackStatus }}</strong></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/churn-risk"><span>Churn risk</span><strong>{{ profileData.metrics.churnRiskScore }}</strong><small><span class="risk-bar"><span class="risk-fill" [style.width.%]="profileData.metrics.churnRiskPercent"></span></span> {{ profileData.metrics.churnRiskPercent }}% score</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/sentiment"><span>Sentiment</span><strong>{{ profileData.metrics.sentimentScore }}/100</strong><small>{{ profileData.metrics.sentimentScore >= 80 ? '😊 Positive' : profileData.metrics.sentimentScore >= 50 ? '😐 Neutral' : '😟 Negative' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/complaints"><span>Complaints</span><strong>{{ profileData.metrics.complaintCount }}</strong><small>{{ profileData.metrics.lastComplaintDate ? 'Last: ' + (profileData.metrics.lastComplaintDate | date: 'mediumDate') : 'No complaints' }}</small></aura-kpi-card>
+  <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/client-status"><span>Client status</span><strong>{{ profileData.metrics.winBackStatus }}</strong></aura-kpi-card>
 
   @if (profileData.metrics.aiInsightSummary) {
-    <aura-kpi-card tone="metric-card--ai-insight" target="/kpi-details/customer-360/ai-insight"><span>✨ AI Insight</span><strong class="ai-insight-text">{{ profileData.metrics.aiInsightSummary }}</strong></aura-kpi-card>
+    <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/ai-insight"><span>✨ AI Insight</span><strong class="ai-insight-text">{{ profileData.metrics.aiInsightSummary }}</strong></aura-kpi-card>
   }
 </div>
 
@@ -267,9 +267,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       gap: 12px;
       margin: 0 0 6px;
       padding: 12px;
-      border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--line));
+      border: 1px solid #4B1238;
       border-radius: var(--radius-md);
-      background: color-mix(in srgb, var(--surface) 95%, var(--teal));
+      background: #F8EEF4;
     }
 
     .duplicate-panel-actions {
@@ -316,8 +316,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     }
 
     .duplicate-group.active {
-      border-color: color-mix(in srgb, var(--teal) 54%, var(--line));
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--teal) 12%, transparent);
+      border-color: #4B1238;
+      box-shadow: 0 0 0 2px color-mix(in srgb, #4B1238 12%, transparent);
     }
 
     .duplicate-client-options {
@@ -340,8 +340,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
     }
 
     .duplicate-client-option.primary {
-      border-color: color-mix(in srgb, var(--green) 56%, var(--line));
-      background: color-mix(in srgb, var(--surface) 88%, var(--green));
+      border-color: #4B1238;
+      background: #F8EEF4;
     }
 
     .duplicate-client-option > span:nth-child(2) {
@@ -361,7 +361,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
     .duplicate-message {
       margin: 0;
-      color: var(--teal);
+      color: #4B1238;
       font-weight: 850;
     }
 

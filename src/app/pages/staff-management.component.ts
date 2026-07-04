@@ -71,30 +71,30 @@ type StaffDirectoryRow = ApiRecord & {
         </section>
 
         <div class="metrics-grid staff-metrics-grid">
-          <aura-kpi-card tone="teal" target="/kpi-details/staff/total-revenue">
+          <aura-kpi-card tone="neutral" target="/kpi-details/staff/total-revenue">
             <span>Total revenue</span>
             <strong>{{ summary.metrics.totalRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <small>{{ summary.metrics.staffCount }} active staff</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="amber" target="/kpi-details/staff/commission">
+          <aura-kpi-card tone="neutral" target="/kpi-details/staff/commission">
             <span>Commission</span>
             <strong>{{ summary.metrics.totalCommission | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <small>{{ summary.commission.entries.length }} commission lines</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="green" target="/kpi-details/staff/incentives">
+          <aura-kpi-card tone="neutral" target="/kpi-details/staff/incentives">
             <span>Incentives</span>
             <strong>{{ summary.metrics.totalIncentives | currency: 'INR':'symbol':'1.0-0' }}</strong>
           </aura-kpi-card>
-          <aura-kpi-card tone="blue" target="/kpi-details/staff/average-score">
+          <aura-kpi-card tone="neutral" target="/kpi-details/staff/average-score">
             <span>Average score</span>
             <strong>{{ summary.metrics.averageScore | number: '1.0-1' }}</strong>
           </aura-kpi-card>
-          <aura-kpi-card tone="violet" target="/kpi-details/staff/present-days">
+          <aura-kpi-card tone="neutral" target="/kpi-details/staff/present-days">
             <span>Present days</span>
             <strong>{{ summary.attendance.presentDays }}</strong>
             <small>{{ summary.attendance.overtimeMinutes }} overtime minutes</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="rose" target="/kpi-details/staff/planned-shifts">
+          <aura-kpi-card tone="neutral" target="/kpi-details/staff/planned-shifts">
             <span>Planned shifts</span>
             <strong>{{ summary.metrics.scheduledShifts }}</strong>
           </aura-kpi-card>

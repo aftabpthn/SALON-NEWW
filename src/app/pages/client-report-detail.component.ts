@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -166,9 +166,9 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
             <span>Revenue</span>
             <select [(ngModel)]="revenueFilters.revenueBucket">
               <option value="all">All revenue</option>
-              <option value="0-1000">Up to ₹1,000</option>
-              <option value="1000-10000">₹1,000 - ₹10,000</option>
-              <option value="10000+">₹10,000+</option>
+              <option value="0-1000">Up to â‚¹1,000</option>
+              <option value="1000-10000">â‚¹1,000 - â‚¹10,000</option>
+              <option value="10000+">â‚¹10,000+</option>
             </select>
           </label>
           <label>
@@ -312,16 +312,16 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
       padding: 24px;
       border-left: 5px solid #55173D;
       background:
-        radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--accent, #55173D) 18%, transparent), transparent 34%),
-        linear-gradient(135deg, color-mix(in srgb, var(--accent, #55173D) 8%, white), var(--surface));
+        radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--accent, #7a6c66) 18%, transparent), transparent 34%),
+        linear-gradient(135deg, color-mix(in srgb, var(--accent, #7a6c66) 8%, white), var(--surface));
     }
 
-    .report-hero.blue { --accent: #2f5dcc; }
+    .report-hero.blue { --accent: #4B1238; }
     .report-hero.teal { --accent: #55173D; }
     .report-hero.red { --accent: #b91c1c; }
-    .report-hero.green { --accent: #1f7a3d; }
-    .report-hero.amber { --accent: #b87810; }
-    .report-hero.violet { --accent: #6d4bd8; }
+    .report-hero.green { --accent: #4B1238; }
+    .report-hero.amber { --accent: #4B1238; }
+    .report-hero.violet { --accent: #4B1238; }
 
     .report-hero h1 {
       margin: 4px 0 6px;
@@ -765,3 +765,4 @@ export class ClientReportDetailComponent implements OnInit, OnDestroy {
     };
   }
 }
+

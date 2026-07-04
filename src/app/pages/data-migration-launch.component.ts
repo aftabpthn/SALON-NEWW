@@ -120,7 +120,7 @@ import { DataMigrationStore } from './data-migration.store';
   styles: [`
     :host { display: block; }
     .migration-shell { display: grid; gap: 14px; padding: 16px; color: #172033; }
-    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
+    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #faf8f6, #ffffff 62%, #f0ece9); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
     .command-header h1 { margin: 4px 0; font-size: 22px; line-height: 1.1; letter-spacing: -0.01em; }
     .command-header p { margin: 0; max-width: 800px; color: #64748b; font-size: 13px; line-height: 1.45; }
     .back-btn { background: none; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: #4f46e5; margin-bottom: 8px; }
@@ -144,12 +144,12 @@ import { DataMigrationStore } from './data-migration.store';
     .step-body strong { font-size: 13px; }
     .step-body small { font-size: 11px; color: #64748b; }
     .status-pill { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
-    .status-pill.good { background: #F1E8EE; color: #4B1238; }
+    .status-pill.good { background: #f5f2ef; color: #4B1238; }
     .status-pill.active { background: #eff6ff; color: #1d4ed8; }
     .status-pill.blocked { background: #fef2f2; color: #b91c1c; }
     .risk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
     .risk-card { border-color: #e2e8f0; }
-    .risk-card.good { border-color: #F1E8EE; }
+    .risk-card.good { border-color: #f5f2ef; }
     .risk-card.warning { border-color: #fffbeb; background: #fffbeb; }
     .risk-card.danger { border-color: #fef2f2; background: #fef2f2; }
     .risk-card strong { font-size: 24px; }
@@ -169,7 +169,7 @@ import { DataMigrationStore } from './data-migration.store';
     @keyframes spin { to { transform: rotate(360deg); } }
     .message { padding: 12px 16px; border-radius: 10px; font-weight: 700; font-size: 13px; }
     .message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .message.success { background: #F1E8EE; color: #4B1238; border: 1px solid #DCC4D4; }
+    .message.success { background: #f5f2ef; color: #4B1238; border: 1px solid #DCC4D4; }
     .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
     @media (max-width: 760px) { .migration-shell { padding: 10px; } .command-header { grid-template-columns: 1fr; } }
   `]

@@ -39,7 +39,7 @@
       <strong>{{ formatMoney(position.ourEffectivePricePaise) }}</strong>
       <small>{{ position.baseDiscountPercent }}% current discount</small>
     </article>
-    <article class="metric-card" [class.warning]="position.position === 'above_market'" [class.good]="position.position === 'at_market'">
+    <article class="metric-card">
       <span>Position</span>
       <strong>{{ positionLabel(position.position) }}</strong>
       <small>{{ formatGap(position.priceGapPercent) }} vs market average</small>

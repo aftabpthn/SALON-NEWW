@@ -302,7 +302,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     :host {
       display: block;
       width: 100%;
-      max-width: calc(100vw - 104px);
+      max-width: 100%;
       min-width: 0;
       overflow-x: hidden;
       box-sizing: border-box;
@@ -310,8 +310,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
     .page-stack {
       --client-edge-safe: clamp(14px, 1.6vw, 28px);
-      width: min(100%, calc(100vw - 118px));
-      max-width: calc(100vw - 118px);
+      width: 100%;
+      max-width: 100%;
       min-width: 0;
       padding-inline-end: var(--client-edge-safe);
       box-sizing: border-box;

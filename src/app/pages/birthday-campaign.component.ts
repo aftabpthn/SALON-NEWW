@@ -131,7 +131,7 @@ type Channel = 'whatsapp' | 'sms';
     textarea { resize: vertical; font-family: inherit; line-height: 1.5; }
     button { min-height: 40px; border: 1px solid #cfe0dc; border-radius: 8px; padding: 0 14px; background: #fff; color: #172033; font-weight: 900; cursor: pointer; }
     button:disabled { opacity: .55; cursor: not-allowed; }
-    .primary-button { background: #5A153F; border-color: #5A153F; color: #fff; }
+    .primary-button { background: #5A153F; border-color: #E7DDD6; color: #fff; }
     .secondary-button { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
     .ghost-button { background: #fff; }
     .metric-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
@@ -146,9 +146,9 @@ type Channel = 'whatsapp' | 'sms';
     .panel-head.compact { margin-bottom: 8px; }
     .client-list, .detail-stack, .suggestion-grid article { display: grid; gap: 8px; }
     .filter-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
-    .filter-row button.active { background: #5A153F; border-color: #5A153F; color: #fff; }
+    .filter-row button.active { background: #5A153F; border-color: #E7DDD6; color: #fff; }
     .client-list button { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 70px; text-align: left; }
-    .client-list button.active, .suggestion.active { background: linear-gradient(135deg, #F1E8EE, #eef4ff); border-color: #5A153F; }
+    .client-list button.active, .suggestion.active { background: linear-gradient(135deg, #F8EEF4, #FAF8F6); border-color: #E7DDD6; }
     .avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 8px; background: #F1E8EE; color: #3D0F2C; font-weight: 950; }
     .client-list strong, .client-list small { display: block; }
     .client-list small { margin-top: 3px; color: #64748b; font-size: 12px; }

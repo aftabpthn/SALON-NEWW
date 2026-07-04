@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -259,7 +259,7 @@ type WalletLedgerRow = ApiRecord & {
           <div class="section-title">
             <div>
               <h3>Wallet / Ewallet Ledger</h3>
-              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · credit, debit, balance-after and abuse audit.</p>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· credit, debit, balance-after and abuse audit.</p>
             </div>
             <div class="hero-actions">
               <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!walletLedgerRows().length">Ledger CSV</button>
@@ -399,7 +399,7 @@ type WalletLedgerRow = ApiRecord & {
           <div class="section-title">
             <div>
               <h2>Sales and collection matrix</h2>
-              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ matrixColumns().length - 1 }} {{ periodMode === 'quarter' ? 'quarter(s)' : 'month(s)' }}</p>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· {{ matrixColumns().length - 1 }} {{ periodMode === 'quarter' ? 'quarter(s)' : 'month(s)' }}</p>
             </div>
             <div class="hero-actions">
               <span class="badge">{{ branchLabel() }}</span>
@@ -472,7 +472,7 @@ type WalletLedgerRow = ApiRecord & {
             <div class="section-title">
               <div>
                 <h2>{{ selectedPaymentReportTitle() }}</h2>
-                <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ paymentDistributionRows().length }} payment row(s)</p>
+                <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· {{ paymentDistributionRows().length }} payment row(s)</p>
               </div>
               <div class="payment-actions">
                 <label class="search-field">
@@ -529,7 +529,7 @@ type WalletLedgerRow = ApiRecord & {
           <div class="section-title daily-sheet-title">
             <div>
               <h2>Daily Sheet / EOD Financial Control</h2>
-              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · {{ branchLabel() }}</p>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· {{ branchLabel() }}</p>
             </div>
             <div class="hero-actions">
               <span class="badge">{{ dailySheetSummary().totalBills }} bill(s)</span>
@@ -626,7 +626,7 @@ type WalletLedgerRow = ApiRecord & {
           <div class="section-title daily-sheet-title">
             <div>
               <h2>Daily Revenue 10x Report</h2>
-              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · revenue, collection, due, discounts and owner alerts.</p>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· revenue, collection, due, discounts and owner alerts.</p>
             </div>
             <div class="hero-actions">
               <span class="badge">{{ dailyRevenueRows().length }} day(s)</span>
@@ -825,7 +825,7 @@ type WalletLedgerRow = ApiRecord & {
           <div class="section-title daily-sheet-title">
             <div>
               <h2>Member vs Non-Member Sales</h2>
-              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · compare revenue, visits, ROI and conversion opportunities.</p>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· compare revenue, visits, ROI and conversion opportunities.</p>
             </div>
             <div class="hero-actions">
               <span class="badge">{{ visibleMemberSalesRows().length }} client(s)</span>
@@ -978,7 +978,7 @@ type WalletLedgerRow = ApiRecord & {
           <div class="section-title daily-sheet-title sales-tax-title">
             <div>
               <h2>Sales Tax / GST 10x Report</h2>
-              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} · invoice tax register, rate breakup, service/product split and accounting checks.</p>
+              <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· invoice tax register, rate breakup, service/product split and accounting checks.</p>
             </div>
             <div class="hero-actions">
               <span class="badge">{{ salesTaxRows().length }} bill(s)</span>
@@ -1164,7 +1164,7 @@ type WalletLedgerRow = ApiRecord & {
 
     .report-tabs button.active {
       color: #fff;
-      background: var(--teal);
+      background: #4B1238;
       box-shadow: 0 8px 20px rgba(75, 18, 56, .18);
     }
 
@@ -1255,7 +1255,7 @@ type WalletLedgerRow = ApiRecord & {
       position: sticky;
       top: 0;
       z-index: 2;
-      background: #f8fafc;
+      background: #FAF8F6;
       color: var(--muted);
       font-size: 0.74rem;
       font-weight: 900;
@@ -1277,7 +1277,7 @@ type WalletLedgerRow = ApiRecord & {
 
     .row-head {
       z-index: 3;
-      background: #f8fafc;
+      background: #FAF8F6;
     }
 
     .right {
@@ -1293,7 +1293,7 @@ type WalletLedgerRow = ApiRecord & {
     }
 
     .section-row td {
-      background: #f8fafc;
+      background: #FAF8F6;
       color: #4b627d;
       font-size: 1rem;
       text-transform: uppercase;
@@ -1345,13 +1345,13 @@ type WalletLedgerRow = ApiRecord & {
 
     .payment-card-strip button:hover,
     .payment-card-strip button.active {
-      border-color: var(--brand);
+      border-color: #4B1238;
       box-shadow: 0 12px 26px rgba(16, 185, 129, 0.16);
       transform: translateY(-1px);
     }
 
     .payment-card-strip button.active {
-      background: #f0fdf4;
+      background: #F8EEF4;
     }
 
     .payment-card-strip strong {
@@ -1436,7 +1436,7 @@ type WalletLedgerRow = ApiRecord & {
       padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid rgba(75, 18, 56, .22);
-      color: var(--teal);
+      color: #4B1238;
       background: rgba(75, 18, 56, .08);
       font-weight: 900;
       text-decoration: none;
@@ -1477,7 +1477,7 @@ type WalletLedgerRow = ApiRecord & {
       align-content: center;
       padding: 14px;
       border: 1px solid var(--line);
-      border-top: 4px solid var(--teal);
+      border-top: 4px solid #4B1238;
       border-radius: var(--radius-md);
       background: #fff;
       box-shadow: var(--shadow-sm);
@@ -1644,7 +1644,7 @@ type WalletLedgerRow = ApiRecord & {
       position: sticky;
       top: 0;
       z-index: 1;
-      background: #f8fafc;
+      background: #FAF8F6;
       color: var(--muted);
       font-size: .72rem;
       font-weight: 900;
@@ -1664,7 +1664,7 @@ type WalletLedgerRow = ApiRecord & {
 
     .member-table-wrap th:first-child {
       z-index: 3;
-      background: #f8fafc;
+      background: #FAF8F6;
     }
 
     .member-conversion-table {
@@ -1702,7 +1702,7 @@ type WalletLedgerRow = ApiRecord & {
       padding: 10px;
       border: 1px solid var(--line);
       border-radius: var(--radius-md);
-      background: linear-gradient(180deg, #f8fbff, #fff);
+      background: linear-gradient(180deg, #f8f5f2, #fff);
     }
 
     .sparkline-bars span {
@@ -1762,7 +1762,7 @@ type WalletLedgerRow = ApiRecord & {
     }
 
     .upi-stack {
-      background: #2563eb;
+      background: #4B1238;
     }
 
     .card-stack {
@@ -1880,7 +1880,7 @@ type WalletLedgerRow = ApiRecord & {
 
     .drilldown-row td {
       position: static;
-      background: #f8fafc !important;
+      background: #FAF8F6 !important;
     }
 
     .sr-only {
@@ -2639,8 +2639,8 @@ export class FinancialSummaryReportComponent implements OnInit {
     const value = [
       { label: 'High discount day', value: highDiscount ? `${this.dailyDiscountRate(highDiscount).toFixed(1)}%` : '0%', detail: highDiscount ? highDiscount.dateLabel : 'No discount risk', tone: highDiscount && this.dailyDiscountRate(highDiscount) >= 20 ? 'danger' : 'normal' },
       { label: 'Low collection day', value: lowCollection ? `${this.dailyCollectionRate(lowCollection).toFixed(1)}%` : '100%', detail: lowCollection ? lowCollection.dateLabel : 'No low collection day', tone: lowCollection && this.dailyCollectionRate(lowCollection) < 80 ? 'warn' : 'normal' },
-      { label: 'Expenses high day', value: highExpense ? this.formatMoney(highExpense.expenses) : '₹0', detail: highExpense ? highExpense.dateLabel : 'No expenses', tone: highExpense && totals.netSale && highExpense.expenses / totals.netSale > 0.12 ? 'warn' : 'normal' },
-      { label: 'Due unusually high', value: highDue ? this.formatMoney(highDue.pendingDueAmount) : '₹0', detail: highDue ? highDue.dateLabel : 'No due risk', tone: highDue && highDue.pendingDueAmount > highDue.receivedAmount * 0.2 ? 'danger' : 'normal' },
+      { label: 'Expenses high day', value: highExpense ? this.formatMoney(highExpense.expenses) : 'â‚¹0', detail: highExpense ? highExpense.dateLabel : 'No expenses', tone: highExpense && totals.netSale && highExpense.expenses / totals.netSale > 0.12 ? 'warn' : 'normal' },
+      { label: 'Due unusually high', value: highDue ? this.formatMoney(highDue.pendingDueAmount) : 'â‚¹0', detail: highDue ? highDue.dateLabel : 'No due risk', tone: highDue && highDue.pendingDueAmount > highDue.receivedAmount * 0.2 ? 'danger' : 'normal' },
       { label: 'Product sale low', value: lowProduct ? 'No product sale' : this.formatMoney(totals.productSale), detail: lowProduct ? lowProduct.dateLabel : 'Product revenue present', tone: lowProduct ? 'warn' : 'normal' },
       { label: 'Cash mismatch with drawer', value: this.formatMoney(cashMismatch), detail: cashMismatch ? 'Drawer variance linked' : 'No cash mismatch signal', tone: cashMismatch ? 'danger' : 'normal' },
       { label: 'GST mismatch risk', value: String(gstRisk.length), detail: gstRisk.length ? 'Revenue days without GST signal' : 'GST signal present', tone: gstRisk.length ? 'warn' : 'normal' }
@@ -2694,8 +2694,8 @@ export class FinancialSummaryReportComponent implements OnInit {
       serviceSummary: this.mapSummary(serviceMap),
       topMode: topMode?.[0] || '',
       paymentModeSummary: this.mapSummary(modeMap),
-      dueSummary: `${dueInvoices.length} pending · ${this.formatMoney(dueInvoices.reduce((sum, invoice) => sum + this.invoiceBalance(invoice), 0))}`,
-      recoveredSummary: `${recovered.length} recovered payment(s) · ${this.formatMoney(recovered.reduce((sum, payment) => sum + this.paymentAmount(payment), 0))}`,
+      dueSummary: `${dueInvoices.length} pending Â· ${this.formatMoney(dueInvoices.reduce((sum, invoice) => sum + this.invoiceBalance(invoice), 0))}`,
+      recoveredSummary: `${recovered.length} recovered payment(s) Â· ${this.formatMoney(recovered.reduce((sum, payment) => sum + this.paymentAmount(payment), 0))}`,
       highDiscountCount: highDiscounts.length,
       highDiscountInvoices: highDiscounts.slice(0, 8).map((invoice) => invoice['invoiceNumber'] || invoice['invoice_number'] || invoice['number'] || invoice['id']).filter(Boolean).join(', '),
       auditCount: audit.length,
@@ -2863,10 +2863,10 @@ export class FinancialSummaryReportComponent implements OnInit {
     const expiredVisitor = rows.find((row) => row.isExpiredMember);
     const lowConversionStaff = this.memberStaffImpactRows().find((row) => Number(row['nonMemberSales'] || 0) > Number(row['memberSales'] || 0) * 2);
     return [
-      { label: 'High value non-member', value: highValueNonMember ? this.formatMoney(highValueNonMember.totalSale) : '₹0', detail: highValueNonMember?.clientName || 'No high value non-member', tone: highValueNonMember && highValueNonMember.totalSale >= 5000 ? 'warn' : 'normal' },
+      { label: 'High value non-member', value: highValueNonMember ? this.formatMoney(highValueNonMember.totalSale) : 'â‚¹0', detail: highValueNonMember?.clientName || 'No high value non-member', tone: highValueNonMember && highValueNonMember.totalSale >= 5000 ? 'warn' : 'normal' },
       { label: 'Repeat non-member not converted', value: repeatNonMember ? `${repeatNonMember.totalVisits} visits` : '0', detail: repeatNonMember?.clientName || 'No repeat non-member risk', tone: repeatNonMember ? 'warn' : 'normal' },
-      { label: 'Member using high discount', value: highDiscountMember ? this.formatMoney(highDiscountMember.discountUsed) : '₹0', detail: highDiscountMember?.clientName || 'No benefit abuse signal', tone: highDiscountMember ? 'danger' : 'normal' },
-      { label: 'Member pending due', value: memberDue ? this.formatMoney(memberDue.pendingAmount) : '₹0', detail: memberDue?.clientName || 'No member due', tone: memberDue ? 'danger' : 'normal' },
+      { label: 'Member using high discount', value: highDiscountMember ? this.formatMoney(highDiscountMember.discountUsed) : 'â‚¹0', detail: highDiscountMember?.clientName || 'No benefit abuse signal', tone: highDiscountMember ? 'danger' : 'normal' },
+      { label: 'Member pending due', value: memberDue ? this.formatMoney(memberDue.pendingAmount) : 'â‚¹0', detail: memberDue?.clientName || 'No member due', tone: memberDue ? 'danger' : 'normal' },
       { label: 'Expired member still visiting', value: expiredVisitor ? expiredVisitor.clientName : '0', detail: expiredVisitor ? 'Renewal opportunity' : 'No expired visitor', tone: expiredVisitor ? 'warn' : 'normal' },
       { label: 'Staff with low membership conversion', value: String(lowConversionStaff?.['staffName'] || 'Clear'), detail: lowConversionStaff ? 'Non-member sales much higher than member sales' : 'No staff conversion risk', tone: lowConversionStaff ? 'warn' : 'normal' }
     ];
@@ -3816,7 +3816,7 @@ export class FinancialSummaryReportComponent implements OnInit {
   }
 
   formatMoney(value: number): string {
-    return `₹${this.money(value).toLocaleString('en-IN')}`;
+    return `â‚¹${this.money(value).toLocaleString('en-IN')}`;
   }
 
   private safeList(resource: string, params: ApiRecord = {}) {
@@ -4341,3 +4341,4 @@ export class FinancialSummaryReportComponent implements OnInit {
     return date.toISOString().slice(0, 10);
   }
 }
+

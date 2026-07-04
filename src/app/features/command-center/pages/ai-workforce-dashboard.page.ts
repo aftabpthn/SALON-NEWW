@@ -262,7 +262,7 @@ interface PolicyRow {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <section class="page-stack">
+    <section class="page-stack ai-workforce-page">
       <div class="greeting">
         <div class="greeting-copy">
           <span class="greeting-eyebrow">Command center</span>
@@ -295,7 +295,7 @@ interface PolicyRow {
 
       <section *ngIf="activeTab() === 'overview'" class="ai-tab-panel">
         <div class="ai-metrics-grid">
-          <article *ngFor="let metric of overviewMetrics()" class="metric-card" [ngClass]="metric.tone">
+          <article *ngFor="let metric of overviewMetrics()" class="metric-card">
             <span>{{ metric.label }}</span>
             <strong>{{ metric.value }}</strong>
             <small>{{ metric.caption }}</small>
@@ -311,7 +311,7 @@ interface PolicyRow {
           </div>
 
           <div class="executive-brief-grid">
-            <div class="executive-score-card">
+            <div class="executive-score-card neutral-surface" style="background: #fff !important; background-image: none !important;">
               <span>Overall readiness</span>
               <strong>{{ executiveReadinessScore() }}%</strong>
               <small>{{ executiveSummaryLine() }}</small>
@@ -1446,7 +1446,7 @@ interface PolicyRow {
       display: flex;
       flex-direction: column;
       gap: 20px;
-      background: #f8f5f2;
+      background: #FAF8F6;
       min-height: 100vh;
     }
 
@@ -1467,7 +1467,7 @@ interface PolicyRow {
       text-transform: uppercase; color: #8f5c54; font-weight: 600;
     }
     .greeting-copy p {
-      font-size: 13px; line-height: 1.45; color: #7a6c66; margin: 2px 0 0;
+      font-size: 13px; line-height: 1.45; color: #6F778A; margin: 2px 0 0;
     }
     .greeting-actions { display: flex; gap: 8px; }
 
@@ -1475,12 +1475,12 @@ interface PolicyRow {
     .btn-ghost {
       display: inline-flex; align-items: center;
       height: 30px; padding: 0 12px; border-radius: 6px;
-      font-size: 12px; font-weight: 500; color: #7a6c66;
-      background: #fff; border: 1px solid #e8e2dc;
+      font-size: 12px; font-weight: 500; color: #6F778A;
+      background: #fff; border: 1px solid #E7DDD6;
       text-decoration: none; cursor: pointer;
       transition: background .15s, border-color .15s;
     }
-    .btn-ghost:hover { background: #f5f2ef; border-color: #d5cec7; color: #2b2220; }
+    .btn-ghost:hover { background: #F8EEF4; border-color: #E7DDD6; color: #4B1238; }
     .btn-ghost.mini { height: 26px; padding: 0 10px; font-size: 11px; }
     .btn-primary {
       display: inline-flex; align-items: center;
@@ -1502,7 +1502,7 @@ interface PolicyRow {
       flex-wrap: wrap;
       gap: 4px;
       padding: 4px;
-      background: #f5f2ef;
+      background: #F8EEF4;
       border-radius: 10px;
     }
 
@@ -1514,14 +1514,14 @@ interface PolicyRow {
       padding: 0 14px;
       border: 0;
       border-radius: 8px;
-      color: #7a6c66;
+      color: #6F778A;
       background: transparent;
       font-weight: 500;
       font-size: 13px;
       cursor: pointer;
       transition: background .15s, color .15s;
     }
-    .ai-tabs button:hover { background: #ede8e3; color: #2b2220; }
+    .ai-tabs button:hover { background: #E7DDD6; color: #4B1238; }
 
     .ai-tabs button.active {
       color: #fff;
@@ -1534,8 +1534,8 @@ interface PolicyRow {
       display: grid;
       place-items: center;
       border-radius: 999px;
-      background: #ede8e3;
-      color: #7a6c66;
+      background: #F8EEF4;
+      color: #4B1238;
       font-size: 11px;
       font-weight: 600;
     }
@@ -1554,6 +1554,18 @@ interface PolicyRow {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 8px;
+    }
+
+    .ai-metrics-grid .metric-card,
+    .ai-metrics-grid .metric-card.neutral,
+    .ai-metrics-grid .metric-card.good,
+    .ai-metrics-grid .metric-card.warning,
+    .ai-metrics-grid .metric-card.critical {
+      background: #fff !important;
+      background-image: none !important;
+      border-color: #E7DDD6 !important;
+      border-left-color: #4B1238 !important;
+      box-shadow: 0 1px 2px rgba(75,18,56,.03) !important;
     }
 
     .ai-overview-grid {
@@ -1580,16 +1592,19 @@ interface PolicyRow {
       gap: 6px;
       align-content: start;
       padding: 16px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6 !important;
+      border-left: 3px solid #4B1238 !important;
       border-radius: 8px;
-      background: #fff;
+      background: #fff !important;
+      background-image: none !important;
+      box-shadow: 0 1px 2px rgba(75,18,56,.03) !important;
     }
 
     .executive-score-card span {
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: .05em;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -1602,7 +1617,7 @@ interface PolicyRow {
 
     .executive-score-card small {
       font-size: 12px;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.35;
     }
 
@@ -1614,7 +1629,7 @@ interface PolicyRow {
 
     .executive-snapshot-grid span {
       padding: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -1623,7 +1638,7 @@ interface PolicyRow {
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: .05em;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -1643,10 +1658,10 @@ interface PolicyRow {
 
     .executive-action-list article {
       padding: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
-      border-left: 3px solid #e8e2dc;
+      border-left: 3px solid #E7DDD6;
     }
 
     .executive-action-list article.good,
@@ -1659,7 +1674,7 @@ interface PolicyRow {
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: .05em;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -1675,7 +1690,7 @@ interface PolicyRow {
     .executive-action-list span {
       display: block;
       font-size: 12px;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.35;
     }
 
@@ -1692,14 +1707,14 @@ interface PolicyRow {
 
     .control-strip article {
       padding: 12px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
 
     .control-strip span {
       display: block;
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
@@ -1716,9 +1731,9 @@ interface PolicyRow {
 
     .control-table-wrap {
       overflow-x: auto;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
-      background: #ffffff;
+      background: #fff;
     }
 
     .control-table {
@@ -1730,13 +1745,13 @@ interface PolicyRow {
     .control-table th,
     .control-table td {
       padding: 8px 10px;
-      border-bottom: 1px solid #e8e2dc;
+      border-bottom: 1px solid #E7DDD6;
       text-align: left;
       vertical-align: middle;
     }
 
     .control-table th {
-      background: #f5f2ef;
+      background: #F8EEF4;
       position: sticky;
       top: 0;
       z-index: 1;
@@ -1744,7 +1759,7 @@ interface PolicyRow {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .04em;
-      color: #7a6c66;
+      color: #6F778A;
     }
 
     .control-table td { font-size: 13px; color: #2b2220; }
@@ -1755,7 +1770,7 @@ interface PolicyRow {
     }
 
     .control-table tbody tr { transition: background .12s; }
-    .control-table tbody tr:hover td { background: #faf8f6; }
+    .control-table tbody tr:hover td { background: #FAF8F6; }
 
     .score-pill {
       width: fit-content;
@@ -1766,17 +1781,17 @@ interface PolicyRow {
 
     .score-pill.good {
       color: #4B1238;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .score-pill.warning {
-      color: #7a6c66;
-      background: #f5f2ef;
+      color: #4B1238;
+      background: #F8EEF4;
     }
 
     .score-pill.danger {
-      color: #7a6c66;
-      background: #f5f2ef;
+      color: #4B1238;
+      background: #F8EEF4;
     }
 
     .agent-card {
@@ -1787,12 +1802,12 @@ interface PolicyRow {
       align-items: center;
       margin-top: 10px;
       padding: 13px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
       color: #2b2220;
       text-align: left;
-      box-shadow: 0 1px 2px rgba(0,0,0,.02);
+      box-shadow: 0 1px 2px rgba(75,18,56,.02);
     }
 
     .detail-grid,
@@ -1806,7 +1821,7 @@ interface PolicyRow {
     .agent-safety-card,
     .permission-row {
       padding: 13px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -1815,7 +1830,7 @@ interface PolicyRow {
     .agent-safety-card span,
     .permission-row span {
       display: block;
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 0.78rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -1840,7 +1855,7 @@ interface PolicyRow {
       height: 10px;
       overflow: hidden;
       border-radius: 999px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .progress-track i {
@@ -1877,7 +1892,7 @@ interface PolicyRow {
     .alert-card,
     .settings-card {
       padding: 14px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -1904,7 +1919,7 @@ interface PolicyRow {
 
     .incident-kpi-grid article {
       padding: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #f8f5f2;
     }
@@ -1915,7 +1930,7 @@ interface PolicyRow {
     .incident-evidence-grid small,
     .incident-evidence-list small,
     .incident-run-preview small {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -1945,23 +1960,23 @@ interface PolicyRow {
       gap: 6px;
       align-items: center;
       padding: 8px 10px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 500;
       font-size: 12px;
       cursor: pointer;
       transition: background .15s, border-color .15s, color .15s;
     }
     .alert-triage-strip button:hover {
-      background: #faf8f6;
-      border-color: #d5cec7;
+      background: #FAF8F6;
+      border-color: #4B1238;
     }
 
     .alert-triage-strip button.active {
       border-color: #4B1238;
-      background: #f5f2ef;
+      background: #F8EEF4;
       color: #4B1238;
     }
 
@@ -1992,21 +2007,21 @@ interface PolicyRow {
     .incident-card-meta span {
       padding: 7px 8px;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .incident-detail-panel {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
 
     .incident-detail-panel p {
       margin: 0;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.5;
     }
 
@@ -2022,7 +2037,7 @@ interface PolicyRow {
     .incident-run-preview {
       padding: 10px;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .incident-evidence-grid strong,
@@ -2049,7 +2064,7 @@ interface PolicyRow {
 
     .policy-kpi-grid article {
       padding: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #f8f5f2;
     }
@@ -2058,7 +2073,7 @@ interface PolicyRow {
     .policy-kpi-grid small,
     .policy-card-strip small,
     .policy-table td small {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -2077,7 +2092,7 @@ interface PolicyRow {
 
     .policy-table-wrap {
       overflow: auto;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -2091,13 +2106,13 @@ interface PolicyRow {
     .policy-table th,
     .policy-table td {
       padding: 11px;
-      border-bottom: 1px solid #e8e2dc;
+      border-bottom: 1px solid #E7DDD6;
       text-align: left;
       vertical-align: top;
     }
 
     .policy-table th {
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .policy-table td strong,
@@ -2113,7 +2128,7 @@ interface PolicyRow {
 
     .policy-card-strip span {
       padding: 10px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
     }
@@ -2132,11 +2147,11 @@ interface PolicyRow {
     }
 
     .approval-triage-strip button {
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
       padding: 8px 10px;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 500;
       font-size: 12px;
       text-align: left;
@@ -2144,19 +2159,19 @@ interface PolicyRow {
       transition: background .15s, border-color .15s, color .15s;
     }
     .approval-triage-strip button:hover {
-      background: #faf8f6;
-      border-color: #d5cec7;
+      background: #FAF8F6;
+      border-color: #4B1238;
     }
 
     .approval-triage-strip button.active {
       border-color: #4B1238;
-      background: #f5f2ef;
+      background: #F8EEF4;
       color: #4B1238;
     }
 
     .approval-triage-strip span {
       display: block;
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
@@ -2180,13 +2195,13 @@ interface PolicyRow {
 
     .decision-card.selected {
       border-color: rgba(75, 18, 56, 0.45);
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .approval-detail-panel {
       display: grid;
       gap: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
       padding: 14px;
@@ -2194,7 +2209,7 @@ interface PolicyRow {
 
     .approval-detail-panel p {
       margin: 0;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.5;
     }
 
@@ -2210,14 +2225,14 @@ interface PolicyRow {
 
     .approval-check-grid article,
     .approval-evidence {
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #f8f5f2;
       padding: 10px;
     }
 
     .approval-check-grid article {
-      border-left: 3px solid #e8e2dc;
+      border-left: 3px solid #E7DDD6;
     }
     .approval-check-grid article.warning,
     .approval-check-grid article.danger,
@@ -2232,7 +2247,7 @@ interface PolicyRow {
 
     .approval-check-grid span,
     .approval-evidence span {
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.45;
       word-break: break-word;
     }
@@ -2253,7 +2268,7 @@ interface PolicyRow {
     .decision-card p,
     .alert-card p {
       margin: 10px 0;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.5;
     }
 
@@ -2265,10 +2280,10 @@ interface PolicyRow {
 
     .decision-stats span {
       padding: 10px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 13px;
     }
 
@@ -2288,8 +2303,8 @@ interface PolicyRow {
     .action-chips span {
       padding: 5px 9px;
       border-radius: 999px;
-      background: #f0ece9;
-      color: #7a6c66;
+      background: #F8EEF4;
+      color: #4B1238;
       font-size: 11px;
       font-weight: 600;
     }
@@ -2303,7 +2318,7 @@ interface PolicyRow {
     }
 
     .ai-table-wrap tr.selected-row td {
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .run-console-grid {
@@ -2316,7 +2331,7 @@ interface PolicyRow {
     .run-console {
       display: grid;
       gap: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
       padding: 14px;
@@ -2330,14 +2345,14 @@ interface PolicyRow {
 
     .console-metrics article {
       padding: 10px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
     }
 
     .console-metrics span {
       display: block;
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 0.76rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -2362,13 +2377,13 @@ interface PolicyRow {
 
     .timeline-step p {
       margin: 5px 0 0;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.45;
       word-break: break-word;
     }
 
     .timeline-step small {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 700;
     }
 
@@ -2377,7 +2392,7 @@ interface PolicyRow {
       height: 12px;
       margin-top: 5px;
       border-radius: 999px;
-      background: #d5cec7;
+      background: #4B1238;
     }
 
     .step-dot.good,
@@ -2388,9 +2403,9 @@ interface PolicyRow {
     }
 
     .raw-json {
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
       padding: 10px;
     }
 
@@ -2456,7 +2471,7 @@ interface PolicyRow {
       display: grid;
       gap: 10px;
       padding: 13px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -2479,14 +2494,14 @@ interface PolicyRow {
       gap: 10px;
       align-items: center;
       padding: 10px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
     }
 
     .provider-health-score span,
     .provider-health-stats span {
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 0.78rem;
       font-weight: 600;
     }
@@ -2506,13 +2521,13 @@ interface PolicyRow {
 
     .provider-health-stats span {
       padding: 9px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
     }
 
     .provider-health-card small {
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.45;
     }
 
@@ -2530,8 +2545,8 @@ interface PolicyRow {
       margin-bottom: 5px;
       padding: 2px 7px;
       border-radius: 999px;
-      background: #f0ece9;
-      color: #7a6c66;
+      background: #F8EEF4;
+      color: #6F778A;
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
@@ -2540,7 +2555,7 @@ interface PolicyRow {
 
     .marketplace-card p {
       margin: 0;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.45;
     }
 
@@ -2558,9 +2573,9 @@ interface PolicyRow {
     .marketplace-kpi-grid article,
     .template-value-strip span {
       padding: 10px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .marketplace-kpi-grid span,
@@ -2569,7 +2584,7 @@ interface PolicyRow {
     .template-rollout-list small,
     .template-value-strip small,
     .marketplace-meta-row {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -2623,21 +2638,21 @@ interface PolicyRow {
     .marketplace-meta-row span {
       padding: 8px;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .marketplace-detail-panel {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
 
     .marketplace-detail-panel p {
       margin: 0;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.5;
     }
 
@@ -2660,7 +2675,7 @@ interface PolicyRow {
     .template-rollout-list article {
       padding: 10px;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .template-readiness-grid span.good {
@@ -2721,7 +2736,7 @@ interface PolicyRow {
     .prompt-compare small,
     .prompt-meta-grid small,
     .prompt-readiness-grid small {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -2729,7 +2744,7 @@ interface PolicyRow {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -2777,7 +2792,7 @@ interface PolicyRow {
     .prompt-compare div {
       padding: 10px;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
       min-width: 0;
     }
 
@@ -2815,14 +2830,14 @@ interface PolicyRow {
 
     .cost-grid div {
       padding: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #f8f5f2;
     }
 
     .cost-grid span {
       display: block;
-      color: #7a6c66;
+      color: #6F778A;
       font-size: 0.78rem;
       font-weight: 700;
     }
@@ -2838,7 +2853,7 @@ interface PolicyRow {
       gap: 10px;
       margin-bottom: 12px;
       padding: 12px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -2857,7 +2872,7 @@ interface PolicyRow {
     }
 
     .roi-health-strip small {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 500;
       font-size: 12px;
     }
@@ -2866,7 +2881,7 @@ interface PolicyRow {
       height: 9px;
       overflow: hidden;
       border-radius: 999px;
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .spend-meter span {
@@ -2885,7 +2900,7 @@ interface PolicyRow {
 
     .roi-table-wrap {
       overflow: auto;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -2899,19 +2914,19 @@ interface PolicyRow {
     .roi-table th,
     .roi-table td {
       padding: 11px;
-      border-bottom: 1px solid #e8e2dc;
+      border-bottom: 1px solid #E7DDD6;
       text-align: left;
       vertical-align: top;
     }
 
     .roi-table th {
-      background: #f5f2ef;
+      background: #F8EEF4;
     }
 
     .roi-table td small {
       display: block;
       margin-top: 2px;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 500;
       font-size: 11px;
     }
@@ -2920,7 +2935,7 @@ interface PolicyRow {
       display: grid;
       gap: 12px;
       padding: 13px;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
     }
@@ -2933,13 +2948,13 @@ interface PolicyRow {
 
     .roi-agent-stats span {
       padding: 10px;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 6px;
       background: #fff;
     }
 
     .roi-agent-stats small {
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 600;
     }
 
@@ -2957,7 +2972,7 @@ interface PolicyRow {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      color: #7a6c66;
+      color: #6F778A;
       font-weight: 700;
       white-space: nowrap;
     }
@@ -2978,7 +2993,7 @@ interface PolicyRow {
     .approval-line {
       padding: 10px 12px;
       border-radius: 6px;
-      background: #f5f2ef;
+      background: #F8EEF4;
       color: #8f5c54;
       font-weight: 600;
     }
@@ -2991,19 +3006,19 @@ interface PolicyRow {
     .roi-agent-panel,
     .run-console {
       background: #fff;
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 10px;
       padding: 20px 24px;
-      box-shadow: 0 1px 3px rgba(75,18,56,.04), 0 1px 2px rgba(0,0,0,.02);
+      box-shadow: 0 1px 3px rgba(75,18,56,.04), 0 1px 2px rgba(75,18,56,.02);
     }
 
     .ai-workforce-page .metric-card {
       padding: 14px 16px;
       background: #fff;
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       border-left: 3px solid #4B1238;
-      box-shadow: 0 1px 2px rgba(0,0,0,.03);
+      box-shadow: 0 1px 2px rgba(75,18,56,.03);
       display: flex;
       flex-direction: column;
       gap: 2px;
@@ -3012,13 +3027,13 @@ interface PolicyRow {
 
     .ai-workforce-page .metric-card:hover {
       box-shadow: 0 4px 12px rgba(75,18,56,.07);
-      border-color: #d5cec7;
+      border-color: #4B1238;
       transform: translateY(-1px);
     }
 
     .ai-workforce-page .metric-card span {
       font-size: 10px;
-      color: #8b7a74;
+      color: #6F778A;
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: .05em;
@@ -3033,7 +3048,7 @@ interface PolicyRow {
 
     .ai-workforce-page .metric-card small {
       font-size: 11px;
-      color: #7a6c66;
+      color: #6F778A;
       line-height: 1.3;
     }
 
@@ -3058,10 +3073,10 @@ interface PolicyRow {
     .detail-grid div,
     .agent-safety-card,
     .permission-row {
-      border: 1px solid #ede8e3;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
       background: #fff;
-      box-shadow: 0 1px 2px rgba(0,0,0,.02);
+      box-shadow: 0 1px 2px rgba(75,18,56,.02);
     }
 
     .agent-card,
@@ -3077,8 +3092,8 @@ interface PolicyRow {
     .decision-card.selected,
     .alert-card.selected,
     .ai-table-wrap tr.selected-row td {
-      border-color: #d5cec7;
-      background: #f5f2ef;
+      border-color: #4B1238;
+      background: #F8EEF4;
       box-shadow: inset 3px 0 0 #4B1238;
     }
 
@@ -3100,7 +3115,7 @@ interface PolicyRow {
     .agent-card small {
       display: block;
       margin-top: 4px;
-      font-size: 12px; color: #7a6c66; line-height: 1.4;
+      font-size: 12px; color: #6F778A; line-height: 1.4;
     }
 
     .agent-actions {
@@ -3122,16 +3137,16 @@ interface PolicyRow {
     .control-table-wrap,
     .policy-table-wrap,
     .roi-table-wrap {
-      border: 1px solid #e8e2dc;
+      border: 1px solid #E7DDD6;
       border-radius: 8px;
-      background: #ffffff;
+      background: #fff;
       overflow: auto;
     }
 
     .ai-table-wrap th,
     .policy-table th,
     .roi-table th {
-      background: #f5f2ef;
+      background: #F8EEF4;
       position: sticky;
       top: 0;
       z-index: 1;
@@ -3139,7 +3154,7 @@ interface PolicyRow {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .04em;
-      color: #7a6c66;
+      color: #6F778A;
       white-space: nowrap;
     }
 
@@ -3158,7 +3173,7 @@ interface PolicyRow {
     .ai-table-wrap tr:hover td,
     .policy-table tr:hover td,
     .roi-table tr:hover td {
-      background: #faf8f6;
+      background: #FAF8F6;
     }
 
     .ai-table-wrap th,
@@ -3174,13 +3189,13 @@ interface PolicyRow {
     .alert-triage-strip button {
       min-height: 38px;
       border-radius: 6px;
-      background: #ffffff;
+      background: #fff;
     }
 
     .approval-triage-strip button.active,
     .alert-triage-strip button.active {
       border-color: #4B1238;
-      background: #f5f2ef;
+      background: #F8EEF4;
       color: #4B1238;
     }
 
@@ -3195,23 +3210,23 @@ interface PolicyRow {
       white-space: nowrap;
     }
     .badge.neutral {
-      color: #7a6c66;
-      background: #f0ece9;
+      color: #4B1238;
+      background: #F8EEF4;
     }
     .badge.good,
     .badge.success,
     .badge.info {
       color: #4B1238;
-      background: #ede8e3;
+      background: #F8EEF4;
     }
     .badge.warning {
-      color: #7a6c66;
-      background: #f0ece9;
+      color: #4B1238;
+      background: #F8EEF4;
     }
     .badge.critical,
     .badge.danger {
-      color: #7a6c66;
-      background: #f0ece9;
+      color: #4B1238;
+      background: #F8EEF4;
     }
 
     .metric-card .badge { height: 20px; font-size: 10px; }

@@ -478,7 +478,7 @@ type AiPageCard = {
     }
 
     .ai-command-page .ai-page-card.active {
-      background: #fffaf8;
+      background: #fff;
       box-shadow: inset 3px 0 0 var(--ai-primary), 0 12px 24px rgba(109, 18, 71, 0.08);
     }
 
@@ -489,7 +489,7 @@ type AiPageCard = {
       place-items: center;
       border-radius: 0;
       color: var(--ai-primary);
-      background: var(--ai-primary-soft);
+      background: #f5f2ef;
       font-size: 0.84rem;
       font-weight: 950;
     }
@@ -534,7 +534,7 @@ type AiPageCard = {
       align-content: center;
       gap: 4px;
       padding: 12px 14px;
-      border-left: 3px solid var(--ai-primary);
+      border-left: 3px solid #d5cec7;
       box-shadow: 0 6px 16px rgba(15, 23, 42, 0.055);
     }
 
@@ -737,7 +737,7 @@ type AiPageCard = {
 
     .workflow-card.active {
       border-color: rgba(109, 18, 71, 0.38);
-      background: #fffaf8;
+      background: #fff;
       box-shadow: inset 3px 0 0 var(--ai-primary), 0 12px 22px rgba(109, 18, 71, 0.08);
     }
 
@@ -785,7 +785,7 @@ type AiPageCard = {
       border-radius: 999px;
       padding: 4px 7px;
       color: var(--ai-primary);
-      background: var(--ai-primary-soft);
+      background: #f5f2ef;
       font-size: 0.62rem;
       font-style: normal;
       font-weight: 900;
@@ -818,7 +818,7 @@ type AiPageCard = {
       place-items: center;
       border-radius: 0;
       color: var(--ai-primary);
-      background: var(--ai-primary-soft);
+      background: #f5f2ef;
       font-size: 0.84rem;
       font-weight: 950;
     }
@@ -875,7 +875,7 @@ type AiPageCard = {
       border: 1px solid rgba(109, 18, 71, 0.16);
       border-radius: 0;
       padding: 10px 11px;
-      background: var(--ai-primary-soft);
+      background: #f5f2ef;
       color: var(--ai-muted);
       font-size: 0.76rem;
     }
@@ -943,7 +943,7 @@ type AiPageCard = {
       display: grid;
       gap: 7px;
       padding: 14px;
-      border-left: 3px solid var(--ai-primary);
+      border-left: 3px solid #d5cec7;
     }
 
     .answer-card strong {
@@ -1102,7 +1102,7 @@ type AiPageCard = {
       display: grid;
       gap: 4px;
       align-content: center;
-      border-left: 3px solid var(--ai-primary);
+      border-left: 3px solid #d5cec7;
       box-shadow: none;
     }
 
@@ -1221,7 +1221,7 @@ type AiPageCard = {
     .ai-command-page .ai-page-card--rose,
     .ai-command-page .ai-page-card--sky,
     .ai-command-page .ai-page-card--green {
-      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+      background: #fff;
       border-color: var(--ai-line);
       box-shadow: inset 3px 0 0 rgba(109, 18, 71, 0.34), 0 12px 28px rgba(45, 24, 34, 0.055);
     }
@@ -1235,8 +1235,8 @@ type AiPageCard = {
       position: relative;
       overflow: hidden;
       border-color: var(--ai-line);
-      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
-      border-left-color: rgba(109, 18, 71, 0.38);
+      background: #fff;
+      border-left-color: #d5cec7;
     }
 
     .ai-kpi-grid .ai-kpi::before {
@@ -1247,11 +1247,11 @@ type AiPageCard = {
       right: 14px;
       height: 2px;
       border-radius: 999px;
-      background: linear-gradient(90deg, rgba(109, 18, 71, 0.55), rgba(181, 123, 88, 0.4));
+      background: #d5cec7;
     }
 
     .ai-kpi-grid .ai-kpi:nth-child(even) {
-      border-left-color: rgba(181, 123, 88, 0.48);
+      border-left-color: #d5cec7;
     }
 
     .ai-kpi span,
@@ -1273,7 +1273,7 @@ type AiPageCard = {
 
     .ai-open-workflow-list .workflow-card,
     .workflow-list .workflow-card {
-      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%) !important;
+      background: #fff !important;
       border-color: var(--ai-line) !important;
       border-left: 3px solid rgba(109, 18, 71, 0.3);
       box-shadow: 0 8px 18px rgba(45, 24, 34, 0.045);
@@ -1281,20 +1281,20 @@ type AiPageCard = {
 
     .ai-open-workflow-list .workflow-card:nth-child(2n),
     .workflow-list .workflow-card:nth-child(2n) {
-      border-left-color: rgba(181, 123, 88, 0.42);
+      border-left-color: #d5cec7;
     }
 
     .ai-open-workflow-list .workflow-card.active,
     .workflow-list .workflow-card.active {
-      background: #fffaf8 !important;
+      background: #fff !important;
       border-color: rgba(109, 18, 71, 0.38) !important;
-      border-left-color: var(--ai-primary);
+      border-left-color: #d5cec7;
     }
 
     .workflow-icon,
     .ai-page-card-icon {
       color: var(--ai-primary);
-      background: #f7ebe8;
+      background: #f5f2ef;
       box-shadow: inset 0 0 0 1px rgba(109, 18, 71, 0.08);
     }
 
@@ -1304,7 +1304,7 @@ type AiPageCard = {
     .badge,
     .panel-count,
     .registry-flags span {
-      background: #fffaf8;
+      background: #fff;
       border-color: var(--ai-line);
       color: #6f5f68;
       font-weight: 720;
@@ -1329,7 +1329,7 @@ type AiPageCard = {
     .action-card,
     .empty-command {
       border-color: var(--ai-line);
-      background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+      background: #fff;
       box-shadow: 0 8px 18px rgba(45, 24, 34, 0.045);
     }
 

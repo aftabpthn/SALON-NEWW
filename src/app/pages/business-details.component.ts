@@ -530,7 +530,7 @@ type ContactVerificationResponse = ContactVerification & {
       padding: 24px;
       margin-bottom: 24px;
       background:
-        linear-gradient(135deg, rgba(15, 127, 115, 0.08), rgba(37, 99, 235, 0.04) 46%, rgba(245, 158, 11, 0.06)),
+        linear-gradient(135deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.04) 46%, rgba(245, 158, 11, 0.06)),
         #fff;
     }
     .module-hero h2, .panel h3 { margin: 4px 0 8px; color: #071524; }
@@ -670,7 +670,7 @@ type ContactVerificationResponse = ContactVerification & {
       display: grid;
       gap: 16px;
       background:
-        linear-gradient(180deg, rgba(15, 127, 115, 0.035), transparent 260px),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.035), transparent 260px),
         #fff;
     }
     .panel-title-row {
@@ -810,7 +810,7 @@ type ContactVerificationResponse = ContactVerification & {
     }
     .token-editor:focus-within {
       border-color: #4A1235;
-      box-shadow: 0 0 0 3px rgba(15, 127, 115, 0.12);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
     }
     .token-editor.has-error {
       border-color: #f04438;
@@ -858,7 +858,7 @@ type ContactVerificationResponse = ContactVerification & {
     .contact-chip em {
       border-radius: 999px;
       padding: 3px 7px;
-      background: rgba(15, 127, 115, 0.12);
+      background: rgba(0, 0, 0, 0.12);
       color: #0b4f48;
       font-size: 10px;
       font-style: normal;
@@ -886,7 +886,7 @@ type ContactVerificationResponse = ContactVerification & {
       width: auto;
       min-width: 54px;
       padding: 0 8px;
-      background: rgba(15, 127, 115, 0.14);
+      background: rgba(0, 0, 0, 0.14);
       color: #0b4f48;
       font-size: 11px;
     }

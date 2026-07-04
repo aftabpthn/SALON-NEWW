@@ -12,7 +12,7 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
   standalone: true,
   imports: [CommonModule, DatePipe, FormsModule, StateComponent],
   styles: [`
-    .settlement-notice { margin: 0 0 12px; padding: 10px 14px; border: 1px solid #d7efe7; border-radius: 12px; background: #f5fbf8; color: #185b46; }
+    .settlement-notice { margin: 0 0 12px; padding: 10px 14px; border: 1px solid #E7DDD6; border-radius: 12px; background: #FAF8F6; color: #4B1238; }
     .follow-up-cell { display: grid; gap: 4px; min-width: 150px; }
     .follow-up-cell strong { text-transform: capitalize; }
     .table-actions { display: flex; gap: 8px; flex-wrap: wrap; min-width: 280px; }

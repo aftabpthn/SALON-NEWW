@@ -100,22 +100,22 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
         <ng-container *ngIf="analyticsCommand() as a">
           <div class="kpi-grid">
             <div class="kpi-card" (click)="navigate('/kpi-details/analytics/14-day-forecast')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#6366f1,#4f46e5)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="kpi-trend up">+{{ a.summary.trendPercent || 0 }}%</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="kpi-trend up">+{{ a.summary.trendPercent || 0 }}%</span></span>
               <strong class="kpi-val">{{ a.summary.projectedRevenue | currency:'INR':'symbol':'1.0-0' }}</strong>
               <span class="kpi-label">AI Forecast</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/analytics/high-churn-risk')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="kpi-trend down">{{ a.summary.highChurnRisk }} at risk</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="kpi-trend down">{{ a.summary.highChurnRisk }} at risk</span></span>
               <strong class="kpi-val">{{ a.summary.repeatRate }}%</strong>
               <span class="kpi-label">Repeat Rate</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/analytics/anomalies')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="kpi-trend down">{{ a.anomalyDetection.critical }} critical</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="kpi-trend down">{{ a.anomalyDetection.critical }} critical</span></span>
               <strong class="kpi-val">{{ a.anomalyDetection.open }}</strong>
               <span class="kpi-label">Open Anomalies</span>
             </div>
             <div class="kpi-card" (click)="navigate('/analytics')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#64748b,#475569)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg></span><span class="kpi-trend" style="color:var(--muted)">{{ a.exportControls.allowed ? 'Active' : 'Blocked' }}</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="9 17 12 20 16 16"/></svg></span><span class="kpi-trend" style="color:var(--muted)">{{ a.exportControls.allowed ? 'Active' : 'Blocked' }}</span></span>
               <strong class="kpi-val">{{ a.scheduledReports.length }}</strong>
               <span class="kpi-label">Scheduled Reports</span>
             </div>
@@ -126,22 +126,22 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
         <ng-container *ngIf="report() as r">
           <div class="kpi-grid">
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/sales-revenue')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#10b981,#059669)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span class="kpi-trend up">{{ r.sales.count }} sales</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span class="kpi-trend up">{{ r.sales.count }} sales</span></span>
               <strong class="kpi-val">{{ r.sales.revenue | currency:'INR':'symbol':'1.0-0' }}</strong>
               <span class="kpi-label">Total Revenue</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/gst-collected')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 6v12M16 6v12M6 10h4M6 14h4M14 10h4M14 14h4"/></svg></span><span class="kpi-trend up">{{ r.gst.invoices }} invoices</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 6v12M16 6v12M6 10h4M6 14h4M14 10h4M14 14h4"/></svg></span><span class="kpi-trend up">{{ r.gst.invoices }} invoices</span></span>
               <strong class="kpi-val">{{ r.gst.collected | currency:'INR':'symbol':'1.0-0' }}</strong>
               <span class="kpi-label">GST Collected</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/bookings')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#3b82f6,#2563eb)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="kpi-trend up">{{ r.bookings.completed }} completed</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="kpi-trend up">{{ r.bookings.completed }} completed</span></span>
               <strong class="kpi-val">{{ r.bookings.total }}</strong>
               <span class="kpi-label">Total Bookings</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/low-stock-count')">
-              <span class="kpi-top"><span class="kpi-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span><span class="kpi-trend down">{{ r.inventory.lowStock }} low</span></span>
+              <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span><span class="kpi-trend down">{{ r.inventory.lowStock }} low</span></span>
               <strong class="kpi-val">{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
               <span class="kpi-label">Stock Value</span>
             </div>
@@ -399,7 +399,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
           </div>
           <div class="lib-grid">
             <div class="lib-card" *ngFor="let item of a.kpiDetailMap; trackBy: trackKpiMap" (click)="navigate(item.route)">
-              <span class="lib-card-icon" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+              <span class="lib-card-icon" style="background:#ede8e3">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
               </span>
               <span class="lib-card-body">
@@ -588,7 +588,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .page-head-l { position: relative; }
     .page-head-l::before {
       content: ''; position: absolute; top: -2px; left: 0; width: 42px; height: 4px;
-      border-radius: 4px; background: linear-gradient(90deg, var(--color-primary), #818cf8, rgba(99,102,241,0.15));
+      border-radius: 4px; background: linear-gradient(90deg, var(--color-primary), #818cf8, rgba(75,18,56,0.15));
     }
     .page-head-r { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
     .ph-branch, .ph-date {
@@ -597,7 +597,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,0.02);
       transition: border-color 140ms ease, box-shadow 140ms ease;
     }
-    .ph-branch:hover, .ph-date:hover { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.08); }
+    .ph-branch:hover, .ph-date:hover { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(75,18,56,0.08); }
     .ph-branch svg, .ph-date svg { color: var(--color-primary); flex-shrink: 0; }
     .ph-actions { display: flex; gap: 5px; }
 
@@ -632,7 +632,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       font-family: inherit; background: var(--surface); outline: none; min-width: 130px;
       transition: border-color 140ms ease, box-shadow 140ms ease;
     }
-    .pf-group input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+    .pf-group input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(75,18,56,0.12); }
     .pf-badge {
       padding: 7px 13px; border-radius: 8px; border: 1px solid var(--line);
       background: var(--color-surface-muted); font-size: 0.82rem; font-weight: 600; white-space: nowrap;
@@ -664,12 +664,12 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       text-align: left; transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
     }
     .report-nav-card:hover { transform: translateY(-2px); border-color: rgba(79,70,229,0.28); box-shadow: 0 8px 22px rgba(12,26,43,0.1); }
-    .report-nav-card.active { border-color: var(--color-primary); background: linear-gradient(90deg, rgba(214,79,146,0.16), rgba(99,102,241,0.12), rgba(236,72,153,0.12)); box-shadow: 0 8px 22px rgba(12,26,43,0.12); }
+    .report-nav-card.active { border-color: var(--color-primary); background: linear-gradient(90deg, rgba(75,18,56,0.16), rgba(75,18,56,0.12), rgba(236,72,153,0.12)); box-shadow: 0 8px 22px rgba(12,26,43,0.12); }
     .report-nav-card strong, .report-nav-card small, .report-nav-card i { display: block; }
     .report-nav-card strong { font-size: 0.95rem; line-height: 1.2; }
     .report-nav-card small { margin-top: 4px; color: var(--muted); font-size: 0.72rem; font-weight: 700; line-height: 1.25; }
     .report-nav-card i { padding: 3px 8px; border-radius: 999px; color: var(--color-primary-strong); background: var(--color-surface-muted); font-size: 0.68rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
-    .report-nav-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 9px; color: var(--color-primary-strong); background: rgba(214,79,146,0.12); font-weight: 900; }
+    .report-nav-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 9px; color: var(--color-primary-strong); background: rgba(75,18,56,0.12); font-weight: 900; }
 
     /* ─── SECTION ─── */
     .sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 170px; padding: 24px 20px; border-radius: 16px; background: var(--surface); box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
@@ -739,11 +739,11 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .ea-sparkline { display: flex; align-items: flex-end; gap: 4px; height: 110px; margin-bottom: 14px; padding: 0 2px; }
     .ea-bar {
       flex: 1; border-radius: 4px 4px 0 0;
-      background: linear-gradient(180deg, rgba(99,102,241,0.5), rgba(99,102,241,0.08));
+      background: linear-gradient(180deg, rgba(75,18,56,0.5), rgba(75,18,56,0.08));
       transition: all 300ms cubic-bezier(0.16,1,0.3,1); min-height: 4px;
       cursor: pointer;
     }
-    .ea-bar:hover { background: linear-gradient(180deg, rgba(99,102,241,0.7), rgba(99,102,241,0.15)); transform: scaleY(1.02); transform-origin: bottom; }
+    .ea-bar:hover { background: linear-gradient(180deg, rgba(75,18,56,0.7), rgba(75,18,56,0.15)); transform: scaleY(1.02); transform-origin: bottom; }
     .ea-bar.is-peak { background: linear-gradient(180deg, rgba(79,70,229,0.7), rgba(79,70,229,0.15)); }
     .ea-chart-footer { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--muted); }
     .ea-chart-up { color: #059669; font-weight: 600; }
@@ -814,9 +814,9 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .tbl th:last-child { border-radius: 0 12px 0 0; }
     .tbl td { padding: 12px 15px; border-bottom: 1px solid var(--line); font-size: 0.85rem; transition: background 120ms ease; }
     .tbl tbody tr:last-child td { border-bottom: 0; }
-    .tbl tbody tr:nth-child(even) td { background: rgba(0,0,0,0.015); }
-    .tbl tbody tr:hover td { background: rgba(99,102,241,0.04); }
-    .tbl tbody tr:active td { background: rgba(99,102,241,0.08); }
+    .tbl tbody tr:nth-child(even) td { background: rgba(75,18,56,0.015); }
+    .tbl tbody tr:hover td { background: rgba(75,18,56,0.04); }
+    .tbl tbody tr:active td { background: rgba(75,18,56,0.08); }
     .tbl-compact td { padding: 9px 12px; font-size: 0.82rem; }
     .td-r { text-align: right; }
     .empty-row { text-align: center; color: var(--muted); padding: 28px !important; font-size: 0.85rem; }
@@ -910,7 +910,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .is-ins-item:has(.is-dot.medium) { border-left-color: #d97706; }
     .is-ins-item:has(.is-dot.low) { border-left-color: #059669; }
     .is-ins-item:has(.is-dot.info) { border-left-color: var(--color-primary); }
-    .is-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
+    .is-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(75,18,56,0.04); }
     .is-dot.high { background: #dc2626; }
     .is-dot.medium { background: #d97706; }
     .is-dot.low { background: #059669; }
@@ -1064,7 +1064,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .report-nav-card.active {
       border-color: rgba(143, 92, 84, 0.28);
       border-left-color: #7a4d47;
-      background: linear-gradient(90deg, #fff7f3, #fff);
+      background: linear-gradient(90deg, #faf8f6, #fff);
       box-shadow: 0 8px 22px rgba(89, 64, 54, 0.065);
     }
 
@@ -1321,7 +1321,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .count-badge,
     .sec-badge,
     .pf-badge {
-      background: #fff7f3 !important;
+      background: #faf8f6 !important;
       color: #75524b !important;
       box-shadow: none !important;
     }
@@ -1379,7 +1379,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
     .stg,
     .compl-badge,
     .sch-badge {
-      background: #fff7f3 !important;
+      background: #faf8f6 !important;
       border-color: rgba(154, 106, 96, 0.15) !important;
       color: #75524b !important;
     }

@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from '@angular/common';
+﻿import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -419,14 +419,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
     </section>
   `,
   styles: [`
-    .policy-workspace { background: #f0f2f5; color: #111827; min-height: 100vh; gap: 8px; padding: 8px; }
+    .policy-workspace { background: #FAF8F6; color: #151827; min-height: 100vh; gap: 8px; padding: 8px; }
     .command-bar { background: #111827; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.16); }
     .brand-block, .command-actions, .header-actions, .page-heading, .section-title, .inline-row { display: flex; align-items: center; gap: 10px; }
-    .brand-mark { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: #635bff; font-weight: 900; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: #4B1238; font-weight: 900; }
     .brand-block small { display: block; color: #94a3b8; font-size: 10px; font-weight: 800; letter-spacing: 0; }
     .brand-block strong { display: block; font-size: 16px; }
     .zenoti-button, .primary-button, .ghost-button { border: 1px solid #bfdbfe; background: #fff; color: #075985; border-radius: 4px; padding: 8px 13px; font-weight: 800; cursor: pointer; text-decoration: none; }
-    .zenoti-button.primary, .primary-button { background: #5A153F; border-color: #5A153F; color: #fff; }
+    .zenoti-button.primary, .primary-button { background: #4B1238; border-color: #4B1238; color: #fff; }
     .zenoti-button:disabled, .ghost-button:disabled { opacity: 0.6; cursor: not-allowed; }
     .zenoti-header { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 26px 16px 12px; border: 1px solid #d7e2ea; }
     .zenoti-header select { grid-column: 2; width: min(620px, 100%); border: 1px solid #bfdbfe; border-radius: 4px; padding: 9px 12px; font-weight: 800; background: #fff; }
@@ -434,7 +434,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .page-heading h1 { margin: 0 0 4px; font-size: 24px; }
     .page-heading span, .section-title p, .section-title span, small, td, .form-grid label span { color: #64748b; }
     .metric-strip { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); border-left: 1px solid #d7e2ea; border-right: 1px solid #d7e2ea; border-bottom: 1px solid #d7e2ea; background: #f8fafc; }
-    .metric-strip article { padding: 14px 16px; border-right: 1px solid #d7e2ea; border-top: 4px solid #5A153F; min-height: 86px; }
+    .metric-strip article { padding: 14px 16px; border-right: 1px solid #E7DDD6; border-top: 4px solid #E7DDD6; min-height: 86px; }
     .metric-strip article:nth-child(2) { border-top-color: #2563eb; }
     .metric-strip article:nth-child(3) { border-top-color: #b7791f; }
     .metric-strip article:nth-child(4) { border-top-color: #b91c1c; }
@@ -451,7 +451,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     .action-card strong, .action-card span { display: block; }
     .action-card span { color: #64748b; font-size: 12px; }
     .score-card strong { font-size: 28px; }
-    .badge { display: inline-block; border-radius: 999px; background: #e0f2fe; color: #075985; padding: 5px 9px; font-weight: 800; font-size: 12px; }
+    .badge { display: inline-block; border-radius: 999px; background: #F8EEF4; color: #4B1238; padding: 5px 9px; font-weight: 800; font-size: 12px; }
     .table-wrap { overflow: auto; border: 1px solid #d7e2ea; border-radius: 4px; }
     table { width: 100%; border-collapse: collapse; min-width: 880px; }
     th { background: #f1f5f9; color: #475569; font-size: 12px; text-align: left; text-transform: uppercase; }
@@ -459,15 +459,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
     input, select { border: 1px solid #d7e2ea; border-radius: 4px; min-height: 38px; padding: 8px 10px; color: #111827; background: #fff; }
     .mini { padding: 6px 10px; }
     .policy-toggle { position: relative; }
-    .policy-toggle input { position: absolute; right: 16px; top: 16px; width: 20px; height: 20px; accent-color: #5A153F; }
+    .policy-toggle input { position: absolute; right: 16px; top: 16px; width: 20px; height: 20px; accent-color: #4B1238; }
     .form-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 18px; }
     .form-grid label span { display: block; margin-bottom: 8px; font-weight: 800; }
     .risk-heatmap { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
-    .risk-tile, .evidence-export { border: 1px solid #d7e2ea; border-radius: 4px; padding: 14px; background: #f8fbfd; display: grid; gap: 6px; }
+    .risk-tile, .evidence-export { border: 1px solid #E7DDD6; border-radius: 4px; padding: 14px; background: #fff; display: grid; gap: 6px; }
     .risk-tile strong { font-size: 24px; }
-    .risk-tile.low { border-color: #9fd6c8; background: #f1fbf7; }
-    .risk-tile.warning { border-color: #f4c56e; background: #fff8e9; }
-    .risk-tile.high, .risk-tile.critical { border-color: #ef9a9a; background: #fff1f1; }
+    .risk-tile.low { border-color: #E7DDD6; background: #FAF8F6; }
+    .risk-tile.warning { border-color: #E7DDD6; background: #FAF8F6; }
+    .risk-tile.high, .risk-tile.critical { border-color: #E7DDD6; background: #FAF8F6; }
     .evidence-export { margin-top: 14px; }
     .evidence-export pre { max-height: 260px; overflow: auto; margin: 0; border-radius: 8px; background: #0f172a; color: #e2e8f0; padding: 12px; white-space: pre-wrap; }
     @media (max-width: 1180px) {

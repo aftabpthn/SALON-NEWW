@@ -15,10 +15,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       </div>
 
       <div class="metrics-grid">
-        <aura-kpi-card tone="teal" target="/kpi-details/prd/roles"><span>Roles</span><strong>8</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/prd/journeys"><span>Journeys</span><strong>6</strong></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/prd/new-pages"><span>New pages</span><strong>6</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/prd/rules"><span>Rules</span><strong>9</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/prd/roles"><span>Roles</span><strong>8</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/prd/journeys"><span>Journeys</span><strong>6</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/prd/new-pages"><span>New pages</span><strong>6</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/prd/rules"><span>Rules</span><strong>9</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

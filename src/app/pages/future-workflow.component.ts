@@ -37,17 +37,17 @@ type WorkflowConfig = {
       </header>
 
       <div class="metric-grid">
-        <aura-kpi-card tone="teal" target="/future-features">
+        <aura-kpi-card tone="neutral" target="/future-features">
           <span>Workflow status</span>
           <strong>{{ workflowStatus() }}</strong>
           <small>{{ workflowMap()?.readySources || 0 }}/{{ workflowMap()?.sourceCount || 0 }} sources ready</small>
         </aura-kpi-card>
-        <aura-kpi-card tone="blue" [target]="config.commandCenterRoute || '/future-features'">
+        <aura-kpi-card tone="neutral" [target]="config.commandCenterRoute || '/future-features'">
           <span>{{ config.recordLabel }}</span>
           <strong>{{ primaryRows().length }}</strong>
           <small>Loaded from {{ config.primaryEndpoint }}</small>
         </aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/future-features">
+        <aura-kpi-card tone="neutral" target="/future-features">
           <span>Last run</span>
           <strong>{{ workflowMap()?.runCount || 0 }}</strong>
           <small>{{ workflowMap()?.lastRunAt || 'No run yet' }}</small>
@@ -203,7 +203,7 @@ type WorkflowConfig = {
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       padding: 10px 14px;
-      background: #f8fafc;
+      background: #f5f2ef;
       color: #172033;
       font-weight: 800;
       text-decoration: none;
@@ -318,7 +318,7 @@ type WorkflowConfig = {
     .draft-action {
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      background: #f8fafc;
+      background: #f5f2ef;
     }
 
     .success-line {

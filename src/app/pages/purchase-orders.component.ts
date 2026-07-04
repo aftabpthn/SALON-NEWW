@@ -406,7 +406,7 @@ type ReceiveItem = {
 
     .po-nav-card.active {
       border-color: var(--color-primary);
-      background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(79, 70, 229, 0.12), rgba(245, 158, 11, 0.12));
+      background: linear-gradient(90deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.03));
       box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
     }
 
@@ -488,7 +488,7 @@ type ReceiveItem = {
       flex-wrap: wrap;
       gap: 8px;
       padding: 10px;
-      border: 1px solid rgba(79, 70, 229, 0.12);
+      border: 1px solid rgba(0, 0, 0, 0.03);
       border-radius: 18px;
       background: rgba(255, 255, 255, 0.92);
     }

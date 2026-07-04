@@ -826,7 +826,7 @@ type ProductConsumeDraftRow = {
       border: 1px solid rgba(75, 18, 56, 0.18);
       border-radius: 10px;
       padding: 14px;
-      background: linear-gradient(180deg, rgba(245, 238, 242, 0.96), rgba(255, 255, 255, 0.98));
+      background: linear-gradient(180deg, rgba(248, 238, 244, 0.96), rgba(255, 255, 255, 0.98));
       display: grid;
       gap: 6px;
     }
@@ -851,7 +851,7 @@ type ProductConsumeDraftRow = {
 
     .settlement-card.is-due {
       border-color: rgba(220, 38, 38, 0.24);
-      background: linear-gradient(180deg, rgba(254, 242, 242, 0.98), rgba(255, 255, 255, 0.98));
+      background: linear-gradient(180deg, rgba(248, 238, 244, 0.98), rgba(255, 255, 255, 0.98));
     }
 
     .settlement-card.is-due span {

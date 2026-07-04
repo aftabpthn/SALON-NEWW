@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -311,7 +311,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
               <span>Batch</span>
               <select formControlName="batchId">
                 <option value="">Auto / no batch</option>
-                <option *ngFor="let batch of batchesForProduct(wasteForm.value.productId)" [value]="batch.id">{{ batch.batchNumber }} · {{ batch.quantityAvailable }} left</option>
+                <option *ngFor="let batch of batchesForProduct(wasteForm.value.productId)" [value]="batch.id">{{ batch.batchNumber }} Â· {{ batch.quantityAvailable }} left</option>
               </select>
             </label>
             <label class="field">
@@ -393,7 +393,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       min-height: 96px;
       padding: 14px;
       border: 1px solid var(--line);
-      border-top: 4px solid var(--teal);
+      border-top: 4px solid #4B1238;
       border-radius: 8px;
       background: #fff;
       box-shadow: var(--shadow);
@@ -443,10 +443,10 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       gap: 10px;
       padding: 16px;
       border: 1px solid var(--line);
-      border-top: 5px solid var(--teal);
+      border-top: 5px solid #4B1238;
       border-radius: 18px;
       background:
-        radial-gradient(circle at top right, color-mix(in srgb, var(--teal) 10%, transparent), transparent 42%),
+        radial-gradient(circle at top right, color-mix(in srgb, #4B1238 10%, transparent), transparent 42%),
         #fff;
       color: var(--ink);
       text-decoration: none;
@@ -456,7 +456,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
 
     .inventory-module-card:hover {
       transform: translateY(-2px);
-      border-color: color-mix(in srgb, var(--teal) 35%, var(--line));
+      border-color: color-mix(in srgb, #4B1238 35%, var(--line));
       box-shadow: 0 20px 44px color-mix(in srgb, var(--ink) 9%, transparent);
     }
 
@@ -609,7 +609,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       padding: 10px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #f7fbfa;
+      background: #F8EEF4;
       color: var(--muted);
       line-height: 1.4;
     }
@@ -661,8 +661,8 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
     }
 
     .desk-tabs button.active {
-      border-color: var(--teal);
-      background: var(--teal);
+      border-color: #4B1238;
+      background: #4B1238;
       color: #fff;
     }
 
@@ -1011,7 +1011,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
       padding: 4px 10px;
       border: 1px solid #b8d9ea;
       border-radius: 999px;
-      background: #eef8fc;
+      background: #F8EEF4;
       color: #27485c;
       font-style: normal;
       font-size: 0.76rem;
@@ -2036,14 +2036,14 @@ export class InventoryComponent implements OnInit {
       .map((product) => ({
         id: product.id,
         name: product.name,
-        reason: `${product.category || 'Retail'} aftercare available · margin ${this.productMargin(product).toFixed(0)} · ${product.stock} in stock`
+        reason: `${product.category || 'Retail'} aftercare available Â· margin ${this.productMargin(product).toFixed(0)} Â· ${product.stock} in stock`
       }));
   }
 
   scanProduct(): void {
     const code = this.scannerCode.trim().toLowerCase();
     const product = this.products().find((item) => String(item.sku || '').toLowerCase() === code || String(item.name || '').toLowerCase().includes(code));
-    this.scannerResult.set(product ? `${product.name}: ${product.stock || 0} in stock, ₹${product.price || 0} price` : 'No product matched this scan.');
+    this.scannerResult.set(product ? `${product.name}: ${product.stock || 0} in stock, â‚¹${product.price || 0} price` : 'No product matched this scan.');
     if (product) this.selectedProductId.set(product.id);
   }
 

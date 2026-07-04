@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
 
@@ -97,41 +97,41 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <main class="analytics-detail">
       <ng-container *ngIf="metrics() as metrics">
         <div class="metrics-grid" *ngIf="visible('overview')">
-          <aura-kpi-card tone="teal" target="/kpi-details/analytics/14-day-forecast">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/14-day-forecast">
             <span>14-day forecast</span>
             <strong>{{ metrics.revenueForecast.projected14DayRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <small>{{ metrics.revenueForecast.trendPercent | number: '1.0-1' }}% recent trend</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="amber" target="/kpi-details/analytics/peak-hour">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/peak-hour">
             <span>Peak hour</span>
             <strong>{{ metrics.peakHours.topHours?.[0]?.label || 'No data' }}</strong>
             <small>{{ metrics.peakHours.topHours?.[0]?.bookings || 0 }} bookings</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="green" target="/kpi-details/analytics/repeat-rate">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/repeat-rate">
             <span>Repeat rate</span>
             <strong>{{ metrics.repeatCustomers.repeatRate | number: '1.0-1' }}%</strong>
             <small>{{ metrics.repeatCustomers.repeatClients }} repeat clients</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="red" target="/kpi-details/analytics/high-churn-risk">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/high-churn-risk">
             <span>High churn risk</span>
             <strong>{{ metrics.churn.highRisk }}</strong>
             <small>Avg risk {{ metrics.churn.averageRiskScore | number: '1.0-1' }}</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="blue" target="/kpi-details/analytics/average-ltv">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/average-ltv">
             <span>Average LTV</span>
             <strong>{{ metrics.lifetimeValue.avgLtv | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <small>{{ metrics.lifetimeValue.totalLtv | currency: 'INR':'symbol':'1.0-0' }} total</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="violet" target="/kpi-details/analytics/membership-revenue">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/membership-revenue">
             <span>Membership revenue</span>
             <strong>{{ metrics.membershipPerformance.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <small>{{ metrics.membershipPerformance.activeCount }} active</small>
           </aura-kpi-card>
-          <aura-kpi-card tone="slate" target="/kpi-details/analytics/funnel-paid">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/funnel-paid">
             <span>Funnel paid</span>
             <strong>{{ funnelStage('Paid')?.conversionFromLead || 0 }}%</strong>
           </aura-kpi-card>
-          <aura-kpi-card tone="rose" target="/kpi-details/analytics/branches">
+          <aura-kpi-card tone="neutral" target="/kpi-details/analytics/branches">
             <span>Branches</span>
             <strong>{{ metrics.branchComparison.length }}</strong>
             <small>{{ metrics.branchComparison[0]?.name || 'No branch data' }}</small>
@@ -182,7 +182,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             </div>
           </div>
           <div class="heatmap-grid">
-            <article *ngFor="let cell of metrics.heatmaps.strongestCells" [style.background]="heatColor(cell.intensity)">
+            <article *ngFor="let cell of metrics.heatmaps.strongestCells" >
               <strong>{{ cell.dayLabel }} {{ cell.hour }}:00</strong>
               <span>{{ cell.bookings }} bookings · {{ cell.revenue | currency: 'INR':'symbol':'1.0-0' }}</span>
             </article>
@@ -428,7 +428,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       min-height: 88px;
       padding: 14px;
       border: 1px solid var(--line);
-      border-left: 3px solid var(--color-primary);
+      border-left: 3px solid #4B1238;
       border-radius: 8px;
       color: var(--ink);
       background: var(--surface);
@@ -439,7 +439,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
     .analytics-nav-card.active {
       border-color: var(--color-primary);
-      background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(236, 72, 153, 0.14));
+      background: var(--surface);
       box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
     }
 
@@ -479,7 +479,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       height: 48px;
       border-radius: 8px;
       color: var(--color-primary-strong);
-      background: rgba(214, 79, 146, 0.12);
+      background: var(--surface-2);
       font-weight: 900;
     }
 
@@ -498,6 +498,14 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
 
     aura-kpi-card {
       min-width: 0;
+    }
+
+    :host ::ng-deep .metrics-grid aura-kpi-card .metric-card {
+      background: var(--surface) !important;
+      background-image: none !important;
+      border-color: var(--line) !important;
+      border-left: 3px solid #4B1238 !important;
+      box-shadow: 0 4px 12px rgba(12, 26, 43, 0.06) !important;
     }
 
     .action-card,
@@ -587,7 +595,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       width: 100%;
       min-height: 8px;
       border-radius: 6px 6px 0 0;
-      background: linear-gradient(180deg, var(--color-primary), var(--color-primary-strong));
+      background: #4B1238;
     }
 
     .chart-bars strong {
@@ -865,10 +873,6 @@ export class AnalyticsEngineComponent implements OnInit {
     return Math.max(8, Math.round((Number(value || 0) / max) * 100));
   }
 
-  heatColor(intensity: number): string {
-    const alpha = Math.min(0.9, Math.max(0.08, Number(intensity || 0) / 100));
-    return `rgba(75, 18, 56, ${alpha})`;
-  }
 
   private defaultStart(): string {
     const date = new Date();

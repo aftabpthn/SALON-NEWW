@@ -733,9 +733,9 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
   styles: [`
     .cash-eod-page { display: grid; gap: 18px; }
     .hero-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .hero-actions input, .field input { border: 1px solid #cbd8d2; border-radius: 8px; padding: 10px 12px; min-height: 40px; }
+    .hero-actions input, .field input { border: 1px solid #E7DDD6; border-radius: 8px; padding: 10px 12px; min-height: 40px; }
     .open-panel, .panel, .close-panel, .report-card {
-      border: 1px solid #dbe7e4; background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 12px 28px rgba(15, 23, 42, .05);
+      border: 1px solid #E7DDD6; background: #fff; border-radius: 8px; padding: 18px; box-shadow: 0 12px 28px rgba(15, 23, 42, .05);
     }
     .open-panel { display: grid; grid-template-columns: minmax(260px, 1fr) 220px minmax(260px, 1fr) auto; gap: 14px; align-items: end; }
     .field { display: grid; gap: 6px; font-weight: 800; color: #334155; }
@@ -743,16 +743,16 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .cash-workspace-shell { display: grid; grid-template-columns: 338px minmax(0, 1fr); gap: 16px; align-items: start; }
     .cash-category-rail { display: grid; gap: 10px; }
     .cash-category-tile {
-      width: 100%; border: 1px solid #dbe7e4; border-left: 4px solid #4B1238; background: #fff; border-radius: 8px; padding: 14px 16px;
+      width: 100%; border: 1px solid #E7DDD6; border-left: 4px solid #4B1238; background: #fff; border-radius: 8px; padding: 14px 16px;
       display: grid; gap: 5px; text-align: left; cursor: pointer; box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
     }
-    .cash-category-tile.active { background: #f2fbf8; border-color: #9bd8cc; border-left-color: #4B1238; }
+    .cash-category-tile.active { background: #F8EEF4; border-color: #E7DDD6; border-left-color: #4B1238; }
     .cash-category-tile[data-state="warn"] { border-left-color: #f59e0b; }
     .cash-category-tile[data-state="bad"] { border-left-color: #dc2626; }
     .cash-category-tile span { color: #0f172a; font-weight: 900; }
     .cash-category-tile strong { color: #0f172a; font-size: 22px; letter-spacing: 0; }
     .cash-category-tile small { color: #64748b; line-height: 1.35; }
-    .cash-workspace-detail { border: 1px solid #dbe7e4; background: #fff; border-radius: 8px; padding: 18px; display: grid; gap: 16px; box-shadow: 0 12px 28px rgba(15, 23, 42, .05); }
+    .cash-workspace-detail { border: 1px solid #E7DDD6; background: #fff; border-radius: 8px; padding: 18px; display: grid; gap: 16px; box-shadow: 0 12px 28px rgba(15, 23, 42, .05); }
     .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 1px solid #e5edf0; padding-bottom: 14px; }
     .detail-head h3 { margin: 2px 0 4px; color: #0f172a; letter-spacing: 0; }
     .detail-head p { margin: 0; color: #64748b; }
@@ -760,7 +760,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .status-pill[data-state="warn"] { border-color: #fde68a; background: #fffbeb; color: #92400e; }
     .status-pill[data-state="bad"] { border-color: #fecaca; background: #fff1f2; color: #9f1239; }
     .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-    .metric-grid article { border: 1px solid #dbe7e4; background: #f8fbfa; border-radius: 8px; padding: 14px; display: grid; gap: 5px; }
+    .metric-grid article { border: 1px solid #E7DDD6; background: #F8EEF4; border-radius: 8px; padding: 14px; display: grid; gap: 5px; }
     .metric-grid span, .metric-grid small, .settlement-card span, .report-card p { color: #64748b; }
     .metric-grid strong { font-size: 24px; color: #0f172a; letter-spacing: 0; }
     .metric-grid strong.warn, .accounting-grid strong.warn, .risk-grid strong.warn, .approval-link-grid strong.warn, .match-summary strong.warn { color: #b42318; }
@@ -769,7 +769,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .section-title h3, .close-panel h3, .report-card h3 { margin: 2px 0 0; color: #0f172a; letter-spacing: 0; }
     .denom-grid { display: grid; gap: 8px; margin: 14px 0; }
     .denom-row { display: grid; grid-template-columns: 1fr 88px 110px; gap: 10px; align-items: center; border-bottom: 1px solid #edf2f7; padding-bottom: 8px; }
-    .denom-row input, .mode-row input, .settlement-card input { width: 100%; border: 1px solid #d8e2df; border-radius: 8px; padding: 8px 10px; }
+    .denom-row input, .mode-row input, .settlement-card input { width: 100%; border: 1px solid #E7DDD6; border-radius: 8px; padding: 8px 10px; }
     .mode-table { display: grid; gap: 8px; margin-top: 12px; }
     .mode-head, .mode-row { display: grid; grid-template-columns: 80px 105px 110px minmax(130px, 1fr); gap: 10px; align-items: center; }
     .mode-head { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 900; }
@@ -788,7 +788,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .handover-box { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; margin-top: 12px; }
     .reconciliation-panel { display: grid; gap: 14px; }
     .recon-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-    .recon-tabs button { border: 1px solid #cbd8d2; background: #fff; border-radius: 999px; padding: 8px 12px; font-weight: 900; cursor: pointer; }
+    .recon-tabs button { border: 1px solid #E7DDD6; background: #fff; border-radius: 999px; padding: 8px 12px; font-weight: 900; cursor: pointer; }
     .recon-tabs button.active { background: #4B1238; color: #fff; border-color: #4B1238; }
     .recon-grid, .deposit-list { display: grid; gap: 10px; }
     .recon-row, .deposit-row { border: 1px solid #e1e9ef; border-radius: 8px; padding: 12px; display: grid; grid-template-columns: minmax(160px, 1fr) repeat(4, minmax(110px, auto)); gap: 10px; align-items: center; }
@@ -797,21 +797,21 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .recon-row span, .deposit-row span { color: #64748b; }
     .recon-tools { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(280px, .75fr); gap: 14px; }
     .csv-box, .deposit-box { border: 1px solid #e1e9ef; border-radius: 8px; padding: 12px; display: grid; gap: 10px; }
-    .csv-box textarea { width: 100%; resize: vertical; border: 1px solid #d8e2df; border-radius: 8px; padding: 10px; font-family: inherit; }
+    .csv-box textarea { width: 100%; resize: vertical; border: 1px solid #E7DDD6; border-radius: 8px; padding: 10px; font-family: inherit; }
     .deposit-row { grid-template-columns: 1fr auto auto; }
     .button-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .accounting-stack { display: grid; gap: 12px; }
     .accounting-grid { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 10px; }
-    .accounting-grid span, .ledger-lines article { border: 1px solid #e1e9ef; border-radius: 8px; padding: 10px; color: #64748b; background: #f8fbfa; }
+    .accounting-grid span, .ledger-lines article { border: 1px solid #e1e9ef; border-radius: 8px; padding: 10px; color: #64748b; background: #F8EEF4; }
     .accounting-grid strong, .ledger-lines strong { display: block; color: #0f172a; margin-top: 4px; }
     .ledger-lines { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; }
     .risk-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }
-    .risk-grid span { border: 1px solid #dbe7e4; border-radius: 8px; padding: 10px; background: #f8fafc; color: #475569; }
+    .risk-grid span { border: 1px solid #E7DDD6; border-radius: 8px; padding: 10px; background: #f8fafc; color: #475569; }
     .risk-grid strong { display: block; color: #0f172a; margin-top: 4px; text-transform: capitalize; }
     .token-approval-panel { max-width: 980px; margin: 0 auto 18px; display: grid; gap: 14px; }
     .approval-link-grid, .match-summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
     .match-summary { margin-top: 10px; }
-    .approval-link-grid span, .match-summary span { border: 1px solid #dbe7e4; border-radius: 8px; padding: 10px; background: #f8fafc; color: #475569; }
+    .approval-link-grid span, .match-summary span { border: 1px solid #E7DDD6; border-radius: 8px; padding: 10px; background: #f8fafc; color: #475569; }
     .approval-link-grid strong, .match-summary strong { display: block; color: #0f172a; margin-top: 4px; text-transform: capitalize; }
     .approval-link-actions { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 10px; align-items: end; }
     .risk-events { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
@@ -823,14 +823,14 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
     .owner-risk-list article { border: 1px solid #e1e9ef; border-radius: 8px; padding: 12px; display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, 1fr) auto; gap: 12px; align-items: center; }
     .owner-risk-list article.high { border-color: #fecaca; background: #fff7f7; }
     .owner-risk-list span { color: #64748b; }
-    .tally-preview { max-height: 180px; overflow: auto; border: 1px solid #d8e2df; border-radius: 8px; padding: 12px; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; }
+    .tally-preview { max-height: 180px; overflow: auto; border: 1px solid #E7DDD6; border-radius: 8px; padding: 12px; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; }
     .check-field { display: flex !important; align-items: center; gap: 8px; color: #334155 !important; }
     .blockers { display: flex; gap: 8px; flex-wrap: wrap; max-width: 520px; }
     .blockers span { border: 1px solid #fecaca; background: #fff1f2; color: #9f1239; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 900; }
     .report-metrics { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); gap: 10px; }
     .report-metrics span { border-left: 3px solid #4B1238; padding-left: 10px; color: #475569; }
     .report-metrics strong { display: block; color: #0f172a; margin-top: 4px; }
-    .empty-state { border: 1px dashed #cbd8d2; border-radius: 8px; padding: 14px; color: #64748b; background: #f8fafc; }
+    .empty-state { border: 1px dashed #E7DDD6; border-radius: 8px; padding: 14px; color: #64748b; background: #f8fafc; }
     .danger { border-color: #b42318 !important; }
     @media (max-width: 1180px) {
       .cash-workspace-shell { grid-template-columns: 1fr; }

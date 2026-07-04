@@ -251,7 +251,7 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
     .saas-section-workspace { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
     .saas-side-nav { position: sticky; top: 92px; display: grid; gap: 10px; }
     .saas-nav-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 11px; align-items: center; width: 100%; min-height: 92px; padding: 13px; border: 1px solid #d8e1ea; border-left: 4px solid #55173D; border-radius: 8px; background: #fff; color: #172033; text-align: left; box-shadow: 0 10px 24px rgba(15,23,42,.06); cursor: pointer; }
-    .saas-nav-card:hover, .saas-nav-card.active { background: linear-gradient(135deg, #F1E8EE, #eef4ff); border-color: #9fc3dc; transform: translateY(-1px); }
+    .saas-nav-card:hover, .saas-nav-card.active { background: linear-gradient(135deg, #F8EEF4, #FAF8F6); border-color: #9fc3dc; transform: translateY(-1px); }
     .saas-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #F1E8EE; color: #3D0F2C; font-weight: 950; font-size: 12px; }
     .saas-nav-card strong, .saas-nav-card small { display: block; }
     .saas-nav-card small { margin-top: 4px; color: #5f6f85; font-size: 12px; font-weight: 700; line-height: 1.3; }

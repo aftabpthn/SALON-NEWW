@@ -252,9 +252,9 @@ const DEFAULT_MODIFIERS = [
     }
 
     .recipes-page {
-      --recipe-line: color-mix(in srgb, var(--line) 76%, white);
-      --recipe-soft: color-mix(in srgb, var(--teal) 9%, white);
-      --recipe-glow: 0 22px 58px color-mix(in srgb, var(--ink) 9%, transparent);
+      --recipe-line: #d5cec7;
+      --recipe-soft: #d5cec7;
+      --recipe-glow: 0 22px 58px #d5cec7;
       gap: 0;
     }
 
@@ -393,11 +393,11 @@ const DEFAULT_MODIFIERS = [
       width: 100%;
       min-height: 250px;
       padding: 12px 14px;
-      border: 1px solid color-mix(in srgb, var(--teal) 18%, var(--line));
+      border: 1px solid #d5cec7;
       background:
-        radial-gradient(circle at 78% 18%, color-mix(in srgb, var(--amber) 18%, transparent), transparent 30%),
-        radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--teal) 20%, transparent), transparent 34%),
-        linear-gradient(135deg, color-mix(in srgb, var(--surface) 98%, white), color-mix(in srgb, var(--surface-2) 88%, var(--teal)));
+        radial-gradient(circle at 78% 18%, #d5cec7, transparent 30%),
+        radial-gradient(circle at 12% 10%, #d5cec7, transparent 34%),
+        linear-gradient(135deg, #d5cec7, #d5cec7);
       box-shadow: var(--recipe-glow);
     }
 
@@ -438,9 +438,9 @@ const DEFAULT_MODIFIERS = [
       align-items: center;
       min-height: 24px;
       padding: 0 9px;
-      border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--line));
+      border: 1px solid #d5cec7;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--surface) 86%, white);
+      background: #d5cec7;
       color: var(--ink);
       font-size: 11px;
       font-weight: 900;
@@ -460,10 +460,10 @@ const DEFAULT_MODIFIERS = [
       border: 1px solid var(--recipe-line);
       border-radius: 18px;
       background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, white), color-mix(in srgb, var(--surface-2) 94%, white)),
+        linear-gradient(180deg, #d5cec7, #d5cec7),
         var(--surface);
       padding: 14px;
-      box-shadow: 0 14px 34px color-mix(in srgb, var(--ink) 5%, transparent);
+      box-shadow: 0 14px 34px #d5cec7;
     }
 
     .recipe-kpi-grid .kpi-card {
@@ -473,7 +473,7 @@ const DEFAULT_MODIFIERS = [
       display: grid;
       align-content: start;
       gap: 6px;
-      border-top: 4px solid var(--teal);
+      border-top: 4px solid #d5cec7;
     }
 
     .recipe-kpi-grid .kpi-card::after {
@@ -484,11 +484,11 @@ const DEFAULT_MODIFIERS = [
       width: 118px;
       height: 118px;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--teal) 10%, transparent);
+      background: #d5cec7;
     }
 
-    .recipe-kpi-grid .accent-red { border-top-color: var(--red); }
-    .recipe-kpi-grid .accent-amber { border-top-color: var(--amber); }
+    .recipe-kpi-grid .accent-red { border-top-color: #d5cec7; }
+    .recipe-kpi-grid .accent-amber { border-top-color: #d5cec7; }
     .recipe-kpi-grid .accent-violet { border-top-color: var(--violet); }
 
     .metric-grid span,
@@ -543,22 +543,22 @@ const DEFAULT_MODIFIERS = [
       border: 1px solid var(--recipe-line);
       border-radius: 22px;
       background:
-        linear-gradient(135deg, color-mix(in srgb, var(--surface) 98%, white), color-mix(in srgb, var(--surface-2) 92%, white)),
+        linear-gradient(135deg, #d5cec7, #d5cec7),
         var(--surface);
       box-shadow: var(--recipe-glow);
     }
 
     .command-card.primary {
       color: white;
-      border-color: color-mix(in srgb, var(--teal) 54%, black);
+      border-color: #d5cec7;
       background:
-        radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--amber) 24%, transparent), transparent 34%),
-        linear-gradient(135deg, color-mix(in srgb, var(--ink) 90%, var(--teal)), color-mix(in srgb, var(--ink) 82%, black));
+        radial-gradient(circle at 92% 12%, #d5cec7, transparent 34%),
+        linear-gradient(135deg, #d5cec7, #d5cec7);
     }
 
     .command-card.primary .eyebrow,
     .command-card.primary p {
-      color: color-mix(in srgb, white 72%, transparent);
+      color: #d5cec7;
     }
 
     .decision-row {
@@ -586,13 +586,13 @@ const DEFAULT_MODIFIERS = [
     }
 
     .recipe-health-pill.watch {
-      border-color: color-mix(in srgb, var(--amber) 42%, var(--line));
-      background: color-mix(in srgb, var(--amber) 13%, white);
+      border-color: #d5cec7;
+      background: #d5cec7;
     }
 
     .recipe-health-pill.danger {
-      border-color: color-mix(in srgb, var(--red) 42%, var(--line));
-      background: color-mix(in srgb, var(--red) 12%, white);
+      border-color: #d5cec7;
+      background: #d5cec7;
       color: #8a1f17;
     }
 
@@ -609,7 +609,7 @@ const DEFAULT_MODIFIERS = [
       padding: 12px;
       border: 1px solid var(--recipe-line);
       border-radius: 16px;
-      background: color-mix(in srgb, var(--surface) 86%, white);
+      background: #d5cec7;
     }
 
     .automation-grid strong,
@@ -634,10 +634,10 @@ const DEFAULT_MODIFIERS = [
 
     .auto-consume-flow article {
       padding: 14px;
-      border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--recipe-line));
+      border: 1px solid #d5cec7;
       border-radius: 18px;
       background:
-        linear-gradient(135deg, color-mix(in srgb, var(--teal) 9%, white), color-mix(in srgb, var(--amber) 8%, white)),
+        linear-gradient(135deg, #d5cec7, #d5cec7),
         var(--surface);
       box-shadow: var(--recipe-glow);
     }
@@ -712,7 +712,7 @@ const DEFAULT_MODIFIERS = [
       display: grid;
       gap: 4px;
       padding: 12px;
-      border: 1px dashed color-mix(in srgb, var(--teal) 28%, var(--line));
+      border: 1px dashed #d5cec7;
       border-radius: 16px;
       background: var(--recipe-soft);
     }
@@ -742,7 +742,7 @@ const DEFAULT_MODIFIERS = [
 
     .recipe-line.head {
       border-top: 0;
-      background: color-mix(in srgb, var(--surface-2) 86%, white);
+      background: #d5cec7;
       color: var(--muted);
       font-size: 12px;
       font-weight: 900;
@@ -774,7 +774,7 @@ const DEFAULT_MODIFIERS = [
       padding: 14px;
       border: 1px solid var(--recipe-line);
       border-radius: 18px;
-      background: color-mix(in srgb, var(--surface) 92%, white);
+      background: #d5cec7;
     }
 
     .meter-label {
@@ -789,14 +789,14 @@ const DEFAULT_MODIFIERS = [
       height: 12px;
       overflow: hidden;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--line) 54%, white);
+      background: #d5cec7;
     }
 
     .meter-track span {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, var(--red), var(--amber), var(--teal));
+      background: linear-gradient(90deg, #d5cec7, #d5cec7, #d5cec7);
     }
 
     .intel-grid,
@@ -822,7 +822,7 @@ const DEFAULT_MODIFIERS = [
       border: 1px solid var(--recipe-line);
       border-radius: 20px;
       background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, white), color-mix(in srgb, var(--surface-2) 94%, white)),
+        linear-gradient(180deg, #d5cec7, #d5cec7),
         var(--surface);
     }
 
@@ -839,14 +839,14 @@ const DEFAULT_MODIFIERS = [
       border: 1px solid var(--recipe-line);
       border-radius: 14px;
       padding: 11px 12px;
-      background: color-mix(in srgb, var(--surface) 88%, white);
+      background: #d5cec7;
       color: var(--ink);
       text-align: left;
       cursor: pointer;
     }
 
     .planner-row:hover {
-      border-color: color-mix(in srgb, var(--teal) 34%, var(--line));
+      border-color: #d5cec7;
       background: var(--recipe-soft);
     }
 
@@ -875,7 +875,7 @@ const DEFAULT_MODIFIERS = [
       margin: 2px 4px 2px 0;
       padding: 4px 8px;
       border-radius: 999px;
-      background: #eef8f6;
+      background: #F8EEF4;
       color: #4B1238;
       font-weight: 700;
       font-size: 12px;
@@ -887,7 +887,7 @@ const DEFAULT_MODIFIERS = [
       border: 1px solid var(--recipe-line);
       border-radius: 999px;
       padding: 5px;
-      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      background: #d5cec7;
     }
 
     .tab-strip button {

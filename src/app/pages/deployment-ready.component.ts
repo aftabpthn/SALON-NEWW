@@ -25,9 +25,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/deployment/ready-items"><span>Ready items</span><strong>{{ metrics.readyItems }}/{{ metrics.checklistItems }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/deployment/events"><span>Events</span><strong>{{ metrics.events }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/deployment/backups"><span>Backups</span><strong>{{ metrics.backups }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/deployment/ready-items"><span>Ready items</span><strong>{{ metrics.readyItems }}/{{ metrics.checklistItems }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/deployment/events"><span>Events</span><strong>{{ metrics.events }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/deployment/backups"><span>Backups</span><strong>{{ metrics.backups }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">

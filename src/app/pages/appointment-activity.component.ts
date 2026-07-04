@@ -768,7 +768,7 @@ interface ClientScoreRow {
 
     .activity-nav-card.active {
       border-color: var(--teal);
-      background: linear-gradient(90deg, rgba(214, 79, 146, 0.18), rgba(37, 99, 235, 0.12), rgba(245, 158, 11, 0.12));
+      background: linear-gradient(90deg, rgba(75,18,56,0.04), rgba(75,18,56,0.03), rgba(75,18,56,0.03));
       box-shadow: 0 8px 22px rgba(12, 26, 43, 0.12);
     }
 

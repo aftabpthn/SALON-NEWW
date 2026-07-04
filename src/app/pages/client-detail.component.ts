@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -149,7 +149,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <span class="avatar large">{{ initials(client.name) }}</span>
             <div class="client360-header-main">
               <h2>{{ client.name || 'Walk-in client' }}</h2>
-              <p>{{ client.phone || client.mobile || 'No mobile' }} · {{ client.email || 'No email' }}</p>
+              <p>{{ client.phone || client.mobile || 'No mobile' }} Â· {{ client.email || 'No email' }}</p>
               <div class="chip-row client360-status-row">
                 <span class="badge">{{ clientTypeLabel(client) }}</span>
                 <span class="badge">{{ membershipStatusLabel(client) }}</span>
@@ -360,15 +360,15 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article [class.danger-text]="totalDue() > 0">
                     <strong>Due warning</strong>
-                    <span>{{ dueWarningLabel() }} · {{ totalDue() | currency:'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ dueWarningLabel() }} Â· {{ totalDue() | currency:'INR':'symbol':'1.0-0' }}</span>
                   </article>
                   <article>
                     <strong>Inactive / reactivation</strong>
-                    <span>{{ reactivationWarningLabel() }} · Last visit {{ lastVisitLabel() }}</span>
+                    <span>{{ reactivationWarningLabel() }} Â· Last visit {{ lastVisitLabel() }}</span>
                   </article>
                   <article [class.danger-text]="allergyPatchWarningLabel(client) !== 'Safety profile captured'">
                     <strong>Allergy / patch-test</strong>
-                    <span>{{ allergyPatchWarningLabel(client) }} · Allergy {{ profileSummary(client, 'allergies') }} · Patch {{ profileSummary(client, 'patchTest') }}</span>
+                    <span>{{ allergyPatchWarningLabel(client) }} Â· Allergy {{ profileSummary(client, 'allergies') }} Â· Patch {{ profileSummary(client, 'patchTest') }}</span>
                   </article>
                 </div>
               </section>
@@ -382,7 +382,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article *ngFor="let invoice of clientInvoices().slice(0, 4); trackBy: trackApiRecord">
                     <strong>{{ invoice.invoiceNumber || invoice.invoice_no || invoice.id }}</strong>
-                    <span>{{ dateLabel(invoice.createdAt || invoice.created_at || invoice.date) }} · {{ saleSummary(invoice.saleId || invoice.sale_id || invoice.id) }} · {{ invoiceTotal(invoice) | currency:'INR':'symbol':'1.0-0' }} · Due {{ invoiceBalance(invoice) | currency:'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ dateLabel(invoice.createdAt || invoice.created_at || invoice.date) }} Â· {{ saleSummary(invoice.saleId || invoice.sale_id || invoice.id) }} Â· {{ invoiceTotal(invoice) | currency:'INR':'symbol':'1.0-0' }} Â· Due {{ invoiceBalance(invoice) | currency:'INR':'symbol':'1.0-0' }}</span>
                   </article>
                   <article *ngIf="!clientInvoices().length">
                     <strong>No invoices yet</strong>
@@ -400,7 +400,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article *ngFor="let appointment of clientAppointments().slice(0, 4); trackBy: trackApiRecord">
                     <strong>{{ appointment.serviceName || appointment.service || appointment.title || 'Appointment' }}</strong>
-                    <span>{{ dateLabel(appointment.startTime || appointment.start_time || appointment.date || appointment.createdAt) }} · {{ staffName(appointment.staffId || appointment.staff_id || appointment.employeeId || '') }} · {{ appointment.status || 'booked' }}</span>
+                    <span>{{ dateLabel(appointment.startTime || appointment.start_time || appointment.date || appointment.createdAt) }} Â· {{ staffName(appointment.staffId || appointment.staff_id || appointment.employeeId || '') }} Â· {{ appointment.status || 'booked' }}</span>
                   </article>
                   <article *ngIf="!clientAppointments().length">
                     <strong>No appointments yet</strong>
@@ -418,7 +418,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article *ngFor="let item of clientWalletTransactions().slice(0, 4); trackBy: trackApiRecord">
                     <strong>{{ item.type || item.reason || 'Wallet entry' }}</strong>
-                    <span>{{ dateLabel(item.createdAt || item.created_at || item.date) }} · {{ moneyValue(item.amount) | currency:'INR':'symbol':'1.0-0' }} · Balance {{ walletEntryBalance(item) | currency:'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ dateLabel(item.createdAt || item.created_at || item.date) }} Â· {{ moneyValue(item.amount) | currency:'INR':'symbol':'1.0-0' }} Â· Balance {{ walletEntryBalance(item) | currency:'INR':'symbol':'1.0-0' }}</span>
                   </article>
                   <article *ngIf="!clientWalletTransactions().length">
                     <strong>No wallet activity</strong>
@@ -540,7 +540,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <span>Preferred stylist</span>
                 <select [(ngModel)]="beautyProfile.preferredStylistId">
                   <option value="">Auto from history</option>
-                  <option *ngFor="let person of staff()" [value]="person.id">{{ person.name }} · {{ person.role || 'staff' }}</option>
+                  <option *ngFor="let person of staff()" [value]="person.id">{{ person.name }} Â· {{ person.role || 'staff' }}</option>
                 </select>
               </label>
               <label class="field">
@@ -604,7 +604,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <span>Treatment staff</span>
                 <select [(ngModel)]="beautyProfile.treatmentStaffId">
                   <option value="">Auto / not assigned</option>
-                  <option *ngFor="let person of staff()" [value]="person.id">{{ person.name }} · {{ person.role || 'staff' }}</option>
+                  <option *ngFor="let person of staff()" [value]="person.id">{{ person.name }} Â· {{ person.role || 'staff' }}</option>
                 </select>
               </label>
               <label class="field full">
@@ -772,7 +772,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <article class="product-profile-card" *ngFor="let product of clientProductRows(); trackBy: trackHistoryRow">
                 <div>
                   <h3>{{ product.name }}</h3>
-                  <p>{{ product.invoice }} · {{ product.lastBought }}</p>
+                  <p>{{ product.invoice }} Â· {{ product.lastBought }}</p>
                 </div>
                 <div class="product-profile-metrics">
                   <div><span>Qty</span><strong>{{ product.qty }}</strong></div>
@@ -868,7 +868,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <span>Add existing client</span>
               <select [(ngModel)]="familyMemberId">
                 <option value="">Select member</option>
-                <option *ngFor="let item of clients()" [value]="item.id" [disabled]="item.id === client.id">{{ item.name }} · {{ item.phone }}</option>
+                <option *ngFor="let item of clients()" [value]="item.id" [disabled]="item.id === client.id">{{ item.name }} Â· {{ item.phone }}</option>
               </select>
             </label>
             <label class="field">
@@ -892,7 +892,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <article class="family-primary-card">
               <div>
                 <h3>{{ familyPrimary(tree, client).name }}</h3>
-                <p>{{ familyPrimary(tree, client).phone || 'No phone' }} · {{ familyMembers(tree).length }} linked member(s)</p>
+                <p>{{ familyPrimary(tree, client).phone || 'No phone' }} Â· {{ familyMembers(tree).length }} linked member(s)</p>
               </div>
               <span class="badge">{{ sharedWalletLabel(familyPrimary(tree, client)) }}</span>
             </article>
@@ -1045,7 +1045,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <div class="activity-list package-redemptions">
                 <article *ngFor="let redemption of row.redemptions; trackBy: trackHistoryRow">
                   <strong>{{ redemption.service }}</strong>
-                  <span>{{ redemption.date }} · {{ redemption.staff }} · {{ redemption.amount | currency: 'INR':'symbol':'1.0-0' }} · {{ redemption.status }}</span>
+                  <span>{{ redemption.date }} Â· {{ redemption.staff }} Â· {{ redemption.amount | currency: 'INR':'symbol':'1.0-0' }} Â· {{ redemption.status }}</span>
                 </article>
                 <article *ngIf="!row.redemptions.length">
                   <strong>No redemptions yet</strong>
@@ -1090,7 +1090,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <div class="activity-list membership-redemptions">
                 <article *ngFor="let redemption of row.redemptions; trackBy: trackHistoryRow">
                   <strong>{{ redemption.service }}</strong>
-                  <span>{{ redemption.date }} · {{ redemption.staff }} · {{ redemption.amount | currency: 'INR':'symbol':'1.0-0' }} · {{ redemption.status }}</span>
+                  <span>{{ redemption.date }} Â· {{ redemption.staff }} Â· {{ redemption.amount | currency: 'INR':'symbol':'1.0-0' }} Â· {{ redemption.status }}</span>
                 </article>
                 <article *ngIf="!row.redemptions.length">
                   <strong>No redemptions yet</strong>
@@ -1201,7 +1201,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             </div>
             <div class="activity-list note-history-list">
               <article *ngFor="let item of clientNoteHistory(client); trackBy: trackHistoryRow">
-                <strong>{{ item.type }} · {{ item.date }}</strong>
+                <strong>{{ item.type }} Â· {{ item.date }}</strong>
                 <span>{{ item.note }}</span>
                 <small>{{ item.author }}</small>
               </article>
@@ -1355,7 +1355,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <div class="activity-list">
               <article *ngFor="let item of client.whatsappHistory">
                 <strong>{{ item.status }}</strong>
-                <span>{{ item.message }} · {{ item.date }}</span>
+                <span>{{ item.message }} Â· {{ item.date }}</span>
               </article>
             </div>
           </section>
@@ -1954,7 +1954,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
       border: 1px solid #d9e3ec;
       border-radius: 8px;
       background:
-        linear-gradient(135deg, rgba(15, 23, 42, 0.04), transparent 34%),
+        linear-gradient(135deg, rgba(75,18,56,0.03), transparent 34%),
         linear-gradient(90deg, #ffffff 0%, #ffffff 66%, #f8fbff 100%);
       padding: 28px;
       box-shadow: 0 22px 48px rgba(15, 23, 42, 0.10);
@@ -1967,7 +1967,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
       right: 0;
       height: 5px;
       content: '';
-      background: linear-gradient(90deg, #4B1238, #2563eb, #c2410c);
+      background: linear-gradient(90deg, #4B1238, #63214D, #4B1238);
     }
 
     .client360-header-body {
@@ -3151,7 +3151,7 @@ export class ClientDetailComponent implements OnInit {
     if (key === 'patchTest') {
       const result = String(safetyFlags.patchTestResult || '').replace(/_/g, ' ');
       const date = safetyFlags.patchTestDate ? this.dateLabel(safetyFlags.patchTestDate) : '';
-      return result || date ? [result || 'Recorded', date].filter(Boolean).join(' · ') : 'Not tested';
+      return result || date ? [result || 'Recorded', date].filter(Boolean).join(' Â· ') : 'Not tested';
     }
     if (key === 'preferredChannel') {
       return this.titleText(communication.preferredChannel || 'Default');
@@ -4015,7 +4015,7 @@ export class ClientDetailComponent implements OnInit {
     const staffId = item.staffId || item.staff_id || item.employeeId || '';
     const staff = item.staffName || item.staff_name || this.staffName(staffId);
     const service = item.serviceName || item.service || item.appointmentService || item.invoiceService || '';
-    if (service && staff && staff !== 'Unassigned') return `${service} · ${staff}`;
+    if (service && staff && staff !== 'Unassigned') return `${service} Â· ${staff}`;
     if (service) return String(service);
     if (staff && staff !== 'Unassigned') return String(staff);
     return 'Not linked';
@@ -4280,7 +4280,7 @@ export class ClientDetailComponent implements OnInit {
       hairType: String(item.hairType || preferences.hairType || '-'),
       scalpCondition: String(item.scalpCondition || preferences.scalpCondition || '-'),
       allergy: String(item.allergy || item.allergies || '-'),
-      patchTest: `${patchDate ? this.dateLabel(patchDate) : '-'}${patchResult ? ` · ${this.titleText(patchResult)}` : ''}`,
+      patchTest: `${patchDate ? this.dateLabel(patchDate) : '-'}${patchResult ? ` Â· ${this.titleText(patchResult)}` : ''}`,
       chemicalHistory: String(item.chemicalHistory || preferences.chemicalHistory || '-'),
       formulaNotes: String(item.formulaNotes || preferences.formulaNotes || '-'),
       productsUsed: String(item.productsUsed || preferences.productsUsed || '-'),

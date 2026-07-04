@@ -170,7 +170,7 @@ type CareContext = {
   styles: [`
     :host { display: block; height: calc(100vh - 44px); min-height: 0; overflow: hidden; }
     .care-shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; padding-top: 6px; color: #172033; min-width: 0; overflow: hidden; }
-    .care-hero { display: flex; justify-content: space-between; gap: 18px; align-items: stretch; padding: 14px 18px; border: 1px solid #dfe7ef; border-radius: 8px; background: linear-gradient(135deg, #ffffff, #f4faf8); box-shadow: 0 10px 24px rgba(15, 23, 42, .07); }
+    .care-hero { display: flex; justify-content: space-between; gap: 18px; align-items: stretch; padding: 14px 18px; border: 1px solid #dfe7ef; border-radius: 8px; background: linear-gradient(135deg, #ffffff, #faf8f6); box-shadow: 0 10px 24px rgba(15, 23, 42, .07); }
     .eyebrow { display: block; color: #4B1238; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: .08em; }
     h1, h2, p { margin: 0; } h1 { font-size: 28px; letter-spacing: 0; } h2 { font-size: 18px; letter-spacing: 0; }
     .care-hero p { max-width: 860px; margin-top: 4px; color: #5f6f83; line-height: 1.4; }
@@ -203,7 +203,7 @@ type CareContext = {
     .bubble { width: min(860px, 100%); max-width: 100%; display: grid; gap: 9px; padding: 13px; border: 1px solid #dfe7ef; border-radius: 8px; background: #fff; overflow-wrap: anywhere; }
     .bubble p { white-space: pre-wrap; line-height: 1.55; } .bubble small, .bubble em { color: #64748b; }
     .chips, .shortcut-row, .answer-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-    .chips span, .shortcut-row a { padding: 5px 8px; border-radius: 999px; background: #e7f8f5; color: #4B1238; font-size: 12px; font-weight: 800; text-decoration: none; }
+    .chips span, .shortcut-row a { padding: 5px 8px; border-radius: 999px; background: #F8EEF4; color: #4B1238; font-size: 12px; font-weight: 800; text-decoration: none; }
     .citation-box { display: grid; gap: 8px; padding: 8px; border-radius: 8px; background: #f8fafc; }
     .citation-box a { display: grid; gap: 2px; padding: 6px; color: inherit; text-decoration: none; }
     ol { margin: 0; padding-left: 18px; color: #334155; }

@@ -96,7 +96,7 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
       background: #ffffff;
       box-shadow: 0 16px 40px rgba(15, 23, 42, .06);
     }
-    .share-hero { min-height: 260px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center; padding: 32px; background: linear-gradient(135deg, #f8fffd 0%, #ffffff 55%, #f4efe0 100%); }
+    .share-hero { min-height: 260px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center; padding: 32px; background: linear-gradient(135deg, #F8EEF4 0%, #ffffff 55%, #FAF8F6 100%); }
     .share-copy { display: grid; gap: 12px; max-width: 840px; }
     .eyebrow { color: #4B1238; font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
     h1, h2 { margin: 0; letter-spacing: 0; color: #111827; }

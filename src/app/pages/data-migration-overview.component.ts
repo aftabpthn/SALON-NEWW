@@ -63,7 +63,7 @@ import { DataMigrationStore } from './data-migration.store';
   styles: [`
     :host { display: block; }
     .migration-shell { display: grid; gap: 14px; padding: 16px; color: #172033; }
-    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
+    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #faf8f6, #ffffff 62%, #f0ece9); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
     .command-header h1 { margin: 4px 0; font-size: 26px; line-height: 1.1; letter-spacing: -0.01em; }
     .command-header p { margin: 0; max-width: 800px; color: #64748b; font-size: 13px; line-height: 1.45; }
     .eyebrow { color: #2563eb; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
@@ -84,8 +84,8 @@ import { DataMigrationStore } from './data-migration.store';
     .module-body { flex: 1; min-width: 0; display: grid; gap: 3px; }
     .module-body strong { font-size: 14px; color: #172033; }
     .module-body span { font-size: 12px; color: #64748b; line-height: 1.4; }
-    .module-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; background: #F1E8EE; color: #4B1238; white-space: nowrap; }
-    .module-badge.ready { background: #F1E8EE; color: #4B1238; }
+    .module-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; background: #f5f2ef; color: #4B1238; white-space: nowrap; }
+    .module-badge.ready { background: #f5f2ef; color: #4B1238; }
     .module-badge.pending { background: #fffbeb; color: #b45309; }
     .module-card button { flex-shrink: 0; }
     button { min-height: 36px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px; font-weight: 700; font-size: 12px; cursor: pointer; background: #ffffff; color: #172033; }

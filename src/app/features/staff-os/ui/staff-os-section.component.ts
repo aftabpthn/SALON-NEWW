@@ -2148,26 +2148,26 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     h1, h2 { margin: 0; letter-spacing: 0; }
     h1 { font-size: 28px; }
     h2 { font-size: 18px; }
-    .refresh, .primary, .icon-button { border: 1px solid #cbd8d2; background: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; min-height: 38px; font-weight: 700; }
+    .refresh, .primary, .icon-button { border: 1px solid #E7DDD6; background: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer; min-height: 38px; font-weight: 700; }
     .primary { background: #4B1238; border-color: #4B1238; color: #fff; }
     .primary:disabled { opacity: .65; cursor: wait; }
     .icon-button { width: 38px; padding: 0; font-size: 22px; }
-    .row-action { border: 1px solid #cbd8d2; background: #fff; border-radius: 6px; padding: 7px 10px; cursor: pointer; min-height: 32px; font-weight: 800; color: #4B1238; }
+    .row-action { border: 1px solid #E7DDD6; background: #fff; border-radius: 6px; padding: 7px 10px; cursor: pointer; min-height: 32px; font-weight: 800; color: #4B1238; }
     .row-action:disabled { opacity: .65; cursor: wait; }
-    .staff-shell-nav { align-items: center; background: rgba(255,255,255,.72); border: 1px solid #d9e5de; border-radius: 8px; display: flex; gap: 8px; max-width: 100%; overflow-x: auto; padding: 8px; }
-    .staff-shell-nav a { align-items: center; background: #fff; border: 1px solid #d9e5de; border-radius: 7px; color: #10201a; display: grid; flex: 1 0 150px; gap: 2px 8px; grid-template-columns: auto 1fr; min-height: 52px; padding: 8px 10px; text-decoration: none; }
-    .staff-shell-nav a.active { border-color: #4B1238; background: #effaf7; box-shadow: inset 0 0 0 1px #4B1238; }
-    .staff-shell-nav span { align-items: center; background: #e8f5f2; border-radius: 8px; color: #4B1238; display: grid; font-size: 12px; font-weight: 900; height: 34px; justify-content: center; width: 34px; }
+    .staff-shell-nav { align-items: center; background: rgba(255,255,255,.72); border: 1px solid #E7DDD6; border-radius: 8px; display: flex; gap: 8px; max-width: 100%; overflow-x: auto; padding: 8px; }
+    .staff-shell-nav a { align-items: center; background: #fff; border: 1px solid #E7DDD6; border-radius: 7px; color: #10201a; display: grid; flex: 1 0 150px; gap: 2px 8px; grid-template-columns: auto 1fr; min-height: 52px; padding: 8px 10px; text-decoration: none; }
+    .staff-shell-nav a.active { border-color: #4B1238; background: #F8EEF4; box-shadow: inset 0 0 0 1px #4B1238; }
+    .staff-shell-nav span { align-items: center; background: #F8EEF4; border-radius: 8px; color: #4B1238; display: grid; font-size: 12px; font-weight: 900; height: 34px; justify-content: center; width: 34px; }
     .staff-shell-nav strong { font-size: 13px; line-height: 1.15; }
     .staff-shell-nav small { color: #60766d; font-size: 11px; grid-column: 2; }
-    .staff-control-room { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 14px; padding: 16px; }
+    .staff-control-room { background: #fff; border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 14px; padding: 16px; }
     .control-heading { align-items: end; display: grid; gap: 12px; grid-template-columns: 1fr auto; }
     .control-heading h2 { font-size: 20px; }
     .control-filters { align-items: end; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
     .control-filters label { color: #60766d; display: grid; font-size: 11px; font-weight: 900; gap: 5px; text-transform: uppercase; }
     .control-filters input { min-height: 38px; width: 160px; }
     .control-cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    .control-card { border: 1px solid #d9e5de; border-left: 5px solid #4B1238; border-radius: 8px; color: #10201a; display: grid; gap: 6px; min-height: 94px; padding: 13px; text-decoration: none; }
+    .control-card { border: 1px solid #E7DDD6; border-left: 5px solid #4B1238; border-radius: 8px; color: #10201a; display: grid; gap: 6px; min-height: 94px; padding: 13px; text-decoration: none; }
     .control-card span { color: #60766d; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .control-card strong { font-size: 25px; line-height: 1; }
     .control-card small { color: #60766d; font-weight: 700; }
@@ -2177,12 +2177,12 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .control-card.blue { border-left-color: #2563eb; }
     .control-card.violet { border-left-color: #7c3aed; }
     .control-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
-    .control-tabs a { align-items: center; border: 1px solid #d9e5de; border-radius: 999px; color: #34483f; display: flex; flex: 0 0 auto; gap: 8px; min-height: 38px; padding: 8px 12px; text-decoration: none; }
+    .control-tabs a { align-items: center; border: 1px solid #E7DDD6; border-radius: 999px; color: #34483f; display: flex; flex: 0 0 auto; gap: 8px; min-height: 38px; padding: 8px 12px; text-decoration: none; }
     .control-tabs a.active { background: #4B1238; border-color: #4B1238; color: #fff; }
-    .control-tabs strong { background: #eef7f5; border-radius: 999px; color: #4B1238; min-width: 24px; padding: 3px 7px; text-align: center; }
+    .control-tabs strong { background: #F8EEF4; border-radius: 999px; color: #4B1238; min-width: 24px; padding: 3px 7px; text-align: center; }
     .control-tabs a.active strong { background: #fff; }
     .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-    .metric, .panel, .state { border: 1px solid #d9e5de; background: #fff; border-radius: 8px; }
+    .metric, .panel, .state { border: 1px solid #E7DDD6; background: #fff; border-radius: 8px; }
     .metric { display: grid; gap: 8px; padding: 14px; min-height: 76px; }
     .metric span { color: #5f746b; font-size: 13px; }
     .metric strong { font-size: 24px; }
@@ -2276,15 +2276,15 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-register-table th,
     .staff-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
     .staff-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
-    .staff-register-table tbody tr:hover { background: #eef7fc; }
+    .staff-register-table tbody tr:hover { background: #F8EEF4; }
     .staff-register-table td small { color: #60766d; display: block; font-size: 12px; margin-top: 3px; }
     .staff-register-footer { align-items: center; color: #64748b; display: flex; gap: 12px; justify-content: space-between; padding: 8px 16px; border-top: 1px solid #d8e1ea; font-size: 12px; }
     .staff-workspace-panel { background: #fbfdff; }
     .workspace-heading { align-items: end; }
     .staff-workspace-shell { align-items: start; display: grid; gap: 14px; grid-template-columns: 300px minmax(0, 1fr); min-width: 0; }
     .staff-category-rail { display: grid; gap: 8px; position: sticky; top: 12px; }
-    .staff-category-tile { align-content: center; background: #fff; border: 1px solid #d9e5de; border-left: 4px solid #4B1238; border-radius: 8px; color: #10201a; cursor: pointer; display: grid; gap: 4px; min-height: 82px; padding: 12px; text-align: left; width: 100%; }
-    .staff-category-tile:hover, .staff-category-tile.active { background: #f4faf8; border-color: #b7d7cf; }
+    .staff-category-tile { align-content: center; background: #fff; border: 1px solid #E7DDD6; border-left: 4px solid #4B1238; border-radius: 8px; color: #10201a; cursor: pointer; display: grid; gap: 4px; min-height: 82px; padding: 12px; text-align: left; width: 100%; }
+    .staff-category-tile:hover, .staff-category-tile.active { background: #F8EEF4; border-color: #E7DDD6; }
     .staff-category-tile.active { box-shadow: 0 10px 24px rgba(16, 32, 56, .08); }
     .staff-category-tile[data-state='ok'] { border-left-color: #16a34a; }
     .staff-category-tile[data-state='warn'] { border-left-color: #b7791f; }
@@ -2292,29 +2292,29 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-category-tile span { font-size: 13px; font-weight: 900; line-height: 1.25; }
     .staff-category-tile strong { font-size: 20px; line-height: 1.1; overflow-wrap: anywhere; }
     .staff-category-tile small { color: #60766d; font-size: 11px; line-height: 1.3; }
-    .staff-workspace-detail { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 14px; min-width: 0; padding: 16px; }
+    .staff-workspace-detail { background: #fff; border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 14px; min-width: 0; padding: 16px; }
     .workspace-detail-head { align-items: start; border-bottom: 1px solid #edf2ef; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding-bottom: 12px; }
     .workspace-detail-head p { color: #60766d; font-size: 13px; margin: 4px 0 0; }
     .badge.warn { background: #fff7e6; color: #8a5a11; }
     .badge.bad { background: #fdecec; color: #9f2424; }
     .workspace-detail-body { display: grid; gap: 14px; min-width: 0; }
     .workspace-kpi-grid { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .workspace-kpi-grid article { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 5px; min-height: 78px; padding: 12px; }
+    .workspace-kpi-grid article { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 5px; min-height: 78px; padding: 12px; }
     .workspace-kpi-grid span { color: #60766d; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .workspace-kpi-grid strong { color: #10201a; font-size: 22px; overflow-wrap: anywhere; }
     .workspace-kpi-grid small { color: #60766d; }
     .workspace-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    .workspace-actions a, .workspace-actions button { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; color: #4B1238; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
+    .workspace-actions a, .workspace-actions button { align-items: center; border: 1px solid #E7DDD6; border-radius: 6px; color: #4B1238; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
     .workspace-actions .primary { color: #fff; }
     .staff-workspace-detail .table { max-height: 520px; }
     .workspace-directory-table .row { grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr) minmax(0, .95fr) minmax(0, 1fr) minmax(0, .6fr) minmax(0, 1fr) minmax(0, .65fr); }
     .salary-workspace-table .row { grid-template-columns: minmax(0, 1.2fr) minmax(0, .75fr) minmax(0, .75fr) minmax(0, .8fr) minmax(0, .65fr); }
-    .salary-editor-card { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; padding: 14px; }
+    .salary-editor-card { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 12px; padding: 14px; }
     .salary-editor-form { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .salary-editor-form .field { grid-template-columns: 1fr; }
     .salary-editor-form .check-field, .salary-editor-form .state, .salary-editor-form .drawer-actions { grid-column: 1 / -1; }
     .salary-editor-form .drawer-actions { position: static; border: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; padding: 0; }
-    .workspace-manual-form.staff-form { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 14px; }
+    .workspace-manual-form.staff-form { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 14px; }
     .workspace-manual-form .field, .workspace-manual-form .field.full { grid-template-columns: 1fr; }
     .workspace-manual-form .field.full, .workspace-manual-form .drawer-actions { grid-column: 1 / -1; }
     .workspace-manual-form .drawer-actions { position: static; border: 0; display: flex; flex-wrap: wrap; padding: 0; }
@@ -2329,8 +2329,8 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .leave-actions .refresh { min-height: 30px; padding: 6px 9px; }
     .leave-actions .danger { border-color: #f1c4bd; color: #a43b2e; }
     .live-badges, .row-links { display: flex; gap: 6px; flex-wrap: wrap; }
-    .mini-badge { width: fit-content; border-radius: 999px; background: #f7faf8; border: 1px solid #d9e5de; color: #40544c; padding: 3px 8px; font-size: 11px; font-weight: 800; }
-    .row-links a { border-bottom: 1px solid #99c8bd; color: #4B1238; font-size: 12px; font-weight: 800; text-decoration: none; }
+    .mini-badge { width: fit-content; border-radius: 999px; background: #f7faf8; border: 1px solid #E7DDD6; color: #40544c; padding: 3px 8px; font-size: 11px; font-weight: 800; }
+    .row-links a { border-bottom: 1px solid #E7DDD6; color: #4B1238; font-size: 12px; font-weight: 800; text-decoration: none; }
     .state, .empty { padding: 14px; color: #61746c; }
     .action-empty { align-items: start; display: grid; gap: 7px; text-align: left; }
     .action-empty strong { color: #10201a; }
@@ -2343,16 +2343,16 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .heatmap { display: grid; grid-template-columns: repeat(14, minmax(10px, 1fr)); gap: 4px; }
     .heatmap span { aspect-ratio: 1; border-radius: 3px; background: #23865c; }
     .task-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .task-create-form.staff-form { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; padding: 14px; }
+    .task-create-form.staff-form { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; padding: 14px; }
     .task-create-form .field.full, .task-create-form .drawer-actions { grid-column: 1 / -1; }
     .task-create-form .drawer-actions { position: static; border: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; padding: 0; }
     .form-message { color: #4B1238; font-weight: 800; }
     .error-message { color: #b91c1c; font-weight: 800; }
-    .commission-setup { align-items: center; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
+    .commission-setup { align-items: center; border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
     .commission-setup strong { display: block; font-size: 15px; }
     .commission-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-    .commission-actions a { align-items: center; border: 1px solid #cbd8d2; border-radius: 6px; color: #4B1238; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
-    .success { color: #4B1238; border-color: #C9A8BA; background: #f0fbf7; }
+    .commission-actions a { align-items: center; border: 1px solid #E7DDD6; border-radius: 6px; color: #4B1238; display: inline-flex; font-size: 13px; font-weight: 900; justify-content: center; min-height: 36px; padding: 8px 11px; text-decoration: none; }
+    .success { color: #4B1238; border-color: #C9A8BA; background: #F8EEF4; }
     .attendance-command .panel-heading { align-items: end; }
     .attendance-command .panel-heading span { color: #60766d; display: block; margin-top: 4px; }
     .staff-attendance-mode { gap: 10px; }
@@ -2412,7 +2412,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .attendance-register-table th,
     .attendance-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
     .attendance-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
-    .attendance-register-table tbody tr:hover { background: #eef7fc; }
+    .attendance-register-table tbody tr:hover { background: #F8EEF4; }
     .staff-roster-mode { gap: 10px; }
     .staff-roster-mode .topbar,
     .staff-roster-mode .staff-shell-nav,
@@ -2446,7 +2446,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .roster-register-table th,
     .roster-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
     .roster-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
-    .roster-register-table tbody tr:hover { background: #eef7fc; }
+    .roster-register-table tbody tr:hover { background: #F8EEF4; }
     .staff-payroll-mode { gap: 10px; }
     .staff-payroll-mode .topbar,
     .staff-payroll-mode .staff-shell-nav,
@@ -2478,7 +2478,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .payroll-register-table th,
     .payroll-register-table td { border-bottom: 1px solid #dfe7ef; padding: 10px 12px; text-align: left; vertical-align: middle; }
     .payroll-register-table th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
-    .payroll-register-table tbody tr:hover { background: #eef7fc; }
+    .payroll-register-table tbody tr:hover { background: #F8EEF4; }
     .payroll-register-table td small { color: #60766d; display: block; font-size: 12px; margin-top: 3px; }
     .payroll-risk-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 10px 16px; border-top: 1px solid #d8e1ea; }
     .payroll-risk-strip article { border: 1px solid #dfe7ef; display: grid; gap: 4px; padding: 9px 10px; }
@@ -2487,7 +2487,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .attendance-controls input,
     .attendance-controls select { width: 170px; min-height: 38px; }
     .attendance-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-    .attendance-stats article { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 4px; min-height: 78px; padding: 12px; }
+    .attendance-stats article { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 4px; min-height: 78px; padding: 12px; }
     .attendance-stats span { color: #60766d; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .attendance-stats strong { font-size: 24px; color: #10201a; }
     .attendance-stats small { color: #60766d; }
@@ -2502,7 +2502,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       min-width: 0;
     }
     .camera-panel { align-content: start; overflow: hidden; }
-    .camera-stage { border: 1px solid #d9e5de; border-radius: 8px; background: #f7faf8; width: 100%; max-width: 100%; min-height: 260px; overflow: hidden; display: grid; place-items: center; }
+    .camera-stage { border: 1px solid #E7DDD6; border-radius: 8px; background: #f7faf8; width: 100%; max-width: 100%; min-height: 260px; overflow: hidden; display: grid; place-items: center; }
     .camera-stage video { display: block; width: 100%; max-width: 100%; height: 100%; min-height: 260px; object-fit: cover; background: #10201a; }
     .camera-stage .hidden { display: none; }
     .camera-placeholder { color: #60766d; font-weight: 800; }
@@ -2569,7 +2569,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .mini { min-height: 34px; padding: 8px 10px; }
     .drawer-shell { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; }
     .drawer-scrim { position: absolute; inset: 0; background: rgba(15, 23, 42, .35); }
-    .drawer { position: relative; width: min(1180px, 100%); height: min(840px, calc(100vh - 48px)); overflow-y: auto; background: #fff; border: 1px solid #cbd8d2; border-radius: 8px; box-shadow: 0 28px 80px rgba(15, 23, 42, .24); padding: 0 22px 18px 74px; display: flex; flex-direction: column; gap: 0; }
+    .drawer { position: relative; width: min(1180px, 100%); height: min(840px, calc(100vh - 48px)); overflow-y: auto; background: #fff; border: 1px solid #E7DDD6; border-radius: 8px; box-shadow: 0 28px 80px rgba(15, 23, 42, .24); padding: 0 22px 18px 74px; display: flex; flex-direction: column; gap: 0; }
     .drawer::before { content: ''; position: fixed; width: 52px; height: min(838px, calc(100vh - 50px)); margin-left: -74px; background: linear-gradient(180deg, #06427d, #08396d); border-radius: 7px 0 0 7px; }
     .drawer::after { content: '⌕\A⌂\A☷\A◎\A◇\A▣\A⋯'; white-space: pre; position: fixed; margin-left: -60px; margin-top: 82px; color: rgba(255,255,255,.86); font-size: 20px; line-height: 2.15; text-align: center; width: 24px; }
     .drawer-header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; background: #fff; border-bottom: 1px solid #e4ebe7; padding: 18px 0 12px; }
@@ -2581,42 +2581,42 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .detail-tabs { position: sticky; top: 76px; z-index: 2; display: flex; gap: 0; overflow-x: auto; background: #fff; border-bottom: 1px solid #d6dee0; padding-top: 12px; }
     .detail-tabs button { border: 1px solid #d6dee0; border-bottom: 0; background: #f8fafb; border-radius: 0; color: #4b5563; cursor: pointer; font-size: 12px; font-weight: 900; min-height: 34px; padding: 7px 11px; text-transform: uppercase; white-space: nowrap; }
     .detail-tabs button.active { background: #fff; border-top: 3px solid #f97316; color: #111827; padding-top: 5px; }
-    .live-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.4fr; gap: 10px; border: 1px solid #d9e5de; border-radius: 4px; background: #f8fbf9; margin-top: 14px; padding: 12px; }
+    .live-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.4fr; gap: 10px; border: 1px solid #E7DDD6; border-radius: 4px; background: #f8fbf9; margin-top: 14px; padding: 12px; }
     .live-context article { display: grid; gap: 4px; min-width: 0; }
     .live-context span { color: #60766d; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .live-context strong { color: #10201a; font-size: 13px; overflow-wrap: anywhere; }
     .context-links { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-    .context-links a { background: #fff; border: 1px solid #cbd8d2; border-radius: 6px; color: #4B1238; font-size: 12px; font-weight: 800; min-height: 30px; padding: 6px 9px; text-decoration: none; }
+    .context-links a { background: #fff; border: 1px solid #E7DDD6; border-radius: 6px; color: #4B1238; font-size: 12px; font-weight: 800; min-height: 30px; padding: 6px 9px; text-decoration: none; }
     .staff-form { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr) 172px; gap: 12px 18px; padding-top: 18px; }
     .field { display: grid; grid-template-columns: 165px minmax(0, 1fr); align-items: center; gap: 10px; font-weight: 800; color: #34483f; font-size: 13px; }
     .field.full, .staff-form > .full, .staff-form .state { grid-column: 1 / 3; }
     .field.full { grid-template-columns: 165px minmax(0, 1fr); }
-    .login-provision { display: grid; grid-column: 1 / 3; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #C9A8BA; border-radius: 8px; background: #f0fbf7; }
+    .login-provision { display: grid; grid-column: 1 / 3; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #C9A8BA; border-radius: 8px; background: #F8EEF4; }
     .login-provision > div, .login-provision .check-field { grid-column: 1 / -1; }
     .check-field { align-items: center; border: 1px solid #edf2ef; border-radius: 8px; color: #34483f; display: grid; font-size: 13px; font-weight: 800; gap: 8px; grid-template-columns: auto 1fr; min-height: 43px; padding: 10px 11px; }
     .check-field input { width: 18px; height: 18px; padding: 0; }
-    .salary-quick-panel { align-items: center; background: #f6fbff; border: 1px solid #c8dff2; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; padding: 14px; }
+    .salary-quick-panel { align-items: center; background: #f6fbff; border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; padding: 14px; }
     .salary-quick-panel strong { color: #10201a; display: block; font-size: 16px; }
     .salary-quick-panel small { color: #60766d; display: block; margin-top: 4px; }
     .salary-quick-meta { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .salary-quick-meta article { background: #fff; border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 4px; min-height: 54px; padding: 9px 10px; }
+    .salary-quick-meta article { background: #fff; border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 4px; min-height: 54px; padding: 9px 10px; }
     .salary-quick-meta span { color: #60766d; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .salary-quick-meta strong { font-size: 13px; overflow-wrap: anywhere; }
     .salary-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .salary-quick-actions .primary, .salary-quick-actions .refresh { min-height: 34px; white-space: nowrap; }
-    .incentive-command, .salary-command { align-items: center; background: #f0fbf7; border: 1px solid #C9A8BA; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
+    .incentive-command, .salary-command { align-items: center; background: #F8EEF4; border: 1px solid #C9A8BA; border-radius: 8px; display: grid; gap: 12px; grid-template-columns: 1fr auto; padding: 14px; }
     .salary-command { background: #f8fafc; border-color: #cbd5e1; }
     .incentive-command strong, .salary-command strong { display: block; font-size: 16px; }
     .incentive-command small, .salary-command small { color: #60766d; display: block; margin-top: 4px; }
     .incentive-summary, .salary-summary { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .incentive-summary article, .salary-summary article { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 5px; min-height: 72px; padding: 12px; }
+    .incentive-summary article, .salary-summary article { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 5px; min-height: 72px; padding: 12px; }
     .incentive-summary span, .salary-summary span { color: #60766d; font-size: 12px; font-weight: 800; text-transform: uppercase; }
     .incentive-summary strong, .salary-summary strong { color: #10201a; font-size: 15px; overflow-wrap: anywhere; }
     .subdrawer-shell { position: fixed; inset: 0; z-index: 70; display: grid; justify-items: end; }
     .subdrawer-scrim { position: absolute; inset: 0; background: rgba(15, 23, 42, .22); }
-    .subdrawer { position: relative; width: min(860px, 100%); height: 100%; overflow-y: auto; background: #fff; border-left: 1px solid #cbd8d2; box-shadow: -28px 0 70px rgba(15, 23, 42, .22); padding: 20px; display: grid; align-content: start; gap: 16px; }
+    .subdrawer { position: relative; width: min(860px, 100%); height: 100%; overflow-y: auto; background: #fff; border-left: 1px solid #E7DDD6; box-shadow: -28px 0 70px rgba(15, 23, 42, .22); padding: 20px; display: grid; align-content: start; gap: 16px; }
     .advanced-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .rule-card { border: 1px solid #d9e5de; border-radius: 8px; display: grid; gap: 12px; padding: 14px; }
+    .rule-card { border: 1px solid #E7DDD6; border-radius: 8px; display: grid; gap: 12px; padding: 14px; }
     .rule-heading { align-items: center; display: grid; gap: 12px; grid-template-columns: 1fr auto; }
     .rule-heading span { color: #60766d; display: block; font-size: 13px; margin-top: 3px; }
     .rule-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -2634,7 +2634,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .live-panel-title { border-bottom: 1px solid #e4ebe7; display: grid; gap: 3px; padding-bottom: 9px; }
     .live-panel-title span, .live-employee-panel article span, .catalog-mini-grid span { color: #60766d; font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .live-panel-title strong { color: #111827; font-size: 13px; overflow-wrap: anywhere; }
-    .live-employee-panel > article { border: 1px solid #d9e5de; border-left: 4px solid #0f6eb3; border-radius: 4px; display: grid; gap: 3px; min-height: 64px; padding: 9px; }
+    .live-employee-panel > article { border: 1px solid #E7DDD6; border-left: 4px solid #0f6eb3; border-radius: 4px; display: grid; gap: 3px; min-height: 64px; padding: 9px; }
     .live-employee-panel > article.green { border-left-color: #16a34a; }
     .live-employee-panel > article.amber { border-left-color: #f59e0b; }
     .live-employee-panel > article.violet { border-left-color: #7c3aed; }
@@ -2645,7 +2645,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .catalog-mini-grid article { border: 1px solid #e4ebe7; border-radius: 4px; display: grid; gap: 3px; padding: 8px; }
     .catalog-mini-grid strong { color: #111827; font-size: 15px; }
     .live-panel-links { display: grid; gap: 7px; }
-    .live-panel-links a { border: 1px solid #cbd8d2; border-radius: 4px; color: #0f6eb3; font-size: 12px; font-weight: 900; min-height: 32px; padding: 8px 9px; text-align: center; text-decoration: none; }
+    .live-panel-links a { border: 1px solid #E7DDD6; border-radius: 4px; color: #0f6eb3; font-size: 12px; font-weight: 900; min-height: 32px; padding: 8px 9px; text-align: center; text-decoration: none; }
     .drawer-action-buttons { display: grid; gap: 10px; }
     .drawer-action-buttons .refresh, .drawer-action-buttons .primary { width: 100%; }
       .attendance-dashboard-workspace {
@@ -2675,7 +2675,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         width: 100%;
         min-height: 88px;
         padding: 14px;
-        border: 1px solid #d9e5de;
+        border: 1px solid #E7DDD6;
         border-left: 3px solid #4B1238;
         border-radius: 8px;
         color: #10231d;
@@ -2965,7 +2965,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       .workspace-detail-head { grid-template-columns: 1fr; }
       .workspace-actions { display: grid; grid-template-columns: 1fr; }
       .workspace-actions a, .workspace-actions button { width: 100%; }
-      .row, .compact .row, .device-table .row, .mapping-table .row, .risk-table .row, .evidence-table .row, .workspace-directory-table .row, .salary-workspace-table .row { grid-template-columns: 1fr; gap: 5px; min-height: 0; border: 1px solid #d9e5de; border-radius: 8px; padding: 11px; }
+      .row, .compact .row, .device-table .row, .mapping-table .row, .risk-table .row, .evidence-table .row, .workspace-directory-table .row, .salary-workspace-table .row { grid-template-columns: 1fr; gap: 5px; min-height: 0; border: 1px solid #E7DDD6; border-radius: 8px; padding: 11px; }
       .row.header { display: none; }
       .heatmap { grid-template-columns: repeat(7, minmax(22px, 1fr)); }
       .action-empty .primary, .action-empty .refresh { width: 100%; }

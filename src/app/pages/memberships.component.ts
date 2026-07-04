@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -173,7 +173,7 @@ type PlanLifecycleDialog = {
 
         <article class="overview-card">
           <h3>{{ activeMembershipPlans()[0]?.name || 'No active plan yet' }}</h3>
-          <p>{{ activeMembershipPlans()[0]?.discountPercent || 0 }}% service discount · {{ activeMembershipPlans()[0]?.validityDays || 0 }} days validity.</p>
+          <p>{{ activeMembershipPlans()[0]?.discountPercent || 0 }}% service discount Â· {{ activeMembershipPlans()[0]?.validityDays || 0 }} days validity.</p>
           <button class="ghost-button mini" type="button" (click)="setTab('plans')">Manage plans</button>
         </article>
 
@@ -335,7 +335,7 @@ type PlanLifecycleDialog = {
           <div class="quick-grid">
             <article class="action-card" *ngFor="let card of giftCards()">
               <strong>{{ card.code }}</strong>
-              <span>{{ card.balance | currency: 'INR':'symbol':'1.0-0' }} balance · expires {{ card.expiryDate }}</span>
+              <span>{{ card.balance | currency: 'INR':'symbol':'1.0-0' }} balance Â· expires {{ card.expiryDate }}</span>
             </article>
             <article class="action-card" *ngIf="!giftCards().length">
               <strong>No gift card yet.</strong>
@@ -349,7 +349,7 @@ type PlanLifecycleDialog = {
         <button class="drawer-scrim" type="button" (click)="closePlanDrawer()" aria-label="Close plan drawer"></button>
         <aside class="plan-drawer">
           <div class="drawer-title">
-            <button class="icon-button" type="button" (click)="closePlanDrawer()">×</button>
+            <button class="icon-button" type="button" (click)="closePlanDrawer()">Ã—</button>
             <h2>{{ editingPlanId() ? 'Update Plan' : 'Add New Plan' }}</h2>
           </div>
           <form [formGroup]="planForm" (ngSubmit)="savePlan()">
@@ -628,7 +628,7 @@ type PlanLifecycleDialog = {
             <article class="action-card" *ngFor="let reminder of reminders()">
               <strong>{{ clientName(reminder.clientId) }}</strong>
               <span>{{ reminder.message }}</span>
-              <span>Due {{ reminder.dueOn }} · {{ reminder.status }}</span>
+              <span>Due {{ reminder.dueOn }} Â· {{ reminder.status }}</span>
               <button class="ghost-button mini" type="button" *ngIf="reminder.status === 'queued'" (click)="approveReminder(reminder)">Approve</button>
             </article>
           </div>
@@ -655,7 +655,7 @@ type PlanLifecycleDialog = {
             <div class="auto-renew-card-header">
               <div>
                 <strong>{{ item.clientName || clientName(item.clientId) }}</strong>
-                <span>{{ item.planName }} · expires {{ item.expiresOn || '-' }}</span>
+                <span>{{ item.planName }} Â· expires {{ item.expiresOn || '-' }}</span>
               </div>
               <span class="badge" [class.danger]="item.failedPayment || item.status === 'payment_method_missing'">{{ autoRenewStatusLabel(item) }}</span>
             </div>
@@ -709,7 +709,7 @@ type PlanLifecycleDialog = {
                 <td>{{ row.action }}</td>
                 <td>{{ (row.paidAmount || row.amount) | currency: 'INR':'symbol':'1.0-0' }}</td>
                 <td>{{ row.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ row.creditsBefore }} → {{ row.creditsAfter }}</td>
+                <td>{{ row.creditsBefore }} â†’ {{ row.creditsAfter }}</td>
                 <td>{{ paymentLabel(row) }}</td>
                 <td>{{ row.invoiceId || '-' }}</td>
                 <td>{{ row.note || '-' }}</td>
@@ -774,7 +774,7 @@ type PlanLifecycleDialog = {
             <div class="quick-grid" *ngIf="commissionReport().cancellationImpact?.length; else noCommissionImpact">
               <article class="action-card" *ngFor="let item of commissionReport().cancellationImpact">
                 <strong>{{ clientName(item['clientId']) }}</strong>
-                <span>{{ item['action'] }} · {{ item['commissionImpact'] | currency: 'INR':'symbol':'1.0-0' }} impact</span>
+                <span>{{ item['action'] }} Â· {{ item['commissionImpact'] | currency: 'INR':'symbol':'1.0-0' }} impact</span>
                 <span>{{ item['reversalReason'] || 'Commission reversal requires review.' }}</span>
                 <span>Audit: {{ item['auditStatus'] || 'missing' }}</span>
               </article>
@@ -837,9 +837,9 @@ type PlanLifecycleDialog = {
             <div class="auto-renew-card-header">
               <div>
                 <strong>{{ riskTitle(signal) }}</strong>
-                <span>{{ clientName(signal['clientId']) }} · {{ signal['staffName'] || 'System' }}</span>
+                <span>{{ clientName(signal['clientId']) }} Â· {{ signal['staffName'] || 'System' }}</span>
               </div>
-              <span class="badge" [ngClass]="riskBadgeClass(signal['riskLevel'])">{{ signal['riskLevel'] }} · {{ signal['riskScore'] || 0 }}</span>
+              <span class="badge" [ngClass]="riskBadgeClass(signal['riskLevel'])">{{ signal['riskLevel'] }} Â· {{ signal['riskScore'] || 0 }}</span>
             </div>
             <span>{{ signal['reason'] || riskReason(signal) }}</span>
             <span>Evidence: {{ riskEvidenceLabel(signal) }}</span>
@@ -1427,7 +1427,7 @@ type PlanLifecycleDialog = {
             </label>
             <label class="field full" *ngIf="isRenewalZeroAmount()">
               <span>Zero amount reason</span>
-              <textarea formControlName="zeroReason" placeholder="Required for ₹0 renewal"></textarea>
+              <textarea formControlName="zeroReason" placeholder="Required for â‚¹0 renewal"></textarea>
             </label>
             <label class="field full">
               <span>Note</span>
@@ -1517,7 +1517,7 @@ type PlanLifecycleDialog = {
               <span>Target plan</span>
               <select formControlName="targetPlanId" (change)="syncLifecycleTargetPlan()">
                 <option value="">Select target plan</option>
-                <option *ngFor="let plan of activeMembershipPlans()" [value]="plan.id">{{ plan.name }} · {{ plan.price | currency: 'INR':'symbol':'1.0-0' }}</option>
+                <option *ngFor="let plan of activeMembershipPlans()" [value]="plan.id">{{ plan.name }} Â· {{ plan.price | currency: 'INR':'symbol':'1.0-0' }}</option>
               </select>
             </label>
             <label class="field">
@@ -1570,7 +1570,7 @@ type PlanLifecycleDialog = {
             </label>
             <label class="field full" *ngIf="requiresLifecycleZeroReason(dialog.action)">
               <span>Zero amount reason</span>
-              <textarea formControlName="zeroReason" placeholder="Required for ₹0 upgrade"></textarea>
+              <textarea formControlName="zeroReason" placeholder="Required for â‚¹0 upgrade"></textarea>
             </label>
             <label class="field full">
               <span>Note</span>
@@ -1778,7 +1778,7 @@ type PlanLifecycleDialog = {
     .overview-card.primary {
       color: #fff;
       background:
-        linear-gradient(135deg, rgba(75, 18, 56, 0.96), rgba(20, 83, 45, 0.92)),
+        linear-gradient(135deg, rgba(75, 18, 56, 0.92), rgba(75, 18, 56, 0.85)),
         #4B1238;
     }
 
@@ -3327,7 +3327,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const value = this.renewalForm.value;
     const paidAmount = Number(value.paidAmount || 0);
     if (paidAmount <= 0 && !String(value.zeroReason || '').trim()) {
-      this.error.set('Reason is required for ₹0 renewal.');
+      this.error.set('Reason is required for â‚¹0 renewal.');
       return;
     }
     this.lifecycle(membership, 'renew', {
@@ -3470,7 +3470,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       return;
     }
     if (dialog.action === 'upgrade' && payableAmount <= 0 && !zeroReason) {
-      this.error.set('Reason is required for ₹0 upgrade.');
+      this.error.set('Reason is required for â‚¹0 upgrade.');
       return;
     }
     const plan = dialog.targetPlan;
@@ -3827,7 +3827,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const parts = [];
     if (membershipCount) parts.push(`${membershipCount} active membership${membershipCount === 1 ? '' : 's'}`);
     if (packageCount) parts.push(`${packageCount} active package${packageCount === 1 ? '' : 's'}`);
-    return parts.join(' · ') || 'No active benefits';
+    return parts.join(' Â· ') || 'No active benefits';
   }
 
   totalMemberCount(): number {
@@ -3859,7 +3859,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   staffOption(staff: ApiRecord): string {
     const name = this.staffName(String(staff.id || staff['staffId'] || ''));
     const role = staff['role'] || staff['designation'] || staff['category'] || '';
-    return role ? `${name} · ${role}` : name;
+    return role ? `${name} Â· ${role}` : name;
   }
 
   branchOptions(): string[] {
@@ -4163,9 +4163,9 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   clientWalletOption(client: ApiRecord): string {
     const active = this.activeMemberships().find((membership) => membership.clientId === client.id);
     const walletBalance = Number(client.walletBalance || 0);
-    const plan = active?.['planName'] ? ` · ${active['planName']}` : ' · No active benefits';
-    const credits = active ? ` · ${Number(active['creditsRemaining'] || 0)} cr` : '';
-    return `${client.name || client.fullName || client.id} · ${client.phone || client.email || client.id} · Wallet ₹${walletBalance}${plan}${credits}`;
+    const plan = active?.['planName'] ? ` Â· ${active['planName']}` : ' Â· No active benefits';
+    const credits = active ? ` Â· ${Number(active['creditsRemaining'] || 0)} cr` : '';
+    return `${client.name || client.fullName || client.id} Â· ${client.phone || client.email || client.id} Â· Wallet â‚¹${walletBalance}${plan}${credits}`;
   }
 
   membershipBenefitType(membership: ApiRecord): 'membership' | 'package' {
@@ -4218,7 +4218,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   paymentLabel(row: ApiRecord): string {
     const payment = (row.snapshot as ApiRecord | undefined)?.['payment'] as ApiRecord | undefined;
     const mode = String(payment?.['mode'] || '').replace(/_/g, ' ');
-    const ref = payment?.['referenceNo'] ? ` · ${payment['referenceNo']}` : '';
+    const ref = payment?.['referenceNo'] ? ` Â· ${payment['referenceNo']}` : '';
     return mode ? `${mode}${ref}` : '-';
   }
 
@@ -4713,7 +4713,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const restriction = restrictionType === 'all'
       ? 'all services'
       : `${restrictionType.replace('_', ' ')}: ${this.planForm.value.serviceRestrictionValue || '-'}`;
-    return `${limit} · applies on ${restriction}${this.planForm.value.allowProductRedeem ? ' · products allowed' : ''}.`;
+    return `${limit} Â· applies on ${restriction}${this.planForm.value.allowProductRedeem ? ' Â· products allowed' : ''}.`;
   }
 
   structuredPlanPreview(): string {
@@ -4733,22 +4733,22 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     const services = this.planForm.value.includedServicesValue ? `Services: ${this.planForm.value.includedServicesValue}` : 'All eligible services';
     const occasion = [this.planForm.value.birthdayBenefit ? 'birthday' : '', this.planForm.value.anniversaryBenefit ? 'anniversary' : ''].filter(Boolean).join(' + ');
     const priority = this.planForm.value.priorityBooking ? 'priority booking' : '';
-    return [services, occasion ? `Occasion: ${occasion}` : '', priority].filter(Boolean).join(' · ') || 'Standard membership rules';
+    return [services, occasion ? `Occasion: ${occasion}` : '', priority].filter(Boolean).join(' Â· ') || 'Standard membership rules';
   }
 
   planSummary(plan: PosMembershipPlan): string {
     const planType = this.membershipPlanType(plan);
     const rules = plan.benefitRules || {};
     if (planType === 'prepaid_credit') {
-      return `Pay ${this.moneyLabel(plan.price)} · Get ${this.moneyLabel(this.membershipPlanCreditAmount(plan))} credit · ${plan.benefitPercent || 0}% bonus`;
+      return `Pay ${this.moneyLabel(plan.price)} Â· Get ${this.moneyLabel(this.membershipPlanCreditAmount(plan))} credit Â· ${plan.benefitPercent || 0}% bonus`;
     }
-    if (planType === 'visit_pack') return `${this.membershipPlanCreditAmount(plan)} visits · ${plan.validityDays} days`;
-    if (planType === 'service_credit' || planType === 'combo') return `${this.membershipPlanCreditAmount(plan)} ${planType === 'combo' ? 'combo' : 'service'} credits · ${this.includedServicesText(plan.includedServices || []) || 'selected services'}`;
-    if (planType === 'unlimited') return `Unlimited · ${Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4)} / month`;
+    if (planType === 'visit_pack') return `${this.membershipPlanCreditAmount(plan)} visits Â· ${plan.validityDays} days`;
+    if (planType === 'service_credit' || planType === 'combo') return `${this.membershipPlanCreditAmount(plan)} ${planType === 'combo' ? 'combo' : 'service'} credits Â· ${this.includedServicesText(plan.includedServices || []) || 'selected services'}`;
+    if (planType === 'unlimited') return `Unlimited Â· ${Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4)} / month`;
     if (planType === 'family') return `Family ${Number(((rules['family'] || {}) as ApiRecord)['memberLimit'] || 4)} members`;
-    if (planType === 'corporate') return `Corporate ${String(((rules['corporate'] || {}) as ApiRecord)['label'] || plan.name)} · ${plan.discountPercent}%`;
+    if (planType === 'corporate') return `Corporate ${String(((rules['corporate'] || {}) as ApiRecord)['label'] || plan.name)} Â· ${plan.discountPercent}%`;
     if (planType === 'tiered') return `Tier ${String(((rules['tier'] || {}) as ApiRecord)['name'] || plan.name)} after ${this.moneyLabel(Number(((rules['tier'] || {}) as ApiRecord)['spendThreshold'] || 0))}`;
-    return `${this.moneyLabel(plan.price)} · ${plan.discountPercent}% service · ${plan.productDiscountPercent || 0}% product`;
+    return `${this.moneyLabel(plan.price)} Â· ${plan.discountPercent}% service Â· ${plan.productDiscountPercent || 0}% product`;
   }
 
   private membershipPlanType(plan: PosMembershipPlan | null | undefined): string {
@@ -4795,7 +4795,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   }
 
   private moneyLabel(value: number): string {
-    return `₹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
+    return `â‚¹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
   }
 
   private normalizePlan(plan: PosMembershipPlan): PosMembershipPlan {

@@ -11253,7 +11253,7 @@ app-dashboard .dashboard-command-panel .hub-icon {
   --aura-plum-2: #6d1b4d;
   --aura-rose-gold: #c98f9f;
   --aura-indigo: #4338ca;
-  --aura-content-max: 1680px;
+  --aura-content-max: 100%;
   --aura-page-gap: 18px;
   --aura-card-radius-premium: 14px;
   --aura-control-radius: 10px;
@@ -11381,8 +11381,7 @@ body {
 }
 
 :where(.page-stack, .module-shell, .settings-shell, .inventory-shell, .reports-shell, .billing-shell, .command-center-shell) {
-  width: min(100%, var(--aura-content-max));
-  margin-inline: auto;
+  width: 100%;
   padding: clamp(12px, 1.8vw, 24px) 0 34px !important;
   display: flex;
   flex-direction: column;
@@ -11744,8 +11743,7 @@ body {
 
 /* AuraSalon page excellence layer: dashboard, calendar, POS, CRM, inventory. */
 :where(app-dashboard, app-appointments, app-pos, app-clients, app-inventory) :where(.page-stack) {
-  width: min(100%, var(--aura-content-max, 1680px));
-  margin-inline: auto;
+  width: 100%;
   gap: 18px !important;
   padding: 14px 0 34px !important;
   background: transparent !important;
@@ -11984,8 +11982,7 @@ app-inventory :where(.zenoti-table-footer, .section-title, .panel-heading) {
 
 /* AuraSalon enterprise module polish layer: staff, reports, finance, marketing, admin, booking. */
 :where(app-staff-os-section, app-reports, app-reports-enterprise, app-balance-sheet, app-finance-engine, app-financial-summary-report, app-invoice-reports, app-profit-intelligence, app-memberships, app-packages, app-reputation-command-center-page, app-reviews-inbox-page, app-command-center-page, app-super-admin, app-white-label, app-ai-marketing-automation, app-whatsapp-automation, app-engagement-command-center, app-business-details, app-marketplace-settings, app-marketplace-integrations, app-booking-portal, app-booking-wizard) :where(.page-stack, .staff-os, .rep-shell, .reports-shell, .module-shell, .portal-shell, .booking-shell) {
-  width: min(100%, var(--aura-content-max, 1680px));
-  margin-inline: auto;
+  width: 100%;
   gap: 18px !important;
   background: transparent !important;
 }
@@ -12157,8 +12154,7 @@ app-command-center-page :where(.cc-item, .cc-row, .cc-card) {
 
 app-happy-hours-workspace .happy-hours-workspace,
 :where(app-happy-hours-control-tower, app-rule-list, app-rule-builder, app-coupon-engine, app-promotion-calendar, app-happy-hours-client-segments, app-happy-hours-staff-incentives, app-offer-lifecycle, app-offer-roi-score, app-offer-health-score, app-offer-auto-sunset, app-happy-hours-fraud-guard, app-rule-conflict-detector, app-discount-audit-log, app-discount-rule-approvals, app-cross-branch-analytics, app-discount-simulation-sandbox, app-discount-anomaly-inbox, app-white-label-rules, app-client-discount-brain, app-client-return-tracker, app-branch-offer-leaderboard, app-campaign-audience-builder, app-bundle-aware-offers, app-channel-aware-offers, app-elasticity-profit-pricing, app-inventory-aware-offers, app-lead-time-offers, app-market-aware-offers, app-member-wallet-offers, app-no-show-risk-offers, app-staff-aware-offers, app-weather-event-offers, app-pricing-incrementality, app-market-intelligence, app-level6-readiness) :where(.page-stack, .promotion-calendar-page, .market-intel-page, .incrementality-page, .level6-page, .page) {
-  width: min(100%, var(--aura-content-max, 1680px));
-  margin-inline: auto;
+  width: 100%;
   gap: 18px !important;
   background: transparent !important;
   color: var(--aura-text, #1f2933) !important;
@@ -15730,5 +15726,58 @@ app-purchase-bill-drafts .warning-list {
 
   .workspace > router-outlet + * :where(.module-hero, .page-heading, .page-header, .page-title, .studio-hero, .apps-header, .section-title, .panel-head, .toolbar, .table-toolbar, .filter-bar, .filters, .header-actions, .hero-actions) {
     align-items: stretch !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   AuraSalon Full-Page Layout Fix Layer
+   — ensures every page uses full available width/height
+   — no empty space, proper scrolling, no content cutoff
+   — low-specificity overrides, additive only
+   ══════════════════════════════════════════════════ */
+
+/* Use dynamic viewport height on modern browsers */
+.app-shell {
+  min-height: 100dvh;
+}
+
+.sidebar {
+  height: 100dvh;
+}
+
+.auth-shell {
+  min-height: 100dvh;
+}
+
+.portal-shell {
+  min-height: 100dvh;
+}
+
+/* Ensure workspace route content area fills available width fully */
+:is(.workspace-route-content > router-outlet + *) {
+  width: 100%;
+  min-width: 0;
+}
+
+/* All page-stack containers should fill width without artificial max-width or centering */
+:where(.page-stack) {
+  width: 100%;
+  max-width: none !important;
+}
+
+/* Ensure grids and cards inside pages stretch naturally — no squeezing */
+:is(.workspace-route-content > router-outlet + *) :where(
+  .metrics-grid, .kpi-grid, .dashboard-grid, .dashboard-hub-grid, .hub-grid,
+  .summary-grid, .quick-grid, .stat-grid, .card-grid, .action-grid,
+  .three-grid, .split-layout, .pos-layout, .ai-layout
+) {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Responsive: on narrow viewports keep full width */
+@media (max-width: 760px) {
+  :is(.workspace-route-content > router-outlet + *) {
+    padding-inline: 0 !important;
   }
 }

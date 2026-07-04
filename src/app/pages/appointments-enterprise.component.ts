@@ -1005,7 +1005,7 @@ const STATUS_TONES: Record<string, string> = {
       padding: 12px 16px;
       border: 1px solid #f7d7a5;
       border-radius: 14px;
-      background: linear-gradient(135deg, #fff8ec, #ffffff);
+      background: linear-gradient(135deg, #faf8f6, #ffffff);
       box-shadow: 0 14px 30px rgba(148, 96, 9, 0.08);
     }
     .deposit-followup-strip strong,
@@ -1036,7 +1036,7 @@ const STATUS_TONES: Record<string, string> = {
     .month-strip-band > button { height: 40px; width: 40px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; font-weight: 900; }
     .month-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
     .month-strip button { min-width: 54px; min-height: 48px; border: 1px solid #d9e5e2; background: #f8fafc; border-radius: 10px; padding: 6px; color: #334155; }
-    .month-strip button.active { border-color: #5A153F; box-shadow: inset 0 -3px 0 #5A153F; background: #F3EAF0; }
+    .month-strip button.active { border-color: #5A153F; box-shadow: inset 0 -3px 0 #5A153F; background: #F8EEF4; }
     .month-strip button.today { color: #5A153F; }
     .month-strip span, .month-strip small { display: block; font-size: 11px; }
     .scheduler-view-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; gap: 12px; min-height: 58px; padding: 10px 14px; border-radius: 14px; }
@@ -1128,11 +1128,11 @@ const STATUS_TONES: Record<string, string> = {
     label { display: grid; gap: 6px; color: #64748b; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     input, select, textarea { width: 100%; min-height: 42px; border: 1px solid #d5e2df; border-radius: 10px; padding: 9px 11px; font: inherit; background: white; color: #172033; }
     .summary-strip { display: grid; grid-template-columns: repeat(7, minmax(116px, 1fr)); justify-content: start; gap: 12px; min-height: 54px; padding: 8px 12px; border-radius: 16px; }
-    .summary-strip article, .summary-strip button, .pulse-grid div { border: 1px solid #d8e7e3; border-radius: 12px; padding: 8px 12px; background: linear-gradient(135deg, #ffffff, #f5fbfa); }
+    .summary-strip article, .summary-strip button, .pulse-grid div { border: 1px solid #d8e7e3; border-radius: 12px; padding: 8px 12px; background: linear-gradient(135deg, #ffffff, #faf8f6); }
     .summary-strip button { cursor: pointer; text-align: left; font: inherit; color: #172033; }
-    .summary-strip .pending-summary-card { border-color: #facc15; background: linear-gradient(135deg, #fffbeb, #ffffff); }
+    .summary-strip .pending-summary-card { border-color: #facc15; background: linear-gradient(135deg, #faf8f6, #ffffff); }
     .summary-strip .pending-summary-card strong { color: #b45309; }
-    .summary-strip .waitlist-summary-action { border-color: #D4A8C0; background: linear-gradient(135deg, #F3EAF0, #ffffff); box-shadow: inset 0 0 0 1px rgba(90, 21, 63, 0.12); }
+    .summary-strip .waitlist-summary-action { border-color: #D4A8C0; background: linear-gradient(135deg, #F8EEF4, #ffffff); box-shadow: inset 0 0 0 1px rgba(90, 21, 63, 0.12); }
     .summary-strip .waitlist-summary-action small { color: #4B1238; font-weight: 900; }
     .summary-strip span, .pulse-grid span { color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; display: block; }
     .summary-strip strong { display: block; font-size: 20px; margin-top: 2px; line-height: 1.05; }
@@ -1160,7 +1160,7 @@ const STATUS_TONES: Record<string, string> = {
     .staff-head strong { max-width: 100%; font-size: 12px; line-height: 1.15; display: block; color: #1f2937; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
     .staff-head small { max-width: 100%; font-size: 11px; line-height: 1.2; color: #64748b; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
     .staff-menu-button { justify-self: end; height: 28px; width: 28px; min-width: 28px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; cursor: pointer; font-weight: 900; }
-    .staff-menu-button:hover { border-color: #5A153F; color: #4B1238; background: #F3EAF0; }
+    .staff-menu-button:hover { border-color: #5A153F; color: #4B1238; background: #F8EEF4; }
     .avatar { height: 30px; width: 30px; border-radius: 50%; display: grid; place-items: center; background: #d9f99d; color: #2D0B21; font-size: 11px; font-weight: 900; flex: 0 0 auto; }
     .scheduler-grid--compact .avatar { height: 26px; width: 26px; font-size: 10px; }
     .time-column { position: sticky; left: 0; z-index: 5; grid-column: 1; grid-row: 2; background: #f8fbfb; min-height: calc(var(--row-height) * var(--slot-count)); }
@@ -1256,7 +1256,7 @@ const STATUS_TONES: Record<string, string> = {
     .ops-launch:focus-visible { outline: 3px solid rgba(90,21,63,.25); outline-offset: 3px; }
     .ops-launch:hover { border-color: #5A153F; box-shadow: 0 18px 42px rgba(90,21,63,.13); transform: translateY(-1px); }
     .panel-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
-    .panel-head small { border: 1px solid #D4B8CC; border-radius: 999px; color: #4B1238; background: #F3EAF0; padding: 4px 9px; font-weight: 900; }
+    .panel-head small { border: 1px solid #D4B8CC; border-radius: 999px; color: #4B1238; background: #F8EEF4; padding: 4px 9px; font-weight: 900; }
     .ops-panel button, .waitlist-row { border: 1px solid #dbe7e4; border-radius: 10px; background: #fff; padding: 12px; text-align: left; display: grid; gap: 4px; }
     .pulse-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .empty-state { border: 1px dashed #cbd5e1; border-radius: 10px; padding: 18px; text-align: center; color: #64748b; background: #fff; }
@@ -1268,7 +1268,7 @@ const STATUS_TONES: Record<string, string> = {
     .operations-drawer { width: min(640px, 96vw); }
     .drawer-panel { border: 1px solid #dbe7e4; border-radius: 14px; background: #fff; padding: 16px; display: grid; gap: 12px; }
     .drawer-panel .panel-head { margin-bottom: 2px; }
-    .mini-action { border: 1px solid #D4B8CC; border-radius: 999px; background: #F3EAF0; color: #4B1238; padding: 6px 12px; font-size: 13px; font-weight: 900; cursor: pointer; }
+    .mini-action { border: 1px solid #D4B8CC; border-radius: 999px; background: #F8EEF4; color: #4B1238; padding: 6px 12px; font-size: 13px; font-weight: 900; cursor: pointer; }
     .mini-action:hover { border-color: #5A153F; background: #EAD9E5; }
     .pulse-grid.expanded div { min-height: 84px; align-content: start; }
     .pulse-grid strong { font-size: 20px; }
@@ -1356,7 +1356,7 @@ const STATUS_TONES: Record<string, string> = {
     .smart-search-results .select-pill { align-self: center; justify-self: end; border: 1px solid #bbf7d0; border-radius: 999px; background: #f0fdf4; color: #059669; font-size: 11px; font-weight: 900; padding: 5px 9px; }
     .smart-search-results .service-result-actions { display: flex; gap: 8px; padding: 6px; }
     .smart-search-results .service-result-actions button { width: auto; border: 1px solid #cfe0dc; border-radius: 999px; padding: 6px 10px; font-weight: 900; }
-    .smart-search-results .service-result-actions button:hover { background: #F3EAF0; }
+    .smart-search-results .service-result-actions button:hover { background: #F8EEF4; }
     .service-field-wide .smart-search-results button { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 10px; }
     .service-field-wide .smart-search-results .service-result-actions button { display: inline-flex; grid-template-columns: none; }
     .picker-search { min-height: 38px; border-radius: 10px; border: 1px solid #cfe0dc; background: #f8fffd; padding: 9px 10px; font-weight: 800; color: #172033; }
@@ -1402,8 +1402,8 @@ const STATUS_TONES: Record<string, string> = {
       .scheduled-staff-panel { position: fixed; top: 96px; left: 12px; right: 12px; width: auto; max-height: calc(100vh - 118px); }
     }
     .enterprise-scheduler {
-      background: #f8f5f2;
-      color: #2f2522;
+      background: #FAF8F6;
+      color: #151827;
     }
 
     .deposit-followup-strip,
@@ -1417,11 +1417,11 @@ const STATUS_TONES: Record<string, string> = {
     .panel-head,
     .smart-slots,
     .waitlist-panel {
-      border-color: rgba(118, 85, 76, 0.13) !important;
+      border-color: rgba(75, 18, 56, 0.13) !important;
       border-radius: 14px !important;
       background: #fff !important;
       background-image: none !important;
-      box-shadow: 0 1px 2px rgba(41, 31, 28, 0.03), 0 10px 26px rgba(73, 51, 43, 0.045) !important;
+      box-shadow: 0 1px 2px rgba(75, 18, 56, 0.03), 0 10px 26px rgba(75, 18, 56, 0.045) !important;
     }
 
     .month-strip-band,
@@ -1435,7 +1435,7 @@ const STATUS_TONES: Record<string, string> = {
     .calendar-list-row,
     .scheduled-staff-row,
     .smart-slots button {
-      border-color: rgba(118, 85, 76, 0.12) !important;
+      border-color: rgba(75, 18, 56, 0.12) !important;
       border-radius: 12px !important;
       background: #fff !important;
       box-shadow: none !important;
@@ -1446,16 +1446,16 @@ const STATUS_TONES: Record<string, string> = {
     .calendar-layout-toggle button.active,
     .scheduled-staff-button.active,
     .waitlist-summary-action {
-      border-color: rgba(154, 106, 96, 0.28) !important;
-      background: #fff7f3 !important;
-      color: #75524b !important;
-      box-shadow: inset 3px 0 0 #9a6a60 !important;
+      border-color: rgba(75, 18, 56, 0.28) !important;
+      background: #F8EEF4 !important;
+      color: #4B1238 !important;
+      box-shadow: inset 3px 0 0 #4B1238 !important;
     }
 
     .summary-strip article,
     .summary-strip button {
       min-height: 76px;
-      border-left: 3px solid rgba(154, 106, 96, 0.62) !important;
+      border-left: 3px solid rgba(75, 18, 56, 0.62) !important;
     }
 
     .summary-strip span,
@@ -1463,7 +1463,7 @@ const STATUS_TONES: Record<string, string> = {
     .calendar-list-head,
     .panel-head small,
     .scheduler-view-copy small {
-      color: #766763 !important;
+      color: #4B1238 !important;
       font-weight: 560 !important;
       letter-spacing: 0.035em;
     }
@@ -1476,7 +1476,7 @@ const STATUS_TONES: Record<string, string> = {
     .timeline-card strong,
     .drawer-panel h2,
     .drawer-panel h3 {
-      color: #302522 !important;
+      color: #151827 !important;
       font-weight: 630 !important;
     }
 
@@ -1487,10 +1487,10 @@ const STATUS_TONES: Record<string, string> = {
     .scheduled-staff-button,
     .calendar-layout-toggle,
     .calendar-layout-toggle button {
-      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-color: rgba(75, 18, 56, 0.14) !important;
       border-radius: 10px !important;
       background: #fff !important;
-      color: #4a3b37 !important;
+      color: #151827 !important;
       font-weight: 560 !important;
     }
 
@@ -1500,7 +1500,7 @@ const STATUS_TONES: Record<string, string> = {
     }
 
     .scheduler-grid {
-      border: 1px solid rgba(118, 85, 76, 0.12);
+      border: 1px solid rgba(75, 18, 56, 0.12);
       border-radius: 14px;
       overflow: hidden;
       background: #fff;
@@ -1508,35 +1508,35 @@ const STATUS_TONES: Record<string, string> = {
 
     .time-head,
     .staff-head {
-      background: #faf7f4 !important;
-      border-bottom-color: rgba(118, 85, 76, 0.12) !important;
+      background: #F8EEF4 !important;
+      border-bottom-color: rgba(75, 18, 56, 0.12) !important;
     }
 
     .staff-head,
     .staff-lane,
     .time-column {
-      border-left-color: rgba(118, 85, 76, 0.1) !important;
+      border-left-color: rgba(75, 18, 56, 0.1) !important;
     }
 
     .time-row,
     .slot-cell {
-      border-color: rgba(118, 85, 76, 0.07) !important;
+      border-color: rgba(75, 18, 56, 0.07) !important;
     }
 
     .appointment-card,
     .timeline-card {
-      border: 1px solid rgba(118, 85, 76, 0.14) !important;
-      border-left: 3px solid #9a6a60 !important;
+      border: 1px solid rgba(75, 18, 56, 0.14) !important;
+      border-left: 3px solid #4B1238 !important;
       border-radius: 10px !important;
       background: #fff !important;
-      box-shadow: 0 8px 18px rgba(73, 51, 43, 0.07) !important;
+      box-shadow: 0 8px 18px rgba(75, 18, 56, 0.07) !important;
     }
 
     .appointment-card:hover,
     .calendar-list-row:hover,
     .smart-slots button:hover {
-      border-color: rgba(154, 106, 96, 0.24) !important;
-      background: #fffaf7 !important;
+      border-color: rgba(75, 18, 56, 0.24) !important;
+      background: #F8EEF4 !important;
       transform: translateY(-1px);
     }
 
@@ -1544,23 +1544,23 @@ const STATUS_TONES: Record<string, string> = {
     .panel-head small,
     .staff-action-menu span,
     .current-time-badge {
-      border-color: rgba(154, 106, 96, 0.16) !important;
+      border-color: rgba(75, 18, 56, 0.16) !important;
       border-radius: 999px !important;
-      background: #fff7f3 !important;
-      color: #75524b !important;
+      background: #F8EEF4 !important;
+      color: #4B1238 !important;
       font-weight: 620 !important;
     }
 
     .staff-action-menu,
     .scheduled-staff-panel {
-      border-color: rgba(118, 85, 76, 0.14) !important;
+      border-color: rgba(75, 18, 56, 0.14) !important;
       border-radius: 14px !important;
-      box-shadow: 0 24px 60px rgba(73, 51, 43, 0.18) !important;
+      box-shadow: 0 24px 60px rgba(75, 18, 56, 0.18) !important;
     }
 
     .staff-action-menu button:hover {
-      background: #fff7f3 !important;
-      color: #75524b !important;
+      background: #F8EEF4 !important;
+      color: #4B1238 !important;
     }
 
     @media (max-width: 720px) {

@@ -195,7 +195,6 @@ import { StateComponent } from '../shared/ui/state/state.component';
       flex-direction: column;
       gap: 20px;
       background: #f8f5f2;
-      min-height: 100vh;
     }
 
     /* ── Greeting ── */

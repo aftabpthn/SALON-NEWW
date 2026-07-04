@@ -58,7 +58,7 @@ import { DataMigrationStore } from './data-migration.store';
   styles: [`
     :host { display: block; }
     .migration-shell { display: grid; gap: 14px; padding: 16px; color: #172033; }
-    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #f8fffd, #ffffff 62%, #edf7ff); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
+    .command-header { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: linear-gradient(135deg, #faf8f6, #ffffff 62%, #f0ece9); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04); }
     .command-header h1 { margin: 4px 0; font-size: 22px; line-height: 1.1; letter-spacing: -0.01em; }
     .command-header p { margin: 0; max-width: 800px; color: #64748b; font-size: 13px; line-height: 1.45; }
     .back-btn { background: none; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: #4f46e5; margin-bottom: 8px; }
@@ -86,7 +86,7 @@ import { DataMigrationStore } from './data-migration.store';
     .required-badge { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 999px; background: #fef2f2; color: #b91c1c; }
     .mapping-confidence { display: flex; align-items: center; }
     .confidence-badge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
-    .confidence-badge.high { background: #F1E8EE; color: #4B1238; }
+    .confidence-badge.high { background: #f5f2ef; color: #4B1238; }
     .confidence-badge.medium { background: #fffbeb; color: #b45309; }
     .confidence-badge.low { background: #fef2f2; color: #b91c1c; }
     .form-input { width: 100%; min-height: 38px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; padding: 8px 10px; color: #172033; font-weight: 700; box-sizing: border-box; font-size: 13px; }

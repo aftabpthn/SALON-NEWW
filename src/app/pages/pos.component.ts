@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, effect, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -396,7 +396,7 @@ type PackageClientNotice = {
               <select formControlName="appointmentId">
                 <option value="">Walk-in / no appointment</option>
                 <option *ngFor="let appointment of billableAppointments()" [value]="appointment.id">
-                  {{ clientName(appointment.clientId) }} · {{ appointment.startAt | date: 'short' }}
+                  {{ clientName(appointment.clientId) }} Â· {{ appointment.startAt | date: 'short' }}
                 </option>
               </select>
             </label>
@@ -477,7 +477,7 @@ type PackageClientNotice = {
                   <span class="multi-select-box" [class.checked]="isServiceSelected(service.id)" aria-hidden="true"></span>
                   <span class="result-copy">
                     <strong>{{ service.name || 'Service' }}</strong>
-                    <span>{{ service.category || 'Service' }} · ₹{{ service.price || 0 }}</span>
+                    <span>{{ service.category || 'Service' }} Â· â‚¹{{ service.price || 0 }}</span>
                   </span>
                   <span class="select-pill">{{ isServiceSelected(service.id) ? 'Selected' : 'Select' }}</span>
                 </button>
@@ -524,7 +524,7 @@ type PackageClientNotice = {
                   <span class="multi-select-box" [class.checked]="isProductSelected(product.id)" aria-hidden="true"></span>
                   <span class="result-copy">
                     <strong>{{ product.name || 'Product' }}</strong>
-                    <span>{{ product.category || product.sku || 'Product' }} · ₹{{ product.price || 0 }} · {{ product.stock || 0 }} left</span>
+                    <span>{{ product.category || product.sku || 'Product' }} Â· â‚¹{{ product.price || 0 }} Â· {{ product.stock || 0 }} left</span>
                   </span>
                   <span class="select-pill">{{ isProductSelected(product.id) ? 'Selected' : 'Select' }}</span>
                 </button>
@@ -570,7 +570,7 @@ type PackageClientNotice = {
                 (keydown)="handlePackageKeydown($event, packageSelect)"
               >
                 <option value="">Choose package</option>
-                <option *ngFor="let itemPackage of packages()" [value]="itemPackage.id">{{ itemPackage.name }} - ₹{{ itemPackage.price }}</option>
+                <option *ngFor="let itemPackage of packages()" [value]="itemPackage.id">{{ itemPackage.name }} - â‚¹{{ itemPackage.price }}</option>
               </select>
             </label>
             <button class="ghost-button" type="button" (click)="addPackageFromSelect(packageSelect)">Add</button>
@@ -607,7 +607,7 @@ type PackageClientNotice = {
                       [ngClass]="'membership-line-badge--' + membershipLineBenefitState(item, index).status"
                     >
                       {{ membershipLineBenefitState(item, index).label }}
-                      <span *ngIf="membershipLineBenefitState(item, index).detail">· {{ membershipLineBenefitState(item, index).detail }}</span>
+                      <span *ngIf="membershipLineBenefitState(item, index).detail">Â· {{ membershipLineBenefitState(item, index).detail }}</span>
                     </small>
                   </td>
                   <td>
@@ -650,7 +650,7 @@ type PackageClientNotice = {
                           (ngModelChange)="setItemDiscountType(item, $event)"
                           [ngModelOptions]="{ standalone: true }"
                         >
-                          <option value="amount">₹</option>
+                          <option value="amount">â‚¹</option>
                           <option value="percent">%</option>
                         </select>
                         <input
@@ -695,7 +695,7 @@ type PackageClientNotice = {
             <label class="field">
               <span>Type</span>
               <select [(ngModel)]="discountMode">
-                <option value="amount">₹</option>
+                <option value="amount">â‚¹</option>
                 <option value="percent">%</option>
               </select>
             </label>
@@ -726,7 +726,7 @@ type PackageClientNotice = {
           </div>
           <p class="inline-hint" *ngIf="selectedRedeemableBenefit() as benefit">
             Redeeming {{ redeemableBenefitTypeLabel(benefit) }} {{ benefit.planName || benefit.name || benefit.membershipId }}.
-            {{ selectedRedeemableBenefitRemainingCredits() }} credits available · {{ membershipCreditRedeemCap(benefit) }} eligible for this bill.
+            {{ selectedRedeemableBenefitRemainingCredits() }} credits available Â· {{ membershipCreditRedeemCap(benefit) }} eligible for this bill.
           </p>
           <div class="membership-redemption-panel" *ngIf="selectedClient()">
             <strong>{{ membershipRedemptionPanelTitle() }}</strong>
@@ -756,7 +756,7 @@ type PackageClientNotice = {
               <article class="benefit-mapping-line" *ngFor="let line of redeemableServiceLines()">
                 <div>
                   <strong>{{ line.serviceName }}</strong>
-                  <small>{{ line.staffName || 'Unassigned staff' }} · {{ line.finalAmount | currency: 'INR':'symbol':'1.0-0' }}</small>
+                  <small>{{ line.staffName || 'Unassigned staff' }} Â· {{ line.finalAmount | currency: 'INR':'symbol':'1.0-0' }}</small>
                 </div>
                 <label class="field compact-field">
                   <span>Credits</span>
@@ -1018,7 +1018,7 @@ type PackageClientNotice = {
       border-radius: 10px;
       padding: 14px;
       margin: 14px 0 16px;
-      background: linear-gradient(180deg, rgba(245, 238, 242, 0.96), rgba(255, 255, 255, 0.98));
+      background: linear-gradient(180deg, rgba(248, 238, 244, 0.96), rgba(255, 255, 255, 0.98));
     }
 
     :host .settlement-preview-copy {
@@ -1354,7 +1354,7 @@ type PackageClientNotice = {
       place-items: center;
       border-radius: 999px;
       color: #f8fafc;
-      background: linear-gradient(135deg, #4B1238, #2563eb);
+      background: linear-gradient(135deg, #4B1238, #55173D);
       font-weight: 900;
     }
 
@@ -1637,7 +1637,7 @@ type PackageClientNotice = {
       outline: 0;
     }
     :host .page-stack { gap: 18px; padding: 8px 4px 28px; background: var(--color-surface-muted); }
-    :host .pos-command-hero { align-items: center; min-height: auto; padding: 18px 22px; border: 1px solid rgba(117, 79, 71, 0.12); border-radius: 14px; background: linear-gradient(180deg, #fff, #fffcfa); box-shadow: 0 10px 28px rgba(89, 64, 54, 0.06); }
+    :host .pos-command-hero { align-items: center; min-height: auto; padding: 18px 22px; border: 1px solid rgba(117, 79, 71, 0.12); border-radius: 14px; background: linear-gradient(180deg, #fff, #faf8f6); box-shadow: 0 10px 28px rgba(89, 64, 54, 0.06); }
     :host .pos-command-copy { display: grid; gap: 4px; min-width: 0; }
     :host .pos-eyebrow { color: #8a625b; font-size: 11px; font-weight: 680; letter-spacing: 0.08em; text-transform: uppercase; }
     :host .pos-command-copy h1 { margin: 0; color: #241b19; font-size: clamp(1.28rem, 1.75vw, 1.82rem); font-weight: 690; letter-spacing: -0.025em; }
@@ -2191,11 +2191,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.form.value.clientId) return 'Wallet';
     if (this.overPaid > 0) {
       return this.walletCreditRequested()
-        ? `Wallet +₹${this.overPaid}`
-        : `Add ₹${this.overPaid} to wallet`;
+        ? `Wallet +â‚¹${this.overPaid}`
+        : `Add â‚¹${this.overPaid} to wallet`;
     }
-    if (this.redeemableWalletAmount > 0) return `Redeem ₹${this.redeemableWalletAmount}`;
-    return `Wallet ₹${this.walletBalance}`;
+    if (this.redeemableWalletAmount > 0) return `Redeem â‚¹${this.redeemableWalletAmount}`;
+    return `Wallet â‚¹${this.walletBalance}`;
   }
 
   get canSaveCheckout(): boolean {
@@ -2271,7 +2271,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   keepRoundOffAsUnpaid(): void {
     if (this.roundOffDueAmount <= 0) return;
-    this.dataHint.set(`Balance ₹${this.roundOffDueAmount.toLocaleString('en-IN')} will be saved as unpaid.`);
+    this.dataHint.set(`Balance â‚¹${this.roundOffDueAmount.toLocaleString('en-IN')} will be saved as unpaid.`);
   }
 
   applyBalanceRoundOff(): void {
@@ -2287,7 +2287,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.discount = this.money(targetDiscount);
     }
     this.walletCreditRequested.set(false);
-    this.dataHint.set(`Round off ₹${dueAmount.toLocaleString('en-IN')} applied. No unpaid balance remains.`);
+    this.dataHint.set(`Round off â‚¹${dueAmount.toLocaleString('en-IN')} applied. No unpaid balance remains.`);
   }
 
   get membershipAutoDiscount(): number {
@@ -2559,10 +2559,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   paymentHint(modeId: string): string {
     const amount = this.paymentAmount(modeId);
-    if (amount > 0) return `₹${amount} applied`;
-    if (modeId === 'wallet' && this.walletBalance > 0) return `redeem ₹${this.redeemableWalletAmount}`;
-    if (modeId === 'wallet') return 'wallet ₹0';
-    if (this.balanceDue > 0) return `click ₹${this.balanceDue}`;
+    if (amount > 0) return `â‚¹${amount} applied`;
+    if (modeId === 'wallet' && this.walletBalance > 0) return `redeem â‚¹${this.redeemableWalletAmount}`;
+    if (modeId === 'wallet') return 'wallet â‚¹0';
+    if (this.balanceDue > 0) return `click â‚¹${this.balanceDue}`;
     return 'settled';
   }
 
@@ -2593,7 +2593,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.bookingAdvanceAppliedAmount.set(this.money(Math.min(this.total, amount)));
     this.walletCreditRequested.set(false);
     const remaining = this.money(Math.max(0, this.total - this.appliedBookingAdvanceAmount()));
-    this.dataHint.set(`Booking advance ₹${this.appliedBookingAdvanceAmount()} applied. Collect remaining ₹${remaining}.`);
+    this.dataHint.set(`Booking advance â‚¹${this.appliedBookingAdvanceAmount()} applied. Collect remaining â‚¹${remaining}.`);
   }
 
   removeBookingAdvanceSuggestion(): void {
@@ -2880,10 +2880,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const active = this.activeMembershipForClientId(clientId);
     const packageCount = this.activePackageCountForClientId(clientId);
     const walletBalance = Number(client.walletBalance || 0);
-    if (!active && !packageCount) return `Wallet ₹${walletBalance} · No active benefits`;
-    const packageLabel = packageCount ? ` · ${packageCount} package${packageCount === 1 ? '' : 's'}` : '';
-    if (!active) return `Wallet ₹${walletBalance}${packageLabel}`;
-    return `Wallet ₹${walletBalance} · ${active.planName || 'Membership'} · ${Number(active.creditsRemaining || 0)} credits${packageLabel}`;
+    if (!active && !packageCount) return `Wallet â‚¹${walletBalance} Â· No active benefits`;
+    const packageLabel = packageCount ? ` Â· ${packageCount} package${packageCount === 1 ? '' : 's'}` : '';
+    if (!active) return `Wallet â‚¹${walletBalance}${packageLabel}`;
+    return `Wallet â‚¹${walletBalance} Â· ${active.planName || 'Membership'} Â· ${Number(active.creditsRemaining || 0)} credits${packageLabel}`;
   }
 
   filteredStaff(): ApiRecord[] {
@@ -2988,7 +2988,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const membership = (index?.membershipIds || []).join(', ');
     return [email, code ? `Code ${code}` : '', membership ? `Membership ${membership}` : index?.membershipMeta || this.clientMembershipSearchSnapshot(client)]
       .filter(Boolean)
-      .join(' · ');
+      .join(' Â· ');
   }
 
   clientMembershipBadge(client: ApiRecord): string {
@@ -3026,7 +3026,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const phone = person.phone || person.mobile || person.contact || person.phoneNumber || '';
     const branch = person.branchName || person.branch || '';
     const smartId = this.staffSmartIdLabel(person);
-    return [smartId, role, phone, branch].filter(Boolean).join(' · ');
+    return [smartId, role, phone, branch].filter(Boolean).join(' Â· ');
   }
 
   private staffSmartIdLabel(person: ApiRecord): string {
@@ -3102,10 +3102,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const active = this.activeMembershipForClientId(String(client.id || ''));
     const packageCount = this.activePackageCountForClientId(String(client.id || ''));
     const walletBalance = Number(client.walletBalance || 0);
-    if (!active && !packageCount) return `Wallet ₹${walletBalance} · No active benefits`;
-    const packageLabel = packageCount ? ` · ${packageCount} package${packageCount === 1 ? '' : 's'}` : '';
-    if (!active) return `Wallet ₹${walletBalance}${packageLabel}`;
-    return `Wallet ₹${walletBalance} · ${active.planName || 'Membership'} · ${Number(active.creditsRemaining || 0)} credits${packageLabel}`;
+    if (!active && !packageCount) return `Wallet â‚¹${walletBalance} Â· No active benefits`;
+    const packageLabel = packageCount ? ` Â· ${packageCount} package${packageCount === 1 ? '' : 's'}` : '';
+    if (!active) return `Wallet â‚¹${walletBalance}${packageLabel}`;
+    return `Wallet â‚¹${walletBalance} Â· ${active.planName || 'Membership'} Â· ${Number(active.creditsRemaining || 0)} credits${packageLabel}`;
   }
 
   redeemableBenefits(): ApiRecord[] {
@@ -3290,7 +3290,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const amount = this.membershipCreditAdjustmentAmount();
       const mappings = this.selectedBenefitServiceMappings().length;
       const creditLabel = this.isUnlimitedBenefit(selected) ? 'unlimited use' : `${Number(this.creditsUsed || 0)} credit${Number(this.creditsUsed || 0) === 1 ? '' : 's'}`;
-      return `${name}: ${creditLabel} mapped to ${mappings} line${mappings === 1 ? '' : 's'}${amount > 0 ? `, bill adjusted ₹${amount.toLocaleString('en-IN')}` : ''}.`;
+      return `${name}: ${creditLabel} mapped to ${mappings} line${mappings === 1 ? '' : 's'}${amount > 0 ? `, bill adjusted â‚¹${amount.toLocaleString('en-IN')}` : ''}.`;
     }
     const matches = this.eligibleAutoCreditBenefits();
     if (matches.length === 1) {
@@ -3371,7 +3371,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   redeemableBenefitOption(benefit: ApiRecord): string {
     const remaining = this.redeemableBenefitRemainingCredits(benefit);
-    const expiry = benefit['expiryDate'] ? ` · exp ${String(benefit['expiryDate']).slice(0, 10)}` : '';
+    const expiry = benefit['expiryDate'] ? ` Â· exp ${String(benefit['expiryDate']).slice(0, 10)}` : '';
     const rules = this.benefitRulesFor(benefit);
     const planType = String(rules['planType'] || this.redeemableBenefitTypeLabel(benefit));
     const label = benefit['businessLabel'] || this.membershipBusinessLabel({
@@ -3383,7 +3383,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       active: true,
       createdAt: ''
     } as PosMembershipPlan);
-    return `${planType.replace('_', ' ')} · ${label} · ${remaining} credits${expiry}`;
+    return `${planType.replace('_', ' ')} Â· ${label} Â· ${remaining} credits${expiry}`;
   }
 
   membershipEligibilityNotes(): string[] {
@@ -3735,11 +3735,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   serviceOption(service: ApiRecord): string {
-    return `${service.name || 'Service'} - ₹${service.price || 0}`;
+    return `${service.name || 'Service'} - â‚¹${service.price || 0}`;
   }
 
   productOption(product: ApiRecord): string {
-    return `${product.name || 'Product'} - ₹${product.price || 0} (${product.stock || 0} left)`;
+    return `${product.name || 'Product'} - â‚¹${product.price || 0} (${product.stock || 0} left)`;
   }
 
   setClientSearch(value: string): void {
@@ -3949,9 +3949,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       this.unpaidReceiveAmount = 0;
       const cappedCopy = requestedAmount > totalOpen
-        ? ` Open balance ₹${totalOpen.toLocaleString('en-IN')} tha, isliye amount cap kiya gaya.`
+        ? ` Open balance â‚¹${totalOpen.toLocaleString('en-IN')} tha, isliye amount cap kiya gaya.`
         : '';
-      this.unpaidReceiveMessage.set(`Old unpaid ₹${cappedAmount.toLocaleString('en-IN')} received.${cappedCopy}`);
+      this.unpaidReceiveMessage.set(`Old unpaid â‚¹${cappedAmount.toLocaleString('en-IN')} received.${cappedCopy}`);
       this.load();
     });
   }
@@ -4680,7 +4680,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const clientName = client?.name || this.clientSearchText || 'Walk-in client';
     return {
       id,
-      title: `${clientName} · ₹${this.total}`,
+      title: `${clientName} Â· â‚¹${this.total}`,
       clientId: String(this.form.value.clientId || ''),
       clientName,
       branchId: String(this.form.value.branchId || ''),
@@ -5103,7 +5103,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         if (walletResult?.client) {
           this.clients.update((clients) => clients.map((client) => client.id === walletResult.client.id ? walletResult.client : client));
         }
-        this.finishCheckout(result, `Extra ₹${amount} added to client wallet.`, settlementPreview);
+        this.finishCheckout(result, `Extra â‚¹${amount} added to client wallet.`, settlementPreview);
       },
       error: (error) => {
         this.invoice.set(result.invoice);
@@ -5585,9 +5585,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const businessLabel = this.membershipBusinessLabel(plan);
     if (businessLabel) return `${plan.name} - ${businessLabel}`;
     if (this.membershipPlanType(plan) === 'prepaid_credit') {
-      return `${plan.name} - Pay ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get ₹${Math.round(this.membershipPlanCreditAmount(plan)).toLocaleString('en-IN')} credit`;
+      return `${plan.name} - Pay â‚¹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get â‚¹${Math.round(this.membershipPlanCreditAmount(plan)).toLocaleString('en-IN')} credit`;
     }
-    return `${plan.name} - ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / ${Number(plan.discountPercent || 0)}% every bill`;
+    return `${plan.name} - â‚¹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / ${Number(plan.discountPercent || 0)}% every bill`;
   }
 
   private membershipBusinessLabel(plan: PosMembershipPlan | null | undefined): string {
@@ -5595,14 +5595,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const rules = plan.benefitRules || {};
     const planType = this.membershipPlanType(plan);
     const credits = this.membershipPlanCreditAmount(plan);
-    if (planType === 'prepaid_credit') return `Pay ₹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get ₹${Math.round(credits).toLocaleString('en-IN')} credit`;
+    if (planType === 'prepaid_credit') return `Pay â‚¹${Math.round(Number(plan.price || 0)).toLocaleString('en-IN')} / Get â‚¹${Math.round(credits).toLocaleString('en-IN')} credit`;
     if (planType === 'visit_pack') return `${credits || 10} visits`;
     if (planType === 'service_credit') return `${credits || 1} service credits`;
     if (planType === 'combo') return `${credits || 1} combo credits`;
     if (planType === 'unlimited') return `Unlimited ${Number(((rules['fairUsage'] || {}) as ApiRecord)['monthlyCap'] || 4)} / month`;
     if (planType === 'family') return `Family ${Number(((rules['family'] || {}) as ApiRecord)['memberLimit'] || 4)} members`;
     if (planType === 'corporate') return `Corporate ${String(((rules['corporate'] || {}) as ApiRecord)['label'] || plan.name)} ${Number(plan.discountPercent || 0)}%`;
-    if (planType === 'tiered') return `Tier ${String(((rules['tier'] || {}) as ApiRecord)['name'] || plan.name)} after ₹${Math.round(Number(((rules['tier'] || {}) as ApiRecord)['spendThreshold'] || 0)).toLocaleString('en-IN')}`;
+    if (planType === 'tiered') return `Tier ${String(((rules['tier'] || {}) as ApiRecord)['name'] || plan.name)} after â‚¹${Math.round(Number(((rules['tier'] || {}) as ApiRecord)['spendThreshold'] || 0)).toLocaleString('en-IN')}`;
     return '';
   }
 

@@ -84,7 +84,7 @@
 }
 
 .decision-card.next {
-  border-color: #bfdbfe;
+  border-color: #e8e2dc;
 }
 
 .decision-card.advanced {
@@ -123,11 +123,11 @@
 }
 
 .module-card.collecting {
-  border-color: #bfdbfe;
+  border-color: #e8e2dc;
 }
 
 .module-card.blocked {
-  border-color: #fecaca;
+  border-color: #e8e2dc;
 }
 
 .module-card.premature {
@@ -160,7 +160,7 @@
 }
 
 .score-track span {
-  background: linear-gradient(90deg, #4B1238, #2563eb);
+  background: #4B1238;
   display: block;
   height: 100%;
 }
@@ -201,38 +201,38 @@
 }
 
 .module-card.ready .status-pill {
-  background: #ecfdf3;
+  background: #fff;
   color: #027a48;
 }
 
 .module-card.collecting .status-pill {
-  background: #eef4ff;
+  background: #fff;
   color: #175cd3;
 }
 
 .module-card.blocked .status-pill {
-  background: #fef3f2;
+  background: #fff;
   color: #b42318;
 }
 
 .module-card.premature .status-pill,
 .status-pill.premature {
-  background: #fffaeb;
+  background: #fff;
   color: #b54708;
 }
 
 .status-pill.ready {
-  background: #ecfdf3;
+  background: #fff;
   color: #027a48;
 }
 
 .status-pill.collecting {
-  background: #eef4ff;
+  background: #fff;
   color: #175cd3;
 }
 
 .status-pill.blocked {
-  background: #fef3f2;
+  background: #fff;
   color: #b42318;
 }
 

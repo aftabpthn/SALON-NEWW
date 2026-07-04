@@ -425,8 +425,7 @@ type ActiveModuleTabs = {
       display: grid;
       grid-template-columns: 204px minmax(0, 1fr);
       align-items: stretch;
-      min-height: calc(100vh - 150px);
-      border: 1px solid #e2dad2;
+      border: 1px solid #E7DDD6;
       background: #fff;
     }
 
@@ -471,7 +470,7 @@ type ActiveModuleTabs = {
     }
     .workspace-route-content {
       min-width: 0;
-      background: #fbf8f6;
+      background: #FAF8F6;
     }
 
     .workspace-route-shell--with-local-nav .workspace-route-content {
@@ -498,7 +497,7 @@ type ActiveModuleTabs = {
       display: flex;
       align-items: center;
       padding: 8px 0;
-      background: #fbf8f6;
+      background: #FAF8F6;
     }
 
     .workspace-local-rail {
@@ -506,8 +505,8 @@ type ActiveModuleTabs = {
       flex-direction: column;
       gap: 10px;
       padding: 12px;
-      background: linear-gradient(180deg, #ffffff 0%, #faf7f2 100%);
-      border-right: 1px solid #e2dad2;
+      background: #f8f5f2;
+      border-right: 1px solid #E7DDD6;
       min-width: 0;
     }
 
@@ -517,7 +516,7 @@ type ActiveModuleTabs = {
       align-items: center;
       gap: 10px;
       padding: 8px 6px 10px;
-      border-bottom: 1px solid #e7e2db;
+      border-bottom: 1px solid #ede8e3;
     }
 
     .topbar-back-button {
@@ -529,11 +528,11 @@ type ActiveModuleTabs = {
       height: 38px;
       min-height: 38px;
       padding: 0;
-      border: 1px solid #d6cec6;
+      border: 1px solid #E7DDD6;
       border-radius: 999px;
       color: #4B1238;
       background: #fff;
-      box-shadow: 0 6px 14px rgba(75, 18, 56, 0.12);
+      box-shadow: 0 2px 8px rgba(75,18,56,0.06);
       font-size: 20px;
       font-weight: 700;
       line-height: 1;
@@ -559,7 +558,7 @@ type ActiveModuleTabs = {
       gap: 9px;
       min-height: 38px;
       padding: 6px 8px;
-      color: #1f2a3d;
+      color: #2b2220;
       text-decoration: none;
       border: 1px solid transparent;
       border-radius: 8px;
@@ -571,9 +570,9 @@ type ActiveModuleTabs = {
     .workspace-local-nav a.active,
     .workspace-local-nav a:hover,
     .workspace-local-nav a:focus-visible {
-      background: rgba(75, 18, 56, 0.07);
-      color: #4B1238;
-      border-color: rgba(75, 18, 56, 0.2);
+      background: #4B1238;
+      color: #fff;
+      border-color: #4B1238;
       outline: none;
     }
 
@@ -584,12 +583,12 @@ type ActiveModuleTabs = {
 
       .workspace-local-rail {
         border-right: 0;
-        border-bottom: 1px solid #eadfd9;
+        border-bottom: 1px solid #E7DDD6;
       }
 
       .workspace-route-content > .workspace-module-tabs {
         position: static;
-        border-top: 1px solid rgba(75, 18, 56, 0.1);
+        border-top: 1px solid #E7DDD6;
       }
 
       .workspace-local-nav {

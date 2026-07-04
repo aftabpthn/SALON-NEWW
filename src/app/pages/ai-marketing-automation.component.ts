@@ -237,10 +237,10 @@ type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'registe
     .marketing-workspace { display: grid; gap: 8px; padding: 8px; color: #1d2430; background: #f0f2f5; min-height: calc(100vh - 20px); }
     .command-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 20px; background: #111827; color: #fff; border-bottom: 1px solid #d8e1ea; }
     .brand-block, .top-actions, .center-line, .header-actions, .desk-heading, .register-heading, .desk-tabs { display: flex; align-items: center; gap: 10px; }
-    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: #6d5bd0; color: #fff; font-weight: 900; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: #4B1238; color: #fff; font-weight: 900; }
     .brand-block small, .desk-heading span, .register-heading span, .field span, .search-field span { display: block; color: #5f6f85; font-size: 11px; font-weight: 800; text-transform: uppercase; }
     .brand-block strong { display: block; color: #fff; font-size: 15px; }
-    .zenoti-button, .desk-tabs button, .primary-button { border: 1px solid #b9cbe0; background: #fff; color: #0065a8; border-radius: 3px; padding: 8px 13px; font-weight: 800; cursor: pointer; }
+    .zenoti-button, .desk-tabs button, .primary-button { border: 1px solid #b9cbe0; background: #fff; color: #4B1238; border-radius: 3px; padding: 8px 13px; font-weight: 800; cursor: pointer; }
     .zenoti-button.primary, .primary-button, .desk-tabs .active { background: #55173D; border-color: #55173D; color: #fff; }
     .primary-button:disabled { opacity: .5; cursor: not-allowed; }
     .zenoti-header { background: #fff; }
@@ -266,11 +266,11 @@ type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'registe
     .marketing-section-workspace { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
     .marketing-side-nav { position: sticky; top: 92px; display: grid; gap: 10px; }
     .marketing-nav-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 11px; align-items: center; width: 100%; min-height: 92px; padding: 13px; border: 1px solid #d8e1ea; border-left: 4px solid #55173D; border-radius: 8px; background: #fff; color: #172033; text-align: left; box-shadow: 0 10px 24px rgba(15,23,42,.06); cursor: pointer; }
-    .marketing-nav-card:hover, .marketing-nav-card.active { background: linear-gradient(135deg, #F1E8EE, #eef4ff); border-color: #9fc3dc; transform: translateY(-1px); }
-    .marketing-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #F1E8EE; color: #3D0F2C; font-weight: 950; font-size: 12px; }
+    .marketing-nav-card:hover, .marketing-nav-card.active { background: linear-gradient(135deg, #F8EEF4, #FAF8F6); border-color: #E7DDD6; transform: translateY(-1px); }
+    .marketing-nav-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; background: #F8EEF4; color: #4B1238; font-weight: 950; font-size: 12px; }
     .marketing-nav-card strong, .marketing-nav-card small { display: block; }
     .marketing-nav-card small { margin-top: 4px; color: #5f6f85; font-size: 12px; font-weight: 700; line-height: 1.3; }
-    .marketing-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #F1E8EE; color: #3D0F2C; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .marketing-nav-card em { align-self: start; padding: 4px 7px; border-radius: 999px; background: #F8EEF4; color: #4B1238; font-size: 10px; font-style: normal; font-weight: 900; text-transform: uppercase; }
     .marketing-detail { display: grid; gap: 8px; min-width: 0; }
     .workdesk, .register-panel { padding: 16px; background: #fff; border: 1px solid #d8e1ea; }
     .desk-heading, .register-heading { justify-content: space-between; align-items: end; margin-bottom: 12px; }
@@ -278,25 +278,25 @@ type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'registe
     .desk-tabs { flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid #d8e1ea; }
     .desk-tabs button { border-radius: 16px; color: #5f6f85; padding: 7px 13px; }
     .workdesk-grid { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; padding-top: 14px; min-height: 370px; align-content: start; }
-    .zenoti-form { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; box-shadow: 0 1px 3px rgba(0,0,0,.04); transition: box-shadow .15s, border-color .15s; min-height: 340px; }
+    .zenoti-form { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid #d8e1ea; background: #FAF8F6; box-shadow: 0 1px 3px rgba(0,0,0,.04); transition: box-shadow .15s, border-color .15s; min-height: 340px; }
     .zenoti-form:focus-within { border-color: #55173D; box-shadow: 0 2px 8px rgba(11,143,124,.1); }
     .zenoti-form.wide { grid-column: span 2; }
     .field.full { grid-column: 1 / -1; }
     .field textarea { min-height: 78px; resize: vertical; }
     .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid rgba(11,143,124,.3); border-color: #55173D; }
     .check-line { display: flex; align-items: center; gap: 8px; color: #41536b; font-weight: 700; }
-    .segment-result { display: grid; gap: 5px; padding: 10px; background: #f4f7fa; border: 1px solid #d8e1ea; color: #41536b; font-size: 13px; }
+    .segment-result { display: grid; gap: 5px; padding: 10px; background: #F8EEF4; border: 1px solid #d8e1ea; color: #41536b; font-size: 13px; }
     .table-wrap { overflow: auto; border: 1px solid #d8e1ea; background: #fff; min-height: 100px; }
     table { width: 100%; min-width: 900px; border-collapse: collapse; }
     th, td { padding: 10px 12px; border-bottom: 1px solid #dfe7ef; text-align: left; vertical-align: middle; }
-    th { background: #f4f7fa; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
+    th { background: #F8EEF4; color: #5b6b81; font-size: 12px; text-transform: uppercase; }
     td strong { display: block; color: #172033; }
-    tr:hover td { background: #eef7fc; }
-    .badge { display: inline-flex; padding: 4px 9px; border-radius: 999px; background: #dff7ee; color: #046452; font-weight: 800; font-size: 12px; }
+    tr:hover td { background: #F8EEF4; }
+    .badge { display: inline-flex; padding: 4px 9px; border-radius: 999px; background: #F8EEF4; color: #4B1238; font-weight: 800; font-size: 12px; }
     .output-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-    .output-grid article { min-height: 82px; padding: 12px; border: 1px solid #d8e1ea; background: #fbfcfe; display: flex; flex-direction: column; justify-content: center; }
+    .output-grid article { min-height: 82px; padding: 12px; border: 1px solid #d8e1ea; background: #FAF8F6; display: flex; flex-direction: column; justify-content: center; }
     app-state { display: block; }
-    .state.success { margin: 0 16px; padding: 12px 14px; border-radius: 8px; font-weight: 850; color: #047857; background: #F3EAF0; border: 1px solid #DCC4D4; }
+    .state.success { margin: 0 16px; padding: 12px 14px; border-radius: 8px; font-weight: 850; color: #047857; background: #F8EEF4; border: 1px solid #E7DDD6; }
     .empty-row { text-align: center; color: #8a9aa8; padding: 24px 12px !important; font-style: italic; }
 
     :host .page-stack,

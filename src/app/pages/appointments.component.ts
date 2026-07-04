@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from '@angular/common';
+﻿import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -180,7 +180,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
               (click)="applySmartSlot(slot)"
             >
               <strong>{{ slot.startAt | date: 'h:mm a' }}</strong>
-              <span>{{ slot.staffName }} · {{ slot.resource }}</span>
+              <span>{{ slot.staffName }} Â· {{ slot.resource }}</span>
               <small>{{ slot.reason }}</small>
               <b>{{ slot.score }} score</b>
             </button>
@@ -242,7 +242,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
               (click)="openAppointment(appointment)"
             >
               <b>{{ clientName(appointment.clientId) }}</b>
-              <span>{{ timeRange(appointment) }} · {{ staffName(appointment.staffId) }}</span>
+              <span>{{ timeRange(appointment) }} Â· {{ staffName(appointment.staffId) }}</span>
             </button>
             <div class="empty-mini" *ngIf="!statusLaneAppointments(status).length">Clear</div>
           </div>
@@ -315,9 +315,9 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
                 <span class="avatar" [style.background]="staffAvatarColor(person)">{{ initials(person.name) }}</span>
                 <div>
                   <strong>{{ person.name }}</strong>
-                  <small>{{ staffLoad(person.id).booked }} booked min · {{ staffLoad(person.id).idle }} idle min</small>
+                  <small>{{ staffLoad(person.id).booked }} booked min Â· {{ staffLoad(person.id).idle }} idle min</small>
                 </div>
-                <button class="staff-menu-button" type="button" aria-label="Staff slot actions" (click)="openSchedulerActionMenu(person, $event)">⌄</button>
+                <button class="staff-menu-button" type="button" aria-label="Staff slot actions" (click)="openSchedulerActionMenu(person, $event)">âŒ„</button>
               </div>
               <ng-container *ngIf="schedulerActionMenu() as menu">
                 <div class="staff-action-menu" *ngIf="menu.staffId === person.id" [style.top.px]="menu.top" (click)="$event.stopPropagation()">
@@ -445,7 +445,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
                 [style.width.%]="timelineWidth(appointment)"
                 (click)="openAppointment(appointment)"
               >
-                {{ clientName(appointment.clientId) }} · {{ timeRange(appointment) }}
+                {{ clientName(appointment.clientId) }} Â· {{ timeRange(appointment) }}
               </button>
             </div>
           </div>
@@ -486,7 +486,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <span class="token">#{{ index + 1 }}</span>
             <div>
               <strong>{{ clientName(appointment.clientId) }}</strong>
-              <small>{{ staffName(appointment.staffId) }} · {{ serviceNames(appointment.serviceIds) }}</small>
+              <small>{{ staffName(appointment.staffId) }} Â· {{ serviceNames(appointment.serviceIds) }}</small>
             </div>
             <span class="status-pill" [class]="statusClass(appointment.status)">{{ label(appointment.status) }}</span>
           </button>
@@ -504,14 +504,14 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
           <button type="button" *ngFor="let entry of waitlistEntries(); trackBy: trackWaitlistEntry">
             <div>
               <strong>{{ waitlistClientName(entry) }}</strong>
-              <small>{{ waitlistServiceName(entry) }} · {{ waitlistStaffName(entry) }}</small>
+              <small>{{ waitlistServiceName(entry) }} Â· {{ waitlistStaffName(entry) }}</small>
             </div>
             <span>{{ waitlistWindowLabel(entry) }}</span>
           </button>
           <button type="button" *ngFor="let appointment of waitlistAppointments()" (click)="openAppointment(appointment)">
             <div>
               <strong>{{ clientName(appointment.clientId) }}</strong>
-              <small>{{ appointment.source || 'front-desk' }} · {{ serviceNames(appointment.serviceIds) }}</small>
+              <small>{{ appointment.source || 'front-desk' }} Â· {{ serviceNames(appointment.serviceIds) }}</small>
             </div>
             <span>{{ nextBestAction(appointment) }}</span>
           </button>
@@ -584,7 +584,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <button type="button" *ngFor="let entry of waitlistEntries(); trackBy: trackWaitlistEntry">
               <div>
                 <strong>{{ waitlistClientName(entry) }}</strong>
-                <small>{{ waitlistServiceName(entry) }} · {{ waitlistStaffName(entry) }}</small>
+                <small>{{ waitlistServiceName(entry) }} Â· {{ waitlistStaffName(entry) }}</small>
               </div>
               <span>{{ waitlistWindowLabel(entry) }}</span>
             </button>
@@ -679,7 +679,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
                   <span>Service</span>
                   <select [value]="line.serviceId" (change)="updateBookingLine(line.id, { serviceId: $any($event.target).value })">
                     <option value="">Select service</option>
-                    <option *ngFor="let service of services()" [value]="service.id">{{ service.name }} · {{ serviceDurationById(service.id) }}m</option>
+                    <option *ngFor="let service of services()" [value]="service.id">{{ service.name }} Â· {{ serviceDurationById(service.id) }}m</option>
                   </select>
                 </label>
                 <label class="field">
@@ -795,7 +795,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <header>
           <div>
             <h3>Remove Blocked Time</h3>
-            <p>{{ blockTimeStaffName() }} · {{ blockTimeDate() | date: 'dd-MM-yyyy' }}</p>
+            <p>{{ blockTimeStaffName() }} Â· {{ blockTimeDate() | date: 'dd-MM-yyyy' }}</p>
           </div>
           <button type="button" class="ghost-button mini" (click)="closeBlockTimeDrawer()">Close</button>
         </header>
@@ -1297,7 +1297,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
 
     .appointment-kpis .waitlist-kpi-action {
       border-color: rgba(75, 18, 56, 0.34);
-      background: linear-gradient(135deg, #F3EAF0, #ffffff);
+      background: linear-gradient(135deg, #FAF8F6, #ffffff);
     }
 
     .appointment-kpis .waitlist-kpi-action span,
@@ -2033,7 +2033,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       gap: 2px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: linear-gradient(135deg, rgba(75, 18, 56, calc(var(--heat) * 0.13)), #fff);
+      background: linear-gradient(135deg, rgba(75, 18, 56, calc(var(--heat) * 0.06)), #fff);
       padding: 10px;
       text-align: left;
     }
@@ -2434,7 +2434,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
 
     .sms-desk {
       border-color: rgba(75, 18, 56, 0.24);
-      background: linear-gradient(135deg, #f7fffc, #fff);
+      background: linear-gradient(135deg, #faf8f6, #fff);
     }
 
     .sms-route-grid {
@@ -3425,7 +3425,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
 
   bookingDrawerSubtitle(): string {
     const slot = this.bookingSlotContext();
-    return slot ? `${slot.timeLabel} · click any field below to change staff, time, branch, chair or service.` : 'Select staff and time to create a booking.';
+    return slot ? `${slot.timeLabel} Â· click any field below to change staff, time, branch, chair or service.` : 'Select staff and time to create a booking.';
   }
 
   bookingEndPreview(): string {
@@ -3585,7 +3585,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
 
   serviceOptionLabel(service: ApiRecord): string {
     const price = Number(service.price || 0);
-    return `${service.name || 'Service'} - ₹${price}`;
+    return `${service.name || 'Service'} - â‚¹${price}`;
   }
 
   visibleAppointments(): ApiRecord[] {
@@ -3709,7 +3709,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
     const date = entry.preferredDate ? this.dateLabel(entry.preferredDate) : 'Any date';
     const start = this.timeLabel(entry.windowStart);
     const end = this.timeLabel(entry.windowEnd);
-    return [date, start && end ? `${start} - ${end}` : start || end].filter(Boolean).join(' · ');
+    return [date, start && end ? `${start} - ${end}` : start || end].filter(Boolean).join(' Â· ');
   }
 
   resources(): string[] {
@@ -4499,10 +4499,10 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
 
   auditDetails(event: ApiRecord): string {
     if (event.reason || event.riskReason || event.suggestedAction) {
-      return [event.reason, event.riskReason, event.suggestedAction].filter(Boolean).join(' · ');
+      return [event.reason, event.riskReason, event.suggestedAction].filter(Boolean).join(' Â· ');
     }
     if (Array.isArray(event.changes) && event.changes.length) {
-      return event.changes.slice(0, 2).map((change: ApiRecord) => `${change.field}: ${change.oldValue} -> ${change.newValue}`).join(' · ');
+      return event.changes.slice(0, 2).map((change: ApiRecord) => `${change.field}: ${change.oldValue} -> ${change.newValue}`).join(' Â· ');
     }
     const details = event.details || event.metadata || event.payload || '';
     if (!details) return event.actorUserId || event.userId || 'System action';
@@ -4892,7 +4892,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
     const label = blocked ? String(row.notes || 'Blocked time') : this.shiftWindowLabel(parsed.start, parsed.end);
     const source = blocked
       ? `${this.minutesLabel(parsed.start)} - ${this.minutesLabel(parsed.end)}`
-      : row.notes ? `Staff OS roster · ${row.notes}` : 'Staff OS roster';
+      : row.notes ? `Staff OS roster Â· ${row.notes}` : 'Staff OS roster';
     return this.makeShiftBlock(
       String(row.id || `${row.staffId || row.staff_id}_${row.scheduleDate || row.schedule_date}`),
       parsed.start,
@@ -4935,7 +4935,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
 
   private parseShiftWindow(rawOrStart: string, rawEnd = ''): { start: number; end: number; label?: string } | null {
     const raw = rawEnd ? `${rawOrStart}-${rawEnd}` : rawOrStart;
-    const parts = String(raw || '').toUpperCase().split(/\s*(?:TO|T0|-|–|—)\s*/).filter(Boolean);
+    const parts = String(raw || '').toUpperCase().split(/\s*(?:TO|T0|-|â€“|â€”)\s*/).filter(Boolean);
     if (parts.length < 2) return null;
     const start = this.parseShiftTimeToken(parts[0], false);
     if (start === null) return null;

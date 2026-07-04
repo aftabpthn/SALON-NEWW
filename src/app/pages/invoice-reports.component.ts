@@ -788,7 +788,7 @@ type InvoiceLine = {
       min-width: 0;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: linear-gradient(180deg, #fff, #f8fbfa);
+      background: linear-gradient(180deg, #fff, #faf8f6);
       padding: 12px;
     }
 
@@ -825,7 +825,7 @@ type InvoiceLine = {
       min-width: 0;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: linear-gradient(180deg, #fff, #f8fbfa);
+      background: linear-gradient(180deg, #fff, #faf8f6);
       padding: 12px;
       overflow: auto;
     }

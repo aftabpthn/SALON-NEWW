@@ -24,10 +24,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/quality/quality-runs"><span>Quality runs</span><strong>{{ metrics.runs }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/quality/last-passed"><span>Last passed</span><strong>{{ metrics.lastPassed ? 'Yes' : 'No' }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/quality/demo-clients"><span>Demo clients</span><strong>{{ metrics.demoClients }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/quality/demo-services"><span>Demo services</span><strong>{{ metrics.demoServices }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/quality/quality-runs"><span>Quality runs</span><strong>{{ metrics.runs }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/quality/last-passed"><span>Last passed</span><strong>{{ metrics.lastPassed ? 'Yes' : 'No' }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/quality/demo-clients"><span>Demo clients</span><strong>{{ metrics.demoClients }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/quality/demo-services"><span>Demo services</span><strong>{{ metrics.demoServices }}</strong></aura-kpi-card>
       </div>
 
       <section class="panel">

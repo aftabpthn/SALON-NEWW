@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+﻿import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -43,12 +43,12 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/future-features/live-sources"><span>Live sources</span><strong>{{ metrics.liveSources || 0 }}/{{ sourceHealth().totalSources || 0 }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/future-features/automation-ready"><span>Connected workflows</span><strong>{{ metrics.automationReady || 0 }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/future-features/innovation-runs"><span>Innovation runs</span><strong>{{ metrics.innovationRuns || 0 }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="red" target="/kpi-details/future-features/no-show-risk"><span>No-show risk</span><strong>{{ metrics.noShowRisk || 0 }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/future-features/demand-index"><span>Demand index</span><strong>{{ metrics.demandIndex || 0 }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="violet" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/live-sources"><span>Live sources</span><strong>{{ metrics.liveSources || 0 }}/{{ sourceHealth().totalSources || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/automation-ready"><span>Connected workflows</span><strong>{{ metrics.automationReady || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/innovation-runs"><span>Innovation runs</span><strong>{{ metrics.innovationRuns || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/no-show-risk"><span>No-show risk</span><strong>{{ metrics.noShowRisk || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/demand-index"><span>Demand index</span><strong>{{ metrics.demandIndex || 0 }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
       </div>
 
       <div class="future-workspace">
@@ -262,12 +262,9 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       gap: 24px;
       overflow: hidden;
       padding: clamp(26px, 4vw, 42px);
-      border: 1px solid rgba(75, 18, 56, .16);
+      border: 1px solid rgba(75,18,56, .16);
       border-radius: 32px;
-      background:
-        radial-gradient(circle at 82% 20%, rgba(196, 132, 26, .24), transparent 28%),
-        radial-gradient(circle at 12% 88%, rgba(75, 18, 56, .18), transparent 34%),
-        linear-gradient(135deg, #f8fffb 0%, #eef8f6 52%, #fff8ea 100%);
+      background: #fff;
       box-shadow: 0 26px 70px rgba(15, 23, 42, .11);
     }
 
@@ -275,7 +272,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       position: absolute;
       width: 220px;
       height: 220px;
-      border: 1px solid rgba(75, 18, 56, .16);
+      border: 1px solid rgba(75,18,56, .16);
       border-radius: 999px;
       pointer-events: none;
     }
@@ -338,9 +335,9 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       align-items: center;
       min-height: 34px;
       padding: 0 12px;
-      border: 1px solid rgba(75, 18, 56, .16);
+      border: 1px solid rgba(75,18,56, .16);
       border-radius: 999px;
-      background: rgba(255, 255, 255, .82);
+      background: #fff;
       color: #123b36;
       font-size: .82rem;
       font-weight: 900;
@@ -369,10 +366,10 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       width: 100%;
       min-height: 96px;
       padding: 14px;
-      border: 1px solid rgba(75, 18, 56, .14);
-      border-left: 4px solid rgba(75, 18, 56, .55);
+      border: 1px solid rgba(75,18,56, .14);
+      border-left: 4px solid #4B1238;
       border-radius: 18px;
-      background: linear-gradient(135deg, #ffffff, #F7EEF4);
+      background: #fff;
       color: var(--ink);
       text-align: left;
       box-shadow: 0 14px 34px rgba(15, 23, 42, .07);
@@ -383,8 +380,8 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
     .future-nav-card:hover,
     .future-nav-card.active {
       transform: translateY(-2px);
-      border-color: rgba(75, 18, 56, .42);
-      background: linear-gradient(135deg, rgba(196, 244, 235, .88), rgba(229, 241, 255, .92));
+      border-color: rgba(75,18,56, .42);
+      background: #fff;
       box-shadow: 0 18px 42px rgba(15, 23, 42, .1);
     }
 
@@ -394,7 +391,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       width: 48px;
       height: 48px;
       border-radius: 14px;
-      background: rgba(75, 18, 56, .1);
+      background: #F8EEF4;
       color: var(--teal);
       font-size: .78rem;
       font-weight: 950;
@@ -417,7 +414,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       align-self: start;
       padding: 5px 8px;
       border-radius: 999px;
-      background: rgba(75, 18, 56, .1);
+      background: #F8EEF4;
       color: var(--teal);
       font-size: .68rem;
       font-style: normal;
@@ -454,9 +451,9 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       gap: 12px;
       align-items: center;
       padding: 13px;
-      border: 1px solid rgba(75, 18, 56, .12);
+      border: 1px solid rgba(75,18,56, .12);
       border-radius: 18px;
-      background: linear-gradient(135deg, #ffffff, #F7EEF4);
+      background: #fff;
       color: inherit;
       text-decoration: none;
       transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
@@ -466,7 +463,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
     .action-link:hover,
     .workflow-map-card:hover {
       transform: translateY(-2px);
-      border-color: rgba(75, 18, 56, .32);
+      border-color: rgba(75,18,56, .32);
       box-shadow: 0 16px 36px rgba(15, 23, 42, .09);
     }
 
@@ -510,9 +507,9 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       display: grid;
       gap: 8px;
       padding: 14px;
-      border: 1px solid rgba(75, 18, 56, .13);
+      border: 1px solid rgba(75,18,56, .13);
       border-radius: 18px;
-      background: #F7EEF4;
+      background: #fff;
     }
 
     .workflow-map-grid {
@@ -526,7 +523,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
       gap: 10px;
       min-height: 180px;
       padding: 16px;
-      border: 1px solid rgba(75, 18, 56, .13);
+      border: 1px solid rgba(75,18,56, .13);
       border-radius: 22px;
       background: #fff;
       cursor: pointer;
@@ -534,8 +531,8 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
     }
 
     .workflow-map-card.active {
-      border-color: rgba(75, 18, 56, .52);
-      background: linear-gradient(135deg, rgba(75, 18, 56, .12), #fff);
+      border-color: rgba(75,18,56, .52);
+      background: #fff;
     }
 
     .workflow-card-head {

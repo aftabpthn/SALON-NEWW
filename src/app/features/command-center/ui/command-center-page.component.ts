@@ -7,6 +7,7 @@ import { CommandCenterModule } from '../domain/command-center.models';
   selector: 'app-command-center-page',
   standalone: true,
   imports: [CommonModule],
+  host: { '[class.module-owner-command]': 'module === "owner-command"' },
   template: `
     <section class="command-center-page">
       <header class="cc-hero">
@@ -23,7 +24,7 @@ import { CommandCenterModule } from '../domain/command-center.models';
       </header>
 
       <section class="cc-metrics" aria-label="Command center metrics">
-        <article *ngFor="let metric of store.metrics()" class="cc-metric-card" [class]="metric.tone">
+        <article *ngFor="let metric of store.metrics()" class="cc-metric-card">
           <span>{{ metric.label }}</span>
           <strong>{{ metric.value }}</strong>
         </article>
@@ -92,7 +93,7 @@ import { CommandCenterModule } from '../domain/command-center.models';
     .cc-hero {
       display: flex; align-items: center; justify-content: space-between; gap: 16px;
       background: #fff; border-radius: 14px; padding: 18px 22px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04);
+      box-shadow: 0 1px 2px rgba(75,18,56,0.04), 0 1px 6px rgba(75,18,56,0.04);
     }
     .eyebrow { margin: 0 0 2px; color: #6b7c74; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
     h1, h2, p { margin: 0; letter-spacing: 0; }
@@ -108,21 +109,21 @@ import { CommandCenterModule } from '../domain/command-center.models';
     .cc-metric-card {
       display: grid; gap: 1px; padding: 3px 8px;
       background: #fff; border-radius: 8px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 4px rgba(0,0,0,0.04);
-      border-top: 2px solid #d9e5de;
+      box-shadow: 0 1px 2px rgba(75,18,56,0.04), 0 1px 4px rgba(75,18,56,0.04);
+      border-left: 2px solid #4B1238;
       align-content: center;
       transition: transform 160ms ease, box-shadow 160ms ease;
     }
     .cc-metric-card:hover {
       transform: translateY(-1px);
-      box-shadow: 0 3px 10px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+      box-shadow: 0 3px 10px rgba(75,18,56,0.06), 0 1px 3px rgba(75,18,56,0.04);
     }
     .cc-metric-card span { color: #6b7c74; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
     .cc-metric-card strong { font-size: 24px; color: #12231d; font-weight: 700; line-height: 1.15; }
-    .cc-metric-card.critical { border-top-color: #d32f2f; }
-    .cc-metric-card.warning { border-top-color: #f59e0b; }
-    .cc-metric-card.good { border-top-color: #16a34a; }
-    .cc-state { padding: 12px 16px; background: #fff; border-radius: 10px; color: #6b7c74; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .cc-metric-card.critical { border-top-color: #d5cec7; }
+    .cc-metric-card.warning { border-top-color: #d5cec7; }
+    .cc-metric-card.good { border-top-color: #d5cec7; }
+    .cc-state { padding: 12px 16px; background: #fff; border-radius: 10px; color: #6b7c74; font-size: 13px; box-shadow: 0 1px 2px rgba(75,18,56,0.04); }
     .cc-error { border-left: 3px solid #d32f2f; color: #b71c1c; background: #fff; }
     .cc-layout {
       display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px;
@@ -130,7 +131,7 @@ import { CommandCenterModule } from '../domain/command-center.models';
     .cc-panel {
       display: grid; align-content: start; gap: 8px; padding: 16px;
       background: #fff; border-radius: 14px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04);
+      box-shadow: 0 1px 2px rgba(75,18,56,0.04), 0 1px 6px rgba(75,18,56,0.04);
     }
     .cc-panel-head {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -149,22 +150,22 @@ import { CommandCenterModule } from '../domain/command-center.models';
     .cc-record div { display: grid; gap: 2px; }
     .cc-record strong { font-size: 13px; color: #12231d; }
     .cc-record span { color: #6b7c74; font-size: 11px; }
-    .cc-record small { border-radius: 999px; background: #eef6f1; padding: 2px 8px; align-self: start; font-size: 10px; font-weight: 700; }
-    .cc-record small.critical { background: #fde8e8; color: #b71c1c; }
-    .cc-record small.warning { background: #fef3cd; color: #92400e; }
-    .cc-record small.good { background: #dcfce7; color: #166534; }
+    .cc-record small { border-radius: 999px; background: #F8EEF4; padding: 2px 8px; align-self: start; font-size: 10px; font-weight: 700; color: #4B1238; }
+    .cc-record small.critical { background: #F8EEF4; color: #4B1238; }
+    .cc-record small.warning { background: #F8EEF4; color: #4B1238; }
+    .cc-record small.good { background: #F8EEF4; color: #4B1238; }
     .cc-empty { padding: 12px 14px; color: #6b7c74; font-size: 13px; }
     .cc-detail { gap: 8px; }
     .cc-detail-hero {
       display: grid; gap: 3px; padding: 12px 14px;
-      border: 1px solid #edf2ef; border-radius: 8px; background: #f8fbfa;
+      border: 1px solid #edf2ef; border-radius: 8px; background: #fff;
     }
     .cc-detail-hero span, dt { color: #6b7c74; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
     .cc-detail-hero strong { font-size: 15px; line-height: 1.2; color: #12231d; }
-    .cc-detail-hero small { width: fit-content; border-radius: 999px; background: #eef6f1; padding: 2px 8px; font-size: 10px; font-weight: 700; }
+    .cc-detail-hero small { width: fit-content; border-radius: 999px; background: #f5f2ef; padding: 2px 8px; font-size: 10px; font-weight: 700; }
     .cc-detail-copy { margin: 0; color: #425952; line-height: 1.4; font-size: 12px; }
     .cc-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; }
-    .cc-detail-grid div { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid #edf2ef; border-radius: 6px; background: #fafbfc; }
+    .cc-detail-grid div { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid #edf2ef; border-radius: 6px; background: #fff; }
     dd { margin: 0; font-weight: 700; word-break: break-word; color: #12231d; font-size: 12px; }
     .cc-detail-empty { display: grid; gap: 3px; }
     @media (max-width: 920px) {
@@ -177,6 +178,71 @@ import { CommandCenterModule } from '../domain/command-center.models';
     @media (max-width: 480px) {
       .cc-metrics { grid-template-columns: 1fr; }
     }
+
+    /* ── Module: owner-command — white card / plum accent ── */
+    :host.module-owner-command .command-center-page {
+      background: #f8f5f2;
+    }
+    :host.module-owner-command .cc-hero {
+      background: #fff;
+      border: 1px solid #E7DDD6;
+      box-shadow: 0 1px 3px rgba(75,18,56,.02);
+    }
+    :host.module-owner-command .cc-hero h1 { color: #2b2220; font-weight: 600; font-size: 20px; }
+    :host.module-owner-command .cc-hero p { color: #6F778A; }
+    :host.module-owner-command .cc-primary {
+      background: #4B1238; border-radius: 6px; font-weight: 500;
+    }
+    :host.module-owner-command .cc-primary:hover { background: #3d0e2e; }
+    :host.module-owner-command .cc-ghost {
+      border-color: #E7DDD6; color: #6F778A; font-weight: 500;
+    }
+    :host.module-owner-command .cc-ghost:hover {
+      background: #F8EEF4; border-color: #E7DDD6; color: #4B1238;
+    }
+    :host.module-owner-command .cc-metric-card {
+      border-top: 0;
+      padding: 14px 16px; gap: 2px;
+      border: 1px solid #E7DDD6;
+      border-left: 2px solid #4B1238;
+      box-shadow: 0 1px 2px rgba(75,18,56,.03);
+    }
+    :host.module-owner-command .cc-metric-card span { color: #6F778A; font-weight: 500; font-size: 10px; letter-spacing: .05em; }
+    :host.module-owner-command .cc-metric-card strong { color: #2b2220; font-weight: 550; font-size: 20px; }
+    :host.module-owner-command .cc-panel {
+      background: #fff; border: 1px solid #E7DDD6; border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(75,18,56,.02);
+    }
+    :host.module-owner-command .cc-panel-head h2 { color: #2b2220; font-weight: 600; font-size: 14px; }
+    :host.module-owner-command .cc-panel-head span { color: #6F778A; font-weight: 500; }
+    :host.module-owner-command .cc-record {
+      border-color: #E7DDD6; border-radius: 6px;
+    }
+    :host.module-owner-command .cc-record:hover,
+    :host.module-owner-command .cc-record.selected {
+      border-color: #4B1238; background: #F8EEF4;
+    }
+    :host.module-owner-command .cc-record strong { color: #2b2220; font-weight: 600; }
+    :host.module-owner-command .cc-record span { color: #6F778A; }
+    :host.module-owner-command .cc-record small {
+      background: #F8EEF4; color: #4B1238; font-weight: 600;
+    }
+    :host.module-owner-command .cc-detail-hero {
+      background: #fff; border-color: #E7DDD6;
+    }
+    :host.module-owner-command .cc-detail-hero strong { color: #2b2220; }
+    :host.module-owner-command .cc-detail-hero small {
+      background: #F8EEF4; color: #4B1238; font-weight: 600;
+    }
+    :host.module-owner-command .cc-detail-grid div {
+      background: #fff; border-color: #E7DDD6;
+    }
+    :host.module-owner-command dd { color: #2b2220; font-weight: 600; }
+    :host.module-owner-command dt { color: #6F778A; font-weight: 500; }
+    :host.module-owner-command .cc-state,
+    :host.module-owner-command .cc-empty { color: #6F778A; }
+    :host.module-owner-command .cc-error { border-left-color: #6F778A; color: #6F778A; }
+    :host.module-owner-command .cc-detail-copy { color: #6F778A; }
   `]
 })
 export class CommandCenterPageComponent implements OnChanges {

@@ -21,10 +21,10 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <aura-kpi-card tone="teal" target="/kpi-details/white-label/profiles"><span>Profiles</span><strong>{{ metrics.profiles }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="blue" target="/kpi-details/white-label/custom-domains"><span>Custom domains</span><strong>{{ metrics.customDomains }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="green" target="/kpi-details/white-label/branded-branches"><span>Branded branches</span><strong>{{ metrics.brandedBranches }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="amber" target="/kpi-details/white-label/default-profiles"><span>Default profiles</span><strong>{{ metrics.defaultProfiles }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/white-label/profiles"><span>Profiles</span><strong>{{ metrics.profiles }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/white-label/custom-domains"><span>Custom domains</span><strong>{{ metrics.customDomains }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/white-label/branded-branches"><span>Branded branches</span><strong>{{ metrics.brandedBranches }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/white-label/default-profiles"><span>Default profiles</span><strong>{{ metrics.defaultProfiles }}</strong></aura-kpi-card>
       </div>
 
       <div class="dashboard-grid">
