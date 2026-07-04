@@ -16845,3 +16845,1747 @@ app-purchase-bill-drafts .warning-list {
     overflow: auto !important;
   }
 }
+
+/* Phone header micro-compact: title, scope pills, POS and actions. */
+@media (max-width: 640px) {
+  .topbar {
+    position: relative !important;
+    grid-template-columns: minmax(0, 1fr) 76px !important;
+    gap: 4px 6px !important;
+    padding: 5px 8px 7px !important;
+  }
+
+  .topbar-brand-title {
+    grid-column: 1 !important;
+    min-height: 26px !important;
+    gap: 6px !important;
+  }
+
+  .topbar h1 {
+    font-size: 0.86rem !important;
+    line-height: 1 !important;
+    letter-spacing: -0.03em !important;
+  }
+
+  .topbar-back-button {
+    width: 26px !important;
+    min-width: 26px !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    flex-basis: 26px !important;
+  }
+
+  .topbar-actions {
+    grid-column: 1 / -1 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 76px !important;
+    gap: 4px 6px !important;
+    align-items: center !important;
+  }
+
+  .topbar-actions aura-workspace-switcher {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    min-width: 0 !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 26px !important;
+    min-height: 26px !important;
+    padding: 0 5px !important;
+    gap: 4px !important;
+    border-radius: 7px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 17px !important;
+    height: 17px !important;
+    border-radius: 5px !important;
+    font-size: 0.5rem !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    display: none !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.52rem !important;
+    line-height: 1 !important;
+    max-width: 76px !important;
+  }
+
+  aura-workspace-switcher .wsw-chevron {
+    font-size: 0.4rem !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    height: 25px !important;
+    min-height: 25px !important;
+    padding: 0 8px !important;
+    border-radius: 7px !important;
+    font-size: 0.64rem !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  .topbar-actions aura-header-actions {
+    grid-column: 2 !important;
+    grid-row: 1 / span 2 !important;
+    align-self: end !important;
+    justify-self: end !important;
+  }
+
+  aura-header-actions .hdr-actions {
+    display: grid !important;
+    grid-template-columns: 34px 34px !important;
+    gap: 4px !important;
+    width: 72px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 25px !important;
+    min-height: 25px !important;
+    border-radius: 7px !important;
+    font-size: 0.68rem !important;
+  }
+
+  aura-header-actions .hdr-avatar {
+    width: 19px !important;
+    height: 19px !important;
+    border-radius: 6px !important;
+    font-size: 0.5rem !important;
+  }
+}
+
+/* Absolute final compact phone header. */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 3px 6px 5px !important;
+    gap: 3px !important;
+    min-height: 0 !important;
+  }
+
+  .topbar-brand-title {
+    min-height: 22px !important;
+    gap: 5px !important;
+  }
+
+  .topbar h1 {
+    font-size: 0.82rem !important;
+    line-height: 1 !important;
+  }
+
+  .topbar-back-button {
+    width: 24px !important;
+    min-width: 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    flex-basis: 24px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+  }
+
+  .topbar-actions {
+    grid-template-columns: minmax(0, 1fr) 64px !important;
+    gap: 3px !important;
+  }
+
+  .topbar-actions aura-workspace-switcher {
+    grid-column: 1 / -1 !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 3px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 24px !important;
+    min-height: 24px !important;
+    padding: 0 4px !important;
+    gap: 3px !important;
+    border-radius: 7px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 5px !important;
+    font-size: 0.5rem !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    display: none !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.54rem !important;
+    line-height: 1 !important;
+    max-width: 92px !important;
+  }
+
+  aura-workspace-switcher .wsw-chevron {
+    font-size: 0.42rem !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    grid-column: 1 !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    padding: 0 8px !important;
+    border-radius: 7px !important;
+    font-size: 0.62rem !important;
+    line-height: 1 !important;
+  }
+
+  .topbar-actions aura-header-actions {
+    grid-column: 2 !important;
+  }
+
+  aura-header-actions .hdr-actions {
+    gap: 3px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    border-radius: 7px !important;
+    font-size: 0.72rem !important;
+  }
+
+  aura-header-actions .hdr-avatar {
+    width: 18px !important;
+    height: 18px !important;
+    border-radius: 6px !important;
+    font-size: 0.5rem !important;
+  }
+
+  aura-header-actions .hdr-dot {
+    top: 4px !important;
+    right: 5px !important;
+    width: 6px !important;
+    height: 6px !important;
+  }
+
+  .workspace-local-rail {
+    padding: 3px 6px !important;
+  }
+
+  .workspace-local-nav {
+    gap: 5px !important;
+    padding: 0 !important;
+  }
+
+  .workspace-local-nav a,
+  .workspace-module-tab {
+    flex: 0 0 30px !important;
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    height: 27px !important;
+    min-height: 27px !important;
+    border-radius: 8px !important;
+  }
+
+  .workspace-local-nav-icon,
+  .workspace-module-tab .nav-icon {
+    font-size: 0.62rem !important;
+  }
+
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    padding: 3px 6px !important;
+  }
+}
+
+/* PHONE REDESIGN OVERRIDE - final mobile layout system, desktop untouched. */
+@media (max-width: 640px) {
+  :root {
+    --phone-gap: 6px;
+    --phone-pad: 8px;
+    --phone-radius: 12px;
+    --phone-control: 30px;
+  }
+
+  body {
+    background: #f3f4f7 !important;
+  }
+
+  .app-shell,
+  .app-shell.sidebar-is-compact,
+  .workspace,
+  .workspace-route-shell,
+  .workspace-route-content,
+  .workspace-route-shell--with-local-nav .workspace-route-content {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .workspace,
+  .app-shell.sidebar-is-compact .workspace {
+    padding: 0 0 calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .workspace-route-content,
+  .workspace-route-shell--with-local-nav .workspace-route-content {
+    padding: 0 !important;
+    background: #f3f4f7 !important;
+  }
+
+  .topbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 60 !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: var(--phone-gap) !important;
+    padding: 8px 10px 9px !important;
+    border: 0 !important;
+    border-bottom: 1px solid #eadde6 !important;
+    border-radius: 0 !important;
+    background: rgba(255, 252, 249, 0.96) !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06) !important;
+  }
+
+  .topbar::before {
+    width: 3px !important;
+    background: linear-gradient(180deg, #4B1238, #B7791F) !important;
+  }
+
+  .topbar-brand-title {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-height: 32px !important;
+    padding: 0 !important;
+  }
+
+  .topbar h1 {
+    font-size: 1rem !important;
+    line-height: 1.05 !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  .topbar-back-button {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    flex: 0 0 30px !important;
+    padding: 0 !important;
+    border-radius: 9px !important;
+    font-size: 14px !important;
+  }
+
+  .topbar-actions {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: var(--phone-gap) !important;
+    align-items: center !important;
+    padding: 0 !important;
+  }
+
+  .topbar-actions aura-workspace-switcher {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: var(--phone-gap) !important;
+    width: 100% !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    width: 100% !important;
+    height: var(--phone-control) !important;
+    min-height: var(--phone-control) !important;
+    grid-template-columns: auto minmax(0, 1fr) auto !important;
+    gap: 5px !important;
+    padding: 0 7px !important;
+    border-radius: 9px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 6px !important;
+    font-size: 0.58rem !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    display: none !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.62rem !important;
+    line-height: 1 !important;
+    max-width: 100% !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    grid-column: 1 !important;
+    width: 100% !important;
+    height: var(--phone-control) !important;
+    min-height: var(--phone-control) !important;
+    padding: 0 10px !important;
+    border-radius: 9px !important;
+    font-size: 0.7rem !important;
+  }
+
+  .topbar-divider {
+    display: none !important;
+  }
+
+  .topbar-actions aura-header-actions {
+    grid-column: 2 !important;
+    justify-self: end !important;
+    width: auto !important;
+  }
+
+  aura-header-actions .hdr-actions {
+    width: auto !important;
+    gap: 5px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 32px !important;
+    min-width: 32px !important;
+    height: var(--phone-control) !important;
+    min-height: var(--phone-control) !important;
+    border-radius: 9px !important;
+    padding: 0 !important;
+  }
+
+  aura-header-actions .hdr-avatar {
+    width: 21px !important;
+    height: 21px !important;
+    border-radius: 7px !important;
+    font-size: 0.56rem !important;
+  }
+
+  .workspace-local-rail,
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    padding: 6px 10px !important;
+    background: rgba(255, 252, 249, 0.92) !important;
+    border-bottom: 1px solid #eadde6 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+  }
+
+  .workspace-local-rail::-webkit-scrollbar,
+  .workspace-module-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-local-rail-head {
+    display: none !important;
+  }
+
+  .workspace-local-nav,
+  .workspace-module-tabs-nav {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    width: max-content !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+  }
+
+  .workspace-local-nav a,
+  .workspace-module-tab {
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    place-items: center !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    font-size: 0.64rem !important;
+  }
+
+  .workspace-local-nav-label,
+  .workspace-module-tab > span:not(.nav-icon) {
+    display: none !important;
+  }
+
+  .workspace-local-nav-icon,
+  .workspace-module-tab .nav-icon {
+    font-size: 0.64rem !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+  }
+
+  :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(
+    .page-header, .page-heading, .page-hero, .module-hero, .command-bar,
+    .workspace-hero, .inventory-hero, .product-hero, .supplier-hero,
+    .membership-hero, .package-hero, .reports-hero, .summary-hero,
+    .panel, .card, .metric-card, .kpi-card, .summary-card
+  ) {
+    border-radius: var(--phone-radius) !important;
+    padding: 12px !important;
+  }
+
+  :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(h1) {
+    font-size: 1.18rem !important;
+    line-height: 1.1 !important;
+  }
+
+  :is(.workspace-route-content > router-outlet + *, .workspace > router-outlet + *) :where(h2) {
+    font-size: 1rem !important;
+    line-height: 1.15 !important;
+  }
+
+  app-command-center-page .command-center-page {
+    gap: 10px !important;
+    padding: 10px 10px calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    background: #f3f4f7 !important;
+  }
+
+  app-command-center-page .cc-hero {
+    gap: 10px !important;
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+  }
+
+  app-command-center-page .cc-hero h1 {
+    font-size: 1.12rem !important;
+    line-height: 1.12 !important;
+  }
+
+  app-command-center-page .cc-actions {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  app-command-center-page .cc-actions button {
+    min-height: 38px !important;
+    font-size: 0.74rem !important;
+  }
+
+  app-command-center-page .cc-metrics,
+  app-command-center-page .cc-layout {
+    gap: 9px !important;
+  }
+
+  app-command-center-page .cc-metric-card,
+  app-command-center-page .cc-panel {
+    border-radius: 13px !important;
+    padding: 10px !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell > aside.sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    right: 8px !important;
+    height: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+    border-radius: 14px 14px 0 0 !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+  }
+}
+
+/* Phone compact mode: icon-only local nav and tighter shell header. */
+@media (max-width: 640px) {
+  .topbar {
+    gap: 7px !important;
+    padding: 8px 10px 10px !important;
+  }
+
+  .topbar-brand-title {
+    min-height: 34px !important;
+    gap: 8px !important;
+  }
+
+  .topbar h1 {
+    font-size: 1.12rem !important;
+    line-height: 1.1 !important;
+  }
+
+  .topbar-back-button {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    flex-basis: 34px !important;
+  }
+
+  .topbar-actions {
+    gap: 6px !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    gap: 6px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding-inline: 8px !important;
+    gap: 7px !important;
+    border-radius: 10px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 8px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    font-size: 0.56rem !important;
+    max-width: 108px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.74rem !important;
+    max-width: 108px !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    height: 36px !important;
+    min-height: 36px !important;
+    border-radius: 9px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
+  aura-header-actions .hdr-avatar {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
+  }
+
+  .workspace-local-rail {
+    padding: 6px 8px 5px !important;
+  }
+
+  .workspace-local-rail-head {
+    display: none !important;
+  }
+
+  .workspace-local-nav {
+    gap: 7px !important;
+    padding: 0 3px 3px !important;
+  }
+
+  .workspace-local-nav a {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    display: grid !important;
+    place-items: center !important;
+    padding: 0 !important;
+  }
+
+  .workspace-local-nav-label {
+    display: none !important;
+  }
+
+  .workspace-local-nav-icon {
+    width: auto !important;
+    min-width: 0 !important;
+    font-size: 0.72rem !important;
+    font-weight: 900 !important;
+  }
+
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    padding: 6px 8px !important;
+  }
+
+  .workspace-module-tab {
+    min-height: 32px !important;
+    padding: 6px 9px !important;
+    font-size: 0.74rem !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell > aside.sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+    height: calc(54px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(54px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    border-radius: 10px !important;
+  }
+
+  .workspace,
+  .app-shell.sidebar-is-compact .workspace {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Final phone layout override: keep local navigation compact and balanced. */
+@media (max-width: 640px) {
+  .workspace-local-rail {
+    padding: 6px 8px !important;
+    overflow-x: hidden !important;
+  }
+
+  .workspace-local-rail-head {
+    display: none !important;
+  }
+
+  .workspace-local-nav {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 0 2px 3px !important;
+    scrollbar-width: none;
+  }
+
+  .workspace-local-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-local-nav a {
+    flex: 0 0 42px !important;
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    place-items: center !important;
+    padding: 0 !important;
+    border-radius: 11px !important;
+  }
+
+  .workspace-local-nav-label {
+    display: none !important;
+  }
+
+  .workspace-local-nav-icon {
+    margin: 0 !important;
+    font-size: 0.72rem !important;
+    line-height: 1 !important;
+  }
+
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    padding: 5px 8px !important;
+  }
+
+  .workspace-module-tabs-nav {
+    gap: 6px !important;
+  }
+
+  .workspace-module-tab {
+    min-height: 31px !important;
+    padding: 5px 8px !important;
+    font-size: 0.72rem !important;
+  }
+
+  app-command-center-page .command-center-page {
+    padding: 10px 8px calc(86px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  app-command-center-page .cc-hero {
+    padding: 16px 14px !important;
+  }
+
+  app-command-center-page .cc-hero h1 {
+    font-size: 1.2rem !important;
+  }
+
+  app-command-center-page .cc-actions button {
+    min-height: 42px !important;
+  }
+
+  app-command-center-page .cc-metric-card {
+    min-height: 54px !important;
+    padding: 9px 11px !important;
+  }
+}
+
+/* Real phone layout: compact chrome, icon-only module tabs, smaller Command Center UI. */
+@media (max-width: 640px) {
+  .topbar {
+    gap: 6px !important;
+    padding: 7px 9px 9px !important;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05) !important;
+  }
+
+  .topbar::before {
+    width: 3px !important;
+  }
+
+  .topbar-brand-title {
+    min-height: 30px !important;
+    gap: 7px !important;
+  }
+
+  .topbar h1 {
+    font-size: 1.02rem !important;
+    line-height: 1.05 !important;
+    letter-spacing: -0.015em !important;
+  }
+
+  .topbar-back-button {
+    width: 31px !important;
+    min-width: 31px !important;
+    height: 31px !important;
+    min-height: 31px !important;
+    flex-basis: 31px !important;
+    font-size: 16px !important;
+  }
+
+  .topbar-actions {
+    gap: 5px !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) !important;
+    gap: 5px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 7px !important;
+    gap: 5px !important;
+    border-radius: 9px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 23px !important;
+    height: 23px !important;
+    border-radius: 7px !important;
+    font-size: 0.68rem !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    font-size: 0.5rem !important;
+    line-height: 1 !important;
+    max-width: 96px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.68rem !important;
+    line-height: 1.05 !important;
+    max-width: 96px !important;
+  }
+
+  aura-workspace-switcher .wsw-chevron {
+    font-size: 0.5rem !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
+    font-size: 0.78rem !important;
+  }
+
+  aura-header-actions .hdr-actions {
+    gap: 6px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    border-radius: 9px !important;
+  }
+
+  aura-header-actions .hdr-avatar {
+    width: 25px !important;
+    height: 25px !important;
+    border-radius: 7px !important;
+    font-size: 0.64rem !important;
+  }
+
+  .workspace-local-rail {
+    padding: 5px 7px !important;
+  }
+
+  .workspace-local-nav a {
+    flex: 0 0 38px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    border-radius: 10px !important;
+  }
+
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    padding: 5px 7px !important;
+    min-height: 0 !important;
+  }
+
+  .workspace-module-tabs-nav {
+    min-width: 0 !important;
+    width: max-content !important;
+    gap: 7px !important;
+  }
+
+  .workspace-module-tab {
+    flex: 0 0 38px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    place-items: center !important;
+    padding: 0 !important;
+    border-radius: 10px !important;
+  }
+
+  .workspace-module-tab > span:not(.nav-icon) {
+    display: none !important;
+  }
+
+  .workspace-module-tab .nav-icon {
+    margin: 0 !important;
+    font-size: 0.72rem !important;
+    line-height: 1 !important;
+    font-weight: 900 !important;
+  }
+
+  app-command-center-page .command-center-page {
+    gap: 8px !important;
+    padding: 8px 7px calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  app-command-center-page .cc-hero {
+    gap: 10px !important;
+    padding: 13px 12px !important;
+    border-radius: 13px !important;
+  }
+
+  app-command-center-page .cc-hero h1 {
+    font-size: 1.08rem !important;
+    line-height: 1.12 !important;
+  }
+
+  app-command-center-page .cc-actions {
+    gap: 7px !important;
+  }
+
+  app-command-center-page .cc-actions button {
+    min-height: 38px !important;
+    font-size: 0.72rem !important;
+    border-radius: 10px !important;
+  }
+
+  app-command-center-page .cc-metrics {
+    gap: 8px !important;
+  }
+
+  app-command-center-page .cc-metric-card {
+    min-height: 48px !important;
+    padding: 8px 10px !important;
+    border-radius: 11px !important;
+  }
+
+  app-command-center-page .cc-metric-card span {
+    font-size: 0.62rem !important;
+  }
+
+  app-command-center-page .cc-metric-card strong {
+    font-size: 1.25rem !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell > aside.sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+    height: calc(50px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(50px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 5px 7px calc(5px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+    width: 35px !important;
+    min-width: 35px !important;
+    height: 35px !important;
+    min-height: 35px !important;
+  }
+
+  .workspace,
+  .app-shell.sidebar-is-compact .workspace {
+    padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Final mobile header fix: compact phone-first shell, no desktop impact. */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 6px 8px 8px !important;
+    gap: 5px !important;
+    align-content: start !important;
+    background: rgba(255, 255, 255, 0.94) !important;
+  }
+
+  .topbar-brand-title {
+    min-height: 29px !important;
+    gap: 7px !important;
+  }
+
+  .topbar h1 {
+    font-size: 0.98rem !important;
+    line-height: 1.05 !important;
+  }
+
+  .topbar-back-button {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    flex-basis: 30px !important;
+  }
+
+  .topbar-actions {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 5px !important;
+    align-items: center !important;
+  }
+
+  .topbar-actions > *,
+  .topbar-actions aura-workspace-switcher,
+  .topbar-actions .dark-button,
+  .topbar-actions aura-header-actions {
+    width: auto !important;
+    max-width: 100% !important;
+    flex: 0 1 auto !important;
+  }
+
+  .topbar-actions aura-workspace-switcher {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    grid-column: 1 !important;
+    width: 100% !important;
+    height: 31px !important;
+    min-height: 31px !important;
+    font-size: 0.75rem !important;
+  }
+
+  .topbar-divider {
+    display: none !important;
+  }
+
+  .topbar-actions aura-header-actions {
+    grid-column: 2 !important;
+    justify-self: end !important;
+  }
+
+  aura-header-actions .hdr-actions {
+    width: auto !important;
+    gap: 5px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 31px !important;
+    min-height: 31px !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) !important;
+    gap: 5px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 33px !important;
+    min-height: 33px !important;
+    padding: 0 6px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    font-size: 0.48rem !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.66rem !important;
+  }
+
+  .workspace-local-rail {
+    height: auto !important;
+    min-height: 0 !important;
+    display: block !important;
+    padding: 5px 7px !important;
+    align-content: start !important;
+  }
+
+  .workspace-local-nav {
+    height: auto !important;
+    min-height: 0 !important;
+    align-items: center !important;
+  }
+
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 4px 7px !important;
+  }
+}
+
+/* Immediate phone header shrink. */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 4px 7px 6px !important;
+    gap: 4px !important;
+  }
+
+  .topbar-brand-title {
+    min-height: 25px !important;
+    gap: 6px !important;
+  }
+
+  .topbar h1 {
+    font-size: 0.9rem !important;
+  }
+
+  .topbar-back-button {
+    width: 27px !important;
+    min-width: 27px !important;
+    height: 27px !important;
+    min-height: 27px !important;
+    flex-basis: 27px !important;
+    font-size: 14px !important;
+  }
+
+  .topbar-actions {
+    gap: 4px !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    gap: 4px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 29px !important;
+    min-height: 29px !important;
+    padding: 0 5px !important;
+    gap: 4px !important;
+    border-radius: 8px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-icon {
+    width: 19px !important;
+    height: 19px !important;
+    border-radius: 6px !important;
+    font-size: 0.6rem !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy small {
+    font-size: 0.43rem !important;
+    max-width: 84px !important;
+  }
+
+  aura-workspace-switcher .wsw-btn-copy strong {
+    font-size: 0.58rem !important;
+    max-width: 84px !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    height: 28px !important;
+    min-height: 28px !important;
+    font-size: 0.68rem !important;
+    border-radius: 7px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    border-radius: 8px !important;
+  }
+
+  aura-header-actions .hdr-avatar {
+    width: 21px !important;
+    height: 21px !important;
+    font-size: 0.56rem !important;
+  }
+
+  .workspace-local-rail {
+    padding: 4px 6px !important;
+  }
+
+  .workspace-local-nav a,
+  .workspace-module-tab {
+    flex-basis: 34px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    border-radius: 9px !important;
+  }
+}
+
+/* Mobile module rail + Command Center page polish. Desktop unaffected. */
+@media (max-width: 640px) {
+  .workspace-local-rail {
+    padding: 8px 8px 6px !important;
+    border-radius: 0 0 14px 14px !important;
+  }
+
+  .workspace-local-rail-head {
+    padding: 0 2px 6px !important;
+  }
+
+  .workspace-local-rail-head strong {
+    font-size: 0.78rem !important;
+  }
+
+  .workspace-local-nav {
+    width: 100% !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+    padding: 0 4px 4px !important;
+    scroll-padding-inline: 10px !important;
+    scrollbar-width: none;
+  }
+
+  .workspace-local-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-local-nav a {
+    min-height: 34px !important;
+    padding: 7px 10px !important;
+    border-radius: 10px !important;
+    white-space: nowrap !important;
+    box-shadow: 0 8px 18px rgba(75, 18, 56, 0.06) !important;
+  }
+
+  .workspace-route-content > .workspace-module-tabs,
+  .workspace-module-tabs {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 7px 8px !important;
+    scrollbar-width: none;
+  }
+
+  .workspace-route-content > .workspace-module-tabs::-webkit-scrollbar,
+  .workspace-module-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-module-tabs-nav {
+    width: max-content !important;
+    min-width: 100% !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+  }
+
+  .workspace-module-tab {
+    flex: 0 0 auto !important;
+    min-height: 34px !important;
+    padding: 7px 10px !important;
+    border-radius: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  app-command-center-page .command-center-page {
+    gap: 10px !important;
+    padding: 12px 10px calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    background: linear-gradient(180deg, #f8f5f2 0%, #f5f6fb 100%) !important;
+  }
+
+  app-command-center-page .cc-hero {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    padding: 18px 16px !important;
+    border-radius: 14px !important;
+  }
+
+  app-command-center-page .cc-hero h1 {
+    font-size: 1.28rem !important;
+    line-height: 1.15 !important;
+  }
+
+  app-command-center-page .cc-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  app-command-center-page .cc-actions button {
+    width: 100% !important;
+    min-height: 44px !important;
+    padding: 0 10px !important;
+  }
+
+  app-command-center-page .cc-metrics {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  app-command-center-page .cc-metric-card {
+    min-height: 58px !important;
+    padding: 10px 12px !important;
+    border-radius: 12px !important;
+  }
+
+  app-command-center-page .cc-layout {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  app-command-center-page .cc-panel {
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  app-command-center-page .cc-record {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* AuraSalon Mobile Shell Final Override
+   Keeps desktop untouched; fixes mobile app chrome so routed pages use full width. */
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell.sidebar-is-compact {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    min-height: 100dvh !important;
+    overflow-x: hidden !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell > aside.sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    z-index: 80 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: calc(66px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(66px + env(safe-area-inset-bottom, 0px)) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    border-right: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-bottom: 0 !important;
+    border-radius: 18px 18px 0 0 !important;
+    background: linear-gradient(135deg, #4B1238, #6D1B4D) !important;
+    box-shadow: 0 -14px 34px rgba(15, 23, 42, 0.16) !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    transform: none !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-brand-row,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar .sidebar-brand-row,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-brand-row,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar .sidebar-brand-row {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 44px !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.sidebar.enterprise-sidebar .brand {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    display: grid !important;
+    place-items: center !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .brand span:not(.brand-mark),
+  .app-shell > aside.sidebar.enterprise-sidebar .brand span:not(.brand-mark),
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-callout,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-callout,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-copy,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-copy,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-count,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-count,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-items,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-items,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-flyout,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-flyout {
+    display: none !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-slot,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-slot,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-care-ai-action {
+    flex: 0 0 auto !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    place-items: center !important;
+    border-radius: 12px !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-list.nav-accordion,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-list.nav-accordion {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-list.nav-accordion::-webkit-scrollbar,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-list.nav-accordion::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section {
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+
+  .workspace,
+  .app-shell.sidebar-is-compact .workspace {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 0 calc(86px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow-x: hidden !important;
+  }
+
+  .topbar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 40 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .topbar-actions {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: visible !important;
+  }
+
+  .workspace-route-shell,
+  .workspace-route-shell--with-local-nav,
+  .workspace-route-shell--local-rail-collapsed {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    display: block !important;
+    border-inline: 0 !important;
+  }
+
+  .workspace-route-content,
+  .workspace-route-shell--with-local-nav .workspace-route-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    padding: 0 10px 18px !important;
+  }
+
+  .workspace-local-rail {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #E7DDD6 !important;
+    overflow-x: auto !important;
+  }
+
+  .workspace-local-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    overflow-x: auto !important;
+    padding-bottom: 2px !important;
+  }
+
+  .workspace-local-nav a {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar h1 {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: 1.25rem !important;
+  }
+
+  .topbar-actions > *,
+  .topbar-actions aura-workspace-switcher,
+  .topbar-actions .dark-button,
+  .topbar-actions aura-header-actions {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .workspace-route-content,
+  .workspace-route-shell--with-local-nav .workspace-route-content {
+    padding-inline: 8px !important;
+  }
+}
+
+/* Mobile header density correction: remove oversized blank topbar space only on phones. */
+@media (max-width: 640px) {
+  .topbar {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    align-items: start !important;
+    align-content: start !important;
+    justify-content: stretch !important;
+    gap: 10px !important;
+    padding: 12px 12px 14px !important;
+  }
+
+  .topbar-brand-title {
+    width: 100% !important;
+    min-height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 0 !important;
+  }
+
+  .topbar-back-button {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    flex: 0 0 38px !important;
+  }
+
+  .topbar-actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+    align-content: start !important;
+    gap: 8px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .topbar-actions aura-workspace-switcher,
+  .topbar-actions > a.dark-button,
+  .topbar-actions aura-header-actions {
+    display: block !important;
+    width: 100% !important;
+    min-height: 0 !important;
+  }
+
+  aura-workspace-switcher .wsw {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr) !important;
+    gap: 8px !important;
+  }
+
+  aura-workspace-switcher .wsw-pop,
+  aura-workspace-switcher .wsw-btn {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  aura-workspace-switcher .wsw-btn {
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+
+  .topbar-actions > a.dark-button {
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 12px !important;
+  }
+
+  aura-header-actions .hdr-actions {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+  }
+
+  aura-header-actions .hdr-icon-btn,
+  aura-header-actions .hdr-profile-btn {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+
+  .workspace-route-shell,
+  .workspace-route-content,
+  .workspace-route-shell--with-local-nav .workspace-route-content {
+    margin-top: 0 !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.inline-app-sidebar.enterprise-sidebar,
+  .app-shell > aside.sidebar.enterprise-sidebar,
+  .app-shell.sidebar-is-compact > aside.sidebar.enterprise-sidebar {
+    box-sizing: border-box !important;
+    height: calc(58px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(58px + env(safe-area-inset-bottom, 0px)) !important;
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    right: 8px !important;
+    padding: 7px 9px calc(7px + env(safe-area-inset-bottom, 0px)) !important;
+    border-radius: 14px 14px 0 0 !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-list.nav-accordion,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-list.nav-accordion {
+    scroll-padding-inline: 8px !important;
+    padding-inline-end: 8px !important;
+  }
+
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.sidebar.enterprise-sidebar .brand,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-search-icon-button,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.sidebar.enterprise-sidebar .sidebar-care-ai-action,
+  .app-shell > aside.inline-app-sidebar.enterprise-sidebar .nav-section-trigger,
+  .app-shell > aside.sidebar.enterprise-sidebar .nav-section-trigger {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+
+  .workspace,
+  .app-shell.sidebar-is-compact .workspace {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
