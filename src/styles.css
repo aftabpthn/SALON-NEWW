@@ -18589,3 +18589,159 @@ app-purchase-bill-drafts .warning-list {
     padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
+
+/* ==========================================================================
+   PREMIUM PAGE LAYOUT REFINEMENT
+   Scope: .workspace-route-content only (inner pages). The sidebar, topbar,
+   navigation, colors, animations and business behaviour are untouched.
+   Only spacing, alignment, cards, tables, forms and responsive layout are
+   polished, reusing the existing design tokens.
+   ========================================================================== */
+
+/* ---- Card & panel rhythm -------------------------------------------- */
+.workspace-route-content .panel,
+.workspace-route-content .form-panel,
+.workspace-route-content .card,
+.workspace-route-content .action-card,
+.workspace-route-content .snap-card,
+.workspace-route-content .booking-card,
+.workspace-route-content .hub-tile,
+.workspace-route-content .kpi-card,
+.workspace-route-content .client-kpi-card,
+.workspace-route-content .payment-mode-card,
+.workspace-route-content .client-crm-tile {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.workspace-route-content .panel > h2:first-child,
+.workspace-route-content .panel > h3:first-child,
+.workspace-route-content .form-panel > h2:first-child,
+.workspace-route-content .form-panel > h3:first-child,
+.workspace-route-content .card > h2:first-child,
+.workspace-route-content .card > h3:first-child {
+  margin-top: 0;
+}
+
+.workspace-route-content .card-actions,
+.workspace-route-content .cell-actions,
+.workspace-route-content .bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- Tables: alignment, breathing room, safe overflow ---------------- */
+.workspace-route-content .table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.workspace-route-content th {
+  text-align: start;
+  white-space: nowrap;
+  padding: 11px 14px;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.workspace-route-content td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}
+
+.workspace-route-content tbody tr > td:first-child,
+.workspace-route-content thead th:first-child {
+  padding-inline-start: 16px;
+}
+
+.workspace-route-content tbody tr > td:last-child,
+.workspace-route-content thead th:last-child {
+  padding-inline-end: 16px;
+}
+
+/* ---- Forms: consistent spacing & action rows ------------------------- */
+.workspace-route-content .field,
+.workspace-route-content .search-field,
+.workspace-route-content .select-label {
+  align-content: start;
+  min-width: 0;
+}
+
+.workspace-route-content .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.workspace-route-content .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.2;
+}
+
+/* ---- Content-area scrollbars (neutral, token-based) ------------------ */
+.workspace-route-content ::-webkit-scrollbar {
+  width: 10px;
+  height: 8px;
+}
+
+.workspace-route-content ::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--aura-gray-300);
+}
+
+.workspace-route-content ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- Keyboard focus polish (existing focus token) --------------------- */
+.workspace-route-content button:focus-visible,
+.workspace-route-content a:focus-visible {
+  outline: none;
+  box-shadow: var(--aura-focus);
+}
+
+/* ---- Mobile & small screens ------------------------------------------ */
+@media (max-width: 760px) {
+  .workspace-route-content .panel,
+  .workspace-route-content .form-panel,
+  .workspace-route-content .card {
+    padding: 14px;
+  }
+
+  .workspace-route-content input,
+  .workspace-route-content select,
+  .workspace-route-content textarea {
+    font-size: 16px; /* prevents focus zoom on iOS */
+  }
+
+  .workspace-route-content th,
+  .workspace-route-content td {
+    padding: 9px 10px;
+    font-size: 12.5px;
+  }
+
+  .workspace-route-content .search-field,
+  .workspace-route-content .fit-field,
+  .workspace-route-content .date-filter-field {
+    width: 100%;
+  }
+
+  .workspace-route-content .form-actions {
+    justify-content: stretch;
+  }
+
+  .workspace-route-content .form-actions .primary-button,
+  .workspace-route-content .form-actions .dark-button,
+  .workspace-route-content .form-actions .danger-button,
+  .workspace-route-content .form-actions .ghost-button {
+    flex: 1 1 150px;
+  }
+}
