@@ -705,7 +705,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <div style="flex:1;min-width:0">
                   <strong>{{ score.label }}</strong>
                   <span style="display:block;height:6px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
-                    <span [style.width.%]="score.value" style="display:block;height:100%;background:var(--accent,#2563eb)"></span>
+                    <span [style.width.%]="score.value" style="display:block;height:100%;background:var(--accent,#4B1238)"></span>
                   </span>
                 </div>
                 <strong>{{ score.value | number: '1.0-1' }}</strong>
@@ -1016,7 +1016,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <div style="min-width:0">
                   <strong>{{ alert.tenantName }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ alert.metric }} · {{ alert.used }}/{{ alert.limit }} · {{ alert.action }}</span>
-                  <a [href]="alert.supportTicketLink" style="display:block;font-size:0.78em;color:var(--accent,#2563eb)">Support ticket link</a>
+                  <a [href]="alert.supportTicketLink" style="display:block;font-size:0.78em;color:var(--accent,#4B1238)">Support ticket link</a>
                 </div>
                 <span style="display:block;height:10px;background:var(--surface-muted,#e5e7eb);border-radius:999px;overflow:hidden">
                   <span [style.width.%]="alert.usagePct > 100 ? 100 : alert.usagePct" [style.background]="healthFlagTone(alert.severity)" style="display:block;height:100%"></span>
@@ -1034,7 +1034,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <div style="flex:1;min-width:0">
                   <strong>{{ alert.tenantName }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ alert.dunningStatus }} · {{ alert.failedPayments }} failed payments · {{ alert.action }}</span>
-                  <a [href]="alert.supportTicketLink" style="display:block;font-size:0.78em;color:var(--accent,#2563eb)">Support ticket link</a>
+                  <a [href]="alert.supportTicketLink" style="display:block;font-size:0.78em;color:var(--accent,#4B1238)">Support ticket link</a>
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                   <span class="badge" [style.background]="healthFlagTone(alert.severity)" style="color:#fff">{{ alert.severity }}</span>
@@ -1119,7 +1119,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
             <article *ngFor="let stage of funnel.stages" style="display:grid;grid-template-columns:150px 1fr 80px;gap:12px;align-items:center">
               <strong>{{ stage.label }}</strong>
               <span style="display:block;height:10px;background:var(--surface-muted,#e5e7eb);border-radius:999px;overflow:hidden">
-                <span [style.width.%]="stage.pct" style="display:block;height:100%;background:var(--accent,#2563eb)"></span>
+                <span [style.width.%]="stage.pct" style="display:block;height:100%;background:var(--accent,#4B1238)"></span>
               </span>
               <span style="text-align:right">{{ stage.count }} · {{ stage.pct | number: '1.0-1' }}%</span>
             </article>
@@ -1545,7 +1545,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <div style="flex:1;min-width:0">
                     <strong>{{ item.label }}</strong>
                     <span style="display:block;height:6px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
-                      <span [style.width.%]="usageBarWidth(item.value, tenant.drilldown.usageGraph)" style="display:block;height:100%;background:var(--accent,#2563eb)"></span>
+                      <span [style.width.%]="usageBarWidth(item.value, tenant.drilldown.usageGraph)" style="display:block;height:100%;background:var(--accent,#4B1238)"></span>
                     </span>
                   </div>
                   <strong>{{ item.value }}</strong>
@@ -1656,7 +1656,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                       <strong>{{ location.label }}</strong>
                       <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ location.users.join(', ') || 'No user' }} · {{ location.ipAddresses.join(', ') || 'No IP' }}</span>
                       <span style="display:block;height:6px;background:var(--surface-muted,#e5e7eb);border-radius:999px;margin-top:8px;overflow:hidden">
-                        <span [style.width.%]="usageBarWidth(location.value, tenant.drilldown.loginActivityMap?.locations || [])" style="display:block;height:100%;background:var(--accent,#2563eb)"></span>
+                        <span [style.width.%]="usageBarWidth(location.value, tenant.drilldown.loginActivityMap?.locations || [])" style="display:block;height:100%;background:var(--accent,#4B1238)"></span>
                       </span>
                     </div>
                     <div style="text-align:right">
@@ -1669,7 +1669,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                       <strong>{{ event.userName }}</strong>
                       <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ event.ipAddress || 'No IP' }} · {{ event.geo?.label || 'Unknown location' }} · {{ event.reasons.join(' · ') || 'watch' }}</span>
                     </div>
-                    <span class="badge" [style.background]="event.level === 'critical' ? 'var(--danger,#dc2626)' : event.level === 'suspicious' ? 'var(--warning,#f59e0b)' : 'var(--accent,#2563eb)'" style="color:#fff">{{ event.level }} {{ event.score }}</span>
+                    <span class="badge" [style.background]="event.level === 'critical' ? 'var(--danger,#dc2626)' : event.level === 'suspicious' ? 'var(--warning,#f59e0b)' : 'var(--accent,#4B1238)'" style="color:#fff">{{ event.level }} {{ event.score }}</span>
                   </article>
                   <article *ngIf="!(tenant.drilldown.loginActivityMap?.locations || []).length">
                     <div>
@@ -4755,7 +4755,7 @@ export class SuperAdminComponent implements OnInit {
   featureFlagTone(toggle: ApiRecord): string {
     if (toggle.statusLabel === 'killed') return 'var(--danger,#dc2626)';
     if (toggle.statusLabel === 'expired') return 'var(--warning,#f59e0b)';
-    if (toggle.statusLabel === 'partial') return 'var(--accent,#2563eb)';
+    if (toggle.statusLabel === 'partial') return 'var(--accent,#4B1238)';
     if (toggle.statusLabel === 'enabled') return 'var(--success,#16a34a)';
     return 'var(--muted,#6b7280)';
   }

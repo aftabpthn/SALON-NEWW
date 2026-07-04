@@ -157,8 +157,8 @@ type LedgerResponse = {
   styles: [`
     .ledger-shell {
       min-height: calc(100vh - 172px);
-      border: 1px solid #7aa9aa;
-      background: #d9eeee;
+      border: 1px solid #E7DDD6;
+      background: #F8EEF4;
       box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
     }
     .ledger-titlebar {
@@ -166,7 +166,7 @@ type LedgerResponse = {
       align-items: center;
       justify-content: space-between;
       padding: 10px 14px;
-      background: #52979a;
+      background: #4B1238;
       color: #fff;
     }
     .ledger-titlebar .eyebrow {
@@ -212,7 +212,7 @@ type LedgerResponse = {
     .date-chip input,
     .account-picker select {
       height: 36px;
-      border: 1px solid #8aa2a6;
+      border: 1px solid #E7DDD6;
       background: #fff;
       padding: 0 10px;
       font: inherit;
@@ -231,7 +231,7 @@ type LedgerResponse = {
     }
     .refresh-button:hover,
     .excel-button:hover {
-      background: #f8fafc;
+      background: #FAF8F6;
     }
     .opening-strip {
       display: flex;
@@ -258,7 +258,7 @@ type LedgerResponse = {
     .ledger-table-wrap {
       overflow: auto;
       margin: 0 10px 10px;
-      border: 1px solid #819a9f;
+      border: 1px solid #E7DDD6;
       background: #fff;
       max-height: calc(100vh - 340px);
     }
@@ -271,19 +271,19 @@ type LedgerResponse = {
     }
     .ledger-table th,
     .ledger-table td {
-      border: 1px solid #a8b5b8;
+      border: 1px solid #E7DDD6;
       padding: 7px 6px;
       white-space: nowrap;
       vertical-align: top;
     }
     .ledger-table th {
-      background: #eef4f4;
+      background: #FAF8F6;
       font-weight: 800;
       text-align: left;
     }
     .ledger-table .group-head th {
       text-align: center;
-      background: #e8eeee;
+      background: #F8EEF4;
       color: #334155;
     }
     .num {

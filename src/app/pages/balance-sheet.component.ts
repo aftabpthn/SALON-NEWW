@@ -956,7 +956,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
     </section>
   `,
   styles: [`
-    :host { --soft:#f5f9ff; --brand:#1d4ed8; --brandink:#152033; --good:#0f9d58; --warn:#e8910c; --bad:#d6453d; --asset:#1d4ed8; --liab:#e8910c; --equity:#0f9d58; }
+    :host { --soft:#FAF8F6; --brand:#4B1238; --brandink:#151827; --good:#0f9d58; --warn:#e8910c; --bad:#d6453d; --asset:#4B1238; --liab:#e8910c; --equity:#0f9d58; }
     .bs { padding: 20px; display: grid; gap: 16px; color: var(--ink); font-feature-settings: "tnum" 1; }
     .masthead { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; padding: 22px 24px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(135deg, #f7faff, #ffffff 60%); }
     .kicker { text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 800; color: var(--brand); }
@@ -974,10 +974,10 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
     .dates { display: flex; align-items: end; gap: 12px; } .spacer { flex: 1; }
     .presets { display: flex; gap: 6px; } .presets button { font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
     label { display: grid; gap: 4px; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-    input, select { min-height: 40px; border: 1px solid #cdd9e8; border-radius: 9px; padding: 0 12px; font: inherit; background: #fff; color: var(--ink); }
+    input, select { min-height: 40px; border: 1px solid #E7DDD6; border-radius: 9px; padding: 0 12px; font: inherit; background: #fff; color: var(--ink); }
     button { font: inherit; cursor: pointer; } button:disabled { opacity: .5; cursor: not-allowed; }
     .solid { min-height: 40px; padding: 0 16px; border-radius: 9px; border: 0; background: var(--brandink); color: #fff; font-weight: 800; }
-    .solid.full, .full { width: 100%; } .ghost { min-height: 40px; padding: 0 14px; border-radius: 9px; border: 1px solid #cdd9e8; background: #fff; color: var(--brand); font-weight: 800; }
+    .solid.full, .full { width: 100%; } .ghost { min-height: 40px; padding: 0 14px; border-radius: 9px; border: 1px solid #E7DDD6; background: #fff; color: var(--brand); font-weight: 800; }
     .ready-chip { font-size: 12px; font-weight: 800; padding: 7px 12px; border-radius: 999px; background: #fff4e0; color: #9a6207; border: 1px solid #f3d9a6; }
     .ready-chip.on { background: #e6f7ee; color: #0a7a44; border-color: #b9e7cd; }
     .banner { margin: 0; padding: 10px 14px; border-radius: 10px; font-weight: 700; } .banner.err { background: #fdecea; color: #a4271f; } .banner.ok { background: #e7f7ee; color: #0a7a44; }
@@ -1007,7 +1007,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
     .balance-columns { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
     .balance-columns > div, .detail-body > .split > div { min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 12px; }
     .action-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    .link-button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 9px; border: 1px solid #cdd9e8; background: #fff; color: var(--brand); font-weight: 800; text-decoration: none; }
+    .link-button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 9px; border: 1px solid #E7DDD6; background: #fff; color: var(--brand); font-weight: 800; text-decoration: none; }
     .coverage-tags { display: flex; gap: 8px; flex-wrap: wrap; }
     .coverage-tags span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 800; }
     .cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
@@ -1026,7 +1026,7 @@ export const LEDGER_GROUPING: Record<string, LedgerGroupingSuggestion> = {
     .scroll { overflow: auto; } table { width: 100%; border-collapse: collapse; min-width: 640px; }
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 14px; } th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
     td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; } tfoot td { font-weight: 800; border-top: 2px solid var(--ink); }
-    .pill { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: #e6f0ff; color: var(--brand); } .pill.bad { background: #fdecea; color: var(--bad); } .pill.done { background: #e7f7ee; color: var(--good); }
+    .pill { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: #F8EEF4; color: var(--brand); } .pill.bad { background: #fdecea; color: var(--bad); } .pill.done { background: #e7f7ee; color: var(--good); }
     .row-controls, .form-row, .ctl, .inline-run { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; } .inline-run { margin: 0; } .inline-run input { min-width: 0; flex: 1; }
     .cc-rows { display: grid; gap: 10px; } .cc-row { display: grid; grid-template-columns: 160px 1fr 120px; gap: 12px; align-items: center; }
     .cc-name { display: flex; flex-direction: column; } .tag { font-size: 11px; color: var(--muted); } .cc-bar { height: 14px; background: var(--soft); border-radius: 999px; overflow: hidden; }

@@ -433,7 +433,7 @@ type ReceiveItem = {
       padding: 3px 8px;
       border-radius: 999px;
       color: var(--color-primary-strong);
-      background: rgba(79, 70, 229, 0.08);
+      background: rgba(75, 18, 56, 0.08);
       font-size: 0.68rem;
       font-style: normal;
       font-weight: 900;
@@ -447,7 +447,7 @@ type ReceiveItem = {
       height: 48px;
       border-radius: 8px;
       color: var(--color-primary-strong);
-      background: rgba(214, 79, 146, 0.12);
+      background: rgba(75, 18, 56, 0.12);
       font-weight: 900;
     }
 
@@ -498,7 +498,7 @@ type ReceiveItem = {
     .history-strip span,
     .totals-grid span,
     .detail-grid div {
-      border: 1px solid rgba(79, 70, 229, 0.08);
+      border: 1px solid rgba(75, 18, 56, 0.08);
       border-radius: 14px;
       padding: 10px;
       background: rgba(255, 255, 255, 0.96);
@@ -607,7 +607,7 @@ type ReceiveItem = {
     }
 
     .draft-box {
-      border: 1px solid rgba(79, 70, 229, 0.14);
+      border: 1px solid rgba(75, 18, 56, 0.14);
       border-radius: 18px;
       padding: 14px;
       background: rgba(255, 255, 255, 0.92);

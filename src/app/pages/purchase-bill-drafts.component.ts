@@ -360,10 +360,10 @@ type UploadFile = {
 
     .hero-insights span {
       padding: 7px 10px;
-      border: 1px solid rgba(79, 70, 229, 0.16);
+      border: 1px solid rgba(75, 18, 56, 0.16);
       border-radius: 999px;
-      background: rgba(238, 242, 255, 0.82);
-      color: #4338ca;
+      background: rgba(248, 238, 244, 0.82);
+      color: #4B1238;
       font-size: 0.78rem;
       font-weight: 900;
     }
@@ -485,18 +485,18 @@ type UploadFile = {
       overflow: hidden;
       min-height: 104px;
       padding: 16px;
-      border: 1px solid rgba(79, 70, 229, 0.12);
+      border: 1px solid rgba(75, 18, 56, 0.12);
       border-radius: 18px;
       background:
-        radial-gradient(circle at 100% 0%, rgba(79, 70, 229, 0.12), transparent 32%),
-        linear-gradient(135deg, #ffffff, #f5f3ff);
+        radial-gradient(circle at 100% 0%, rgba(75, 18, 56, 0.12), transparent 32%),
+        linear-gradient(135deg, #ffffff, #F8EEF4);
       box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
     }
 
     .command-card.primary {
       background:
-        radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.3), transparent 34%),
-        linear-gradient(135deg, #1e1b4b, #312e81);
+        radial-gradient(circle at 100% 0%, rgba(75, 18, 56, 0.3), transparent 34%),
+        linear-gradient(135deg, #2d0a1f, #4B1238);
       color: #fff;
     }
 
@@ -590,7 +590,7 @@ type UploadFile = {
     .line-readiness article {
       min-height: 88px;
       padding: 12px;
-      border: 1px solid rgba(79, 70, 229, 0.1);
+      border: 1px solid rgba(75, 18, 56, 0.1);
       border-radius: 18px;
       background: rgba(255, 255, 255, 0.92);
     }
@@ -617,13 +617,13 @@ type UploadFile = {
       gap: 8px 16px;
       margin-bottom: 8px;
       padding: 10px 12px;
-      border: 1px solid rgba(79, 70, 229, 0.12);
+      border: 1px solid rgba(75, 18, 56, 0.12);
       border-radius: 18px;
-      background: rgba(238, 242, 255, 0.74);
+      background: rgba(248, 238, 244, 0.74);
     }
 
     .table-guidance strong {
-      color: #4338ca;
+      color: #4B1238;
     }
 
     .table-guidance span {
@@ -755,8 +755,8 @@ type UploadFile = {
     }
 
     .badge.success {
-      background: #eef2ff;
-      color: #4338ca;
+      background: #F8EEF4;
+      color: #4B1238;
     }
 
     .badge.warn {
