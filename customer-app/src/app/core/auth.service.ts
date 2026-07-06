@@ -62,8 +62,7 @@ export class AuthService {
       || (!!String(profile.firstName || "").trim()
         && !!String(profile.lastName || "").trim()
         && !!String(profile.email || "").trim()
-        && !!String(profile.phone || "").trim()
-        && !!String(profile.phoneVerifiedAt || "").trim());
+        && !!String(profile.phone || "").trim());
   }
 
   async signInWithGoogle(): Promise<AuthSession> {
@@ -248,7 +247,7 @@ export class AuthService {
     this.error.set("");
     try {
       const profile = await firstValueFrom(this.api.updateMe(payload));
-      this.customer.set({ ...profile, isLoggedIn: true });
+      this.customer.set({ ...profile, profileComplete: this.profileComplete(profile), isLoggedIn: true });
       return this.customer() as CustomerProfile;
     } catch (error) {
       this.error.set(this.message(error, "Unable to update customer profile"));

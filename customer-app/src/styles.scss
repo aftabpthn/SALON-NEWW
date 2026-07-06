@@ -34,6 +34,31 @@ body {
   font-family: var(--ion-font-family);
 }
 
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+}
+
+body::before {
+  inset: 0;
+  background:
+    linear-gradient(115deg, rgba(35, 25, 13, 0.04), transparent 32%, rgba(214, 169, 74, 0.07)),
+    radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.72), transparent 42%);
+}
+
+body::after {
+  width: 420px;
+  height: 420px;
+  right: -180px;
+  bottom: 8%;
+  border-radius: 999px;
+  background: rgba(214, 169, 74, 0.14);
+  filter: blur(8px);
+}
+
 ion-app {
   min-height: 100%;
   background: var(--app-bg);
@@ -155,6 +180,20 @@ ion-router-outlet > .ion-page {
   animation: aura-page-in var(--motion-slow) both;
 }
 
+@media (min-width: 1180px) {
+  ion-router-outlet > .ion-page::before {
+    content: "";
+    position: fixed;
+    inset: 98px max(22px, calc((100vw - 1504px) / 2)) 22px;
+    z-index: -1;
+    border: 1px solid rgba(125, 89, 32, 0.1);
+    border-radius: 38px;
+    background: linear-gradient(180deg, rgba(255, 249, 236, 0.34), rgba(255, 255, 255, 0.14));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.54);
+    pointer-events: none;
+  }
+}
+
 ion-toolbar {
   --background: rgba(255, 249, 236, 0.88);
   --color: var(--text);
@@ -254,6 +293,13 @@ ion-tab-button ion-label {
 .page,
 .page-narrow {
   animation: aura-content-rise var(--motion-slow) both;
+}
+
+@media (min-width: 1024px) {
+  .page,
+  .app-container {
+    width: min(calc(100% - (var(--page-gutter) * 2)), var(--container-wide));
+  }
 }
 
 .eyebrow {
@@ -1698,20 +1744,20 @@ ion-button:active,
 /* Aura Shine customer app premium SaaS polish layer. */
 :root {
   --customer-bg-premium:
-    radial-gradient(circle at 12% 0%, rgba(109, 27, 77, 0.1), transparent 32%),
-    radial-gradient(circle at 88% 8%, rgba(232, 167, 184, 0.16), transparent 34%),
+    radial-gradient(circle at 12% 0%, rgba(214, 169, 74, 0.16), transparent 32%),
+    radial-gradient(circle at 88% 8%, rgba(244, 213, 141, 0.18), transparent 34%),
     linear-gradient(180deg, #fffaf5 0%, #fbf5ef 48%, #f7eadf 100%);
   --customer-surface: rgba(255, 255, 255, 0.94);
   --customer-surface-soft: rgba(255, 250, 245, 0.9);
-  --customer-text: #241521;
-  --customer-muted: #756775;
-  --customer-border: rgba(75, 18, 56, 0.13);
-  --customer-border-strong: rgba(75, 18, 56, 0.2);
-  --customer-primary: #4b1238;
-  --customer-primary-2: #6d1b4d;
-  --customer-rose: #c98f9f;
-  --customer-shadow: 0 18px 42px rgba(75, 18, 56, 0.1);
-  --customer-shadow-soft: 0 10px 26px rgba(75, 18, 56, 0.07);
+  --customer-text: #23190D;
+  --customer-muted: #7E6E55;
+  --customer-border: rgba(125, 89, 32, 0.13);
+  --customer-border-strong: rgba(125, 89, 32, 0.22);
+  --customer-primary: #7A5019;
+  --customer-primary-2: #D6A94A;
+  --customer-rose: #F4D58D;
+  --customer-shadow: 0 18px 42px rgba(92, 65, 28, 0.12);
+  --customer-shadow-soft: 0 10px 26px rgba(92, 65, 28, 0.08);
 }
 
 html,
@@ -1752,6 +1798,15 @@ ion-tab-bar {
   box-shadow: 0 22px 52px rgba(75, 18, 56, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
 }
 
+ion-tab-bar::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  z-index: -1;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(244, 213, 141, 0.2));
+}
+
 ion-tab-button {
   --color: var(--customer-muted) !important;
   --color-selected: var(--customer-primary) !important;
@@ -1760,9 +1815,9 @@ ion-tab-button {
 }
 
 ion-tab-button.tab-selected ion-icon {
-  color: #fff !important;
-  background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-rose)) !important;
-  box-shadow: 0 10px 22px rgba(75, 18, 56, 0.22), 0 0 0 1px rgba(255, 250, 245, 0.82) !important;
+  color: #120D05 !important;
+  background: linear-gradient(135deg, var(--customer-rose), var(--customer-primary-2)) !important;
+  box-shadow: 0 10px 22px rgba(92, 65, 28, 0.22), 0 0 0 1px rgba(255, 250, 245, 0.82) !important;
 }
 
 .page,
@@ -1856,11 +1911,11 @@ small {
 
 .primary-gradient,
 ion-button.primary-gradient {
-  --background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-primary)) !important;
-  --background-hover: linear-gradient(135deg, #7f275d, var(--customer-primary)) !important;
-  --background-activated: linear-gradient(135deg, #3f0f2f, #2f0a23) !important;
-  --color: #ffffff !important;
-  --box-shadow: 0 14px 30px rgba(75, 18, 56, 0.24) !important;
+  --background: linear-gradient(135deg, var(--customer-rose), var(--customer-primary-2)) !important;
+  --background-hover: linear-gradient(135deg, #f7dc9d, #c99632) !important;
+  --background-activated: linear-gradient(135deg, #d6a94a, #9b6b22) !important;
+  --color: #120D05 !important;
+  --box-shadow: 0 14px 30px rgba(92, 65, 28, 0.24) !important;
 }
 
 .secondary-button,
@@ -1905,8 +1960,8 @@ ion-button.secondary-button {
 .service-choice.selected,
 .staff-choice.selected {
   color: #fff !important;
-  background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-primary)) !important;
-  box-shadow: 0 14px 30px rgba(75, 18, 56, 0.2) !important;
+  background: linear-gradient(135deg, var(--customer-primary), #9b6b22) !important;
+  box-shadow: 0 14px 30px rgba(92, 65, 28, 0.2) !important;
 }
 
 .status-pill,
@@ -1919,8 +1974,8 @@ ion-button.secondary-button {
 }
 
 .offer-pill {
-  color: #fff !important;
-  background: linear-gradient(135deg, var(--customer-primary-2), var(--customer-rose)) !important;
+  color: #120D05 !important;
+  background: linear-gradient(135deg, var(--customer-rose), var(--customer-primary-2)) !important;
 }
 
 input,
@@ -1997,7 +2052,534 @@ ion-segment-button {
   .page,
   .page-narrow,
   .app-container {
-    width: min(calc(100% - 28px), var(--container-mobile)) !important;
+    width: min(calc(100% - 20px), var(--container-mobile)) !important;
+    padding-top: 10px !important;
+    padding-bottom: calc(92px + var(--safe-bottom)) !important;
+  }
+
+  .home-page.page {
+    padding-top: 4px !important;
+  }
+
+  ion-header,
+  ion-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  ion-toolbar {
+    --min-height: 58px;
+    border-bottom: 1px solid rgba(125, 89, 32, 0.1);
+  }
+
+  ion-searchbar {
+    min-height: 48px;
+    padding: 0 !important;
+    --border-radius: 14px !important;
+    --box-shadow: 0 6px 18px rgba(92, 65, 28, 0.08) !important;
+  }
+
+  ion-tab-bar {
+    width: min(100% - 18px, 430px) !important;
+    height: 66px !important;
+    margin-bottom: calc(8px + var(--safe-bottom)) !important;
+    border-radius: 20px !important;
+  }
+
+  ion-tab-bar::before {
+    inset: 5px !important;
+    border-radius: 16px !important;
+  }
+
+  ion-tab-button {
+    min-width: 0 !important;
+    min-height: 58px !important;
+    font-size: 0.68rem !important;
+  }
+
+  ion-tab-button ion-icon {
+    font-size: 1.15rem !important;
+  }
+
+  ion-tab-button.tab-selected ion-icon {
+    padding: 5px !important;
+  }
+
+  .home-toolbar {
+    gap: 8px !important;
+    padding: 8px 0 !important;
+  }
+
+  .location-copy > span,
+  .location-row button,
+  .toolbar-actions {
+    display: none !important;
+  }
+
+  .location-row strong {
+    max-width: 100% !important;
+    font-size: 0.92rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hero {
+    display: grid !important;
+    gap: 14px !important;
+    padding: 0 !important;
+    margin: 0 0 14px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+
+  .hero-copy {
+    display: grid !important;
+    gap: 10px !important;
+  }
+
+  .hero-copy .muted,
+  .live-consultation-card,
+  .aura-dashboard,
+  .welcome-card {
+    display: none !important;
+  }
+
+  .page-title,
+  .hero h1,
+  h1 {
+    margin: 0 !important;
+    font-size: clamp(1.65rem, 7.6vw, 2.25rem) !important;
+    line-height: 1.03 !important;
+    letter-spacing: -0.035em !important;
+  }
+
+  .search-panel {
+    position: sticky !important;
+    top: calc(58px + var(--safe-top)) !important;
+    z-index: 18 !important;
+    display: grid !important;
+    gap: 9px !important;
+    padding: 10px !important;
+    border: 1px solid var(--customer-border) !important;
+    border-radius: 18px !important;
+    background: rgba(255, 250, 245, 0.96) !important;
+    box-shadow: 0 10px 28px rgba(92, 65, 28, 0.1) !important;
+    backdrop-filter: blur(18px);
+  }
+
+  .search-panel ion-button {
+    display: none !important;
+  }
+
+  .home-search-wrap,
+  .home-search-wrap ion-searchbar {
+    width: 100% !important;
+  }
+
+  .home-control-row,
+  .fresha-filter-row,
+  .discovery-row,
+  .category-rail,
+  .business-rail,
+  .visited-rail {
+    display: grid !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: max-content !important;
+    gap: 8px !important;
+    overflow-x: auto !important;
+    padding: 1px 2px 8px !important;
+    scroll-snap-type: x proximity;
+  }
+
+  .business-rail aura-business-card {
+    display: block !important;
+    width: min(178px, 47vw) !important;
+    min-width: min(178px, 47vw) !important;
+    height: 68px !important;
+    scroll-snap-align: start;
+  }
+
+  .visited-card {
+    height: 68px !important;
+  }
+
+  .home-control-button,
+  .fresha-filter-row button:not(.filter-icon-button),
+  .category-chip,
+  .quick-chip,
+  .filter-chip {
+    min-height: 38px !important;
+    padding: 0 13px !important;
+    border-radius: 999px !important;
+    font-size: 0.82rem !important;
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+  }
+
+  .search-page .sticky-search.fresha-search-card {
+    position: static !important;
+    display: block !important;
+    padding: 6px !important;
+    border-radius: 14px !important;
+  }
+
+  .search-page .search-input-wrap {
+    position: static !important;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 44px !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .search-page .search-input-wrap ion-searchbar {
+    order: 1 !important;
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .search-page .search-input-wrap .fresha-filter-row {
+    order: 2 !important;
+    margin-left: auto !important;
+    margin-top: 0 !important;
+    align-self: center !important;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    z-index: 5 !important;
+    display: flex !important;
+    flex: 0 0 auto !important;
+    grid-auto-flow: unset !important;
+    grid-auto-columns: unset !important;
+    gap: 6px !important;
+    height: 34px !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    transform: none !important;
+    scroll-snap-type: none !important;
+  }
+
+  .search-page .search-input-wrap .control-button {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    display: inline-grid !important;
+    align-self: center !important;
+    place-items: center !important;
+    align-items: center !important;
+    justify-items: center !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+  }
+
+  .search-page .search-input-wrap .control-button span,
+  .search-page .search-input-wrap .control-button small,
+  .search-page .search-input-wrap .quick-filter-row {
+    display: none !important;
+  }
+
+  .search-page .search-input-wrap .control-button ion-icon {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 !important;
+    font-size: 18px !important;
+    line-height: 1 !important;
+    transform: translate(0, 0) !important;
+  }
+
+  .search-page .search-input-wrap .control-button ion-icon::part(icon) {
+    display: block !important;
+  }
+
+  .home-control-button.map {
+    background: #ffffff !important;
+  }
+
+  .section-heading {
+    display: flex !important;
+    align-items: center !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    margin: 18px 0 10px !important;
+  }
+
+  .section-title,
+  .section-heading h2 {
+    font-size: 1.15rem !important;
+    line-height: 1.1 !important;
+  }
+
+  .section-heading p,
+  .section-heading small {
+    display: none !important;
+  }
+
+  .business-grid,
+  .nearby-grid,
+  .offer-grid,
+  .records-grid,
+  .quick-grid,
+  .hub-grid,
+  .metric-grid,
+  .results,
+  .customer-metrics,
+  .service-grid,
+  .staff-grid,
+  .booking-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .business-card,
+  .search-card,
+  .booking-card,
+  .offer-card,
+  .service-card,
+  .staff-card,
+  .quick-card,
+  .metric-card,
+  .premium-card,
+  .glass-card {
+    border-radius: 14px !important;
+    box-shadow: 0 4px 14px rgba(92, 65, 28, 0.07) !important;
+  }
+
+  .business-card,
+  .search-card,
+  .offer-card {
+    position: relative !important;
+    border: 1px solid rgba(125, 89, 32, 0.1) !important;
+    background: #fffdf8 !important;
+  }
+
+  .business-card::after,
+  .search-card::after,
+  .offer-card::after {
+    content: "";
+    position: absolute;
+    inset: auto 12px 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(214, 169, 74, 0.45), transparent);
+    pointer-events: none;
+  }
+
+  .business-card {
+    overflow: hidden !important;
+  }
+
+  .business-card .cover,
+  .business-card img,
+  .wishlist-card img,
+  .professional-card > img {
+    aspect-ratio: 16 / 9 !important;
+    object-fit: cover !important;
+    border-radius: 12px !important;
+  }
+
+  .rating-pill,
+  .status-pill,
+  .offer-pill,
+  .countdown-pill {
+    min-height: 26px !important;
+    padding: 0 9px !important;
+    border-radius: 999px !important;
+    font-size: 0.72rem !important;
+    font-weight: 950 !important;
+  }
+
+  .service-scroller,
+  .offer-rail,
+  .quick-actions,
+  .service-rail {
+    display: grid !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: minmax(138px, 42vw) !important;
+    gap: 10px !important;
+    overflow-x: auto !important;
+    padding: 2px 2px 10px !important;
+    scroll-snap-type: x proximity;
+  }
+
+  .service-chip,
+  .quick-card {
+    scroll-snap-align: start;
+    min-height: 142px !important;
+    border-radius: 18px !important;
+  }
+
+  .service-chip img {
+    height: 82px !important;
+    object-fit: cover !important;
+    border-radius: 14px !important;
+  }
+
+  .service-scroller {
+    grid-auto-columns: min(178px, 47vw) !important;
+    gap: 8px !important;
+  }
+
+  .service-chip {
+    width: min(178px, 47vw) !important;
+    min-width: min(178px, 47vw) !important;
+    height: 68px !important;
+    min-height: 68px !important;
+    display: grid !important;
+    grid-template-columns: 42px minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    align-items: center !important;
+    gap: 3px 8px !important;
+    padding: 7px !important;
+    scroll-snap-align: start;
+  }
+
+  .service-chip img {
+    grid-row: span 2 !important;
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 14px !important;
+  }
+
+  .service-chip span,
+  .service-chip strong {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .service-chip span {
+    align-self: end !important;
+    font-size: 0.76rem !important;
+    line-height: 1.05 !important;
+  }
+
+  .service-chip strong {
+    align-self: start !important;
+    font-size: 0.72rem !important;
+  }
+
+  .home-page::before {
+    content: none;
+    display: none;
+    align-items: center;
+    min-height: 28px;
+    margin: 0 0 6px;
+    padding: 0 11px;
+    border: 1px solid rgba(214, 169, 74, 0.24);
+    border-radius: 999px;
+    color: #7A5019;
+    background: rgba(244, 213, 141, 0.16);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .home-page .hero {
+    min-height: 0 !important;
+    margin-bottom: 10px !important;
+  }
+
+  .home-page .hero-copy {
+    align-content: start !important;
+  }
+
+  .home-page .search-panel {
+    position: relative !important;
+    top: auto !important;
+    z-index: 1 !important;
+  }
+
+  .visited-card {
+    width: min(178px, 47vw) !important;
+    min-width: min(178px, 47vw) !important;
+    grid-template-columns: 42px minmax(0, 1fr) 26px !important;
+    grid-template-rows: auto auto auto !important;
+    align-items: center !important;
+    gap: 4px 10px !important;
+    min-height: 68px !important;
+    padding: 7px !important;
+    scroll-snap-align: start;
+  }
+
+  .visited-card img {
+    grid-row: span 3 !important;
+    width: 42px !important;
+    height: 42px !important;
+    aspect-ratio: 1 / 1 !important;
+    object-fit: cover !important;
+  }
+
+  .visited-card span,
+  .visited-card strong,
+  .visited-card small {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
+
+  .visited-card ion-icon {
+    grid-row: span 3 !important;
+    width: 26px !important;
+    height: 26px !important;
+    padding: 5px !important;
+  }
+
+  .home-suggestion-panel,
+  .search-popover,
+  .suggestion-panel,
+  .filter-popover,
+  .bottom-sheet {
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    border-radius: 18px !important;
+  }
+
+  .bottom-action-card,
+  .sticky-cta {
+    right: 10px !important;
+    bottom: calc(82px + var(--safe-bottom)) !important;
+    left: 10px !important;
+    width: auto !important;
+    border-radius: 18px !important;
+  }
+
+  .onboarding {
+    padding: 10px !important;
+  }
+
+  .onboarding .hero {
+    padding: 22px !important;
+    border: 1px solid var(--customer-border) !important;
+    border-radius: 24px !important;
+    background: rgba(255, 250, 245, 0.94) !important;
+    box-shadow: var(--customer-shadow-soft) !important;
+  }
+
+  .onboarding h1 {
+    font-size: clamp(2rem, 11vw, 3.15rem) !important;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
 
   .premium-card,

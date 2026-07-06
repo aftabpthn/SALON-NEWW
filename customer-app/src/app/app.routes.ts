@@ -1,5 +1,6 @@
 import { Routes } from "@angular/router";
 import { customerAuthGuard } from "./core/auth.guard";
+import { staffAuthGuard } from "./core/staff-auth.guard";
 
 export const routes: Routes = [
   { path: "", redirectTo: "onboarding", pathMatch: "full" },
@@ -19,6 +20,20 @@ export const routes: Routes = [
   {
     path: "verify-otp",
     loadComponent: () => import("./features/auth/verify-otp.page").then((m) => m.VerifyOtpPage)
+  },
+  {
+    path: "staff",
+    redirectTo: "staff/dashboard",
+    pathMatch: "full"
+  },
+  {
+    path: "staff/login",
+    loadComponent: () => import("./features/staff/staff-login.page").then((m) => m.StaffLoginPage)
+  },
+  {
+    path: "staff/dashboard",
+    canActivate: [staffAuthGuard],
+    loadComponent: () => import("./features/staff/staff-dashboard.page").then((m) => m.StaffDashboardPage)
   },
   {
     path: "tabs",

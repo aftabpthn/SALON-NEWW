@@ -4,6 +4,7 @@ import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, I
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
+import { AvailabilityDay } from "../../core/api.types";
 
 @Component({
   standalone: true,
@@ -95,9 +96,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
               }
               <div class="date-row">
                 @for (date of availabilityDays(); track date.date) {
-                  <button class="date-card" [class.selected]="selectedDate() === date.date" (click)="setDate(date.date)">
+                  <button class="date-card" [class.selected]="selectedDate() === date.date" [class.availability-full]="dateAvailabilityClass(date) === 'full'" [class.availability-many]="dateAvailabilityClass(date) === 'many'" [class.availability-partial]="dateAvailabilityClass(date) === 'partial'" (click)="setDate(date.date)">
                     <strong>{{ date.dayLabel }}</strong>
                     <span>{{ date.label }}</span>
+                    <em>{{ dateAvailabilityLabel(date) }}</em>
                   </button>
                 } @empty {
                   <section class="state-card premium-card"><h2>No slots available</h2></section>
@@ -224,8 +226,19 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .date-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
     .date-row::-webkit-scrollbar { display: none; }
     .date-card, .slot { border: 1px solid var(--border); border-radius: 18px; background: rgba(255, 249, 236, 0.94); color: var(--text); font-weight: 900; }
-    .date-card { display: grid; gap: 5px; justify-items: center; padding: 14px 10px; }
+    .date-card { position: relative; display: grid; gap: 5px; justify-items: center; padding: 14px 10px; overflow: hidden; }
+    .date-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: rgba(125, 89, 32, 0.18); }
+    .date-card.availability-many { border-color: rgba(29, 151, 76, 0.36); background: linear-gradient(145deg, rgba(232, 250, 239, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card.availability-many::before { background: #21a657; }
+    .date-card.availability-partial { border-color: rgba(236, 145, 28, 0.42); background: linear-gradient(145deg, rgba(255, 242, 220, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card.availability-partial::before { background: #f09a22; }
+    .date-card.availability-full { border-color: rgba(212, 62, 62, 0.38); background: linear-gradient(145deg, rgba(255, 232, 232, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card.availability-full::before { background: #d94141; }
     .date-card span { color: var(--muted); font-size: 0.86rem; }
+    .date-card em { color: var(--muted); font-size: 0.72rem; font-style: normal; font-weight: 950; text-transform: uppercase; }
+    .date-card.availability-many em { color: #157c40; }
+    .date-card.availability-partial em { color: #a96108; }
+    .date-card.availability-full em { color: #aa2e2e; }
     .slot-group, .state-card { padding: 16px; }
     .slot-group h3, .state-card h2, .state-card h1 { margin: 0 0 12px; letter-spacing: -0.035em; }
     .state-card.error p { color: #EF4444; }
@@ -327,6 +340,23 @@ export class BookingFlowPage implements OnInit {
     this.selectedDate.set(date);
     this.selectedSlotStartAt.set("");
     void this.reloadAvailability();
+  }
+
+  dateAvailabilityClass(day: AvailabilityDay): "full" | "many" | "partial" {
+    const slots = day.periods.flatMap((period) => period.slots);
+    if (!slots.length) return "full";
+    const available = slots.filter((slot) => slot.available).length;
+    if (available === 0) return "full";
+    if (available / slots.length >= 0.6) return "many";
+    return "partial";
+  }
+
+  dateAvailabilityLabel(day: AvailabilityDay): string {
+    const slots = day.periods.flatMap((period) => period.slots);
+    const available = slots.filter((slot) => slot.available).length;
+    if (!slots.length || available === 0) return "Booked";
+    if (available / slots.length >= 0.6) return "Available";
+    return "Filling fast";
   }
 
   canContinue(): boolean {

@@ -238,18 +238,162 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     @media (max-width: 599px) {
-      .content {
-        padding: 14px;
+      :host-context(.business-rail) .business-card {
+        grid-template-columns: 42px minmax(0, 1fr) 26px;
+        grid-template-rows: auto auto auto;
+        gap: 3px 8px;
+        align-items: center;
+        width: min(178px, 47vw);
+        height: 68px;
+        min-height: 68px;
+        padding: 7px;
+        border-radius: 14px;
       }
 
-      .service-row,
+      :host-context(.business-rail) .cover {
+        grid-row: span 3;
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+      }
+
+      :host-context(.business-rail) .content {
+        display: contents;
+      }
+
+      :host-context(.business-rail) .rating-pill,
+      :host-context(.business-rail) .favorite,
+      :host-context(.business-rail) .offer-pill,
+      :host-context(.business-rail) .topline,
+      :host-context(.business-rail) .address,
+      :host-context(.business-rail) .service-row strong,
+      :host-context(.business-rail) .footer-row > span {
+        display: none;
+      }
+
+      :host-context(.business-rail) h3,
+      :host-context(.business-rail) .category,
+      :host-context(.business-rail) .service-row {
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      :host-context(.business-rail) h3 {
+        grid-column: 2;
+        color: var(--text);
+        font-size: 0.86rem;
+        line-height: 1.05;
+      }
+
+      :host-context(.business-rail) .category,
+      :host-context(.business-rail) .service-row span {
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 900;
+      }
+
+      :host-context(.business-rail) .footer-row {
+        grid-column: 3;
+        grid-row: 1 / span 3;
+        display: grid;
+        padding: 0;
+      }
+
+      :host-context(.business-rail) .footer-row ion-button {
+        width: 26px;
+        min-width: 26px;
+        height: 26px;
+        min-height: 26px;
+        --padding-start: 0;
+        --padding-end: 0;
+        font-size: 0;
+      }
+
+      .business-card {
+        border-radius: 18px;
+      }
+
+      .cover {
+        aspect-ratio: auto;
+        width: 100%;
+        height: 138px;
+      }
+
+      .cover img,
+      .cover .image-fill {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+      }
+
+      .rating-pill {
+        top: 10px;
+        left: 10px;
+      }
+
+      .favorite {
+        top: 10px;
+        right: 10px;
+        width: 36px;
+        height: 36px;
+      }
+
+      .content {
+        gap: 5px;
+        padding: 10px 12px 12px;
+      }
+
+      .topline {
+        gap: 6px;
+      }
+
+      h3 {
+        margin-top: 2px;
+        font-size: 1.05rem;
+      }
+
+      .category,
+      .address {
+        font-size: 0.78rem;
+        line-height: 1.2;
+      }
+
+      .address {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .service-row {
+        margin-top: 4px;
+        padding: 9px 10px;
+        border-radius: 14px;
+      }
+
+      .service-row span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
       .footer-row {
-        align-items: flex-start;
-        flex-direction: column;
+        align-items: center;
+        flex-direction: row;
+        gap: 8px;
+        padding-top: 4px;
       }
 
       .footer-row ion-button {
-        width: 100%;
+        width: auto;
+        min-width: 92px;
+        min-height: 36px;
+        margin: 0;
       }
     }
 

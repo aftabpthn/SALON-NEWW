@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  apiBaseUrl: "http://localhost:4000/api/v1",
+  apiBaseUrl: "http://127.0.0.1:4000/api/v1",
   firebase: {
     apiKey: "AIzaSyAFQDxE69U0eprOuJSxd28Q3E6rGMAiAM0",
     authDomain: "aurashineclient.firebaseapp.com",

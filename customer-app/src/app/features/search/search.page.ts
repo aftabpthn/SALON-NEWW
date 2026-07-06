@@ -59,6 +59,7 @@ interface ProfessionalResult {
             <h1>{{ searchTitle() }}</h1>
             <p>Any time · {{ locationDisplayLabel() }}</p>
           </div>
+          <button class="header-change-button" type="button" (click)="clearSelectedArea()">Change</button>
           <button class="map-toggle-button" type="button" (click)="toggleMapPanel()" aria-label="Toggle map">
             <ion-icon name="map-outline"></ion-icon>
           </button>
@@ -67,6 +68,28 @@ interface ProfessionalResult {
         <section class="sticky-search fresha-search-card">
           <div class="search-input-wrap">
             <ion-searchbar [placeholder]="placeholder()" [value]="query()" (ionInput)="setQuery($any($event.target).value || '')"></ion-searchbar>
+            <div class="fresha-filter-row" aria-label="Search filters and sorting">
+              <div class="quick-filter-row" aria-label="Quick filters">
+                <button type="button" [class.active]="mode() === 'salons'" (click)="applyMode('salons')">Venues</button>
+                <button type="button" [class.active]="mode() === 'staff'" (click)="applyMode('staff')">Professionals</button>
+                <button type="button" [class.active]="!hasAvailabilityFilter()" (click)="applyAnyTime()">Any time</button>
+                @if (hasPriceFilter()) {
+                  <button type="button" class="active" (click)="toggleFilterPanel()">Price</button>
+                }
+              </div>
+              <div class="filter-sort-actions">
+                <button type="button" class="control-button" [class.active]="filterPanelOpen() || activeFilterCount()" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
+                  <ion-icon name="options-outline"></ion-icon>
+                  <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
+                  <small>{{ filterButtonLabel() }}</small>
+                </button>
+                <button type="button" class="control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
+                  <ion-icon name="swap-vertical-outline"></ion-icon>
+                  <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
+                  <small>{{ sortDescription(sort()) }}</small>
+                </button>
+              </div>
+            </div>
             @if (suggestions().length) {
               <div class="suggestion-panel" role="listbox" aria-label="Search suggestions">
                 @for (suggestion of suggestions(); track suggestion.key) {
@@ -80,26 +103,6 @@ interface ProfessionalResult {
                 }
               </div>
             }
-          </div>
-          <div class="fresha-filter-row" aria-label="Search filters and sorting">
-            <button type="button" class="control-button" [class.active]="filterPanelOpen() || activeFilterCount()" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()">
-              <ion-icon name="options-outline"></ion-icon>
-              <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
-              <small>{{ filterButtonLabel() }}</small>
-            </button>
-            <button type="button" class="control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()">
-              <ion-icon name="swap-vertical-outline"></ion-icon>
-              <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
-              <small>{{ sortDescription(sort()) }}</small>
-            </button>
-            <div class="quick-filter-row" aria-label="Quick filters">
-              <button type="button" [class.active]="mode() === 'salons'" (click)="applyMode('salons')">Venues</button>
-              <button type="button" [class.active]="mode() === 'staff'" (click)="applyMode('staff')">Professionals</button>
-              <button type="button" [class.active]="!hasAvailabilityFilter()" (click)="applyAnyTime()">Any time</button>
-              @if (hasPriceFilter()) {
-                <button type="button" class="active" (click)="toggleFilterPanel()">Price</button>
-              }
-            </div>
           </div>
           @if (activeFilterSummary().length) {
             <div class="active-summary-row" aria-label="Active filters">
@@ -220,12 +223,6 @@ interface ProfessionalResult {
             </section>
           }
           </div>
-          @if (location()) {
-            <div class="selected-area-row">
-              <span><ion-icon name="locate-outline"></ion-icon> Using {{ locationDisplayLabel() }} for distance results</span>
-              <button type="button" (click)="clearSelectedArea()">Change area</button>
-            </div>
-          }
         </section>
 
         <div class="search-shell">
@@ -1058,6 +1055,22 @@ interface ProfessionalResult {
       .location-select-row {
         grid-template-columns: 1fr;
       }
+
+      .control-button {
+        display: grid;
+        grid-template-columns: 1fr;
+        place-items: center;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        padding: 0;
+      }
+
+      .control-button span,
+      .control-button small {
+        display: none;
+      }
     }
 
     @media (min-width: 1440px) {
@@ -1073,7 +1086,7 @@ interface ProfessionalResult {
 
     .fresha-search-top {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
       align-items: center;
       gap: 14px;
       min-height: 64px;
@@ -1126,6 +1139,19 @@ interface ProfessionalResult {
       color: var(--primary);
     }
 
+    .header-change-button {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid rgba(214, 169, 74, 0.28);
+      border-radius: 999px;
+      color: #8A5C12;
+      background: rgba(255, 249, 236, 0.94);
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
     .fresha-search-card {
       position: static;
       display: grid;
@@ -1150,7 +1176,7 @@ interface ProfessionalResult {
 
     .fresha-filter-row {
       display: grid;
-      grid-template-columns: minmax(104px, auto) minmax(104px, auto) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 10px;
       overflow: visible;
@@ -1214,6 +1240,12 @@ interface ProfessionalResult {
     .control-button.active small {
       color: inherit;
       opacity: 0.74;
+    }
+
+    .filter-sort-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
 
     .quick-filter-row {
@@ -1891,31 +1923,144 @@ interface ProfessionalResult {
 
     @media (max-width: 599px) {
       .search-page {
-        padding-top: 12px;
+        padding-top: 4px;
       }
 
       .fresha-search-top {
-        border-radius: 28px;
+        min-height: 34px;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
+        gap: 6px;
+        padding: 4px 6px;
+        border-radius: 12px;
+      }
+
+      .fresha-search-top h1 {
+        font-size: 15px !important;
+        line-height: 1 !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase !important;
+      }
+
+      .fresha-search-top p {
+        margin-top: 2px;
+        font-size: 0.72rem !important;
+        font-weight: 950 !important;
+      }
+
+      .back-button,
+      .map-toggle-button {
+        width: 27px;
+        height: 27px;
+      }
+
+      .header-change-button {
+        min-height: 27px;
+        padding: 0 8px;
+        font-size: 0.62rem;
+      }
+
+      .sticky-search.fresha-search-card {
+        display: block;
+        gap: 5px;
+        margin-bottom: 6px;
+        padding: 6px;
+        border-radius: 14px;
+      }
+
+      .fresha-search-card ion-searchbar {
+        min-height: 44px;
+        --border-radius: 14px;
+      }
+
+      .sticky-search.fresha-search-card .search-input-wrap ion-searchbar {
+        flex: 1 1 auto;
+        width: auto !important;
+        min-width: 0;
+        padding-right: 0 !important;
+      }
+
+      .sticky-search.fresha-search-card .search-input-wrap {
+        position: static !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px;
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
       }
 
       .fresha-filter-row button:not(.filter-icon-button) {
-        min-height: 38px;
-        padding-inline: 14px;
+        min-height: 30px;
+        padding-inline: 9px;
       }
 
       .fresha-filter-row {
-        grid-template-columns: minmax(92px, auto) minmax(92px, auto) minmax(0, 1fr);
-        gap: 8px;
-        padding-left: 8px;
+        position: static !important;
+        top: auto !important;
+        right: auto !important;
+        left: auto !important;
+        z-index: 5;
+        display: flex;
+        flex: 0 0 auto;
+        margin-left: auto;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        width: auto;
+        height: 34px;
+        padding: 0;
+        overflow: visible;
+        translate: none !important;
       }
 
       .control-button {
-        min-width: 92px;
-        padding-inline: 11px;
+        width: 34px;
+        min-width: 34px;
+        height: 34px;
+        min-height: 34px !important;
+        padding: 0 !important;
+        border-radius: 999px;
+        justify-content: center;
       }
 
+      .control-button span,
       .control-button small {
-        max-width: 58px;
+        display: none !important;
+      }
+
+      .control-button ion-icon {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .quick-filter-row {
+        display: none !important;
+      }
+
+      .active-summary-row {
+        display: none !important;
+      }
+
+      .selected-area-row {
+        min-height: 34px;
+        gap: 6px;
+        padding: 7px 9px;
+        border-radius: 12px;
+      }
+
+      .selected-area-row span {
+        min-width: 0;
+        font-size: 0.78rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .selected-area-row button {
+        font-size: 0.72rem;
+        white-space: nowrap;
       }
 
       .popover-grid {
@@ -1925,12 +2070,24 @@ interface ProfessionalResult {
       .map-copy {
         align-items: flex-start;
         flex-direction: column;
+        gap: 8px;
       }
 
       .map-actions {
         width: 100%;
         overflow-x: auto;
         padding-bottom: 2px;
+      }
+
+      .aura-map-card {
+        gap: 10px;
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      .live-map {
+        min-height: 260px;
+        border-radius: 16px;
       }
 
       .aura-map-card.fullscreen-map {

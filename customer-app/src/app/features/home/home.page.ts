@@ -112,6 +112,14 @@ interface ConsultationChatMessage {
                 Search
               </ion-button>
             </div>
+            <div class="category-strip hero-category-strip">
+              <button class="pill" [class.active]="categoryFilter() === ''" type="button" (click)="setCategory('')">All</button>
+              @for (category of marketplace.categories(); track category.id || category.slug) {
+                <button class="pill" [class.active]="categoryFilter() === category.slug" type="button" (click)="setCategory(category.slug)">
+                  {{ category.label }}
+                </button>
+              }
+            </div>
             @if (locationNotice()) {
               <p class="location-notice">{{ locationNotice() }}</p>
             }
@@ -263,6 +271,19 @@ interface ConsultationChatMessage {
           </div>
         }
 
+        @if (!searchActive() && recentlyViewed().length) {
+          <div class="section-heading">
+            <div>
+              <h2 class="section-title">Continue where you left off</h2>
+            </div>
+          </div>
+          <div class="business-rail">
+            @for (business of recentlyViewed(); track business.id) {
+              <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+            }
+          </div>
+        }
+
         @if (!searchActive()) {
           <div class="section-heading priority-heading">
             <div>
@@ -279,19 +300,6 @@ interface ConsultationChatMessage {
           </div>
         }
 
-        @if (!searchActive() && recentlyViewed().length) {
-          <div class="section-heading">
-            <div>
-              <h2 class="section-title">Continue where you left off</h2>
-            </div>
-          </div>
-          <div class="business-rail">
-            @for (business of recentlyViewed(); track business.id) {
-              <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
-            }
-          </div>
-        }
-
         @if (marketplace.loading()) {
           <section class="skeleton-grid" aria-label="Loading businesses">
             @for (item of skeletons; track item) {
@@ -302,15 +310,6 @@ interface ConsultationChatMessage {
         @if (marketplace.error()) {
           <section class="state-card premium-card error"><h2>Could not load marketplace</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
         }
-
-        <div class="category-strip">
-          <button class="pill" [class.active]="categoryFilter() === ''" type="button" (click)="setCategory('')">All</button>
-          @for (category of marketplace.categories(); track category.id || category.slug) {
-            <button class="pill" [class.active]="categoryFilter() === category.slug" type="button" (click)="setCategory(category.slug)">
-              {{ category.label }}
-            </button>
-          }
-        </div>
 
         @if (searchActive()) {
           <div class="section-heading">
@@ -1184,12 +1183,38 @@ interface ConsultationChatMessage {
       }
 
       .near-you-button {
-        padding: 0 10px;
+        display: none;
       }
 
       .hero {
-        padding: 20px;
+        min-height: auto;
+        padding: 14px 14px 16px;
         border-radius: 32px;
+      }
+
+      .hero-copy {
+        align-content: start;
+        gap: 10px;
+      }
+
+      .page-title {
+        display: none;
+        margin: 0;
+        font-size: clamp(1.7rem, 8vw, 2.35rem);
+        line-height: 0.98;
+      }
+
+      .search-panel {
+        margin-top: 0;
+      }
+
+      .home-search-wrap {
+        position: relative;
+      }
+
+      .home-search-wrap ion-searchbar {
+        width: calc(100% - 132px) !important;
+        padding-right: 0 !important;
       }
 
       .live-consultation-card {
@@ -1215,15 +1240,42 @@ interface ConsultationChatMessage {
 
 
       .home-control-row {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        position: absolute;
+        top: 50%;
+        right: 10px;
+        z-index: 3;
+        display: flex;
+        width: auto;
+        gap: 6px;
+        transform: translateY(-50%);
       }
 
       .home-control-button {
-        width: 100%;
+        width: 36px;
+        height: 36px;
+        min-height: 36px;
         min-width: 0;
-        padding: 0 8px;
+        padding: 0;
+        border: 1px solid rgba(214, 169, 74, 0.22);
+        border-radius: 999px;
+        color: #2A1A08;
+        background: #fffaf0;
+        box-shadow: 0 5px 14px rgba(92, 65, 28, 0.08);
         font-size: 0.78rem;
+      }
+
+      .home-control-button span {
+        display: none;
+      }
+
+      .home-control-button ion-icon {
+        display: block;
+        width: 19px;
+        height: 19px;
+        margin: 0 auto;
+        color: #2A1A08;
+        font-size: 19px;
+        opacity: 1;
       }
       .welcome-actions ion-button {
         width: 100%;

@@ -15,9 +15,9 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
       <main class="page-narrow profile-page">
         @if (marketplace.isAuthenticated()) {
           <section class="profile-card premium-card">
-            <div class="avatar">{{ (marketplace.customer()?.name || "?").charAt(0) }}</div>
+            <div class="avatar">{{ profileName().charAt(0) }}</div>
             <div>
-              <h1>{{ marketplace.customer()?.name || "Loading profile" }}</h1>
+              <h1>{{ profileName() || "Loading profile" }}</h1>
               <p class="muted">{{ marketplace.customer()?.email || "No email saved" }} · {{ marketplace.customer()?.phone || "No phone saved" }}</p>
             </div>
             <button type="button" class="edit-profile-button" routerLink="/tabs/profile/edit" aria-label="Edit profile">
@@ -202,6 +202,7 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
         }
 
         <nav class="menu premium-card" aria-label="Profile menu">
+          <div class="menu-section-title">Hub</div>
           <a routerLink="/tabs/bookings"><ion-icon name="sparkles-outline"></ion-icon><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/wishlist"><ion-icon name="heart-outline"></ion-icon><span>Wishlist and saved salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet and payments</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
@@ -525,6 +526,16 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
       overflow: hidden;
     }
 
+    .menu-section-title {
+      padding: 14px 18px 8px;
+      color: #8A5C12;
+      background: rgba(244, 213, 141, 0.16);
+      font-size: 0.76rem;
+      font-weight: 950;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
     .menu a,
     .menu-item {
       display: grid;
@@ -658,6 +669,13 @@ export class ProfilePage implements OnInit {
       await this.marketplace.loadBookings().catch(() => undefined);
       await this.marketplace.loadFavorites().catch(() => undefined);
     }
+  }
+
+  profileName(): string {
+    const customer = this.marketplace.customer();
+    const fullName = [customer?.firstName, customer?.lastName].map((part) => String(part || "").trim()).filter(Boolean).join(" ");
+    const fallback = String(customer?.name || customer?.displayName || "").trim();
+    return fullName || (/^\+?\d[\d\s-]{7,}$/.test(fallback) ? "" : fallback);
   }
 
   upcomingCount(): number {

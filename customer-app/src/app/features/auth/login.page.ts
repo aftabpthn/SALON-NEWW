@@ -19,7 +19,14 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       <main class="auth-shell">
         <section class="auth-card">
           <div class="brand-mark"><ion-icon name="sparkles-outline"></ion-icon></div>
-          <h1>AuraSalon for customers</h1>
+          <p class="auth-kicker">Aura customer app</p>
+          <h1>Book salon visits without calling.</h1>
+          <p class="subtitle">Search nearby salons, compare services, save offers, and manage bookings from one clean mobile app.</p>
+          <div class="auth-benefits" aria-label="Customer app benefits">
+            <span>Live slots</span>
+            <span>Rewards</span>
+            <span>Fast OTP</span>
+          </div>
 
           @if (notice) {
             <p class="notice-text">{{ notice }}</p>
@@ -136,9 +143,13 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
                 </ion-list>
                 <ion-button type="button" expand="block" size="large" class="primary-gradient" (click)="verifyCompletionPhoneOtp()" [disabled]="auth.loading()">Verify OTP</ion-button>
               }
-              @if (!completionPhoneOtpSent || completionPhoneVerified) {
+              @if (completionPhoneVerified) {
+                <button type="button" class="native-continue-button" (click)="forceOpenApp()">
+                  Continue
+                </button>
+              } @else if (!completionPhoneOtpSent) {
                 <ion-button type="submit" expand="block" size="large" class="primary-gradient" [disabled]="auth.loading()">
-                  {{ completionPhoneVerified ? "Continue" : "Send mobile OTP" }}
+                  Send mobile OTP
                 </ion-button>
               } @else {
                 <ion-button type="button" fill="clear" class="resend-otp-button" (click)="sendCompletionPhoneOtp()" [disabled]="auth.loading() || completionResendCountdown > 0">
@@ -310,6 +321,37 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       text-align: center;
     }
 
+    .auth-kicker {
+      margin: -6px 0 -10px;
+      color: #9B6B22;
+      font-size: 0.72rem;
+      font-weight: 950;
+      letter-spacing: 0.14em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .auth-benefits {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: -4px;
+    }
+
+    .auth-benefits span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid rgba(214, 169, 74, 0.26);
+      border-radius: 999px;
+      color: #7A5019;
+      background: rgba(244, 213, 141, 0.16);
+      font-size: 0.76rem;
+      font-weight: 950;
+    }
+
     .subtitle,
     .step-copy {
       margin: 0;
@@ -431,16 +473,39 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     }
 
     .dark-continue-button {
-      --background: #080806;
-      --background-hover: #17130C;
-      --background-activated: #000000;
+      --background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      --background-hover: linear-gradient(135deg, #FFE4A2, #C99632);
+      --background-activated: linear-gradient(135deg, #D6A94A, #9B6B22);
       --border-radius: 999px;
-      --box-shadow: 0 16px 34px rgba(35, 25, 13, 0.18);
-      --color: #ffffff;
+      --box-shadow: 0 16px 34px rgba(92, 65, 28, 0.18);
+      --color: #120D05;
       min-height: 50px;
       margin-top: 12px;
       font-weight: 900;
       letter-spacing: 0;
+    }
+
+    .native-continue-button {
+      width: 100%;
+      min-height: 54px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 999px;
+      color: #120D05;
+      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      box-shadow: 0 16px 34px rgba(92, 65, 28, 0.18);
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .native-continue-button:active {
+      transform: translateY(1px) scale(0.99);
     }
 
     .guest-button {
@@ -675,6 +740,125 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         height: 50px;
         border-radius: 12px;
         font-size: 1.1rem;
+      }
+    }
+
+    @media (max-width: 599px) {
+      .auth-shell {
+        min-height: 100dvh;
+        align-items: stretch;
+        place-items: stretch;
+        padding: max(10px, var(--safe-top)) 10px max(14px, var(--safe-bottom));
+        background:
+          radial-gradient(circle at 18% 0%, rgba(214, 169, 74, 0.24), transparent 34%),
+          linear-gradient(180deg, #FFF9EC 0%, #F7E8CB 100%);
+      }
+
+      .auth-card {
+        align-self: stretch;
+        width: 100%;
+        gap: 13px;
+        padding: 18px;
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.94)),
+          #FFF9EC;
+        box-shadow: 0 18px 52px rgba(92, 65, 28, 0.13);
+      }
+
+      .brand-mark {
+        width: 50px;
+        height: 50px;
+        margin-bottom: 0;
+        border-radius: 18px;
+      }
+
+      h1 {
+        max-width: 300px;
+        margin-inline: auto;
+        font-size: clamp(1.72rem, 8vw, 2.2rem);
+        line-height: 0.98;
+        letter-spacing: -0.045em;
+      }
+
+      .subtitle {
+        max-width: 320px;
+        margin-inline: auto;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+
+      .auth-benefits {
+        margin-bottom: 2px;
+      }
+
+      .choice-email-form,
+      .auth-form,
+      .social-stack {
+        gap: 10px;
+      }
+
+      ion-list {
+        border-radius: 18px;
+      }
+
+      ion-item {
+        --min-height: 54px;
+      }
+
+      .dark-continue-button,
+      .choice-button {
+        min-height: 48px;
+        margin-top: 4px;
+        text-transform: none;
+        font-size: 0.88rem;
+      }
+
+      .social-stack {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .social-stack .choice-button,
+      .social-stack .guest-button {
+        width: 100%;
+      }
+
+      .social-stack .guest-button {
+        grid-column: 1 / -1;
+      }
+
+      .choice-button::part(native) {
+        padding-inline: 8px;
+      }
+
+      .choice-button ion-icon {
+        margin-right: 4px;
+        font-size: 1rem;
+      }
+
+      .divider {
+        margin: 4px 0 -2px;
+      }
+
+      .notice-text,
+      .error-text {
+        padding: 10px 12px;
+        border-radius: 14px;
+        font-size: 0.86rem;
+      }
+
+      .phone-grid {
+        grid-template-columns: 82px minmax(0, 1fr);
+      }
+
+      .mobile-modal {
+        top: auto;
+        bottom: max(10px, var(--safe-bottom));
+        transform: translateX(-50%);
+        width: calc(100vw - 20px);
+        max-height: min(82dvh, 620px);
+        overflow-y: auto;
+        border-radius: 26px;
       }
     }
   `]
@@ -937,8 +1121,10 @@ export class LoginPage implements OnInit, OnDestroy {
       email,
       phone
     })
-      .then(() => this.openHome())
-      .catch(() => undefined);
+      .then(() => this.navigateToApp())
+      .catch((error) => {
+        this.notice = error instanceof Error ? error.message : "Unable to complete profile. Please try again.";
+      });
   }
 
   async sendCompletionPhoneOtp() {
@@ -1149,8 +1335,9 @@ export class LoginPage implements OnInit, OnDestroy {
       : nameParts.lastName || (this.validNamePart(this.lastName) ? this.lettersOnly(this.lastName) : "");
     this.completionEmail = (customer?.email || this.email || this.completionEmail).trim().toLowerCase();
     const phone = this.firstValidPhone(
+      this.auth.otpPhone(),
+      this.phone ? this.fullPhone() : "",
       customer?.phone,
-      this.fullPhoneIfEntered(),
       this.completionFullPhone()
     );
     this.setCompletionPhone(phone);
@@ -1244,7 +1431,123 @@ export class LoginPage implements OnInit, OnDestroy {
       return;
     }
     const returnUrl = this.route.snapshot.queryParamMap.get("returnUrl");
-    void this.router.navigateByUrl(returnUrl && returnUrl.startsWith("/") ? returnUrl : "/tabs/home");
+    void this.router.navigateByUrl(this.safeReturnUrl(returnUrl));
+  }
+
+  private async saveCompletedProfile() {
+    this.notice = "";
+    const firstName = this.lettersOnly(this.firstName).trim();
+    const lastName = this.lettersOnly(this.lastName).trim();
+    const email = this.completionEmail.trim().toLowerCase();
+    this.completionPhone = this.phoneDigits(this.completionPhone);
+    const phone = this.completionFullPhone();
+    if (!this.validNamePart(firstName)) {
+      this.notice = "First name can contain letters only.";
+      return;
+    }
+    if (!this.validNamePart(lastName)) {
+      this.notice = "Last name can contain letters only.";
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.notice = "Enter a valid email address.";
+      return;
+    }
+    if (!this.isValidFullPhone(phone)) {
+      this.notice = "Enter a valid mobile number.";
+      return;
+    }
+    if (!this.completionPhoneVerified) {
+      await this.sendCompletionPhoneOtp();
+      return;
+    }
+    await this.auth.updateMe({ firstName, lastName, name: `${firstName} ${lastName}`.trim(), email, phone })
+      .then(() => this.navigateToApp())
+      .catch((error) => {
+        this.notice = error instanceof Error ? error.message : "Unable to complete profile. Please try again.";
+      });
+  }
+
+  continueAfterVerifiedTap(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    void this.saveProfileBestEffort();
+    this.navigateToApp();
+  }
+
+  async forceOpenApp() {
+    const saved = await this.saveProfileBestEffort();
+    if (!saved && this.notice) return;
+    const target = this.safeReturnUrl(this.route.snapshot.queryParamMap.get("returnUrl"));
+    void this.router.navigateByUrl(target).then((ok) => {
+      if (!ok) window.location.assign(target);
+    }).catch(() => window.location.assign(target));
+    setTimeout(() => {
+      if (window.location.pathname === "/login" || window.location.pathname === "/signup") {
+        window.location.assign(target);
+      }
+    }, 250);
+  }
+
+  private async saveProfileBestEffort(): Promise<boolean> {
+    const firstName = this.lettersOnly(this.firstName).trim();
+    const lastName = this.lettersOnly(this.lastName).trim();
+    const email = this.completionEmail.trim().toLowerCase();
+    const phone = this.completionFullPhone();
+    if (!this.validNamePart(firstName)) {
+      this.notice = "First name can contain letters only.";
+      return false;
+    }
+    if (!this.validNamePart(lastName)) {
+      this.notice = "Last name can contain letters only.";
+      return false;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      this.notice = "Enter a valid email address.";
+      return false;
+    }
+    if (!this.isValidFullPhone(phone)) {
+      this.notice = "Enter a valid mobile number.";
+      return false;
+    }
+    try {
+      const name = `${firstName} ${lastName}`.trim();
+      const profile = await this.auth.updateMe({ firstName, lastName, name, email, phone });
+      const savedProfile = {
+        ...profile,
+        firstName,
+        lastName,
+        name,
+        displayName: name,
+        email,
+        phone,
+        phoneNumber: phone,
+        phoneVerifiedAt: profile.phoneVerifiedAt || new Date().toISOString(),
+        profileComplete: true,
+        isLoggedIn: true
+      };
+      this.auth.customer.set(savedProfile);
+      if (!this.auth.profileComplete(savedProfile)) {
+        this.notice = "Profile saved, but mobile verification is still pending.";
+        return false;
+      }
+      this.notice = "";
+      return true;
+    } catch (error) {
+      this.notice = error instanceof Error ? error.message : "Unable to complete profile. Please try again.";
+      return false;
+    }
+  }
+
+  private navigateToApp() {
+    const returnUrl = this.route.snapshot.queryParamMap.get("returnUrl");
+    void this.router.navigateByUrl(this.safeReturnUrl(returnUrl));
+  }
+
+  private safeReturnUrl(returnUrl: string | null): string {
+    if (!returnUrl || !returnUrl.startsWith("/")) return "/tabs/home";
+    if (/^\/(login|signup|verify-otp)(?:\?|#|$)/.test(returnUrl)) return "/tabs/home";
+    return returnUrl;
   }
 
   private async resumeExistingSession() {

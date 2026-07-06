@@ -61,10 +61,6 @@ import { AuthService } from "../../core/auth.service";
           <ion-icon name="home-outline"></ion-icon>
           <ion-label>Home</ion-label>
         </ion-tab-button>
-        <ion-tab-button tab="search" href="/tabs/search">
-          <ion-icon name="search-outline"></ion-icon>
-          <ion-label>Discover</ion-label>
-        </ion-tab-button>
         <ion-tab-button tab="consultation" href="/tabs/consultation">
           <ion-icon name="sparkles-outline"></ion-icon>
           <ion-label>Consult</ion-label>
@@ -72,10 +68,6 @@ import { AuthService } from "../../core/auth.service";
         <ion-tab-button tab="bookings" href="/tabs/bookings">
           <ion-icon name="calendar-outline"></ion-icon>
           <ion-label>Bookings</ion-label>
-        </ion-tab-button>
-        <ion-tab-button tab="rewards" href="/tabs/rewards">
-          <ion-icon name="ribbon-outline"></ion-icon>
-          <ion-label>Hub</ion-label>
         </ion-tab-button>
         <ion-tab-button tab="profile" href="/tabs/profile">
           <ion-icon name="person-outline"></ion-icon>
@@ -160,8 +152,8 @@ import { AuthService } from "../../core/auth.service";
         padding: 10px 12px 10px 18px;
         border: 1px solid rgba(17, 24, 39, 0.14);
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.86);
-        box-shadow: 0 18px 42px rgba(139, 92, 246, 0.14);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 249, 236, 0.82));
+        box-shadow: 0 18px 42px rgba(92, 65, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.72);
         backdrop-filter: blur(24px);
         transform: translateX(-50%);
         animation: aura-web-nav-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -214,7 +206,7 @@ import { AuthService } from "../../core/auth.service";
         padding: 6px;
         border: 1px solid var(--border);
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.82);
+        background: rgba(255, 249, 236, 0.72);
       }
 
       .nav-links a {
@@ -282,16 +274,16 @@ import { AuthService } from "../../core/auth.service";
 
       .location-chip:hover,
       .icon-link:hover {
-        border-color: rgba(139, 92, 246, 0.26);
-        color: var(--primary-2);
+        border-color: rgba(214, 169, 74, 0.32);
+        color: #7A5019;
         background: #ffffff;
         transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(139, 92, 246, 0.1);
+        box-shadow: 0 12px 24px rgba(92, 65, 28, 0.1);
       }
 
       .brand:hover .brand-mark {
         transform: rotate(-3deg) scale(1.04);
-        box-shadow: 0 14px 30px rgba(139, 92, 246, 0.18);
+        box-shadow: 0 14px 30px rgba(92, 65, 28, 0.18);
       }
     }
 

@@ -169,15 +169,15 @@ function insertClient({ tenantId, branchId, name, email, phone, firebaseUid, pro
   return clientById(tenantId, row.id);
 }
 
-function updateClient(existing, { name, email, phone, firebaseUid, provider }) {
+function updateClient(existing, { name, email, phone, firebaseUid, provider, forceName = false, forcePhone = false }) {
   const stamp = now();
   const updates = { updatedAt: stamp };
-  if (name && (!existing.name || existing.name === "Customer")) updates.name = name;
+  if (name && (forceName || !existing.name || existing.name === "Customer")) updates.name = name;
   if (email && !existing.email) {
     updates.email = email;
     setColumn(updates, "emailVerifiedAt", stamp);
   }
-  if (phone && !existing.phone) {
+  if (phone && (forcePhone || !existing.phone)) {
     updates.phone = phone;
     setColumn(updates, "phoneVerifiedAt", stamp);
   }
@@ -553,7 +553,9 @@ export const customerAuthService = {
       email,
       phone,
       firebaseUid: existing.firebaseUid || existing.firebase_uid || "",
-      provider: existing.authProvider || existing.auth_provider || "customer"
+      provider: existing.authProvider || existing.auth_provider || "customer",
+      forceName: true,
+      forcePhone: true
     });
     return rowToCustomer(updated);
   },
