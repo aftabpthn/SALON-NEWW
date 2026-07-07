@@ -1040,14 +1040,15 @@ const STATUS_TONES: Record<string, string> = {
     .primary-button { background: #0f8f7f; color: white; border-color: #0f8f7f; }
     .ghost-button.mini { padding: 8px 11px; font-size: 12px; }
     .danger { color: #b91c1c; }
-    .month-strip-band { display: grid; grid-template-columns: auto minmax(76px, auto) auto 1fr; gap: 8px; align-items: center; min-height: 54px; padding: 8px 14px; border-radius: 14px; }
-    .month-range-label { min-width: 76px; color: #172033; font-size: 14px; white-space: nowrap; }
+    .month-strip-band { display: grid; grid-template-columns: auto minmax(84px, auto) auto minmax(0, 1fr); gap: 8px; align-items: center; min-height: 72px; padding: 10px 14px; border-radius: 14px; }
+    .month-range-label { min-width: 84px; color: #172033; font-size: 14px; white-space: nowrap; }
     .month-strip-band > button { height: 40px; width: 40px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; font-weight: 900; }
-    .month-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-    .month-strip button { min-width: 54px; min-height: 48px; border: 1px solid #d9e5e2; background: #f8fafc; border-radius: 10px; padding: 6px; color: #334155; }
+    .month-strip { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 2px 0 8px; min-width: 0; scrollbar-gutter: stable; }
+    .month-strip button { flex: 0 0 58px; min-width: 58px; min-height: 48px; border: 1px solid #d9e5e2; background: #f8fafc; border-radius: 10px; padding: 6px 4px; color: #334155; display: grid; place-items: center; align-content: center; gap: 2px; text-align: center; }
     .month-strip button.active { border-color: #0f8f7f; box-shadow: inset 0 -3px 0 #0f8f7f; background: #ecfdf5; }
     .month-strip button.today { color: #0f8f7f; }
-    .month-strip span, .month-strip small { display: block; font-size: 11px; }
+    .month-strip strong { display: block; font-size: 13px; line-height: 1; }
+    .month-strip span, .month-strip small { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 1.1; }
     .scheduler-view-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; gap: 12px; min-height: 58px; padding: 10px 14px; border-radius: 14px; }
     .scheduler-view-copy { display: grid; gap: 2px; }
     .scheduler-view-copy strong { color: #172033; font-size: 16px; }
