@@ -23,6 +23,7 @@ export const env = {
   refreshCookieName: process.env.REFRESH_COOKIE_NAME || (process.env.NODE_ENV === "production" ? "__Host-aura_refresh" : "aura_refresh"),
   refreshCookieSameSite: process.env.REFRESH_COOKIE_SAMESITE || "Strict",
   trustProxy: (process.env.TRUST_PROXY || "false") === "true",
+  enterpriseRateLimitMax: Number(process.env.ENTERPRISE_RATE_LIMIT_MAX || (process.env.NODE_ENV === "production" ? 240 : 2000)),
   requirePasswordAuth: (process.env.REQUIRE_PASSWORD_AUTH || (process.env.NODE_ENV === "production" ? "true" : "false")) === "true",
   demoAdminPassword: process.env.DEMO_ADMIN_PASSWORD || "AuraOwner#2026",
   apiVersion: "v1",

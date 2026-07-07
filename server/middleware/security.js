@@ -1,12 +1,16 @@
 import { AppError } from "../utils/app-error.js";
+import { env } from "../config/env.js";
 import { securityService } from "../services/security.service.js";
 
 const windows = new Map();
 const WINDOW_MS = 60 * 1000;
-const MAX_REQUESTS = 240;
+const MAX_REQUESTS = Math.max(60, Number(env.enterpriseRateLimitMax || 240));
 
 function keyFor(req) {
-  return [req.access?.tenantId || "public", req.access?.userId || req.ip || "anonymous", req.path.split("/").slice(0, 4).join("/")].join(":");
+  const tenantId = req.access?.tenantId || req.get?.("x-tenant-id") || "public";
+  const branchId = req.access?.branchId || req.get?.("x-branch-id") || "";
+  const userKey = req.access?.userId || req.get?.("x-user-role") || req.ip || "anonymous";
+  return [tenantId, branchId, userKey, req.path.split("/").slice(0, 4).join("/")].join(":");
 }
 
 export function enterpriseSecurity(req, res, next) {
