@@ -213,14 +213,19 @@ export class EnterpriseSchedulerService {
     const clientLimit = Math.min(Math.max(safeNumber(query.clientLimit, 120), 25), 250);
     const serviceLimit = Math.min(Math.max(safeNumber(query.serviceLimit, 300), 50), 600);
 
-    const allStaff = this.staff(branchId, access, staffSearch);
-    const staffPool = staffFilter ? allStaff.filter((person) => person.id === staffFilter) : allStaff;
-    const visibleStaff = staffPool.slice(staffOffset, staffOffset + staffLimit);
-    const visibleStaffIds = new Set(visibleStaff.map((person) => person.id));
     const rangeQuery = { branchId, from, to: exclusiveTo, limit: 5000 };
+    const rangeStartAt = `${from}T00:00:00.000Z`;
+    const rangeEndAt = `${exclusiveTo}T00:00:00.000Z`;
     const rawAppointments = repositories.appointments
       .list(rangeQuery, scopedQuery(access, branchId))
+      .filter((appointment) => String(appointment.startAt || "") >= rangeStartAt && String(appointment.startAt || "") < rangeEndAt)
       .filter((appointment) => !status || String(appointment.status || "").toLowerCase() === status);
+    const assignedStaffIds = new Set(rawAppointments.map((appointment) => String(appointment.staffId || "")).filter(Boolean));
+    const allStaff = this.staff(branchId, access, staffSearch);
+    const staffPoolBase = staffFilter ? allStaff.filter((person) => person.id === staffFilter) : allStaff;
+    const staffPool = staffFilter ? staffPoolBase : this.prioritizeAssignedStaff(staffPoolBase, assignedStaffIds);
+    const visibleStaff = staffPool.slice(staffOffset, staffOffset + staffLimit);
+    const visibleStaffIds = new Set(visibleStaff.map((person) => person.id));
     const sales = repositories.sales.list({ branchId, limit: 10000 }, scopedQuery(access, branchId));
     const saleIdsByAppointmentId = new Map();
     for (const sale of sales) {
@@ -521,22 +526,29 @@ export class EnterpriseSchedulerService {
     } catch (error) {
       console.warn("Appointment scheduler live staff source failed", error?.message || error);
     }
-    if (!rows.length) {
-      const legacy = repositories.staff
-        .list({ branchId, limit: 5000 }, tenantService.accessScope(access, "staff"))
-        .filter(activeStaff)
-        .map((row) => normalizeStaff(row, "staff"));
-      rows.push(...legacy);
-      if (tableExists("staff_master")) {
-        const masterRows = db.prepare(`SELECT * FROM staff_master
-          WHERE tenant_id = @tenantId AND branch_id = @branchId AND lower(COALESCE(status, 'active')) IN ('active', 'available', 'on-roll', 'onroll', 'probation')
-          ORDER BY full_name LIMIT 5000`).all({ tenantId: access.tenantId, branchId });
-        rows.push(...masterRows.map((row) => normalizeStaff(row, "staff_master")));
-      }
+    const legacy = repositories.staff
+      .list({ branchId, limit: 5000 }, tenantService.accessScope(access, "staff"))
+      .filter(activeStaff)
+      .map((row) => normalizeStaff(row, "staff"));
+    rows.push(...legacy);
+    if (tableExists("staff_master")) {
+      const masterRows = db.prepare(`SELECT * FROM staff_master
+        WHERE tenant_id = @tenantId AND branch_id = @branchId AND lower(COALESCE(status, 'active')) IN ('active', 'available', 'on-roll', 'onroll', 'probation')
+        ORDER BY full_name LIMIT 5000`).all({ tenantId: access.tenantId, branchId });
+      rows.push(...masterRows.map((row) => normalizeStaff(row, "staff_master")));
     }
     return uniqueById(rows)
       .filter((row) => staffMatchesSearch(row, search))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  prioritizeAssignedStaff(staffRows, assignedStaffIds) {
+    return [...staffRows].sort((left, right) => {
+      const leftAssigned = assignedStaffIds.has(String(left.id || "")) ? 0 : 1;
+      const rightAssigned = assignedStaffIds.has(String(right.id || "")) ? 0 : 1;
+      if (leftAssigned !== rightAssigned) return leftAssigned - rightAssigned;
+      return String(left.name || "").localeCompare(String(right.name || ""));
+    });
   }
 
   schedules(branchId, from, to, access) {
