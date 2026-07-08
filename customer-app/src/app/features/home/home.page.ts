@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, signal } from "@angular/core";
+import { Component, HostListener, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar } from "@ionic/angular/standalone";
@@ -51,14 +51,18 @@ interface ConsultationChatMessage {
             <span>Near you</span>
             <div class="location-row">
               <strong><ion-icon name="location-outline"></ion-icon> {{ areaLabel() }}</strong>
+              @if (!mobileHome()) {
               <button type="button" class="near-you-button" [disabled]="locating()" (click)="useCurrentLocation()">
                 <ion-icon name="navigate-outline"></ion-icon>
                 {{ locating() ? "Detecting" : "Use current location" }}
               </button>
+              }
             </div>
           </div>
           <div class="toolbar-actions">
-            <ion-button fill="clear" shape="round" class="staff-toolbar-button" routerLink="/staff/login">Staff?</ion-button>
+            @if (!mobileHome()) {
+              <ion-button fill="clear" shape="round" class="staff-toolbar-button" routerLink="/staff/login">Staff?</ion-button>
+            }
             <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
               <ion-icon name="notifications-outline"></ion-icon>
             </ion-button>
@@ -74,7 +78,9 @@ interface ConsultationChatMessage {
       <main class="page home-page">
         <section class="hero">
           <div class="hero-copy">
-            <h1 class="page-title">Find and book your next self-care visit</h1>
+            @if (!mobileHome()) {
+              <h1 class="page-title">Find and book your next self-care visit</h1>
+            }
             <div class="search-panel">
               <div class="home-search-wrap">
                 <ion-searchbar
@@ -113,6 +119,7 @@ interface ConsultationChatMessage {
                 Search
               </ion-button>
             </div>
+            @if (!mobileHome()) {
             <div class="category-strip hero-category-strip">
               <button class="pill" [class.active]="categoryFilter() === ''" type="button" (click)="setCategory('')">All</button>
               @for (category of marketplace.categories(); track category.id || category.slug) {
@@ -121,10 +128,12 @@ interface ConsultationChatMessage {
                 </button>
               }
             </div>
-            @if (locationNotice()) {
+            }
+            @if (!mobileHome() && locationNotice()) {
               <p class="location-notice">{{ locationNotice() }}</p>
             }
           </div>
+          @if (!mobileHome()) {
           <aside class="live-consultation-card" aria-label="Live AI consultation">
             <div class="consultation-topline">
               <span><ion-icon name="sparkles-outline"></ion-icon> Live consultation</span>
@@ -224,6 +233,7 @@ interface ConsultationChatMessage {
               </div>
             }
           </aside>
+          }
         </section>
 
         <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
@@ -254,6 +264,7 @@ interface ConsultationChatMessage {
         </section>
 
         @if (!searchActive() && recentlyVisited().length) {
+          <section class="mobile-secondary-section">
           <div class="section-heading priority-heading">
             <div>
               <h2 class="section-title">Book again faster</h2>
@@ -270,9 +281,11 @@ interface ConsultationChatMessage {
               </button>
             }
           </div>
+          </section>
         }
 
         @if (!searchActive() && recentlyViewed().length) {
+          <section class="mobile-secondary-section">
           <div class="section-heading">
             <div>
               <h2 class="section-title">Continue where you left off</h2>
@@ -283,6 +296,7 @@ interface ConsultationChatMessage {
               <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
             }
           </div>
+          </section>
         }
 
         @if (!searchActive()) {
@@ -329,6 +343,7 @@ interface ConsultationChatMessage {
         }
 
         @if (!searchActive()) {
+        <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
             <h2 class="section-title">Recommended businesses</h2>
@@ -342,9 +357,11 @@ interface ConsultationChatMessage {
             <section class="state-card premium-card"><h2>No businesses found</h2></section>
           }
         </div>
+        </section>
         }
 
         @if (!searchActive()) {
+        <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
             <h2 class="section-title">Nearby businesses</h2>
@@ -358,9 +375,11 @@ interface ConsultationChatMessage {
             <section class="state-card premium-card"><h2>No nearby businesses yet</h2></section>
           }
         </div>
+        </section>
         }
 
         @if (!searchActive()) {
+        <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
             <h2 class="section-title">Services customers love</h2>
@@ -377,6 +396,7 @@ interface ConsultationChatMessage {
             <section class="state-card premium-card"><h2>No services published yet</h2></section>
           }
         </div>
+        </section>
         }
       </main>
     </ion-content>
@@ -1226,7 +1246,7 @@ interface ConsultationChatMessage {
       }
 
       .home-search-wrap ion-searchbar {
-        width: calc(100% - 132px) !important;
+        width: 100% !important;
         padding-right: 0 !important;
       }
 
@@ -1253,45 +1273,124 @@ interface ConsultationChatMessage {
 
 
       .home-control-row {
-        position: absolute;
-        top: 50%;
-        right: 10px;
-        z-index: 3;
-        display: flex;
-        width: auto;
+        position: static;
+        z-index: auto;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
         gap: 6px;
-        transform: translateY(-50%);
+        transform: none;
       }
 
       .home-control-button {
-        width: 36px;
-        height: 36px;
-        min-height: 36px;
+        width: 100%;
+        height: 34px;
+        min-height: 34px;
         min-width: 0;
-        padding: 0;
+        padding: 0 8px;
         border: 1px solid rgba(214, 169, 74, 0.22);
         border-radius: 999px;
         color: #2A1A08;
-        background: #fffaf0;
-        box-shadow: 0 5px 14px rgba(92, 65, 28, 0.08);
-        font-size: 0.78rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,249,236,0.96));
+        box-shadow: 0 5px 12px rgba(92, 65, 28, 0.06);
+        font-size: 0.7rem;
+        font-weight: 900;
       }
 
       .home-control-button span {
-        display: none;
+        display: inline;
+        line-height: 1;
       }
 
       .home-control-button ion-icon {
-        display: block;
-        width: 19px;
-        height: 19px;
-        margin: 0 auto;
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        margin: 0;
         color: #2A1A08;
-        font-size: 19px;
+        font-size: 14px;
         opacity: 1;
       }
       .welcome-actions ion-button {
         width: 100%;
+      }
+    }
+
+    @media (max-width: 767px) {
+      .home-toolbar {
+        gap: 8px;
+        min-height: 54px;
+        padding: 8px 14px;
+      }
+
+      .location-copy > span,
+      .staff-toolbar-button,
+      .toolbar-actions ion-button:last-child,
+      .near-you-button,
+      .page-title,
+      .hero-category-strip,
+      .location-notice,
+      .live-consultation-card {
+        display: none !important;
+      }
+
+      .location-row {
+        gap: 0;
+      }
+
+      .location-copy strong {
+        max-width: 220px;
+        color: #2A1A08;
+        font-size: 0.82rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .toolbar-actions {
+        gap: 0;
+      }
+
+      .home-page {
+        gap: 12px;
+        padding-top: 10px;
+      }
+
+      .hero {
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .hero-copy {
+        gap: 0;
+      }
+
+      .search-panel {
+        gap: 10px;
+        padding: 12px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 12px 28px rgba(92, 65, 28, 0.08);
+      }
+
+      .home-search-wrap ion-searchbar {
+        width: 100% !important;
+        padding: 0 !important;
+        --border-radius: 18px;
+        --box-shadow: none;
+      }
+
+      .search-panel ion-button {
+        min-height: 44px;
+        margin: 0;
+      }
+
+      .section-heading.priority-heading {
+        margin-top: 8px;
       }
     }
 
@@ -1354,6 +1453,7 @@ export class HomePage implements OnInit {
   readonly query = signal("");
   readonly activeQuery = signal("");
   readonly categoryFilter = signal("");
+  readonly mobileHome = signal(this.isMobileViewport());
   readonly areaLabel = signal(localStorage.getItem("aura_customer_area_label") || "Current area");
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(this.savedLocation());
   readonly locating = signal(false);
@@ -1443,6 +1543,11 @@ export class HomePage implements OnInit {
       swapVerticalOutline,
       timeOutline
     });
+  }
+
+  @HostListener("window:resize")
+  onResize(): void {
+    this.mobileHome.set(this.isMobileViewport());
   }
 
   ngOnInit() {
@@ -1855,6 +1960,10 @@ export class HomePage implements OnInit {
     } catch {
       return "Detected area";
     }
+  }
+
+  private isMobileViewport(): boolean {
+    return typeof window !== "undefined" && window.innerWidth <= 900;
   }
 
   private savedLocation(): { lat: number; lng: number } | null {

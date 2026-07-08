@@ -37,11 +37,16 @@ export class FirebaseCustomerAuthService {
     return String(this.app?.options?.authDomain || this.firebaseConfig().authDomain || "");
   }
 
-  async signInWithGoogle(): Promise<User> {
+  async signInWithGoogle(): Promise<void> {
     const auth = await this.requireAuth();
-    const { GoogleAuthProvider, signInWithPopup } = await import("firebase/auth");
-    const result = await signInWithPopup(auth, new GoogleAuthProvider());
-    return result.user;
+    const { GoogleAuthProvider, signInWithRedirect } = await import("firebase/auth");
+    await signInWithRedirect(auth, new GoogleAuthProvider());
+  }
+
+  async getGoogleRedirectResult(): Promise<User | null> {
+    const auth = await this.requireAuth();
+    const { getRedirectResult } = await import("firebase/auth");
+    return (await getRedirectResult(auth))?.user || null;
   }
 
   async signInWithApple(): Promise<User> {

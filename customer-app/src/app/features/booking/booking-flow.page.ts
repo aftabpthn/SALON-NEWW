@@ -160,7 +160,7 @@ type PendingBookingIntent = {
           }
         </main>
 
-        <div class="sticky-cta">
+        <div class="sticky-cta" [class.sticky-cta--confirm]="step() === 4">
           <div class="bottom-action-card">
             <div>
               <small>{{ selectedService()?.name || "Select a service" }}</small>
@@ -266,8 +266,30 @@ type PendingBookingIntent = {
     dd { margin: 0; font-weight: 900; text-align: right; }
     .trust-card ion-icon { color: #10B981; font-size: 2rem; }
     .trust-card p { margin: 0; color: var(--muted); line-height: 1.5; }
-    .sticky-cta { bottom: calc(24px + env(safe-area-inset-bottom)); }
+      .sticky-cta { bottom: calc(24px + env(safe-area-inset-bottom)); }
+      .sticky-cta--confirm { bottom: calc(8px + env(safe-area-inset-bottom)); }
     @media (max-width: 599px) {
+      .booking-page {
+        padding-bottom: calc(196px + var(--safe-bottom));
+      }
+
+      .sticky-cta {
+        bottom: calc(14px + env(safe-area-inset-bottom));
+      }
+
+      .sticky-cta--confirm {
+        bottom: calc(2px + env(safe-area-inset-bottom));
+      }
+
+      .bottom-action-card {
+        padding: 10px 12px;
+        border-radius: 20px;
+      }
+
+      .bottom-action-card ion-button {
+        min-width: 112px;
+      }
+
       .stepper button span { display: none; }
       .booking-intent-row, .resource-grid, .time-mode-row { grid-template-columns: 1fr; }
       .service-choice, .staff-choice { grid-template-columns: 1fr; }

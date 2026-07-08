@@ -4,7 +4,7 @@ import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angu
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { ApiRecord, ApiService } from './core/api.service';
-import { AppointmentToolbarService } from './core/appointment-toolbar.service';
+import { APPOINTMENT_SLOT_MINUTE_OPTIONS, AppointmentToolbarService } from './core/appointment-toolbar.service';
 import { AuthSessionService } from './core/auth-session.service';
 import { I18nService, LocalePreference } from './core/i18n.service';
 import { NavigationPrefetchService } from './core/navigation-prefetch.service';
@@ -400,8 +400,7 @@ type ActiveModuleTabs = {
                 <label>
                   <span>Slot</span>
                   <select [value]="appointmentToolbar.slotMinutes()" (change)="appointmentToolbar.setSlotMinutes($any($event.target).value)">
-                    <option value="15">15 mins</option>
-                    <option value="30">30 mins</option>
+                    <option *ngFor="let minutes of slotMinuteOptions" [value]="minutes">{{ minutes === 60 ? '1 hour' : minutes + ' mins' }}</option>
                   </select>
                 </label>
                 <label class="appointment-tab-view-field">
@@ -795,6 +794,7 @@ type ActiveModuleTabs = {
 })
 export class AppComponent implements OnDestroy {
   private readonly fb = inject(FormBuilder);
+  readonly slotMinuteOptions = APPOINTMENT_SLOT_MINUTE_OPTIONS;
   readonly branches = signal<ApiRecord[]>([]);
   readonly tenants = signal<ApiRecord[]>([]);
   readonly isPortal = signal(false);
@@ -1526,6 +1526,7 @@ export class AppComponent implements OnDestroy {
         }
       }
       this.isPortal.set(this.isPortalUrl(url));
+      if (this.routePath(url).startsWith('/appointments')) this.appointmentToolbar.setSlotMinutes(15);
       this.activeRoute.set(url);
       this.syncPreviousRouteFromHistory();
       this.ensureActiveGroupExpanded(url);

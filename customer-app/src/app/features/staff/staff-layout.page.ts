@@ -376,7 +376,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   private connectRealtime() {
     if (!this.online() || !this.staff.isAuthenticated()) return;
-    if (this.socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(this.socket.readyState)) return;
+    if (this.socket && ([WebSocket.CONNECTING, WebSocket.OPEN] as number[]).includes(this.socket.readyState)) return;
     const url = this.staff.realtimeSocketUrl();
     if (!url) return;
     try {

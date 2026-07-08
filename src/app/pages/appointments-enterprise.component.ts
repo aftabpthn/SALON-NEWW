@@ -4,7 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
-import { AppointmentToolbarService } from '../core/appointment-toolbar.service';
+import { AppointmentToolbarService, normalizeAppointmentSlotMinutes } from '../core/appointment-toolbar.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { serviceTotalMinutes } from '../shared/appointment-capacity';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -15,6 +15,15 @@ type SchedulerActionMenu = {
   staffId: string;
   minute: number;
   top: number;
+};
+
+type StaffGridSwipeState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startScrollLeft: number;
+  grid: HTMLElement;
+  dragging: boolean;
 };
 
 type StaffLane = {
@@ -176,7 +185,7 @@ type ScheduledStaffPrefs = {
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 22 * 60;
 const ROW_HEIGHT = 44;
-const COMPACT_ROW_HEIGHT = 32;
+const COMPACT_ROW_HEIGHT = 24;
 const STAFF_LIMIT = 30;
 const PROCESSING_HANDOFF_MINUTES = 15;
 const CALENDAR_LAYOUT_STORAGE_KEY = 'aura.appointments.calendarLayout.v1';
@@ -287,7 +296,7 @@ const STATUS_TONES: Record<string, string> = {
         </section>
 
         <section class="summary-strip">
-          <article><span>Booked</span><strong>{{ pageAppointmentCount() }}</strong></article>
+          <article><span>Booked</span><strong>{{ summaryValue('booked') }}</strong></article>
           <article class="pending-summary-card"><span>Pending</span><strong>{{ pendingAppointmentCount() }}</strong></article>
           <article><span>Arrived</span><strong>{{ summaryValue('arrived') }}</strong></article>
           <article><span>In service</span><strong>{{ summaryValue('inService') }}</strong></article>
@@ -300,7 +309,19 @@ const STATUS_TONES: Record<string, string> = {
         </section>
 
         <section class="scheduler-grid-shell" [class.scheduler-grid-shell--compact]="calendarLayout() === 'compact-grid'" *ngIf="isGridCalendarLayout(); else alternateCalendarLayout">
-          <div class="scheduler-grid" [class.scheduler-grid--compact]="calendarLayout() === 'compact-grid'" [style.--staff-count]="visibleStaff().length" [style.--slot-count]="timeSlots().length" [style.--row-height.px]="rowHeight()">
+          <div
+            class="scheduler-grid"
+            [class.scheduler-grid--compact]="calendarLayout() === 'compact-grid'"
+            [class.scheduler-grid--swiping]="staffGridSwiping()"
+            [style.--staff-count]="visibleStaff().length"
+            [style.--slot-count]="timeSlots().length"
+            [style.--row-height.px]="rowHeight()"
+            (pointerdown)="startStaffGridSwipe($event)"
+            (pointermove)="moveStaffGridSwipe($event)"
+            (pointerup)="endStaffGridSwipe($event)"
+            (pointercancel)="cancelStaffGridSwipe()"
+            (pointerleave)="endStaffGridSwipe($event)"
+          >
             <div class="time-head">Time</div>
             <div class="staff-head" *ngFor="let person of visibleStaff(); trackBy: trackStaff">
               <span class="avatar">{{ initials(person.name) }}</span>
@@ -338,7 +359,7 @@ const STATUS_TONES: Record<string, string> = {
                 type="button"
                 *ngFor="let slot of timeSlots(); trackBy: trackSlot"
                 [title]="slot.label + ' - ' + person.name + ' | ' + cellCount(person.id, slot.minute)"
-                (click)="openQuickBooking(person, slot)"
+                (click)="openQuickBookingFromGrid(person, slot, $event)"
                 (contextmenu)="openAddBlockedTime(person, slot, $event)"
                 (mouseenter)="showSlotHover(person, slot, $event)"
                 (mousemove)="showSlotHover(person, slot, $event)"
@@ -1088,11 +1109,15 @@ const STATUS_TONES: Record<string, string> = {
       border: 1px solid #d7e4e1;
       border-radius: 14px;
       background: #f8fbfb;
+      cursor: grab;
+      touch-action: pan-y;
     }
+    .scheduler-grid--swiping { cursor: grabbing; user-select: none; }
+    .scheduler-grid--swiping .lane-cell { cursor: grabbing; }
     .scheduler-grid--compact { --staff-width: minmax(172px, 1fr); max-height: 640px; }
-    .time-head, .staff-head { position: sticky; top: 0; z-index: 6; min-height: 92px; background: #f8fbfb; border-bottom: 1px solid #d7e4e1; }
+    .time-head, .staff-head { position: sticky; top: 0; z-index: 60; min-height: 92px; background: #f8fbfb; border-bottom: 1px solid #d7e4e1; }
     .scheduler-grid--compact .time-head, .scheduler-grid--compact .staff-head { min-height: 84px; }
-    .time-head { left: 0; z-index: 8; display: grid; place-items: center; font-weight: 900; color: #475569; text-transform: uppercase; }
+    .time-head { left: 0; z-index: 62; display: grid; place-items: center; font-weight: 900; color: #475569; text-transform: uppercase; }
     .staff-head { display: grid; grid-template-columns: 30px minmax(0, 1fr) 28px; align-items: center; column-gap: 8px; row-gap: 2px; padding: 10px 9px; border-left: 1px solid #d7e4e1; }
     .scheduler-grid--compact .staff-head { grid-template-columns: 26px minmax(0, 1fr) 26px; column-gap: 7px; padding: 8px; }
     .staff-head > div { min-width: 0; display: grid; gap: 3px; }
@@ -1105,7 +1130,7 @@ const STATUS_TONES: Record<string, string> = {
     .time-column { position: sticky; left: 0; z-index: 5; grid-column: 1; grid-row: 2; background: #f8fbfb; min-height: calc(var(--row-height) * var(--slot-count)); }
     .time-row { height: var(--row-height); border-bottom: 1px solid #e5ecea; display: flex; align-items: start; justify-content: flex-end; padding: 8px 10px 0 0; font-size: 12px; font-weight: 900; color: #64748b; }
     .scheduler-grid--compact .time-row { padding-top: 5px; font-size: 11px; }
-    .staff-lane { position: relative; min-height: calc(var(--row-height) * var(--slot-count)); border-left: 1px solid #d7e4e1; grid-row: 2; }
+    .staff-lane { position: relative; min-height: calc(var(--row-height) * var(--slot-count)); border-left: 1px solid #d7e4e1; grid-row: 2; overflow: hidden; }
     .lane-cell { display: block; width: 100%; height: var(--row-height); border: 0; border-bottom: 1px solid #edf2f1; background: white; cursor: crosshair; }
     .lane-cell:hover { background: #f0fdfa; outline: 1px solid #99f6e4; }
     .lane-block { position: absolute; left: 0; right: 0; z-index: 1; border: 1px solid rgba(15,23,42,.08); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 12px; overflow: hidden; }
@@ -1397,7 +1422,9 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   readonly waitlistSaving = signal(false);
   readonly selectedDate = signal(new Date().toISOString().slice(0, 10));
   readonly staffOffset = signal(0);
+  readonly staffGridSwiping = signal(false);
   readonly slotMinutes = signal(15);
+  readonly activeSlotMinutes = computed(() => normalizeAppointmentSlotMinutes(this.slotMinutes()));
   readonly statusFilter = signal('');
   readonly staffSearch = signal('');
   readonly staffPanelOpen = signal(false);
@@ -1485,7 +1512,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   readonly timeSlots = computed<TimeSlot[]>(() => {
     const rows: TimeSlot[] = [];
-    for (let minute = DAY_START_MINUTES; minute < DAY_END_MINUTES; minute += this.slotMinutes()) {
+    for (let minute = DAY_START_MINUTES; minute < DAY_END_MINUTES; minute += this.activeSlotMinutes()) {
       rows.push({ minute, label: this.timeLabel(minute), input: this.localDateTime(minute) });
     }
     return rows;
@@ -1497,6 +1524,8 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     return this.scheduledStaffRows().filter((person) => !hidden.has(person.id));
   });
   readonly scheduledStaffVisibleCount = computed(() => this.visibleStaff().length);
+  private staffGridSwipeState: StaffGridSwipeState | null = null;
+  private staffGridSwipeSuppressClick = false;
   private handledSafeSlotRequests = 0;
   private handledOperationsRequests = 0;
   readonly clients = computed(() => this.context()?.clients || []);
@@ -1547,7 +1576,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     this.visibleStaff().map((staff) => ({ staff, cards: this.appointmentCardsByStaff().get(staff.id) || [] }))
   );
   readonly timelineScaleSlots = computed(() => {
-    const hourStep = Math.max(1, Math.round(60 / this.slotMinutes()));
+    const hourStep = Math.max(1, Math.round(60 / this.activeSlotMinutes()));
     return this.timeSlots().filter((_, index) => index % hourStep === 0);
   });
   readonly pageAppointmentCount = computed(() =>
@@ -1596,7 +1625,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   private readonly toolbarStateSync = effect(() => {
     const toolbarSlot = this.appointmentToolbar.slotMinutes();
-    const nextSlot = toolbarSlot === 30 ? 30 : 15;
+    const nextSlot = normalizeAppointmentSlotMinutes(toolbarSlot);
     if (nextSlot !== this.slotMinutes()) this.slotMinutes.set(nextSlot);
 
     const toolbarLayout = this.normalizeCalendarLayout(this.appointmentToolbar.calendarLayout());
@@ -1639,7 +1668,8 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.appointmentToolbar.visible.set(true);
-    this.appointmentToolbar.setSlotMinutes(this.slotMinutes());
+    this.slotMinutes.set(15);
+    this.appointmentToolbar.setSlotMinutes(15);
     this.appointmentToolbar.setCalendarLayout(this.calendarLayout());
     this.applyRouteDateSelection();
     this.load();
@@ -1887,7 +1917,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     return { x: Math.max(12, x), y: Math.max(12, y) };
   }
   setSlotMinutes(value: string): void {
-    const next = Number(value) === 30 ? 30 : 15;
+    const next = normalizeAppointmentSlotMinutes(value);
     this.slotMinutes.set(next);
     if (this.appointmentToolbar.slotMinutes() !== next) this.appointmentToolbar.setSlotMinutes(next);
   }
@@ -2029,6 +2059,106 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const window = this.context()?.staffWindow;
     if (!window || !window.total) return 'No staff';
     return `Showing ${window.showingFrom}-${window.showingTo} of ${window.total}`;
+  }
+
+  startStaffGridSwipe(event: PointerEvent): void {
+    if (!this.isGridCalendarLayout() || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest('.appointment-card, .resize-handle, .staff-menu-button, .staff-action-menu, .lane-block, input, select, textarea, a')) return;
+    const grid = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    if (!grid) return;
+    this.staffGridSwipeState = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startScrollLeft: grid.scrollLeft, grid, dragging: false };
+    try {
+      grid.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can fail if the browser has already cancelled the pointer.
+    }
+  }
+
+  moveStaffGridSwipe(event: PointerEvent): void {
+    const state = this.staffGridSwipeState;
+    if (!state || state.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - state.startX;
+    const deltaY = event.clientY - state.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    if (!state.dragging) {
+      if (absY > 12 && absY > absX) {
+        this.cancelStaffGridSwipe();
+        return;
+      }
+      if (absX < 12 || absX < absY * 1.2) return;
+      state.dragging = true;
+      this.staffGridSwiping.set(true);
+      this.staffGridSwipeSuppressClick = true;
+      this.hoverSlot.set(null);
+    }
+    event.preventDefault();
+    state.grid.scrollLeft = state.startScrollLeft - deltaX;
+  }
+
+  endStaffGridSwipe(event: PointerEvent): void {
+    const state = this.staffGridSwipeState;
+    if (!state || state.pointerId !== event.pointerId) return;
+    if (state.dragging) {
+      event.preventDefault();
+      this.completeStaffGridSwipe(state, event.clientX - state.startX);
+      this.resetStaffGridClickGuardSoon();
+    } else {
+      this.staffGridSwipeSuppressClick = false;
+    }
+    this.releaseStaffGridPointer(state);
+    this.staffGridSwipeState = null;
+    this.staffGridSwiping.set(false);
+  }
+
+  cancelStaffGridSwipe(): void {
+    if (this.staffGridSwipeState?.dragging) this.resetStaffGridClickGuardSoon();
+    else this.staffGridSwipeSuppressClick = false;
+    if (this.staffGridSwipeState) this.releaseStaffGridPointer(this.staffGridSwipeState);
+    this.staffGridSwipeState = null;
+    this.staffGridSwiping.set(false);
+  }
+
+  openQuickBookingFromGrid(staff: StaffLane, slot: TimeSlot, event: MouseEvent): void {
+    if (this.staffGridSwipeSuppressClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    this.openQuickBooking(staff, slot);
+  }
+
+  private completeStaffGridSwipe(state: StaffGridSwipeState, deltaX: number): void {
+    if (Math.abs(deltaX) < 72) return;
+    const atStart = state.grid.scrollLeft <= 4;
+    const atEnd = state.grid.scrollLeft + state.grid.clientWidth >= state.grid.scrollWidth - 4;
+    if (deltaX < 0 && atEnd && this.canMoveNextStaff()) {
+      state.grid.scrollLeft = 0;
+      this.moveStaffWindow(1);
+    } else if (deltaX > 0 && atStart && this.staffOffset() > 0) {
+      state.grid.scrollLeft = Math.max(0, state.grid.scrollWidth - state.grid.clientWidth);
+      this.moveStaffWindow(-1);
+    }
+  }
+
+  private releaseStaffGridPointer(state: StaffGridSwipeState): void {
+    try {
+      if (state.grid.hasPointerCapture(state.pointerId)) state.grid.releasePointerCapture(state.pointerId);
+    } catch {
+      // Pointer capture may already be released after cancellation.
+    }
+  }
+
+  private resetStaffGridClickGuardSoon(): void {
+    const reset = () => {
+      this.staffGridSwipeSuppressClick = false;
+    };
+    if (typeof window === 'undefined') {
+      reset();
+      return;
+    }
+    window.setTimeout(reset, 120);
   }
 
   openBlankBooking(): void {
@@ -2712,7 +2842,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       date: this.selectedDate(),
       staffId: staff.id,
       startTime: this.hhmm(slot.minute),
-      endTime: this.hhmm(slot.minute + this.slotMinutes()),
+      endTime: this.hhmm(slot.minute + this.activeSlotMinutes()),
       reason: 'Blocked time'
     });
     this.drawer.set('blocked-time');
@@ -2733,7 +2863,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const rect = lane?.getBoundingClientRect();
     const rawY = rect ? event.clientY - rect.top : 0;
     const minute = rawY > 0
-      ? this.snapMinute(DAY_START_MINUTES + (rawY / this.rowHeight()) * this.slotMinutes())
+      ? this.snapMinute(DAY_START_MINUTES + (rawY / this.rowHeight()) * this.activeSlotMinutes())
       : DAY_START_MINUTES;
     this.schedulerActionMenu.set({
       staffId: person.id,
@@ -2918,7 +3048,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const appointment = this.draggingAppointment();
     if (!appointment || !event.currentTarget) return;
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const minute = this.snapMinute(DAY_START_MINUTES + ((event.clientY - rect.top) / this.rowHeight()) * this.slotMinutes());
+    const minute = this.snapMinute(DAY_START_MINUTES + ((event.clientY - rect.top) / this.rowHeight()) * this.activeSlotMinutes());
     const duration = Math.max(15, this.appointmentDuration(appointment));
     await this.moveAppointment(appointment, staff.id, this.isoAtMinute(minute), this.isoAtMinute(minute + duration), 'Drag-drop scheduler move');
     this.clearDrag();
@@ -2940,10 +3070,10 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     const state = this.resizeState();
     if (!state) return;
     const deltaRows = Math.round((event.clientY - state.startY) / this.rowHeight());
-    const deltaMinutes = deltaRows * this.slotMinutes();
+    const deltaMinutes = deltaRows * this.activeSlotMinutes();
     const startMinute = this.minuteOf(state.appointment.startAt);
     const originalEndMinute = this.minuteOf(state.originalEnd);
-    const nextEndMinute = Math.max(startMinute + this.slotMinutes(), this.snapMinute(originalEndMinute + deltaMinutes));
+    const nextEndMinute = Math.max(startMinute + this.activeSlotMinutes(), this.snapMinute(originalEndMinute + deltaMinutes));
     this.resizeState.set(null);
     await this.moveAppointment(state.appointment, state.appointment.staffId || '', state.appointment.startAt, this.isoAtMinute(nextEndMinute), 'Resize appointment duration');
   };
@@ -3098,17 +3228,17 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   }
 
   minuteTop(minute: number): number {
-    return ((minute - DAY_START_MINUTES) / this.slotMinutes()) * this.rowHeight();
+    return ((minute - DAY_START_MINUTES) / this.activeSlotMinutes()) * this.rowHeight();
   }
 
   topToMinute(top: number): number {
-    return DAY_START_MINUTES + Math.round(top / this.rowHeight()) * this.slotMinutes();
+    return DAY_START_MINUTES + Math.round(top / this.rowHeight()) * this.activeSlotMinutes();
   }
 
   appointmentCard(appointment: ApiRecord): AppointmentCard {
     const top = this.minuteTop(this.minuteOf(appointment.startAt));
     const minHeight = this.calendarLayout() === 'compact-grid' ? 28 : 36;
-    const height = Math.max(minHeight, (this.appointmentDuration(appointment) / this.slotMinutes()) * this.rowHeight() - 4);
+    const height = Math.max(minHeight, (this.appointmentDuration(appointment) / this.activeSlotMinutes()) * this.rowHeight() - 4);
     const status = String(appointment.status || 'booked').toLowerCase();
     const clientName = this.clientName(appointment.clientId);
     const serviceLabel = this.serviceNames(appointment.serviceIds);
@@ -3203,7 +3333,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       id: row.id,
       staffId: row.staffId,
       top: this.minuteTop(start),
-      height: Math.max(this.rowHeight(), ((end - start) / this.slotMinutes()) * this.rowHeight()),
+      height: Math.max(this.rowHeight(), ((end - start) / this.activeSlotMinutes()) * this.rowHeight()),
       label: `${row.startTime || ''} TO ${row.endTime || ''}`,
       kind: 'shift',
       reason: `${date} ${row.shiftType || 'regular'}`
@@ -3242,7 +3372,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       id: `unavailable-${staffId}-${start}-${end}`,
       staffId,
       top: this.minuteTop(start),
-      height: Math.max(this.rowHeight(), ((end - start) / this.slotMinutes()) * this.rowHeight()),
+      height: Math.max(this.rowHeight(), ((end - start) / this.activeSlotMinutes()) * this.rowHeight()),
       label: 'Off shift',
       kind: 'unavailable',
       reason: 'Outside staff shift'
@@ -3271,7 +3401,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
       id: row.id,
       staffId: row.staffId,
       top: this.minuteTop(start),
-      height: Math.max(this.rowHeight(), ((end - start) / this.slotMinutes()) * this.rowHeight()),
+      height: Math.max(this.rowHeight(), ((end - start) / this.activeSlotMinutes()) * this.rowHeight()),
       label: row.reason || 'Blocked',
       kind: 'blocked',
       reason: row.reason || 'Blocked'
@@ -3874,8 +4004,9 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   }
 
   private snapMinute(minute: number): number {
-    const snapped = Math.round(minute / this.slotMinutes()) * this.slotMinutes();
-    return Math.min(DAY_END_MINUTES - this.slotMinutes(), Math.max(DAY_START_MINUTES, snapped));
+    const slotMinutes = this.activeSlotMinutes();
+    const snapped = Math.round(minute / slotMinutes) * slotMinutes;
+    return Math.min(DAY_END_MINUTES - slotMinutes, Math.max(DAY_START_MINUTES, snapped));
   }
 
   private appointmentDuration(appointment: ApiRecord): number {

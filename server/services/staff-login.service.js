@@ -8,7 +8,7 @@ import { ensureTenantUserAccessColumns, normalizeBranchIdsForRole } from "./acce
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
-const privilegedRoles = new Set(["superAdmin", "owner", "admin"]);
+const privilegedRoles = new Set(["superAdmin", "owner", "admin", "manager"]);
 
 function normalizeRole(role = "") {
   const value = String(role || "").trim();
@@ -320,7 +320,7 @@ export class StaffLoginService {
     ensureTenantUserAccessColumns();
     const staff = typeof staffOrId === "string" ? this.getStaff(staffOrId, access) : staffOrId;
     if (!staff?.id) throw notFound("Staff record not found");
-    if (!privilegedRoles.has(normalizeRole(access.role))) throw forbidden("Only owner, admin or super admin can provision staff login");
+    if (!privilegedRoles.has(normalizeRole(access.role))) throw forbidden("Only manager, owner, admin or super admin can provision staff login");
     const loginId = normalizeLoginId(payload.loginId || payload.login_id || payload.email || staff.email || staff.mobile || staff.id);
     if (!loginId) throw badRequest("Staff login ID is required");
     const email = safeEmail(loginId, payload.email || staff.email);

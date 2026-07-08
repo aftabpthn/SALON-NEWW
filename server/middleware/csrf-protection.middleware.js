@@ -8,7 +8,14 @@ const AUTH_BOOTSTRAP_PATHS = new Set([
   "/auth/secure-login",
   "/auth/secure-login/verify",
   "/auth/refresh",
-  "/auth/logout"
+  "/auth/logout",
+  "/customer/auth/request-email-code",
+  "/customer/auth/verify-email-code",
+  "/customer/auth/request-otp",
+  "/customer/auth/verify-otp",
+  "/customer/auth/firebase",
+  "/customer/auth/refresh",
+  "/customer/auth/logout"
 ]);
 
 function normalizedPath(req) {

@@ -5,11 +5,12 @@ import { IonicRouteStrategy, provideIonicAngular } from "@ionic/angular/standalo
 import { AppComponent } from "./app/app.component";
 import { routes } from "./app/app.routes";
 import { authInterceptor } from "./app/core/auth.interceptor";
+import { csrfInterceptor } from "./app/core/csrf.interceptor";
 
 bootstrapApplication(AppComponent, {
   providers: [
     provideIonicAngular(),
-    provideHttpClient(withInterceptors([authInterceptor])),
+    provideHttpClient(withInterceptors([csrfInterceptor, authInterceptor])),
     provideRouter(routes, withPreloading(PreloadAllModules)),
     { provide: RouteReuseStrategy, useClass: IonicRouteStrategy }
   ]

@@ -21,7 +21,14 @@ import { MarketplaceService } from "../core/marketplace.service";
       (keydown.enter)="openCard()"
       (keydown.space)="openCard()">
       <div class="cover">
-        <img class="image-fill" [src]="displayImage()" [alt]="business.businessName + ' salon interior'" loading="lazy" />
+        @if (displayImage()) {
+          <img class="image-fill" [src]="displayImage()" [alt]="business.businessName + ' salon interior'" loading="lazy" (error)="markImageFailed()" />
+        } @else {
+          <div class="cover-fallback" aria-hidden="true">
+            <span>{{ businessInitials() }}</span>
+            <small>{{ business.category || 'Salon' }}</small>
+          </div>
+        }
         <span class="rating-pill">Star {{ ratingText() }}</span>
         <button class="favorite" [class.saved]="isSaved()" type="button" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
           <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
@@ -86,6 +93,41 @@ import { MarketplaceService } from "../core/marketplace.service";
       content: "";
       background: linear-gradient(180deg, rgba(35, 25, 13, 0.02), rgba(35, 25, 13, 0.38));
       pointer-events: none;
+    }
+
+    .cover-fallback {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      gap: 8px;
+      text-align: center;
+      background:
+        radial-gradient(circle at 50% 22%, rgba(255,255,255,0.56), transparent 24%),
+        linear-gradient(145deg, #dff3fb, #bde6f7 42%, #7cd0e8 100%);
+      color: #0f4f65;
+    }
+
+    .cover-fallback span {
+      width: 88px;
+      height: 88px;
+      display: grid;
+      place-items: center;
+      border-radius: 28px;
+      background: rgba(255,255,255,0.82);
+      box-shadow: 0 18px 34px rgba(15, 79, 101, 0.12);
+      font-size: 1.9rem;
+      font-weight: 1000;
+      letter-spacing: -0.04em;
+    }
+
+    .cover-fallback small {
+      padding: 0 14px;
+      color: rgba(15, 79, 101, 0.84);
+      font-size: 0.74rem;
+      font-weight: 950;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
     }
 
     .rating-pill {
@@ -325,6 +367,17 @@ import { MarketplaceService } from "../core/marketplace.service";
         height: 138px;
       }
 
+      .cover-fallback span {
+        width: 60px;
+        height: 60px;
+        border-radius: 20px;
+        font-size: 1.25rem;
+      }
+
+      .cover-fallback small {
+        font-size: 0.62rem;
+      }
+
       .cover img,
       .cover .image-fill {
         width: 100% !important;
@@ -424,6 +477,7 @@ export class BusinessCardComponent implements OnInit {
   @Input() userLocation: { lat: number; lng: number } | null = null;
   @Output() cardSelect = new EventEmitter<Business>();
   private readonly savedUserLocation = this.savedLocation();
+  private imageFailed = false;
 
   constructor(private readonly marketplace: MarketplaceService, private readonly router: Router, private readonly clock: ClockService) {
     addIcons({ heart, heartOutline, locationOutline, timeOutline });
@@ -442,7 +496,17 @@ export class BusinessCardComponent implements OnInit {
   }
 
   displayImage(): string {
-    return this.business.coverImage || this.business.galleryImages?.[0] || "assets/icons/icon.svg";
+    if (this.imageFailed) return "";
+    return this.business.coverImage || this.business.galleryImages?.[0] || this.business.logoUrl || "";
+  }
+
+  markImageFailed() {
+    this.imageFailed = true;
+  }
+
+  businessInitials(): string {
+    const words = String(this.business.businessName || "Aura").trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    return words.map((word) => word.charAt(0).toUpperCase()).join("") || "A";
   }
 
   isOpenNow(): boolean {

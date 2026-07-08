@@ -4,6 +4,7 @@ import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/fo
 import { RouterLink } from '@angular/router';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { APPOINTMENT_SLOT_MINUTE_OPTIONS, normalizeAppointmentSlotMinutes } from '../core/appointment-toolbar.service';
 import { appointmentConflictBlocks, serviceTotalMinutes } from '../shared/appointment-capacity';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -134,8 +135,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
           <label>
             <span>Grid</span>
             <select [value]="slotMinutes()" (change)="setSlotMinutes($any($event.target).value)">
-              <option value="15">15 mins</option>
-              <option value="30">30 mins</option>
+              <option *ngFor="let minutes of slotMinuteOptions" [value]="minutes">{{ minutes === 60 ? '1 hour' : minutes + ' mins' }}</option>
             </select>
           </label>
           <label>
@@ -2645,6 +2645,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
   readonly staffWindowStart = signal(0);
   readonly selectedDate = signal(this.toDateInput(new Date()));
   readonly slotMinutes = signal(15);
+  readonly slotMinuteOptions = APPOINTMENT_SLOT_MINUTE_OPTIONS;
   readonly currentMinuteTicker = signal(Date.now());
   readonly selectedAppointment = signal<ApiRecord | null>(null);
   readonly bookingDrawerOpen = signal(false);
@@ -3034,8 +3035,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
   }
 
   setSlotMinutes(value: string | number): void {
-    const minutes = Number(value);
-    this.slotMinutes.set(minutes === 30 ? 30 : 15);
+    this.slotMinutes.set(normalizeAppointmentSlotMinutes(value));
   }
 
   setStaffFilter(value: string): void {

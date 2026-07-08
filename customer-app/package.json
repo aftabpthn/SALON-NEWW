@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "ng serve --host 0.0.0.0 --port 4310 --allowed-hosts repeal-cork-lubricant.ngrok-free.dev --proxy-config proxy.conf.json",
+    "start": "ng serve --host 0.0.0.0 --port 4310 --allowed-hosts repeal-cork-lubricant.ngrok-free.dev --proxy-config proxy.conf.json --prebundle=false",
     "build": "ng build",
     "cap:sync": "npx cap sync",
     "cap:add:android": "npx cap add android",

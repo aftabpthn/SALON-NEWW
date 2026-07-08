@@ -764,22 +764,25 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         min-height: 100dvh;
         align-items: stretch;
         place-items: stretch;
-        padding: max(10px, var(--safe-top)) 10px max(14px, var(--safe-bottom));
+        padding: max(8px, var(--safe-top)) 8px max(10px, var(--safe-bottom));
         background:
           radial-gradient(circle at 18% 0%, rgba(214, 169, 74, 0.24), transparent 34%),
+          radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.45), transparent 20%),
           linear-gradient(180deg, #FFF9EC 0%, #F7E8CB 100%);
       }
 
       .auth-card {
         align-self: stretch;
         width: 100%;
-        gap: 13px;
-        padding: 18px;
-        border-radius: 28px;
+        gap: 14px;
+        padding: 16px;
+        border-radius: 26px;
+        border-color: rgba(214, 169, 74, 0.3);
         background:
+          radial-gradient(circle at top center, rgba(255, 255, 255, 0.82), transparent 24%),
           linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.94)),
           #FFF9EC;
-        box-shadow: 0 18px 52px rgba(92, 65, 28, 0.13);
+        box-shadow: 0 22px 56px rgba(92, 65, 28, 0.14), inset 0 1px 0 rgba(255,255,255,0.9);
       }
 
       .brand-mark {
@@ -787,6 +790,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         height: 50px;
         margin-bottom: 0;
         border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255, 244, 215, 0.96));
+        box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.22), 0 14px 26px rgba(92, 65, 28, 0.1);
       }
 
       h1 {
@@ -805,7 +810,22 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       }
 
       .auth-benefits {
+        justify-content: center;
+        gap: 7px;
         margin-bottom: 2px;
+      }
+
+      .auth-benefits span {
+        min-height: 28px;
+        padding: 0 12px;
+        background: rgba(255, 252, 244, 0.92);
+        box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.16);
+      }
+
+      .staff-switch {
+        min-height: 40px;
+        background: rgba(255,255,255,0.8);
+        box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
       }
 
       .choice-email-form,
@@ -814,24 +834,43 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         gap: 10px;
       }
 
+      .choice-email-form {
+        padding: 14px;
+        border: 1px solid rgba(214, 169, 74, 0.18);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,250,239,0.78));
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+      }
+
       ion-list {
         border-radius: 18px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
       }
 
       ion-item {
-        --min-height: 54px;
+        --min-height: 46px;
+      }
+
+      .field-label {
+        font-size: 0.78rem;
       }
 
       .dark-continue-button,
       .choice-button {
-        min-height: 48px;
-        margin-top: 4px;
+        min-height: 46px;
+        margin-top: 0;
         text-transform: none;
         font-size: 0.88rem;
       }
 
+      .dark-continue-button {
+        min-height: 52px;
+        --box-shadow: 0 16px 30px rgba(92, 65, 28, 0.16);
+      }
+
       .social-stack {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
+        gap: 10px;
       }
 
       .social-stack .choice-button,
@@ -839,21 +878,32 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         width: 100%;
       }
 
+      .social-stack .choice-button {
+        --background: rgba(255, 255, 255, 0.96);
+        --border-radius: 18px;
+        --border-color: rgba(126, 110, 85, 0.22);
+        --box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
+      }
+
       .social-stack .guest-button {
-        grid-column: 1 / -1;
+        grid-column: auto;
+        min-height: 42px;
+        border-top: 1px solid rgba(214, 169, 74, 0.14);
+        border-radius: 0;
       }
 
       .choice-button::part(native) {
-        padding-inline: 8px;
+        justify-content: flex-start;
+        padding-inline: 14px;
       }
 
       .choice-button ion-icon {
-        margin-right: 4px;
+        margin-right: 8px;
         font-size: 1rem;
       }
 
       .divider {
-        margin: 4px 0 -2px;
+        margin: 2px 0 -2px;
       }
 
       .notice-text,
@@ -924,13 +974,13 @@ export class LoginPage implements OnInit, OnDestroy {
       return;
     }
     void this.resumeExistingSession();
-    void this.handleFacebookRedirectResult();
+    void this.handleProviderRedirectResult();
   }
 
-  private async handleFacebookRedirectResult() {
+  private async handleProviderRedirectResult() {
     if (this.auth.isAuthenticated()) return;
     try {
-      const session = await this.auth.handleFacebookRedirect();
+      const session = await this.auth.handleGoogleRedirect() || await this.auth.handleFacebookRedirect();
       if (session) this.afterProviderSignIn(session);
     } catch {
       /* error already set by auth service */
@@ -1178,7 +1228,7 @@ export class LoginPage implements OnInit, OnDestroy {
 
   async continueWithGoogle() {
     this.notice = "";
-    await this.auth.signInWithGoogle().then((session) => this.afterProviderSignIn(session)).catch(() => undefined);
+    await this.auth.signInWithGoogle().catch(() => undefined);
   }
 
   async continueWithFacebook() {

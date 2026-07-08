@@ -1,11 +1,20 @@
 import { Injectable, signal } from '@angular/core';
 
 export type AppointmentCalendarLayout = 'grid' | 'compact-grid' | 'timeline' | 'list';
+export const APPOINTMENT_SLOT_MINUTE_OPTIONS = [10, 15, 30, 60] as const;
+export type AppointmentSlotMinutes = (typeof APPOINTMENT_SLOT_MINUTE_OPTIONS)[number];
+
+const APPOINTMENT_SLOT_MINUTE_SET = new Set<number>(APPOINTMENT_SLOT_MINUTE_OPTIONS);
+
+export function normalizeAppointmentSlotMinutes(value: string | number): AppointmentSlotMinutes {
+  const minutes = Number(value);
+  return (APPOINTMENT_SLOT_MINUTE_SET.has(minutes) ? minutes : 15) as AppointmentSlotMinutes;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AppointmentToolbarService {
   readonly visible = signal(false);
-  readonly slotMinutes = signal(15);
+  readonly slotMinutes = signal<AppointmentSlotMinutes>(15);
   readonly calendarLayout = signal<AppointmentCalendarLayout>('grid');
   readonly scheduledStaffVisibleCount = signal(0);
   readonly staffPanelOpen = signal(false);
@@ -17,7 +26,7 @@ export class AppointmentToolbarService {
   readonly operationsRequests = signal(0);
 
   setSlotMinutes(value: string | number): void {
-    this.slotMinutes.set(Number(value) === 30 ? 30 : 15);
+    this.slotMinutes.set(normalizeAppointmentSlotMinutes(value));
   }
 
   setCalendarLayout(value: string): void {

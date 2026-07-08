@@ -66,7 +66,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
               </div>
             </section>
 
-            <section>
+            <section class="gallery-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Inside the studio</h2>
@@ -81,7 +81,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
               </div>
             </section>
 
-            <section>
+            <section class="services-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">{{ business().services.length }} services available</h2>
@@ -106,7 +106,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
               </div>
             </section>
 
-            <section>
+            <section class="staff-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Choose your professional</h2>
@@ -577,8 +577,66 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     @media (max-width: 599px) {
+      .profile-page {
+        padding-bottom: calc(82px + env(safe-area-inset-bottom));
+      }
+
       .cover {
-        min-height: clamp(320px, 58vh, 420px);
+        min-height: 190px;
+        border-radius: 0 0 22px 22px;
+      }
+
+      .cover-actions {
+        top: 8px;
+        right: 8px;
+      }
+
+      .cover-actions ion-button:last-child,
+      .cover-copy p,
+      .intro h2,
+      .trust-row,
+      .gallery-section,
+      .staff-section,
+      .review-section,
+      .info-grid,
+      .service-card p {
+        display: none;
+      }
+
+      .cover-copy {
+        padding: 0 18px 18px;
+      }
+
+      .cover-copy h1 {
+        margin: 8px 0 0;
+        font-size: 1.85rem;
+        line-height: 0.96;
+      }
+
+      .status-pill {
+        min-height: 26px;
+        padding: 5px 9px;
+        font-size: 0.72rem;
+      }
+
+      .profile-shell {
+        gap: 10px;
+        padding-top: 10px;
+      }
+
+      .main-column {
+        gap: 10px;
+      }
+
+      .intro {
+        gap: 10px;
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      .intro .eyebrow {
+        margin-bottom: 0;
+        font-size: 0.72rem;
       }
 
       .stat-grid,
@@ -586,8 +644,57 @@ import { MarketplaceService } from "../../core/marketplace.service";
         grid-template-columns: 1fr;
       }
 
+      .stat-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .stat-grid span {
+        padding: 8px 6px;
+        border-radius: 12px;
+        font-size: 0.68rem;
+        line-height: 1.15;
+        text-align: center;
+      }
+
+      .stat-grid strong {
+        font-size: 0.78rem;
+      }
+
+      .section-heading {
+        margin-top: 0;
+      }
+
+      .section-title {
+        font-size: 1.08rem;
+      }
+
+      .service-stack {
+        gap: 8px;
+      }
+
+      .service-card {
+        gap: 8px;
+        padding: 12px;
+        border-radius: 16px;
+      }
+
+      .service-card h3 {
+        font-size: 0.95rem;
+      }
+
+      .service-card strong {
+        font-size: 0.82rem;
+      }
+
       .service-card ion-button {
         width: 100%;
+        min-height: 38px;
+      }
+
+      .bottom-action-card {
+        padding: 8px 10px;
+        border-radius: 18px;
       }
     }
 

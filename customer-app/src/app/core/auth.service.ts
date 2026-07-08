@@ -31,7 +31,7 @@ export class AuthService {
   constructor(private readonly api: CustomerApiService, private readonly firebaseAuth: FirebaseCustomerAuthService) {
     this.ensureDeviceId();
     this.listenForSessionEvents();
-    if (this.accessToken() && !this.biometricLocked()) void this.loadMe();
+    if (this.accessToken() && !this.biometricLocked() && !this.isPublicAuthRoute()) void this.loadMe();
   }
 
   private listenForSessionEvents() {
@@ -65,10 +65,24 @@ export class AuthService {
         && !!String(profile.phone || "").trim());
   }
 
-  async signInWithGoogle(): Promise<AuthSession> {
-    return this.runFirebaseAuth("Unable to sign in with Google", async () => {
-      const user = await this.firebaseAuth.signInWithGoogle();
-      return this.exchangeFirebaseUser(user, "google");
+  async signInWithGoogle(): Promise<void> {
+    this.loading.set(true);
+    this.error.set("");
+    try {
+      await this.firebaseAuth.signInWithGoogle();
+    } catch (error) {
+      console.error("[AuthService] Unable to sign in with Google", error);
+      this.error.set(this.firebaseAuth.friendlyMessage(error, "Unable to sign in with Google"));
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async handleGoogleRedirect(): Promise<AuthSession | null> {
+    return this.runFirebaseAuth("Unable to complete Google sign-in", async () => {
+      const user = await this.firebaseAuth.getGoogleRedirectResult();
+      return user ? this.exchangeFirebaseUser(user, "google") : null;
     });
   }
 
@@ -551,7 +565,7 @@ export class AuthService {
     return { ...response, customer: profile };
   }
 
-  private async runFirebaseAuth(fallback: string, action: () => Promise<AuthSession>): Promise<AuthSession> {
+  private async runFirebaseAuth<T>(fallback: string, action: () => Promise<T>): Promise<T> {
     this.loading.set(true);
     this.error.set("");
     try {
@@ -577,6 +591,11 @@ export class AuthService {
     this.codeEmail.set("");
     this.devices.set([]);
     this.biometricLocked.set(false);
+  }
+
+  private isPublicAuthRoute(): boolean {
+    if (typeof window === "undefined") return false;
+    return /^\/(login|signup|verify-otp)(?:\/|$)/.test(window.location.pathname);
   }
 
   private readToken(key: string): string | null {

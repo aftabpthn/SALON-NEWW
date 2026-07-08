@@ -592,6 +592,107 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
       color: #EF4444;
     }
 
+    @media (max-width: 767px) {
+      .profile-page {
+        gap: 10px;
+      }
+
+      .profile-card {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 14px;
+        border-radius: 20px;
+      }
+
+      .avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 16px;
+        font-size: 1.2rem;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+        line-height: 1.05;
+      }
+
+      .profile-card .muted {
+        max-width: 190px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.75rem;
+      }
+
+      .edit-profile-button {
+        min-width: 38px;
+        min-height: 38px;
+        padding: 0;
+      }
+
+      .edit-profile-button span {
+        display: none;
+      }
+
+      .pass-card {
+        min-height: 62px;
+        padding: 12px 14px;
+        border-radius: 18px;
+        animation: none;
+      }
+
+      .pass-card span {
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+      }
+
+      .pass-card h2 {
+        margin: 3px 0 0;
+        font-size: 1rem;
+        line-height: 1.1;
+      }
+
+      .pass-card p,
+      .pass-card ion-icon,
+      .summary-card span,
+      .menu-section-title {
+        display: none;
+      }
+
+      .account-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .summary-card {
+        align-items: center;
+        justify-items: center;
+        min-height: 82px;
+        gap: 6px;
+        padding: 10px 8px;
+        border-radius: 18px;
+        text-align: center;
+      }
+
+      .summary-card ion-icon {
+        width: 32px;
+        height: 32px;
+        padding: 7px;
+        border-radius: 12px;
+      }
+
+      .summary-card strong {
+        font-size: 0.72rem;
+        line-height: 1.15;
+      }
+
+      .menu a,
+      .menu-item {
+        min-height: 48px;
+        padding: 0 14px;
+      }
+    }
+
     @media (min-width: 1024px) {
       .profile-page {
         grid-template-columns: minmax(0, 0.95fr) minmax(360px, 0.65fr);

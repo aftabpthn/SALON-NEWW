@@ -2,7 +2,7 @@ import { CurrencyPipe, DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { IonSpinner } from "@ionic/angular/standalone";
-import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffToday } from "../../core/staff-app.service";
+import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffToday } from "../../core/staff-app.service";
 
 @Component({
   standalone: true,
@@ -18,6 +18,29 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
             <button type="button" class="link-button" [disabled]="loading() || sessionExpired()" (click)="clockAction()">{{ clockButtonLabel() }}</button>
             <a class="button primary" routerLink="/staff/appointments">Open appointments</a>
             <a class="button" routerLink="/staff/client-360">Client 360</a>
+            <button type="button" class="button" (click)="toggleCustomizer()">Customize</button>
+          </div>
+          <div class="hero-stat-grid">
+            <article>
+              <span>Bookings</span>
+              <strong>{{ data()?.summary?.todayAppointments || os()?.home?.todayAppointments || 0 }}</strong>
+              <small>today assigned</small>
+            </article>
+            <article>
+              <span>Live floor</span>
+              <strong>{{ data()?.summary?.liveAppointments || 0 }}</strong>
+              <small>active services</small>
+            </article>
+            <article>
+              <span>Open tasks</span>
+              <strong>{{ openTaskCount() }}</strong>
+              <small>follow-ups pending</small>
+            </article>
+            <article>
+              <span>VIP cues</span>
+              <strong>{{ os()?.home?.vipClients || 0 }}</strong>
+              <small>high-value arrivals</small>
+            </article>
           </div>
         </div>
         <div class="attendance-spotlight">
@@ -103,6 +126,36 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
           }
         </section> }
 
+        @if (showWidget('pulse') || showWidget('timers')) { <section class="grid two" [style.order]="widgetOrder('pulse')">
+          @if (showWidget('pulse')) {
+          <article class="panel dark">
+            <div class="panel-title"><h2>Floor pulse</h2><span>{{ activeAlertCount() }} live alerts</span></div>
+            <div class="grid two pulse-grid">
+              <article class="kpi"><span>Late clients</span><strong>{{ os()?.home?.lateClients || 0 }}</strong><small>follow up now</small></article>
+              <article class="kpi"><span>Pending payment</span><strong>{{ os()?.home?.pendingPayments || 0 }}</strong><small>checkout attention</small></article>
+              <article class="kpi"><span>Birthdays</span><strong>{{ os()?.home?.birthdayClients || 0 }}</strong><small>surprise upsell chance</small></article>
+              <article class="kpi"><span>Notifications</span><strong>{{ unreadCount() }}</strong><small>unread actions</small></article>
+            </div>
+          </article>
+          }
+
+          @if (showWidget('timers')) {
+          <article class="panel">
+            <div class="panel-title"><h2>Service timers</h2><span>{{ activeServiceTimerCount() }}</span></div>
+            <div class="list">
+              @for (timer of activeServiceTimers(); track timer.appointmentId) {
+                <div class="row timer-row">
+                  <div class="row-main"><strong>{{ timer.clientName }}</strong><small>{{ timer.status }} · {{ timer.elapsedMinutes }} / {{ timer.totalMinutes }} min</small></div>
+                  <div class="timer-progress"><b>{{ timer.remainingMinutes }} min left</b><div class="timer-track"><span [style.width.%]="timer.progress"></span></div></div>
+                </div>
+              } @empty {
+                <p class="empty">No active service timers right now.</p>
+              }
+            </div>
+          </article>
+          }
+        </section> }
+
         @if (showWidget('appointments') || showWidget('notifications')) { <section class="grid two" [style.order]="widgetOrder('appointments')">
           @if (showWidget('appointments')) {
           <article class="panel">
@@ -111,7 +164,11 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
               @for (item of dashboard.todayAppointments.slice(0, 5); track item.id) {
                 <div class="row">
                   <div class="row-main"><strong>{{ item.clientName || 'Walk-in client' }}</strong><small>{{ item.startAt | date:'shortTime' }} · {{ item.serviceNames.join(', ') || 'Service' }}</small></div>
-                  <a class="button" [routerLink]="['/staff/client-360', item.clientId]">Client 360</a>
+                  <div class="row-actions">
+                    @if (canStartService(item)) { <button type="button" class="button primary" (click)="startService(item.id)">Start</button> }
+                    @if (canCompleteService(item)) { <button type="button" class="button primary" (click)="completeService(item.id)">Complete</button> }
+                    <a class="button" [routerLink]="['/staff/client-360', item.clientId]">Client 360</a>
+                  </div>
                 </div>
               } @empty {
                 <p class="empty">No upcoming appointments assigned today.</p>
@@ -132,6 +189,22 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
             </div>
           </article>
           }
+        </section> }
+
+        @if (showWidget('opportunities')) { <section class="panel dark" [style.order]="widgetOrder('opportunities')">
+          <div class="panel-title"><h2>Opportunity board</h2><span>{{ opportunityCount() }} cues</span></div>
+          <div class="grid three opportunity-grid">
+            <article class="kpi"><span>VIP guests</span><strong>{{ os()?.home?.vipClients || 0 }}</strong><small>premium touchpoints</small></article>
+            <article class="kpi"><span>Birthdays</span><strong>{{ os()?.home?.birthdayClients || 0 }}</strong><small>surprise reward pitch</small></article>
+            <article class="kpi"><span>Pending pay</span><strong>{{ os()?.home?.pendingPayments || 0 }}</strong><small>close billing faster</small></article>
+          </div>
+          <div class="list mini-list">
+            @for (cue of coachCues(); track cue.title) {
+              <div class="row"><div class="row-main"><strong>{{ cue.title }}</strong><small>{{ cue.body }}</small></div><span class="badge">{{ cue.priority }}</span></div>
+            } @empty {
+              <p class="empty">No active opportunity cues.</p>
+            }
+          </div>
         </section> }
 
         @if (showWidget('ai') || showWidget('performance')) { <section class="grid two" [style.order]="widgetOrder('ai')">
@@ -157,6 +230,73 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
           </article>
           }
         </section> }
+
+        @if (showWidget('gamification') || showWidget('leaderboard')) { <section class="grid two" [style.order]="widgetOrder('gamification')">
+          @if (showWidget('gamification')) {
+          <article class="panel dark">
+            <div class="panel-title"><h2>Growth streak</h2><span>Level {{ os()?.gamification?.level || 0 }}</span></div>
+            <div class="grid three">
+              <article class="kpi"><span>Points</span><strong>{{ os()?.gamification?.points || 0 }}</strong></article>
+              <article class="kpi"><span>Stars</span><strong>{{ os()?.gamification?.stars || 0 }}</strong></article>
+              <article class="kpi"><span>Streak</span><strong>{{ os()?.gamification?.dailyStreak || 0 }}</strong></article>
+            </div>
+            <div class="badge-row">
+              @for (badge of earnedBadges(); track badge.label) {
+                <span class="badge green">{{ badge.label }}</span>
+              } @empty {
+                <span class="badge">Next badge loading</span>
+              }
+            </div>
+          </article>
+          }
+
+          @if (showWidget('leaderboard')) {
+          <article class="panel">
+            <div class="panel-title"><h2>Leaderboard</h2><span>{{ leaderboardRankLabel() }}</span></div>
+            <div class="list">
+              @for (entry of leaderboardPreview(); track entry.staffId) {
+                <div class="row">
+                  <div class="row-main"><strong>#{{ entry.rank }} {{ entry.staffName }}</strong><small>Score {{ entry.score }} · Rating {{ entry.rating }}</small></div>
+                  <span class="badge" [class.green]="entry.isMe">{{ entry.isMe ? 'You' : moneyCompact(entry.revenue) }}</span>
+                </div>
+              } @empty {
+                <p class="empty">Leaderboard will appear once synced.</p>
+              }
+            </div>
+          </article>
+          }
+        </section> }
+
+        @if (showWidget('shift') || showWidget('leave')) { <section class="grid two" [style.order]="widgetOrder('shift')">
+          @if (showWidget('shift')) {
+          <article class="panel">
+            <div class="panel-title"><h2>Shift timeline</h2><span>{{ today()?.schedules?.length || 0 }}</span></div>
+            <div class="list">
+              @for (item of today()?.schedules || []; track item.id) {
+                <div class="row">
+                  <div class="row-main"><strong>{{ item.scheduleDate }}</strong><small>{{ item.shiftType || 'Shift' }} · {{ item.status || 'scheduled' }}</small></div>
+                  <span class="badge">{{ item.startTime || '--' }} - {{ item.endTime || '--' }}</span>
+                </div>
+              } @empty {
+                <p class="empty">No shift entries available.</p>
+              }
+            </div>
+          </article>
+          }
+
+          @if (showWidget('leave')) {
+          <article class="panel dark">
+            <div class="panel-title"><h2>Leave balance</h2><span>{{ leaveBalances().length }}</span></div>
+            <div class="grid two leave-grid">
+              @for (item of leaveBalances().slice(0, 4); track item.id) {
+                <article class="kpi"><span>{{ item.leaveType }}</span><strong>{{ item.balance }}</strong><small>{{ item.used }} used</small></article>
+              } @empty {
+                <p class="empty">Leave balances not published yet.</p>
+              }
+            </div>
+          </article>
+          }
+        </section> }
       }
     </section>
   `,
@@ -166,6 +306,7 @@ export class StaffDashboardPage implements OnInit {
   readonly data = signal<StaffDashboard | null>(null);
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly today = signal<StaffToday | null>(null);
+  readonly leaveBalances = signal<StaffLeaveBalance[]>([]);
   readonly loading = signal(false);
   readonly sessionExpired = signal(false);
   readonly actionMessage = signal("");
@@ -179,8 +320,15 @@ export class StaffDashboardPage implements OnInit {
     { key: "actions", label: "Quick actions" },
     { key: "appointments", label: "Appointments" },
     { key: "notifications", label: "Notifications" },
+    { key: "pulse", label: "Floor pulse" },
+    { key: "timers", label: "Service timers" },
     { key: "ai", label: "AI summary" },
-    { key: "performance", label: "Performance" }
+    { key: "performance", label: "Performance" },
+    { key: "gamification", label: "Growth streak" },
+    { key: "leaderboard", label: "Leaderboard" },
+    { key: "shift", label: "Shift timeline" },
+    { key: "leave", label: "Leave balance" },
+    { key: "opportunities", label: "Opportunity board" }
   ];
   readonly widgetOrderKeys = signal<string[]>(this.readWidgetOrder());
 
@@ -192,10 +340,11 @@ export class StaffDashboardPage implements OnInit {
     this.loading.set(true);
     this.sessionExpired.set(false);
     try {
-      const [dashboard, enterprise, today] = await Promise.all([this.staff.dashboard(), this.staff.enterpriseOs(), this.staff.today()]);
+      const [dashboard, enterprise, today, leaveBalances] = await Promise.all([this.staff.dashboard(), this.staff.enterpriseOs(), this.staff.today(), this.staff.leaveBalances().catch(() => [])]);
       this.data.set(dashboard);
       this.os.set(enterprise);
       this.today.set(today);
+      this.leaveBalances.set(leaveBalances);
     } catch (error) {
       const message = this.staff.error() || (error instanceof Error ? error.message : "");
       this.sessionExpired.set(/jwt|expired|session|401/i.test(message));
@@ -272,6 +421,78 @@ export class StaffDashboardPage implements OnInit {
 
   aiCoachHint(): string {
     return this.os()?.aiCoach?.[0]?.action || "Complete attendance, check queue, and review client notes.";
+  }
+
+  activeAlertCount(): number {
+    const home = this.os()?.home;
+    if (!home) return 0;
+    return Number(home.lateClients || 0) + Number(home.pendingPayments || 0) + Number(home.birthdayClients || 0);
+  }
+
+  activeServiceTimers() {
+    return (this.os()?.serviceTimers || []).slice(0, 4);
+  }
+
+  activeServiceTimerCount(): number {
+    return (this.os()?.serviceTimers || []).length;
+  }
+
+  earnedBadges() {
+    return (this.os()?.gamification?.badges || []).filter((badge) => badge.earned).slice(0, 4);
+  }
+
+  leaderboardPreview() {
+    return (this.os()?.leaderboard || []).slice(0, 4);
+  }
+
+  leaderboardRankLabel(): string {
+    const mine = (this.os()?.leaderboard || []).find((entry) => entry.isMe);
+    return mine ? `Rank #${mine.rank}` : "Live board";
+  }
+
+  moneyCompact(value: number): string {
+    if (!Number.isFinite(Number(value))) return "0";
+    return new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value));
+  }
+
+  opportunityCount(): number {
+    return Number(this.os()?.home?.vipClients || 0) + Number(this.os()?.home?.birthdayClients || 0) + Number(this.os()?.home?.pendingPayments || 0);
+  }
+
+  coachCues() {
+    return (this.os()?.aiCoach || []).slice(0, 3);
+  }
+
+  canStartService(item: StaffDashboard['todayAppointments'][number]): boolean {
+    const status = String(item.status || '').toLowerCase();
+    return !['in-service', 'completed', 'cancelled'].includes(status);
+  }
+
+  canCompleteService(item: StaffDashboard['todayAppointments'][number]): boolean {
+    const status = String(item.status || '').toLowerCase();
+    return ['in-service', 'arrived', 'confirmed', 'booked'].includes(status) && status !== 'completed' && status !== 'cancelled';
+  }
+
+  async startService(appointmentId: string) {
+    this.actionMessage.set('');
+    try {
+      await this.staff.startService(appointmentId);
+      this.actionMessage.set('Service started.');
+      await this.load();
+    } catch {
+      this.actionMessage.set(this.staff.error() || 'Unable to start service.');
+    }
+  }
+
+  async completeService(appointmentId: string) {
+    this.actionMessage.set('');
+    try {
+      await this.staff.completeService(appointmentId);
+      this.actionMessage.set('Service completed.');
+      await this.load();
+    } catch {
+      this.actionMessage.set(this.staff.error() || 'Unable to complete service.');
+    }
   }
 
   showWidget(key: string): boolean {
