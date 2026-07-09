@@ -11,13 +11,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent, AuraKpiCardComponent],
   template: `
-    <section class="page-stack">
+    <section class="page-stack inner-page-shell">
       <button class="ghost-button back-button" type="button" routerLink="/customer-360">← Back to Customer Intelligence</button>
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="profile() as profileData">
-        <section class="profile-header">
+        <section class="profile-header inner-page-header">
           <span class="avatar large">{{ profileData.client.name.slice(0, 1) }}</span>
           <div>
             <h2>{{ profileData.client.name }}</h2>
@@ -30,7 +30,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </section>
 
-        <div class="metrics-grid">
+        <div class="metrics-grid inner-stats-grid">
   <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/last-visit"><span>Last visit</span><strong>{{ profileData.metrics.lastVisit ? (profileData.metrics.lastVisit | date: 'mediumDate') : 'Never' }}</strong><small>{{ profileData.metrics.inactiveDays }} inactive days</small></aura-kpi-card>
   <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/favorite-service"><span>Favorite service</span><strong>{{ profileData.metrics.favoriteService }}</strong></aura-kpi-card>
   <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/average-spend"><span>Average spend</span><strong>{{ profileData.metrics.averageSpend | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ profileData.metrics.visitCount }} visits</small></aura-kpi-card>
@@ -75,7 +75,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 </div>
 
         <div class="dashboard-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>AI next-best-action</h2></div>
             <article class="action-card">
               <strong>{{ profileData.nextBestAction.action }}</strong>

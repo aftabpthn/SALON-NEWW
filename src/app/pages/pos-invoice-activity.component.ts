@@ -237,8 +237,8 @@ interface InvoiceActivityRow {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack invoice-activity-page">
-      <div class="module-hero invoice-activity-hero">
+    <section class="page-stack invoice-activity-page inner-page-shell">
+      <div class="module-hero invoice-activity-hero inner-page-header">
         <div>
           <h2>Invoice Audit Center</h2>
         </div>
@@ -251,7 +251,7 @@ interface InvoiceActivityRow {
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <div class="metrics-grid" *ngIf="!loading() && !error()">
+      <div class="metrics-grid inner-stats-grid" *ngIf="!loading() && !error()">
         <article class="metric-card teal">
           <span>Today invoices</span>
           <strong>{{ todayInvoices().count }}</strong>
@@ -298,7 +298,7 @@ interface InvoiceActivityRow {
         </button>
       </div>
 
-      <div class="panel invoice-activity-shell" *ngIf="!loading() && !error()">
+      <div class="panel invoice-activity-shell inner-page-card" *ngIf="!loading() && !error()">
         <div class="section-title invoice-activity-title">
           <div>
             <h3>Search & filter activity</h3>

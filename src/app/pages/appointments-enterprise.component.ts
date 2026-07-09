@@ -216,7 +216,7 @@ const STATUS_TONES: Record<string, string> = {
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
   template: `
-    <section class="enterprise-scheduler">
+    <section class="enterprise-scheduler inner-page-shell">
       <app-state [loading]="loading()" [error]="drawer() ? '' : error()" loadingText="Loading enterprise scheduler"></app-state>
       <ng-container *ngIf="!loading() && (!error() || drawer())">
         <section class="deposit-followup-strip" *ngIf="adjustedDueFollowUpCount() > 0">

@@ -45,20 +45,20 @@ type PaymentModeReport = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="page-stack payment-mode-report">
-      <div class="module-hero">
+    <section class="page-stack payment-mode-report inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <span class="eyebrow">Accounts report</span>
           <h2>Payment mode collection</h2>
           <p>Cash, UPI, card, wallet aur custom payment modes ka daily collection report.</p>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/pos/payment-modes">Payment modes</a>
           <a class="ghost-button" routerLink="/pos">Back to POS</a>
         </div>
       </div>
 
-      <section class="panel report-filter-panel">
+      <section class="panel report-filter-panel inner-page-card">
         <label class="field" *ngIf="datePreset !== 'all'">
           <span>From</span>
           <input type="date" [ngModel]="fromDate" (ngModelChange)="updateCustomDate('from', $event)" />

@@ -22,12 +22,12 @@ type PendingPackageReport = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack pending-packages-page">
-      <div class="module-hero report-hero">
+    <section class="page-stack pending-packages-page inner-page-shell">
+      <div class="module-hero report-hero inner-page-header">
         <div>
           <h2>Pending Packages</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
           <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!rows().length">Download CSV</button>
           <button class="primary-button" type="button" (click)="runReport()">Run Report</button>
@@ -71,7 +71,7 @@ type PendingPackageReport = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="report() as data">
-        <section class="metrics-grid report-kpis">
+        <section class="metrics-grid report-kpis inner-stats-grid">
           <article class="metric-card">
             <span>Total Service</span>
             <strong>{{ numberValue(data.summary.totalService) }}</strong>

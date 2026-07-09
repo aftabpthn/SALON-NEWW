@@ -18,12 +18,12 @@ type StaffAppointmentsReport = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack staff-appointments-page">
-      <div class="module-hero report-hero">
+    <section class="page-stack staff-appointments-page inner-page-shell">
+      <div class="module-hero report-hero inner-page-header">
         <div>
           <h2>Appointment Booked By Staff</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
           <a class="ghost-button" routerLink="/reports">Reports</a>
           <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!rows().length">Download</button>
@@ -50,7 +50,7 @@ type StaffAppointmentsReport = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="report() as data">
-        <section class="metrics-grid report-kpis">
+        <section class="metrics-grid report-kpis inner-stats-grid">
           <article class="metric-card">
             <span>Staff</span>
             <strong>{{ numberValue(data.summary.staffCount) }}</strong>
@@ -93,7 +93,7 @@ type StaffAppointmentsReport = {
             <span>Showing {{ showingFrom() }} to {{ showingTo() }} of {{ total() }} Entries</span>
           </div>
 
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead>
                 <tr>

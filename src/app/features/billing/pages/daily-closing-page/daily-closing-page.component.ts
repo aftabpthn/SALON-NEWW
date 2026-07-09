@@ -54,8 +54,8 @@ import { AppStateService } from '../../../../core/state/app-state.service';
     }
   `],
   template: `
-    <section class="close-shell">
-      <header class="hero">
+    <section class="close-shell inner-page-shell">
+      <header class="hero inner-page-header">
         <div class="hero-copy">
           <h1>Cash, card, UPI and bank day close</h1>
         </div>
@@ -66,7 +66,7 @@ import { AppStateService } from '../../../../core/state/app-state.service';
         </div>
       </header>
 
-      <section class="metric-grid">
+      <section class="metric-grid inner-stats-grid">
         <article class="metric"><strong>{{ lockStatusText() }}</strong><small class="muted">{{ branchId() }} · {{ businessDate() }}</small></article>
         <article class="metric"><strong>{{ money(expectedCash()) }}</strong></article>
         <article class="metric"><strong>{{ money(cashVariance()) }}</strong></article>
@@ -74,11 +74,11 @@ import { AppStateService } from '../../../../core/state/app-state.service';
       </section>
 
       <section class="grid">
-        <aside class="action-panel">
+        <aside class="action-panel inner-page-card">
           <div>
             <h2>Cashier close form</h2>
           </div>
-          <div class="form-row">
+          <div class="form-row inner-form-grid">
             <label class="field">
               <span>Branch ID</span>
               <input [ngModel]="branchId()" (ngModelChange)="branchId.set($event); load()" />
@@ -88,7 +88,7 @@ import { AppStateService } from '../../../../core/state/app-state.service';
               <input type="date" [ngModel]="businessDate()" (ngModelChange)="businessDate.set($event); load()" />
             </label>
           </div>
-          <div class="form-row">
+          <div class="form-row inner-form-grid">
             <label class="field">
               <span>Opening cash</span>
               <input type="number" [ngModel]="openingCash()" (ngModelChange)="openingCash.set(numberValue($event))" />
@@ -102,7 +102,7 @@ import { AppStateService } from '../../../../core/state/app-state.service';
             <span>Reopen reason</span>
             <textarea [ngModel]="reopenReason()" (ngModelChange)="reopenReason.set($event)" placeholder="Required only when reopening a locked day"></textarea>
           </label>
-          <div class="button-row">
+          <div class="button-row inner-action-bar">
             <button class="ghost" type="button" [disabled]="busy()" (click)="generateZReport()">Generate Z-report</button>
             <button class="ghost" type="button" [disabled]="busy()" (click)="ownerDailyClose()">Owner daily close</button>
             <button class="primary" type="button" [disabled]="busy() || isLocked()" (click)="lockDay()">Lock day</button>
@@ -112,8 +112,8 @@ import { AppStateService } from '../../../../core/state/app-state.service';
           <p class="error" *ngIf="error()">{{ error() }}</p>
         </aside>
 
-        <main class="panel">
-          <div class="toolbar">
+        <main class="panel inner-page-card">
+          <div class="toolbar inner-action-bar">
             <div>
               <h2>Cash/card/UPI/bank variance</h2>
             </div>
@@ -132,8 +132,8 @@ import { AppStateService } from '../../../../core/state/app-state.service';
         </main>
       </section>
 
-      <section class="panel">
-        <div class="toolbar">
+      <section class="panel inner-page-card">
+        <div class="toolbar inner-action-bar">
           <div>
             <h2>{{ zReport()?.['report_no'] || 'No report generated yet' }}</h2>
           </div>

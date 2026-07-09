@@ -86,8 +86,8 @@ import { BillingRepository } from '../../data/billing.repository';
     @media (max-width: 720px) { .billing-hero, .invoice-row { grid-template-columns: 1fr; align-items: stretch; } .billing-hero { display: grid; } .hero-stat, .amount, .status-chip { justify-self: stretch; text-align: left; } }
   `],
   template: `
-    <section class="invoice-list-page">
-      <header class="billing-hero">
+    <section class="invoice-list-page inner-page-shell">
+      <header class="billing-hero inner-page-header">
         <div>
           <h1>Invoices</h1>
           <p>Review bills, payment status, and customer checkout records.</p>
@@ -101,7 +101,7 @@ import { BillingRepository } from '../../data/billing.repository';
       <p class="state-message" *ngIf="repo.loading()">Loading invoices...</p>
       <p class="state-message error" *ngIf="repo.error()">{{ repo.error() }}</p>
 
-      <section class="invoice-list-card" *ngIf="!repo.loading() && repo.invoices().length">
+      <section class="invoice-list-card inner-page-card" *ngIf="!repo.loading() && repo.invoices().length">
         <a class="invoice-row" *ngFor="let invoice of repo.invoices()" [routerLink]="['/billing/invoices', invoice.id]">
           <span class="invoice-main">
             <strong>{{ invoice.invoice_no }}</strong>

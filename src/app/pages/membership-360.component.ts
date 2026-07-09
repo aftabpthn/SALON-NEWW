@@ -14,8 +14,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero compact-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero compact-hero inner-page-header">
         <div>
           <span class="eyebrow">{{ isMembershipProfile() ? 'Member 360 timeline' : 'Membership plan 360' }}</span>
           <h2>{{ pageTitle() }}</h2>
@@ -34,7 +34,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="isMembershipProfile(); else plan360View">
-        <section class="stats-grid" *ngIf="metrics() as metric">
+        <section class="stats-grid inner-stats-grid" *ngIf="metrics() as metric">
           <article class="metric-card"><span>Timeline</span><strong>{{ metric.timelineEvents || 0 }}</strong></article>
           <article class="metric-card"><span>Payments</span><strong>{{ metric.payments || 0 }}</strong></article>
           <article class="metric-card"><span>Invoices</span><strong>{{ metric.invoices || 0 }}</strong></article>
@@ -42,7 +42,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="two-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Membership profile</h2></div>
             <div class="detail-grid">
               <div><span>Status</span><strong>{{ membershipProfile().status || '-' }}</strong></div>
@@ -58,7 +58,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Client info</h2></div>
             <div class="profile-card">
               <strong>{{ client().name || client().id || 'Client' }}</strong>
@@ -70,7 +70,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <div class="two-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Current plan</h2></div>
             <div class="detail-grid">
               <div><span>Plan</span><strong>{{ currentPlan().name || '-' }}</strong></div>
@@ -82,7 +82,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Wallet snapshot</h2></div>
             <div class="detail-grid" *ngIf="wallet(); else noWallet">
               <div><span>Wallet balance</span><strong>{{ wallet().walletBalance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
@@ -102,7 +102,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><h2>Lifecycle timeline</h2></div>
           <div class="timeline-list" *ngIf="lifecycleTimeline().length; else noTimeline">
             <article class="timeline-event" *ngFor="let event of lifecycleTimeline()">
@@ -122,9 +122,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="two-grid">
-          <section class="panel">
-            <div class="section-title"><h2>Payment history</h2></div>
-            <div class="table-wrap">
+        <section class="panel inner-page-card">
+            <div class="section-title"><h2>Audit ledger</h2></div>
+            <div class="table-wrap inner-table-wrap">
               <table>
                 <thead><tr><th>When</th><th>Action</th><th>Mode</th><th>Paid</th><th>Invoice</th><th>Actor</th></tr></thead>
                 <tbody>
@@ -141,7 +141,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Invoice links</h2></div>
             <div class="quick-grid" *ngIf="invoiceLinks().length; else noInvoices">
               <article class="action-card" *ngFor="let invoice of invoiceLinks()">
@@ -157,7 +157,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <div class="two-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Staff attribution</h2></div>
             <div class="quick-grid" *ngIf="staffAttribution().length; else noStaff">
               <article class="action-card" *ngFor="let actor of staffAttribution()">
@@ -171,7 +171,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </ng-template>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Risk signals</h2></div>
             <div class="quick-grid" *ngIf="riskSignals().length; else noRisk">
               <article class="action-card risk-card" *ngFor="let risk of riskSignals()">
@@ -187,7 +187,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <div class="two-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Audit trail</h2></div>
             <div class="quick-grid" *ngIf="auditTrail().length; else noAudit">
               <article class="action-card" *ngFor="let audit of auditTrail()">
@@ -201,7 +201,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </ng-template>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>WhatsApp reminders</h2></div>
             <div class="quick-grid" *ngIf="whatsappReminders().length; else noReminders">
               <article class="action-card" *ngFor="let reminder of whatsappReminders()">
@@ -218,7 +218,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </ng-container>
 
       <ng-template #plan360View>
-        <section class="stats-grid" *ngIf="metrics() as metric">
+        <section class="stats-grid inner-stats-grid" *ngIf="metrics() as metric">
           <article class="metric-card"><span>Sold clients</span><strong>{{ metric.soldClients || 0 }}</strong></article>
           <article class="metric-card"><span>Active</span><strong>{{ metric.active || 0 }}</strong></article>
           <article class="metric-card"><span>Revenue</span><strong>{{ (metric.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
@@ -226,7 +226,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="two-grid" *ngIf="plan() as planData">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Plan details</h2></div>
             <div class="detail-grid">
               <div><span>Code</span><strong>{{ planData.code || '-' }}</strong></div>
@@ -239,15 +239,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>Business label</span><strong>{{ planBusinessLabel(planData) }}</strong></div>
             </div>
           </section>
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Benefit rules snapshot</h2></div>
             <pre class="json-preview">{{ planData.benefitRules | json }}</pre>
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><h2>Sold client memberships</h2></div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Client</th><th>Plan</th><th>Status</th><th>Credits</th><th>Expiry</th><th>Price</th><th>360</th></tr></thead>
               <tbody>
@@ -265,7 +265,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><h2>Membership wallet snapshots</h2></div>
           <div class="quick-grid" *ngIf="wallets().length; else noWalletSnapshots">
             <article class="action-card" *ngFor="let wallet of wallets()">
@@ -285,7 +285,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="two-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Audit ledger</h2></div>
             <div class="quick-grid">
               <article class="action-card" *ngFor="let row of ledger()">
@@ -295,7 +295,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </article>
             </div>
           </section>
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><h2>Invoice snapshots</h2></div>
             <div class="quick-grid">
               <article class="action-card" *ngFor="let snapshot of snapshots()">

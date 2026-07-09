@@ -129,8 +129,8 @@ interface ClientScoreRow {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="appointment-activity-page">
-      <div class="module-hero">
+    <section class="appointment-activity-page inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Appointment Report & Full History Register</h2>
         </div>
@@ -163,7 +163,7 @@ interface ClientScoreRow {
 
         <main class="activity-detail">
 
-      <div class="metric-grid" *ngIf="!loading() && visibleActivityView('overview')">
+      <div class="metric-grid inner-stats-grid" *ngIf="!loading() && visibleActivityView('overview')">
         <article class="metric-card" *ngFor="let card of kpiCards" [ngClass]="card.tone">
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
@@ -171,7 +171,7 @@ interface ClientScoreRow {
         </article>
       </div>
 
-      <section class="owner-command-grid" *ngIf="!loading() && visibleActivityView('overview')">
+      <section class="owner-command-grid inner-action-bar" *ngIf="!loading() && visibleActivityView('overview')">
         <article class="panel owner-summary-panel">
           <div class="section-title activity-title">
             <div>

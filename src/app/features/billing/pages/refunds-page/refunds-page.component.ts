@@ -63,8 +63,8 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
     }
   `],
   template: `
-    <section class="refund-shell">
-      <header class="hero">
+    <section class="refund-shell inner-page-shell">
+      <header class="hero inner-page-header">
         <div class="hero-copy">
           <h1>Refund, void and credit note approval queue</h1>
         </div>
@@ -75,7 +75,7 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
         </div>
       </header>
 
-      <section class="metric-grid">
+      <section class="metric-grid inner-stats-grid">
         <article class="metric-card"><strong>{{ money(refundableTotal()) }}</strong><small class="muted">{{ refundableRows().length }} invoices</small></article>
         <article class="metric-card"><strong>{{ refundedRows().length }}</strong><small class="muted">{{ money(refundedTotal()) }} processed</small></article>
         <article class="metric-card"><strong>{{ voidCandidateRows().length }}</strong></article>
@@ -83,8 +83,8 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
       </section>
 
       <section class="grid">
-        <div class="panel">
-          <div class="toolbar">
+        <div class="panel inner-page-card">
+          <div class="toolbar inner-action-bar">
             <div class="field">
               <span>Search invoice/client</span>
               <input [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Invoice no, customer, status" />
@@ -121,14 +121,14 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
           <ng-template #emptyQueue><div class="empty">No actionable invoice found for this filter.</div></ng-template>
         </div>
 
-        <aside class="action-box">
+        <aside class="action-box inner-page-card">
           <div>
             <h2>{{ actionTitle() }}</h2>
             <p class="muted" *ngIf="selectedInvoice(); else noSelection">{{ invoiceLabel(selectedInvoice()) }} selected hai.</p>
             <ng-template #noSelection></ng-template>
           </div>
 
-          <div class="inline-fields">
+          <div class="inline-fields inner-form-grid">
             <label class="field">
               <span>Action</span>
               <select [ngModel]="actionKind()" (ngModelChange)="setActionKind($event)">

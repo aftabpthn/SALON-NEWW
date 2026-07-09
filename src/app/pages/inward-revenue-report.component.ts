@@ -17,12 +17,12 @@ type ColumnDef = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, StateComponent],
   template: `
-    <section class="page-stack inward-revenue-page">
-      <div class="module-hero">
+    <section class="page-stack inward-revenue-page inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Inward Revenue Report</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
           <button class="primary-button" type="button" (click)="saveImport()" [disabled]="!selectedFileBase64 || importing()">
             {{ importing() ? 'Saving import...' : 'Save import' }}
@@ -47,7 +47,7 @@ type ColumnDef = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <section class="panel preview-panel" *ngIf="preview() as previewData">
-        <div class="section-title">
+        <div class="section-title inner-action-bar">
           <div>
             <h3>{{ previewData.title || selectedFileName }}</h3>
           </div>
@@ -56,13 +56,13 @@ type ColumnDef = {
         <div class="warning-list" *ngIf="previewData.warnings?.length">
           <strong *ngFor="let warning of previewData.warnings">{{ warning }}</strong>
         </div>
-        <div class="metrics-grid compact-metrics">
+        <div class="metrics-grid compact-metrics inner-stats-grid">
           <article class="metric-card"><span>Lines</span><strong>{{ previewData.lineCount || 0 }}</strong><small>{{ previewData.rowCount || 0 }} source rows</small></article>
           <article class="metric-card"><span>Total</span><strong>{{ previewData.summary?.totalAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card"><span>Received</span><strong>{{ previewData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card"><span>Unpaid</span><strong>{{ previewData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
         </div>
-        <div class="table-wrap compact-table">
+        <div class="table-wrap compact-table inner-table-wrap">
           <table>
             <thead><tr><th>Invoice</th><th>Date</th><th>Client</th><th>Service/Product</th><th>Operator</th><th class="right">Line amt</th><th class="right">Invoice total</th></tr></thead>
             <tbody>
@@ -144,7 +144,7 @@ type ColumnDef = {
 
         <div class="dashboard-grid">
           <section class="panel">
-            <div class="section-title">
+            <div class="section-title inner-action-bar">
               <div>
                 <h3>Cash, card, online and cheque</h3>
               </div>
@@ -159,7 +159,7 @@ type ColumnDef = {
           </section>
 
           <section class="panel column-panel">
-            <div class="section-title">
+            <div class="section-title inner-action-bar">
               <div>
                 <h3>FlexiSalon-style chooser</h3>
               </div>
@@ -177,7 +177,7 @@ type ColumnDef = {
 
         <div class="dashboard-grid">
           <section class="panel">
-            <div class="section-title"><h3>Top operators</h3></div>
+            <div class="section-title inner-action-bar"><h3>Top operators</h3></div>
             <div class="rank-list">
               <article *ngFor="let item of reportData.topOperators || []">
                 <strong>{{ item.key }}</strong>
@@ -187,7 +187,7 @@ type ColumnDef = {
             </div>
           </section>
           <section class="panel">
-            <div class="section-title"><h3>Top services/products</h3></div>
+            <div class="section-title inner-action-bar"><h3>Top services/products</h3></div>
             <div class="rank-list">
               <article *ngFor="let item of reportData.topServices || []">
                 <strong>{{ item.key }}</strong>
@@ -199,7 +199,7 @@ type ColumnDef = {
         </div>
 
         <section class="panel">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h3>Line-item revenue with invoice drill-down</h3>
             </div>
@@ -239,7 +239,7 @@ type ColumnDef = {
 
       <div class="floating-detail-backdrop" *ngIf="selectedInvoice() as detail" (click)="closeInvoice()">
         <section class="panel floating-detail-card" (click)="$event.stopPropagation()">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h3>{{ detail.invoice.invoiceNo }}</h3>
               <small>{{ detail.invoice.clientName }} · {{ detail.invoice.docDate | date: 'dd MMM yyyy' }}</small>

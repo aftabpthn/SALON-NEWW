@@ -22,12 +22,12 @@ type CompletedPackagesReport = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack completed-packages-page">
-      <div class="module-hero report-hero">
+    <section class="page-stack completed-packages-page inner-page-shell">
+      <div class="module-hero report-hero inner-page-header">
         <div>
           <h2>Completed Packages</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
           <a class="ghost-button" routerLink="/reports">Reports</a>
           <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!rows().length">Download CSV</button>
@@ -63,7 +63,7 @@ type CompletedPackagesReport = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="report() as data">
-        <section class="metrics-grid report-kpis">
+        <section class="metrics-grid report-kpis inner-stats-grid">
           <article class="metric-card">
             <span>Total completed services</span>
             <strong>{{ numberValue(data.summary.totalCompletedServices) }}</strong>

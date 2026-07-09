@@ -17,13 +17,13 @@ type PettyCashRow = ApiRecord & {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="petty-report-page">
-      <header class="titlebar">
+    <section class="petty-report-page inner-page-shell">
+      <header class="titlebar inner-page-header">
         <div>
           <span class="eyebrow">Finance Report</span>
           <h2>Petty Cash Report</h2>
         </div>
-        <div class="title-actions">
+        <div class="title-actions inner-action-bar">
           <a class="ghost-button" routerLink="/transactions/petty-cash">New Entry</a>
           <button class="ghost-button" type="button" (click)="printPage()">Print</button>
           <button class="ghost-button" type="button" (click)="exportCsv()">Export</button>
@@ -31,14 +31,14 @@ type PettyCashRow = ApiRecord & {
         </div>
       </header>
 
-      <section class="summary-row">
+      <section class="summary-row inner-stats-grid">
         <article><span>Rows</span><strong>{{ rows().length }}</strong></article>
         <article><span>Total IN</span><strong>{{ totalDebit() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
         <article><span>Total OUT</span><strong>{{ totalCredit() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
         <article><span>Balance</span><strong>{{ closingBalance() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
-      <section class="report-panel">
+      <section class="report-panel inner-page-card">
         <div class="filters">
           <label><span>From</span><input type="date" [ngModel]="dateFrom()" (ngModelChange)="dateFrom.set($event)" /></label>
           <label><span>To</span><input type="date" [ngModel]="dateTo()" (ngModelChange)="dateTo.set($event)" /></label>

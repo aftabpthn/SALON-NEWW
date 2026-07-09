@@ -67,8 +67,8 @@ type ProductConsumeDraftRow = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>{{ pageTitle() }}</h2>
           <p>{{ pageDescription() }}</p>
@@ -86,7 +86,7 @@ type ProductConsumeDraftRow = {
       <div class="state loading" *ngIf="notice()">{{ notice() }}</div>
 
       <ng-container *ngIf="!loading()">
-        <div class="metrics-grid">
+        <div class="metrics-grid inner-stats-grid">
           <a class="metric-card" routerLink="/pos/invoices" [class.active-filter-card]="isAllView()"><span>Invoices</span><strong>{{ rows().length }}</strong></a>
           <article class="metric-card"><span>Total billed</span><strong>{{ billedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card"><span>Collected</span><strong>{{ paidTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
@@ -135,8 +135,8 @@ type ProductConsumeDraftRow = {
         </section>
 
         <div class="split-layout invoice-register-layout">
-          <section class="panel">
-            <div class="table-toolbar">
+          <section class="panel inner-page-card">
+            <div class="table-toolbar inner-action-bar">
               <label class="search-field">
                 <span>Search invoice or client</span>
                 <input [(ngModel)]="query" placeholder="AURA-2026, client name, phone, staff" />

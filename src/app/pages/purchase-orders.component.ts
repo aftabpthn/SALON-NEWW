@@ -45,7 +45,7 @@ type ReceiveItem = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack purchase-orders-page">
+    <section class="page-stack purchase-orders-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Purchase Command Center"
         breadcrumb="Inventory > Purchase orders"
@@ -80,7 +80,7 @@ type ReceiveItem = {
 
         <main class="po-detail-pane">
 
-      <section class="po-kpis" *ngIf="visiblePurchaseOrderView('overview')">
+      <section class="po-kpis inner-stats-grid" *ngIf="visiblePurchaseOrderView('overview')">
         <article class="metric-card teal"><span>AI suggestions</span><strong>{{ suggestions().length }}</strong></article>
         <article class="metric-card amber"><span>Draft PO</span><strong>{{ draftRows().length }}</strong></article>
         <article class="metric-card blue"><span>Approved / sent</span><strong>{{ approvedRows().length }}</strong></article>
@@ -88,12 +88,12 @@ type ReceiveItem = {
       </section>
 
       <div class="po-layout" *ngIf="visiblePurchaseOrderView('entry') || visiblePurchaseOrderView('receive')">
-        <section class="panel" *ngIf="visiblePurchaseOrderView('entry')">
+        <section class="panel inner-page-card" *ngIf="visiblePurchaseOrderView('entry')">
           <div class="section-title">
             <div><h2>Product purchase entry</h2></div>
             <button class="ghost-button mini" type="button" (click)="addDraftLine()">Add item</button>
           </div>
-          <form [formGroup]="draftForm" (ngSubmit)="createDraft()" class="po-form">
+          <form [formGroup]="draftForm" (ngSubmit)="createDraft()" class="po-form inner-form-grid">
             <label class="field">
               <span>Branch</span>
               <select formControlName="branchId">

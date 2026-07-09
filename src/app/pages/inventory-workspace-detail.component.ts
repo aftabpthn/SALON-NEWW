@@ -14,7 +14,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
   standalone: true,
   imports: [CommonModule, FormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack inventory-detail-page">
+    <section class="page-stack inventory-detail-page inner-page-shell">
       <app-inventory-zenoti-chrome
         [title]="pageTitle()"
         [breadcrumb]="eyebrow()"
@@ -23,14 +23,14 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <section class="panel detail-shell" [ngSwitch]="workspace()">
+      <section class="panel detail-shell inner-page-card" [ngSwitch]="workspace()">
         <ng-container *ngSwitchCase="'vendors'">
           <div class="detail-title">
             <div>
               <h2>Manage Vendors</h2>
             </div>
           </div>
-          <div class="filter-bar compact">
+          <div class="filter-bar compact inner-action-bar">
             <label>
               <span>Status</span>
               <select [(ngModel)]="vendorStatusFilter">
@@ -44,7 +44,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
               <input [(ngModel)]="vendorQuery" />
             </label>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Code</th><th>Name</th><th class="address-column">Address</th><th>Phone</th><th>Email</th><th>Score</th><th>Purchase value</th><th>Last purchase</th></tr></thead>
               <tbody>
@@ -70,7 +70,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
               <h2>Current Stock</h2>
             </div>
           </div>
-          <div class="filter-bar">
+          <div class="filter-bar inner-form-grid">
             <label>
               <span>Center</span>
               <select [(ngModel)]="stockCenterFilter">
@@ -93,7 +93,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
               </select>
             </label>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Product</th><th>Qty</th><th>Stock cost</th><th>Last price</th><th>Business unit</th><th>Purchase price</th><th>Avg price</th><th>Vendor</th></tr></thead>
               <tbody>

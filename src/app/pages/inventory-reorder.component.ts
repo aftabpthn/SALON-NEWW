@@ -11,7 +11,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack separated-inventory-page">
+    <section class="page-stack separated-inventory-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Approval-safe purchase plan"
         breadcrumb="Inventory > AI Reorder Autopilot"
@@ -26,7 +26,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="zenoti-reorder-workspace">
-        <div class="zenoti-result-bar">
+        <div class="zenoti-result-bar inner-stats-grid">
           <div>
             <strong>{{ suggestions().length }}</strong><span>Results</span>
             <small class="status-chip">Status: Reorder active in this center</small>
@@ -38,7 +38,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </div>
 
-        <div class="zenoti-table-wrap">
+        <div class="zenoti-table-wrap inner-table-wrap">
           <table>
             <thead>
               <tr>

@@ -1,10 +1,10 @@
-<section class="page-stack enterprise-reports">
+<section class="page-stack enterprise-reports inner-page-shell">
   <div class="sticky-filter-bar">
-    <div class="module-hero reports-header">
+    <div class="module-hero reports-header inner-page-header">
       <div>
         <h2>Reports</h2>
       </div>
-      <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
         <div class="date-range-group">
           <button class="range-btn" [class.active]="filters.dateRange==='today'" (click)="setDateRange('today')">Today</button>
           <button class="range-btn" [class.active]="filters.dateRange==='thisWeek'" (click)="setDateRange('thisWeek')">This Week</button>
@@ -32,7 +32,7 @@
       </div>
     </div>
 
-    <div class="metrics-grid" *ngIf="!kpiLoading(); else kpiSkeleton">
+    <div class="metrics-grid inner-stats-grid" *ngIf="!kpiLoading(); else kpiSkeleton">
       <div *ngFor="let kpi of kpis()" class="metric-card reports-kpi" [ngClass]="kpi.tone">
         <div class="kpi-top">
           <span>{{ kpi.label }}</span>

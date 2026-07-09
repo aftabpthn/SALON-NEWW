@@ -11,9 +11,9 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <div class="page">
+    <div class="page inner-page-shell">
       <!-- ═══════ STICKY HEADER ═══════ -->
-      <header class="page-head">
+      <header class="page-head inner-page-header">
         <div class="page-head-l">
           <span class="eye">Reports & analytics</span>
           <h1>Enterprise report command center</h1>
@@ -27,7 +27,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <span>{{ from }} – {{ to }}</span>
           </div>
-          <div class="ph-actions">
+          <div class="ph-actions inner-action-bar">
             <button class="ac-btn" title="Export" (click)="load()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
@@ -98,7 +98,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       <section id="overview" class="sec" *ngIf="visibleReportView('overview')">
         <!-- Analytics KPIs -->
         <ng-container *ngIf="analyticsCommand() as a">
-          <div class="kpi-grid">
+          <div class="kpi-grid inner-stats-grid">
             <div class="kpi-card" (click)="navigate('/kpi-details/analytics/14-day-forecast')">
               <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="kpi-trend up">+{{ a.summary.trendPercent || 0 }}%</span></span>
               <strong class="kpi-val">{{ a.summary.projectedRevenue | currency:'INR':'symbol':'1.0-0' }}</strong>
@@ -124,7 +124,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
 
         <!-- Report KPIs -->
         <ng-container *ngIf="report() as r">
-          <div class="kpi-grid">
+          <div class="kpi-grid inner-stats-grid">
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/sales-revenue')">
               <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span class="kpi-trend up">{{ r.sales.count }} sales</span></span>
               <strong class="kpi-val">{{ r.sales.revenue | currency:'INR':'symbol':'1.0-0' }}</strong>
@@ -155,7 +155,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       <ng-container *ngIf="visibleReportView('revenue')">
       @defer (on viewport) {
       <section id="revenue" class="sec">
-        <div class="sec-h">
+        <div class="sec-h inner-action-bar">
           <h2>Executive analytics</h2>
           <span class="sec-badge">Revenue overview</span>
         </div>
@@ -222,7 +222,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       <ng-container *ngIf="visibleReportView('bookings')">
       @defer (on viewport) {
       <section id="bookings" class="sec">
-        <div class="sec-h">
+        <div class="sec-h inner-action-bar">
           <h2>Business snapshots</h2>
           <span class="sec-badge">Daily closing · P&L · Bookings · Clients</span>
         </div>
@@ -297,7 +297,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       @defer (on viewport) {
       <section id="staff" class="sec">
         <ng-container *ngIf="report() as r">
-          <div class="sec-h">
+          <div class="sec-h inner-action-bar">
             <h2>Staff performance</h2>
             <a class="sec-link" routerLink="/reports/staff-sales">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -339,7 +339,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       @defer (on viewport) {
       <section id="inventory" class="sec">
         <ng-container *ngIf="report() as r">
-          <div class="sec-h">
+          <div class="sec-h inner-action-bar">
             <h2>Inventory overview</h2>
             <a class="sec-link" routerLink="/inventory/reports">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
@@ -372,7 +372,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       <ng-container *ngIf="visibleReportView('reports')">
       @defer (on viewport) {
       <section id="reports" class="sec">
-        <div class="sec-h">
+        <div class="sec-h inner-action-bar">
           <h2>Report library</h2>
           <span class="sec-badge">{{ quickLinks().length }} reports</span>
         </div>
@@ -393,7 +393,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
 
         <!-- Connected reports -->
         <ng-container *ngIf="analyticsCommand() as a">
-          <div class="sec-h" style="margin-top:24px">
+          <div class="sec-h inner-action-bar" style="margin-top:24px">
             <h3>KPI detail mapping</h3>
             <span class="sec-badge">{{ a.kpiDetailMap?.length || 0 }} drill-downs</span>
           </div>
@@ -426,7 +426,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       @defer (on viewport) {
       <section id="insights" class="sec">
         <ng-container *ngIf="analyticsCommand() as a">
-          <div class="sec-h"><h2>AI Insights & schedules</h2></div>
+          <div class="sec-h inner-action-bar"><h2>AI Insights & schedules</h2></div>
           <div class="is-grid">
             <!-- Insights -->
             <div class="is-card">
@@ -517,7 +517,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
       @defer (on viewport) {
       <section id="drilldowns" class="sec">
         <ng-container *ngIf="analyticsCommand() as a">
-          <div class="sec-h"><h2>Report drilldowns</h2><span class="sec-badge">{{ a.drilldowns?.length || 0 }} reports</span></div>
+          <div class="sec-h inner-action-bar"><h2>Report drilldowns</h2><span class="sec-badge">{{ a.drilldowns?.length || 0 }} reports</span></div>
           <div class="tbl-wrap">
             <table class="tbl">
               <thead><tr><th>Report</th><th>Rows</th><th>Source</th><th></th></tr></thead>

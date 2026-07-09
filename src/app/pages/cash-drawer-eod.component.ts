@@ -268,8 +268,8 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="cash-eod-page">
-      <header class="module-hero">
+    <section class="cash-eod-page inner-page-shell">
+      <header class="module-hero inner-page-header">
         <div>
           <h2>Cash Drawer Tally</h2>
         </div>
@@ -283,7 +283,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
-      <section class="panel token-approval-panel" *ngIf="tokenApproval() as approvalContext">
+      <section class="panel token-approval-panel inner-page-card" *ngIf="tokenApproval() as approvalContext">
         <div>
           <h3>Owner cash-risk approval</h3>
           <p>{{ approvalContext.session?.businessDate }} · risk {{ approvalContext.risk?.score || 0 }}/100 {{ approvalContext.risk?.level || 'low' }}</p>
@@ -338,7 +338,7 @@ const DENOMINATION_TEMPLATE: DenominationRow[] = [
 
             <ng-container *ngIf="session() as active; else openDayWorkspace">
 
-            <section class="metric-grid" *ngIf="cashWorkspace() === 'overview'">
+            <section class="metric-grid inner-stats-grid" *ngIf="cashWorkspace() === 'overview'">
               <article><span>Status</span><strong>{{ active.status }}</strong><small>{{ active.businessDate }}</small></article>
               <article *ngIf="!isBlind(active)"><span>Expected cash</span><strong>{{ money(active.expectedCashPaise) }}</strong></article>
               <article><span>Counted cash</span><strong>{{ money(countedTotal()) }}</strong></article>

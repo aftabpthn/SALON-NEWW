@@ -10,16 +10,16 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule, CurrencyPipe, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <div class="service-metrics">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Most Popular Services</h3></div>
+      <div class="service-metrics inner-stats-grid">
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Most Popular Services</h3></div>
           <div class="chart-container">
             <base-chart type="horizontalBar" [labels]="popularLabels()" [datasets]="popularDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Highest Revenue Services</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Highest Revenue Services</h3></div>
           <div class="chart-container">
             <base-chart type="horizontalBar" [labels]="topRevenueLabels()" [datasets]="topRevenueDataset()"></base-chart>
           </div>
@@ -27,19 +27,19 @@ import { Subscription } from 'rxjs';
       </div>
 
       <div class="service-bottom">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Category Breakdown</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Category Breakdown</h3></div>
           <div class="chart-container">
             <base-chart type="doughnut" [labels]="catLabels()" [datasets]="catDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section full-width">
-          <div class="section-title">
+        <section class="panel report-section full-width inner-page-card">
+          <div class="section-title inner-action-bar">
             <h3>Service Performance Table</h3>
             <button class="ghost-button mini" (click)="exportTable()">Export CSV</button>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Service</th><th>Bookings</th><th>Revenue</th><th>Avg Price</th><th>Growth %</th><th>Trend</th></tr></thead>
               <tbody>

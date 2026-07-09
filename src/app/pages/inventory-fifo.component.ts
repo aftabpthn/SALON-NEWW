@@ -11,7 +11,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack fifo-page">
+    <section class="page-stack fifo-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Next stock to consume"
         breadcrumb="Inventory > Batch + Expiry + FIFO"
@@ -21,7 +21,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <section class="zenoti-fifo-workspace">
-        <div class="zenoti-result-bar">
+        <div class="zenoti-result-bar inner-stats-grid">
           <div>
             <strong>{{ activeBatches().length }}</strong><span>Results</span>
             <small class="status-chip">Status: FIFO active in this center</small>
@@ -34,7 +34,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </div>
 
-        <div class="zenoti-table-wrap">
+        <div class="zenoti-table-wrap inner-table-wrap">
           <table>
             <thead>
               <tr>

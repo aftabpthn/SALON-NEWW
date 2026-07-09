@@ -62,7 +62,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
   standalone: true,
   imports: [CommonModule, FormsModule, InventoryZenotiChromeComponent],
   template: `
-    <section class="page-stack">
+    <section class="page-stack inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Product Consume"
         breadcrumb="Inventory > Service Usage"
@@ -70,7 +70,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
       ></app-inventory-zenoti-chrome>
 
       <section class="zenoti-consume-register">
-        <div class="zenoti-toolbar">
+        <div class="zenoti-toolbar inner-page-header">
           <div>
             <h2>Invoice service usage</h2>
           </div>
@@ -89,14 +89,14 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
           </div>
         </div>
 
-        <div class="consume-kpi-strip">
+        <div class="consume-kpi-strip inner-stats-grid">
           <article><span>Draft pending</span><strong>{{ draftCount() }}</strong></article>
           <article><span>Confirmed</span><strong>{{ confirmedCount() }}</strong></article>
           <article><span>Expected cost</span><strong>{{ money(totalExpected()) }}</strong></article>
           <article><span>Actual cost</span><strong>{{ money(totalActual()) }}</strong></article>
         </div>
 
-        <div class="zenoti-table-scroll">
+        <div class="zenoti-table-scroll inner-table-wrap">
           <table class="zenoti-register-table">
             <thead>
               <tr>

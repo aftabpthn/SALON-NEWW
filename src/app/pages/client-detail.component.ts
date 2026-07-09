@@ -138,8 +138,8 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="client360-toolbar">
+    <section class="page-stack inner-page-shell">
+      <div class="client360-toolbar inner-action-bar">
         <a class="ghost-button fit" routerLink="/clients">Back to clients</a>
         <div class="client360-toolbar-copy">
           <strong>Enterprise 360 workspace</strong>

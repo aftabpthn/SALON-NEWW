@@ -11,13 +11,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack product-edit-page">
-      <div class="module-hero compact-hero">
+    <section class="page-stack product-edit-page inner-page-shell">
+      <div class="module-hero compact-hero inner-page-header">
         <div>
           <h2>Edit Product</h2>
           <p>{{ product()?.name || 'Selected product' }}</p>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/inventory">Back to products</a>
           <a class="ghost-button" [routerLink]="product360Link()">Open 360</a>
           <a class="primary-button" routerLink="/inventory/purchase-orders">Purchase orders</a>
@@ -27,7 +27,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="product() as item">
-        <section class="panel edit-shell">
+        <section class="panel edit-shell inner-page-card">
           <div class="edit-heading">
             <div>
               <h2>{{ item.name }}</h2>
@@ -93,7 +93,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </div>
             </div>
 
-            <div class="table-wrap" *ngSwitchCase="'variants'">
+            <div class="table-wrap inner-table-wrap" *ngSwitchCase="'variants'">
               <table>
                 <thead><tr><th>Batch</th><th>Qty</th><th>Expiry</th><th>Vendor</th></tr></thead>
                 <tbody>

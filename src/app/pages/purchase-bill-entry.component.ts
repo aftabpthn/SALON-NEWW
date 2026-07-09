@@ -30,8 +30,8 @@ type PurchaseBillLine = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="purchase-entry-page">
-      <div class="top-command">
+    <section class="purchase-entry-page inner-page-shell">
+      <div class="top-command inner-page-header">
         <a class="command-button" routerLink="/inventory">Back</a>
         <span>Inventory</span>
         <button class="command-button dark" type="button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Fast POS</button>
@@ -56,7 +56,7 @@ type PurchaseBillLine = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-      <form [formGroup]="headerForm" class="entry-form">
+      <form [formGroup]="headerForm" class="entry-form inner-form-grid">
         <section class="bill-header">
           <label>
             <span>Bill Date</span>
@@ -113,12 +113,12 @@ type PurchaseBillLine = {
           </label>
         </section>
 
-        <section class="bill-lines">
+        <section class="bill-lines inner-page-card">
           <div class="line-toolbar">
             <strong>{{ lines().length }} line(s)</strong>
             <button type="button" (click)="addLine()">Add product line</button>
           </div>
-          <div class="table-shell">
+          <div class="table-shell inner-table-wrap">
             <table>
               <thead>
                 <tr>
@@ -176,7 +176,7 @@ type PurchaseBillLine = {
           </div>
         </section>
 
-        <section class="totals-strip">
+        <section class="totals-strip inner-stats-grid">
           <article><span>Taxable</span><strong>{{ taxableTotal() | currency:'INR':'symbol':'1.2-2' }}</strong></article>
           <article><span>GST</span><strong>{{ gstTotal() | currency:'INR':'symbol':'1.2-2' }}</strong></article>
           <article><span>Total</span><strong>{{ grandTotal() | currency:'INR':'symbol':'1.2-2' }}</strong></article>

@@ -39,12 +39,12 @@ type GroupBucket = {
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, StateComponent],
   template: `
-    <section class="account-page">
-      <header class="account-hero">
+    <section class="account-page inner-page-shell">
+      <header class="account-hero inner-page-header">
         <div>
           <h2>Account Master</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <button class="group-button" type="button" (click)="openGroupPanel()">Account Group</button>
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
           <button class="primary-button" type="button" (click)="startAdd()">Add account</button>
@@ -54,7 +54,7 @@ type GroupBucket = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
-      <section class="metric-grid" *ngIf="!loading() && !error()">
+      <section class="metric-grid inner-stats-grid" *ngIf="!loading() && !error()">
         <article><span>Total accounts</span><strong>{{ accounts().length }}</strong></article>
         <article><span>Visible</span><strong>{{ visibleAccounts().length }}</strong></article>
         <article><span>Hidden</span><strong>{{ hiddenAccounts().length }}</strong></article>
@@ -62,7 +62,7 @@ type GroupBucket = {
       </section>
 
       <div class="account-master-shell" *ngIf="!loading() && !error()">
-        <aside class="account-list-panel">
+        <aside class="account-list-panel inner-page-card">
           <div class="panel-title">
             <div>
               <h3>Accounts</h3>
@@ -99,7 +99,7 @@ type GroupBucket = {
           </div>
         </aside>
 
-        <section class="account-form-panel">
+        <section class="account-form-panel inner-page-card">
           <form [formGroup]="accountForm" (ngSubmit)="saveAccount()" class="master-form">
             <div class="form-header">
               <div>
@@ -112,7 +112,7 @@ type GroupBucket = {
               </label>
             </div>
 
-            <div class="form-grid top-fields">
+            <div class="form-grid top-fields inner-form-grid">
               <label class="field wide"><span>Name</span><input formControlName="accountName" /></label>
               <label class="field"><span>Group</span>
                 <select formControlName="groupId" (change)="syncGroupName()">

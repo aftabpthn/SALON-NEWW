@@ -77,8 +77,8 @@ type TipsReport = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Staff Tips / Tip Payout Register</h2>
         </div>
@@ -92,7 +92,7 @@ type TipsReport = {
         </div>
       </div>
 
-      <section class="panel filter-panel tip-filter-panel">
+      <section class="panel filter-panel tip-filter-panel inner-page-card">
         <div class="date-preset-actions">
           <button
             class="ghost-button mini"

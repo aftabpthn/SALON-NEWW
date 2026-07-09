@@ -12,8 +12,8 @@ import { Subscription } from 'rxjs';
   template: `
     <ng-container *ngIf="!loading(); else overviewSkeleton">
       <div class="overview-grid">
-        <section class="panel report-section">
-          <div class="section-title">
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar">
             <h3>Revenue Trend</h3>
             <button class="ghost-button mini" (click)="exportSection()">Export</button>
           </div>
@@ -22,8 +22,8 @@ import { Subscription } from 'rxjs';
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title">
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar">
             <h3>Bookings Trend</h3>
             <button class="ghost-button mini" (click)="exportSection()">Export</button>
           </div>
@@ -32,8 +32,8 @@ import { Subscription } from 'rxjs';
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title">
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar">
             <h3>New vs Returning Clients</h3>
             <button class="ghost-button mini" (click)="exportSection()">Export</button>
           </div>
@@ -42,8 +42,8 @@ import { Subscription } from 'rxjs';
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title">
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar">
             <h3>Revenue by Category</h3>
             <button class="ghost-button mini" (click)="exportSection()">Export</button>
           </div>
@@ -54,9 +54,9 @@ import { Subscription } from 'rxjs';
       </div>
 
       <div class="overview-bottom">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Today's Performance Summary</h3></div>
-          <div class="today-grid" *ngIf="todayPerf() as t">
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Today's Performance Summary</h3></div>
+          <div class="today-grid inner-stats-grid" *ngIf="todayPerf() as t">
             <div class="today-card"><span>Revenue</span><strong>{{ t.revenue | currency:'INR':'symbol':'1.0-0' }}</strong></div>
             <div class="today-card"><span>Bookings</span><strong>{{ t.bookings }}</strong></div>
             <div class="today-card"><span>Clients</span><strong>{{ t.clients }}</strong></div>
@@ -64,8 +64,8 @@ import { Subscription } from 'rxjs';
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Key Opportunities</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Key Opportunities</h3></div>
           <div class="opportunity-list" *ngIf="opportunities() as ops">
             <div class="opportunity-card" *ngFor="let op of ops">
               <strong>{{ op.title }}</strong>

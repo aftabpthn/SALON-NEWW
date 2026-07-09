@@ -93,12 +93,12 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="client-report-detail">
+    <section class="client-report-detail inner-page-shell">
       <div class="report-back-row">
         <a class="ghost-button fit" routerLink="/clients">Back to Client CRM</a>
       </div>
 
-      <section class="panel report-hero" [ngClass]="config().accent">
+      <section class="panel report-hero inner-page-header" [ngClass]="config().accent">
         <div>
           <h1>{{ config().title }}</h1>
           <p>{{ config().description }}</p>
@@ -182,7 +182,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
           <button class="primary-button" type="button" (click)="load()">Run Report</button>
         </section>
 
-        <section class="report-summary-grid">
+        <section class="report-summary-grid inner-stats-grid">
           <article class="summary-card aura-card" *ngFor="let card of summaryCards()">
             <span>{{ card.label }}</span>
             <strong>
@@ -196,7 +196,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
         </section>
 
         <section class="panel report-table-panel">
-          <div class="section-title compact">
+          <div class="section-title compact inner-action-bar">
             <h2>{{ config().title }}</h2>
             <span class="api-badge soft">{{ rows().length }} row(s)</span>
           </div>

@@ -10,7 +10,7 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule, CurrencyPipe, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <div class="client-metrics">
+      <div class="client-metrics inner-stats-grid">
         <div class="metric-card green"><span>New Clients</span><strong>{{ d()?.newClients }}</strong></div>
         <div class="metric-card blue"><span>Returning Clients</span><strong>{{ d()?.returningClients }}</strong></div>
         <div class="metric-card violet"><span>Retention Rate</span><strong>{{ d()?.retentionRate }}%</strong></div>
@@ -20,15 +20,15 @@ import { Subscription } from 'rxjs';
       </div>
 
       <div class="client-charts">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Client Segments</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Client Segments</h3></div>
           <div class="chart-container">
             <base-chart type="doughnut" [labels]="segLabels()" [datasets]="segDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Top Spending Clients</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Top Spending Clients</h3></div>
           <div class="rank-list">
             <article *ngFor="let c of topSpenders(); let i=index">
               <div><small>#{{ i+1 }}</small><strong>{{ c.name }}</strong><span>{{ c.visits }} visits</span></div>
@@ -38,8 +38,8 @@ import { Subscription } from 'rxjs';
         </section>
       </div>
 
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>At-Risk Clients (No visit in 60/90 days)</h3>
           <button class="ghost-button mini" (click)="exportReport()">Export</button>
         </div>

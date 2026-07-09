@@ -11,8 +11,8 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent, AuraKpiCardComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Lifetime value, visit behavior, preferences, risk score, timeline and AI next-best-action</h2>
         </div>
@@ -68,7 +68,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         </div>
       </section>
 
-      <div class="metrics-grid" *ngIf="summary()?.metrics as metrics">
+      <div class="metrics-grid inner-stats-grid" *ngIf="summary()?.metrics as metrics">
         <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/clients"><span>Clients</span><strong>{{ metrics.clients }}</strong></aura-kpi-card>
         <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/total-ltv"><span>Total LTV</span><strong>{{ metrics.totalLtv | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
         <aura-kpi-card tone="neutral" target="/kpi-details/customer-360/avg-spend"><span>Avg spend</span><strong>{{ metrics.avgSpend | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
@@ -76,9 +76,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
       </div>
 
       <div class="dashboard-grid">
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><h2>Customer intelligence list</h2><span class="badge">{{ totalClients() }} total clients</span></div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Client</th><th>LTV</th><th>Favorite</th><th>Risk</th><th>Next action</th><th></th></tr></thead>
               <tbody>
@@ -96,7 +96,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </div>
         </section>
 
-        <section class="form-panel">
+        <section class="form-panel inner-form-grid">
           <h3>Notes timeline</h3>
           <form [formGroup]="noteForm" (ngSubmit)="addNote()">
             <label class="field"><span>Title</span><input formControlName="title" /></label>

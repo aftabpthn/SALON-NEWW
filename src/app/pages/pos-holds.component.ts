@@ -8,8 +8,8 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
   standalone: true,
   imports: [CommonModule, RouterLink, CurrencyPipe, DatePipe],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Hold invoice register</h2>
         </div>
@@ -19,14 +19,14 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
         </div>
       </div>
 
-      <div class="metrics-grid">
+      <div class="metrics-grid inner-stats-grid">
         <article class="metric-card"><span>Held invoices</span><strong>{{ holds().length }}</strong></article>
         <article class="metric-card"><span>Total value</span><strong>{{ totalHeld() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
         <article class="metric-card"><span>Due value</span><strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
       </div>
 
-      <section class="panel">
-        <div class="table-toolbar">
+      <section class="panel inner-page-card">
+        <div class="table-toolbar inner-action-bar">
           <div>
             <h2>Held invoice list</h2>
           </div>

@@ -9,15 +9,15 @@ import { PosPaymentMode, PosSettingsService } from '../core/pos-settings.service
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Payment modes</h2>
         </div>
         <a class="ghost-button" routerLink="/pos">Back to POS</a>
       </div>
 
-      <section class="panel">
+      <section class="panel inner-page-card">
         <div class="section-title">
           <div>
             <span class="eyebrow">{{ editingId() ? 'Edit mode' : 'Create mode' }}</span>
@@ -48,7 +48,7 @@ import { PosPaymentMode, PosSettingsService } from '../core/pos-settings.service
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel inner-page-card">
         <div class="section-title">
           <div>
             <h2>Modes shown in POS</h2>

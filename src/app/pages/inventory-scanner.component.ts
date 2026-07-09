@@ -13,7 +13,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack inventory-enterprise-page scanner-page">
+    <section class="page-stack inventory-enterprise-page scanner-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Barcode and QR stock workflow"
         breadcrumb="Inventory > Scanner"
@@ -24,7 +24,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="zenoti-scanner-workspace">
-        <div class="zenoti-result-bar">
+        <div class="zenoti-result-bar inner-stats-grid">
           <div>
             <strong>{{ activeScannerCount() }}</strong><span>Results</span>
             <small class="status-chip">Status: scanner active in this center</small>
@@ -37,7 +37,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
           </div>
         </div>
 
-        <form [formGroup]="scannerForm" (ngSubmit)="scan()" class="zenoti-scan-form">
+        <form [formGroup]="scannerForm" (ngSubmit)="scan()" class="zenoti-scan-form inner-form-grid">
             <label class="field">
               <span>Branch</span>
               <select formControlName="branchId">
@@ -80,7 +80,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
             </div>
         </form>
 
-        <div class="zenoti-filter-row">
+        <div class="zenoti-filter-row inner-action-bar">
           <div class="tab-strip">
             <button type="button" [class.active]="activeView() === 'matched'" (click)="activeView.set('matched')">Matched product</button>
             <button type="button" [class.active]="activeView() === 'history'" (click)="activeView.set('history')">Scan history</button>
@@ -94,7 +94,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
           </div>
         </div>
 
-        <div class="zenoti-table-wrap" *ngIf="activeView() === 'matched'">
+        <div class="zenoti-table-wrap inner-table-wrap" *ngIf="activeView() === 'matched'">
           <table>
             <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Branch</th><th>Stock</th><th>Reorder</th><th>Price</th><th>Unit cost</th><th>Workflow</th></tr></thead>
             <tbody>
@@ -114,7 +114,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
           </table>
         </div>
 
-        <div class="zenoti-table-wrap" *ngIf="activeView() === 'history'">
+        <div class="zenoti-table-wrap inner-table-wrap" *ngIf="activeView() === 'history'">
           <table>
             <thead><tr><th>Time</th><th>Code</th><th>Workflow</th><th>Product</th><th>Status</th><th>Result</th></tr></thead>
             <tbody>

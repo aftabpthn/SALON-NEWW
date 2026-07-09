@@ -10,12 +10,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, DecimalPipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Commission Calculation Preview</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/reports/staff-sales">Staff sales</a>
           <a class="ghost-button" routerLink="/commissions">Rules</a>
           <button class="ghost-button" type="button" (click)="load()">Refresh</button>
@@ -41,7 +41,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="preview() as data">
-        <div class="metrics-grid">
+        <div class="metrics-grid inner-stats-grid">
           <article class="metric-card">
             <span>Preview commission</span>
             <strong>{{ data.totals?.commission || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
@@ -76,12 +76,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Staff commission summary</h2>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead>
                 <tr>
@@ -118,7 +118,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
         <section class="dashboard-grid two-col">
           <article class="panel">
-            <div class="section-title"><h2>Commission by category</h2></div>
+            <div class="section-title inner-action-bar"><h2>Commission by category</h2></div>
             <div class="summary-lines">
               <div *ngFor="let row of data.typeTotals || []">
                 <span>{{ row.itemTypeLabel }} · {{ row.itemCount }} items</span>
@@ -129,7 +129,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </article>
 
           <article class="panel">
-            <div class="section-title"><h2>Ready for payroll</h2></div>
+            <div class="section-title inner-action-bar"><h2>Ready for payroll</h2></div>
             <div class="summary-lines">
               <div><span>Preview status</span><strong>Not posted</strong></div>
               <div><span>Source</span><strong>POS item staff</strong></div>
@@ -139,12 +139,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Invoice item commission</h2>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead>
                 <tr>

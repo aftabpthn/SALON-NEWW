@@ -118,8 +118,8 @@ type PackageClientNotice = {
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero pos-command-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero pos-command-hero inner-page-header">
         <div class="pos-command-copy">
           <span class="pos-eyebrow">POS billing</span>
           <h1>Counter checkout</h1>

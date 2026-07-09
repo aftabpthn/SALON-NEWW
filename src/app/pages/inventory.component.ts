@@ -16,11 +16,11 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, RouterLink, StateComponent],
   template: `
-    <section class="page-stack inventory-shell zenoti-inventory-shell">
+    <section class="page-stack inventory-shell zenoti-inventory-shell inner-page-shell">
       <section class="zenoti-product-page">
         <app-state [loading]="loading()" [error]="error()"></app-state>
 
-        <div class="inventory-control-tower">
+        <div class="inventory-control-tower inner-page-header">
           <div>
             <strong>Inventory control tower</strong>
             <span>Stock, FIFO, reorder, wastage and profit linkage</span>
@@ -52,7 +52,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
           </label>
         </div>
 
-        <div class="zenoti-filter-grid">
+        <div class="zenoti-filter-grid inner-form-grid">
           <label>
             <span>Categories</span>
             <select [(ngModel)]="productCategoryFilter">
@@ -98,14 +98,14 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
             <span>Results</span>
             <em>Status: {{ productStatusLabel() }}</em>
           </div>
-          <div class="zenoti-grid-actions">
+          <div class="zenoti-grid-actions inner-action-bar">
             <a class="zenoti-mini-button" routerLink="/inventory/reports">Reports</a>
             <a class="zenoti-mini-button" routerLink="/inventory/purchase-orders">Purchase Orders</a>
             <button class="zenoti-mini-button" type="button" (click)="openNewProductForm()">Add Product</button>
           </div>
         </div>
 
-        <div class="zenoti-table-shell">
+        <div class="zenoti-table-shell inner-table-wrap">
           <table class="zenoti-products-table">
             <thead>
               <tr>
@@ -166,7 +166,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
         </div>
       </section>
 
-      <section class="panel operations-panel" *ngIf="activeDesk()">
+        <section class="panel operations-panel inner-page-card" *ngIf="activeDesk()">
         <div class="section-title">
           <div>
             <h2>{{ deskTitle() }}</h2>

@@ -19,12 +19,12 @@ type MessageHistoryResponse = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="message-history-page">
-      <header class="page-hero">
+    <section class="message-history-page inner-page-shell">
+      <header class="page-hero inner-page-header">
         <div>
           <h1>Message History</h1>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/whatsapp">WhatsApp</a>
           <a class="ghost-button" routerLink="/notification-center">Notifications</a>
           <button class="primary-button" type="button" (click)="load()">Run Report</button>

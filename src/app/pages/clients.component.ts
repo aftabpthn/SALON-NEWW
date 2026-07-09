@@ -11,8 +11,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero client-command-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero client-command-hero inner-page-header">
         <div class="hero-copy">
           <h2>Client list</h2>
         </div>
@@ -22,7 +22,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
       </div>
 
-      <section class="salonist-kpis" aria-label="Client summary">
+      <section class="salonist-kpis inner-stats-grid" aria-label="Client summary">
         <button class="client-kpi-card" type="button" (click)="applyClientTypeFilter('')">
           <span class="kpi-icon">CL</span>
           <strong>{{ totalClientsCount() }}</strong>
@@ -75,9 +75,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </button>
       </section>
 
-      <section class="panel client-database-panel">
+      <section class="panel client-database-panel inner-page-card">
         <p class="client-notice" *ngIf="notice()">{{ notice() }}</p>
-        <div class="table-toolbar">
+        <div class="table-toolbar inner-action-bar">
           <label class="field">
             <span>Client Type</span>
             <select [ngModel]="clientTypeFilter()" (ngModelChange)="setClientTypeFilter($event)">

@@ -9,7 +9,7 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <div class="ai-insights-header">
+      <div class="ai-insights-header inner-page-header">
         <div class="ai-brand">
           <span class="ai-icon">🤖</span>
           <div>
@@ -19,7 +19,7 @@ import { Subscription } from 'rxjs';
         <button class="ghost-button" (click)="refreshInsights()">🔄 Refresh insights</button>
       </div>
 
-      <div class="insights-grid" *ngIf="insights() as items">
+      <div class="insights-grid inner-stats-grid" *ngIf="insights() as items">
         <div *ngFor="let item of items" class="insight-card" [ngClass]="'severity-' + item.severity">
           <div class="insight-header">
             <span class="insight-type-badge">{{ item.type }}</span>

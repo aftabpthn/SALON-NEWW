@@ -33,7 +33,7 @@ const DEFAULT_MODIFIERS = [
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack inventory-enterprise-page recipes-page">
+    <section class="page-stack inventory-enterprise-page recipes-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Service Recipes"
         breadcrumb="Inventory > Recipes"
@@ -50,7 +50,7 @@ const DEFAULT_MODIFIERS = [
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="zenoti-recipe-workspace">
-        <div class="zenoti-result-bar">
+        <div class="zenoti-result-bar inner-stats-grid">
           <div>
             <strong>{{ activeTabCount() }}</strong><span>Results</span>
             <small class="status-chip">Status: recipes active in this center</small>
@@ -65,7 +65,7 @@ const DEFAULT_MODIFIERS = [
           </div>
         </div>
 
-        <div class="zenoti-filter-row">
+        <div class="zenoti-filter-row inner-action-bar">
           <div class="tab-strip">
             <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">{{ tab.label }}</button>
           </div>
@@ -73,7 +73,7 @@ const DEFAULT_MODIFIERS = [
         </div>
 
         <ng-container *ngIf="activeTab() === 'recipes'">
-          <div class="table-wrap zenoti-table-wrap">
+          <div class="table-wrap zenoti-table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Service</th><th>Branch</th><th>Products</th><th>Cost</th><th>Margin</th><th>Status</th><th>Auto consume</th><th>Action</th></tr></thead>
               <tbody>
@@ -94,7 +94,7 @@ const DEFAULT_MODIFIERS = [
         </ng-container>
 
         <ng-container *ngIf="activeTab() === 'planner'">
-          <div class="table-wrap zenoti-table-wrap">
+          <div class="table-wrap zenoti-table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Queue</th><th>Service / product</th><th>Category</th><th>Need</th><th>Severity</th></tr></thead>
               <tbody>
@@ -108,7 +108,7 @@ const DEFAULT_MODIFIERS = [
         </ng-container>
 
         <ng-container *ngIf="activeTab() === 'intelligence'">
-          <div class="table-wrap zenoti-table-wrap">
+          <div class="table-wrap zenoti-table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Signal</th><th>Name</th><th>Message</th><th>Action</th></tr></thead>
               <tbody>

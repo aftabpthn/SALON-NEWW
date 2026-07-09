@@ -76,8 +76,8 @@ type PlanLifecycleDialog = {
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="page-stack memberships-page">
-      <div class="module-hero membership-hero membership-action-bar">
+    <section class="page-stack memberships-page inner-page-shell">
+      <div class="module-hero membership-hero membership-action-bar inner-page-header">
         <div class="hero-actions membership-quick-actions">
           <a class="ghost-button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Sell in POS</a>
           <button class="ghost-button" type="button" (click)="openPlanWorkspace('packages')">Packages</button>
@@ -144,7 +144,7 @@ type PlanLifecycleDialog = {
         </button>
       </section>
 
-      <section class="stats-grid membership-stats" *ngIf="activeTab() === 'overview'">
+      <section class="stats-grid membership-stats inner-stats-grid" *ngIf="activeTab() === 'overview'">
         <article class="metric-card">
           <span>Total members</span>
           <strong>{{ totalMemberCount() }}</strong>
@@ -231,7 +231,7 @@ type PlanLifecycleDialog = {
           </label>
         </div>
 
-        <div class="plan-table-wrap" *ngIf="planWorkspaceView() === 'plans'">
+        <div class="plan-table-wrap inner-table-wrap" *ngIf="planWorkspaceView() === 'plans'">
           <table class="plan-table">
             <thead>
               <tr>
@@ -283,7 +283,7 @@ type PlanLifecycleDialog = {
           </div>
         </footer>
 
-        <div class="plan-table-wrap" *ngIf="planWorkspaceView() === 'packages'">
+        <div class="plan-table-wrap inner-table-wrap" *ngIf="planWorkspaceView() === 'packages'">
           <table class="plan-table">
             <thead>
               <tr>
@@ -330,7 +330,7 @@ type PlanLifecycleDialog = {
         </div>
 
         <div class="giftcard-workspace" *ngIf="planWorkspaceView() === 'giftcards'">
-          <form class="form-panel inline-form" [formGroup]="giftForm" (ngSubmit)="saveGiftCard()">
+          <form class="form-panel inline-form inner-form-grid" [formGroup]="giftForm" (ngSubmit)="saveGiftCard()">
             <label class="field"><span>Code</span><input formControlName="code" /></label>
             <label class="field"><span>Initial value</span><input type="number" formControlName="initialValue" /></label>
             <label class="field"><span>Expiry</span><input type="date" formControlName="expiryDate" /></label>
@@ -481,7 +481,7 @@ type PlanLifecycleDialog = {
         </aside>
       </div>
 
-      <section class="panel" *ngIf="activeTab() === 'active'">
+      <section class="panel inner-page-card" *ngIf="activeTab() === 'active'">
         <div class="section-title">
           <div>
             <h2>{{ memberListTitle() }}</h2>
@@ -494,7 +494,7 @@ type PlanLifecycleDialog = {
             </select>
           </div>
         </div>
-        <div class="table-wrap compact-table">
+        <div class="table-wrap compact-table inner-table-wrap">
           <table>
             <thead>
               <tr>
@@ -543,7 +543,7 @@ type PlanLifecycleDialog = {
         </div>
 
         <div class="two-grid compact-workbench self-service-grid">
-          <section class="form-panel">
+          <section class="form-panel inner-form-grid">
             <div class="section-title compact-title">
               <div>
                 <h3>Membership self-service control center</h3>
@@ -579,7 +579,7 @@ type PlanLifecycleDialog = {
             <p class="inline-hint" *ngIf="selfServiceLastLink">{{ selfServiceLastLink }}</p>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel inner-form-grid">
             <div class="section-title compact-title">
               <div>
                 <h3>Manual credit adjustment</h3>
@@ -615,7 +615,7 @@ type PlanLifecycleDialog = {
       </section>
 
       <div class="two-grid compact-workbench" *ngIf="activeTab() === 'reminders'">
-        <section class="form-panel">
+        <section class="form-panel inner-form-grid">
           <h3>Family membership sharing</h3>
           <form [formGroup]="familyForm" (ngSubmit)="saveFamilyMember()">
             <label class="field"><span>Primary client</span><select formControlName="primaryClientId"><option value="">Select primary</option><option *ngFor="let client of clients()" [value]="client.id">{{ client.name }}</option></select></label>
@@ -626,7 +626,7 @@ type PlanLifecycleDialog = {
           </form>
         </section>
 
-        <section class="form-panel">
+        <section class="form-panel inner-form-grid">
           <h3>WhatsApp renewal queue</h3>
           <div class="quick-grid">
             <article class="action-card" *ngFor="let reminder of reminders()">
@@ -639,7 +639,7 @@ type PlanLifecycleDialog = {
         </section>
       </div>
 
-      <section class="panel" *ngIf="activeTab() === 'autoRenew'">
+      <section class="panel inner-page-card" *ngIf="activeTab() === 'autoRenew'">
         <div class="section-title">
           <div>
             <h2>Auto-renew queue</h2>
@@ -685,7 +685,7 @@ type PlanLifecycleDialog = {
         </ng-template>
       </section>
 
-      <section class="panel" *ngIf="activeTab() === 'audit'">
+      <section class="panel inner-page-card" *ngIf="activeTab() === 'audit'">
         <div class="section-title">
           <div>
             <h2>Membership audit ledger</h2>
@@ -703,7 +703,7 @@ type PlanLifecycleDialog = {
             <button class="ghost-button mini" type="button" (click)="clearAuditLedgerSearch()" [disabled]="saving() || (!auditLedgerSearch && !auditLedgerSearchDraft)">Clear</button>
           </div>
         </div>
-        <div class="table-wrap compact-table">
+        <div class="table-wrap compact-table inner-table-wrap">
           <table>
             <thead><tr><th>When</th><th>Client</th><th>Action</th><th>Amount</th><th>Discount</th><th>Credits</th><th>Payment</th><th>Invoice</th><th>Note</th></tr></thead>
             <tbody>
@@ -723,7 +723,7 @@ type PlanLifecycleDialog = {
         </div>
       </section>
 
-      <section class="panel" *ngIf="activeTab() === 'commission'">
+      <section class="panel inner-page-card" *ngIf="activeTab() === 'commission'">
         <div class="section-title">
           <div>
             <h2>Membership commission center</h2>
@@ -739,13 +739,13 @@ type PlanLifecycleDialog = {
         </section>
 
         <div class="two-grid compact-workbench">
-          <section class="form-panel">
+          <section class="form-panel inner-form-grid">
             <div class="section-title compact-title">
               <div>
                 <h3>Staff-wise revenue and retention</h3>
               </div>
             </div>
-            <div class="table-wrap compact-table" *ngIf="commissionReport().staff?.length; else noCommissionStaff">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="commissionReport().staff?.length; else noCommissionStaff">
               <table>
                 <thead><tr><th>Staff</th><th>Sale</th><th>Renewal</th><th>Upgrade</th><th>Retention</th><th>Preview</th><th>Reversal</th></tr></thead>
                 <tbody>
@@ -769,7 +769,7 @@ type PlanLifecycleDialog = {
             </ng-template>
           </section>
 
-          <section class="form-panel">
+          <section class="form-panel inner-form-grid">
             <div class="section-title compact-title">
               <div>
                 <h3>Reversal and audit flags</h3>
@@ -792,7 +792,7 @@ type PlanLifecycleDialog = {
           </section>
         </div>
 
-        <div class="table-wrap compact-table">
+        <div class="table-wrap compact-table inner-table-wrap">
           <table>
             <thead><tr><th>When</th><th>Staff</th><th>Client</th><th>Action</th><th>Revenue</th><th>Rate</th><th>Commission</th><th>Audit</th><th>Status</th></tr></thead>
             <tbody>
@@ -812,7 +812,7 @@ type PlanLifecycleDialog = {
         </div>
       </section>
 
-      <section class="panel" *ngIf="activeTab() === 'risk'">
+      <section class="panel inner-page-card" *ngIf="activeTab() === 'risk'">
         <div class="section-title">
           <div>
             <h2>Membership risk center</h2>
@@ -863,7 +863,7 @@ type PlanLifecycleDialog = {
         </ng-template>
       </section>
 
-      <section class="panel" *ngIf="activeTab() === 'reports'">
+      <section class="panel inner-page-card" *ngIf="activeTab() === 'reports'">
         <div class="section-title">
           <div>
             <h2>Membership reports center</h2>
@@ -1009,14 +1009,14 @@ type PlanLifecycleDialog = {
           <button type="button" [class.active]="activeReportTab() === 'membershipSalesByCustomer'" (click)="setReportTab('membershipSalesByCustomer')">Membership Sales By Customer <span>{{ reportSet('membershipSalesByCustomer').length }}</span></button>
         </nav>
 
-        <section class="form-panel report-card action-queue-card report-detail-card" *ngIf="activeReportTab() === 'actionQueue'">
+        <section class="form-panel report-card action-queue-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'actionQueue'">
           <div class="section-title compact-section-title">
             <div>
               <h3>Membership action queue</h3>
             </div>
             <span class="badge" [class.danger]="reportMetric('actionQueue') > 0">{{ reportMetric('actionQueue') }} open</span>
           </div>
-          <div class="table-wrap compact-table" *ngIf="reportSet('actionQueue').length; else noMembershipActionQueue">
+          <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('actionQueue').length; else noMembershipActionQueue">
             <table><thead><tr><th>Priority</th><th>Type</th><th>Client / plan</th><th>Value</th><th>Next action</th></tr></thead>
               <tbody><tr *ngFor="let row of reportSet('actionQueue').slice(0, 10)">
                 <td><span class="badge" [ngClass]="riskBadgeClass(row['priority'])">{{ row['priority'] }}</span></td>
@@ -1030,9 +1030,9 @@ type PlanLifecycleDialog = {
         </section>
 
         <div class="report-grid">
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'activeMembers'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'activeMembers'">
             <h3>Active members</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('activeMembers').length; else noActiveReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('activeMembers').length; else noActiveReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Expiry</th><th>Credits</th><th>Price</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('activeMembers').slice(0, 8)">
                   <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td>{{ row['expiresOn'] || '-' }}</td><td>{{ row['creditsRemaining'] || 0 }} / {{ row['planCredits'] || 0 }}</td><td>{{ row['price'] | currency: 'INR':'symbol':'1.0-0' }}</td>
@@ -1041,9 +1041,9 @@ type PlanLifecycleDialog = {
             <ng-template #noActiveReport><div class="empty-panel compact-empty"><strong>No active members.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'expiringSoon'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'expiringSoon'">
             <h3>Expiring soon</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('expiringSoon').length; else noExpiryReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('expiringSoon').length; else noExpiryReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Days</th><th>Auto-renew</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('expiringSoon').slice(0, 8)">
                   <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td><span class="badge" [class.danger]="row['daysLeft'] <= 7">{{ row['daysLeft'] }}d</span></td><td>{{ row['autoRenew'] ? 'Yes' : 'No' }}</td>
@@ -1052,9 +1052,9 @@ type PlanLifecycleDialog = {
             <ng-template #noExpiryReport><div class="empty-panel compact-empty"><strong>No expiring memberships.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'renewalRevenue'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'renewalRevenue'">
             <h3>Renewal revenue</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('renewalRevenue').length; else noRenewalReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('renewalRevenue').length; else noRenewalReport">
               <table><thead><tr><th>Date</th><th>Revenue</th><th>Count</th><th>Staff</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('renewalRevenue').slice(0, 8)">
                   <td>{{ row['date'] }}</td><td>{{ row['revenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['count'] }}</td><td>{{ row['staffCount'] }}</td>
@@ -1063,9 +1063,9 @@ type PlanLifecycleDialog = {
             <ng-template #noRenewalReport><div class="empty-panel compact-empty"><strong>No renewal revenue.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'cancelledMemberships'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'cancelledMemberships'">
             <h3>Cancelled memberships</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('cancelledMemberships').length; else noCancelledReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('cancelledMemberships').length; else noCancelledReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Amount</th><th>When</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('cancelledMemberships').slice(0, 8)">
                   <td>{{ row['clientName'] }}</td><td>{{ row['planName'] || row['planId'] }}</td><td>{{ (row['amount'] || row['price'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['createdAt'] || row['takenOn'] || '-' }}</td>
@@ -1074,9 +1074,9 @@ type PlanLifecycleDialog = {
             <ng-template #noCancelledReport><div class="empty-panel compact-empty"><strong>No cancellations.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'staffWiseSales'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'staffWiseSales'">
             <h3>Staff-wise sales</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('staffWiseSales').length; else noStaffReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('staffWiseSales').length; else noStaffReport">
               <table><thead><tr><th>Staff</th><th>Sale</th><th>Renewal</th><th>Upgrade</th><th>Commission</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('staffWiseSales').slice(0, 8)">
                   <td>{{ row['staffName'] || 'System' }}</td><td>{{ row['saleRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['renewalRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['upgradeRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['commissionPreview'] | currency: 'INR':'symbol':'1.0-0' }}</td>
@@ -1085,9 +1085,9 @@ type PlanLifecycleDialog = {
             <ng-template #noStaffReport><div class="empty-panel compact-empty"><strong>No staff sales rows.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'planWiseProfitability'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'planWiseProfitability'">
             <h3>Plan-wise profitability</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('planWiseProfitability').length; else noPlanReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('planWiseProfitability').length; else noPlanReport">
               <table><thead><tr><th>Plan</th><th>Revenue</th><th>Leakage</th><th>Liability</th><th>Margin</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('planWiseProfitability').slice(0, 8)">
                   <td>{{ row['planName'] }}</td><td>{{ row['revenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['discountLeakage'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['creditLiability'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['marginPercent'] || 0 }}%</td>
@@ -1096,9 +1096,9 @@ type PlanLifecycleDialog = {
             <ng-template #noPlanReport><div class="empty-panel compact-empty"><strong>No plan profitability rows.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'creditLiability'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'creditLiability'">
             <h3>Credit liability</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('creditLiability').length; else noCreditReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('creditLiability').length; else noCreditReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Credits</th><th>Value</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('creditLiability').slice(0, 8)">
                   <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td>{{ row['creditsRemaining'] }}</td><td>{{ row['liabilityValue'] | currency: 'INR':'symbol':'1.0-0' }}</td>
@@ -1107,9 +1107,9 @@ type PlanLifecycleDialog = {
             <ng-template #noCreditReport><div class="empty-panel compact-empty"><strong>No credit liability.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'autoRenewFailedPayments'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'autoRenewFailedPayments'">
             <h3>Auto-renew failed payments</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('autoRenewFailedPayments').length; else noAutoFailedReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('autoRenewFailedPayments').length; else noAutoFailedReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Status</th><th>Retry</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('autoRenewFailedPayments').slice(0, 8)">
                   <td>{{ row['clientName'] || clientName(row['clientId']) }}</td><td>{{ row['planName'] || row['planId'] }}</td><td><span class="badge danger">{{ row['status'] }}</span></td><td>{{ row['retryCount'] || 0 }}</td>
@@ -1118,9 +1118,9 @@ type PlanLifecycleDialog = {
             <ng-template #noAutoFailedReport><div class="empty-panel compact-empty"><strong>No failed auto-renew payments.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'upgradeDowngrade'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'upgradeDowngrade'">
             <h3>Upgrade / downgrade</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('upgradeDowngrade').length; else noLifecycleReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('upgradeDowngrade').length; else noLifecycleReport">
               <table><thead><tr><th>Client</th><th>Action</th><th>Amount</th><th>Staff</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('upgradeDowngrade').slice(0, 8)">
                   <td>{{ row['clientName'] }}</td><td>{{ row['action'] }}</td><td>{{ (row['amount'] || row['refundAmount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['staffName'] || 'System' }}</td>
@@ -1129,9 +1129,9 @@ type PlanLifecycleDialog = {
             <ng-template #noLifecycleReport><div class="empty-panel compact-empty"><strong>No upgrade or downgrade rows.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card" *ngIf="activeReportTab() === 'discountLeakage'">
+          <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'discountLeakage'">
             <h3>Discount leakage</h3>
-            <div class="table-wrap compact-table" *ngIf="reportSet('discountLeakage').length; else noDiscountReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('discountLeakage').length; else noDiscountReport">
               <table><thead><tr><th>Invoice</th><th>Plan</th><th>Discount</th><th>Risk</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('discountLeakage').slice(0, 8)">
                   <td>{{ row['invoiceId'] || '-' }}</td><td>{{ row['planName'] || row['planId'] }}</td><td>{{ row['discountAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td><td><span class="badge" [ngClass]="riskBadgeClass(row['riskLevel'])">{{ row['riskLevel'] }}</span></td>
@@ -1140,7 +1140,7 @@ type PlanLifecycleDialog = {
             <ng-template #noDiscountReport><div class="empty-panel compact-empty"><strong>No discount leakage.</strong></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card wide-report-card" *ngIf="activeReportTab() === 'membershipSalesByCustomer'">
+          <section class="form-panel report-card report-detail-card wide-report-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'membershipSalesByCustomer'">
             <div class="section-title compact-section-title">
               <div>
                 <h3>Membership Sales By Customer</h3>
@@ -1157,7 +1157,7 @@ type PlanLifecycleDialog = {
               <article><span>Active Memberships</span><strong>{{ reportMetric('membershipSalesActiveMemberships') }}</strong></article>
               <article><span>Expired Memberships</span><strong>{{ reportMetric('membershipSalesExpiredMemberships') }}</strong></article>
             </section>
-            <div class="table-wrap compact-table" *ngIf="reportSet('membershipSalesByCustomer').length; else noMembershipSalesByCustomer">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('membershipSalesByCustomer').length; else noMembershipSalesByCustomer">
               <table><thead><tr><th>Name</th><th>Contact</th><th>Membership / Plan</th><th>Plan Type</th><th>Sale Type</th><th>Offer Price</th><th>Paid</th><th>Due</th><th>Total Ewallet</th><th>Pending Ewallet</th><th>Redeemed</th><th>Staff</th><th>Invoice No</th><th>Branch</th><th>Expiry</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('membershipSalesByCustomer').slice(0, 30)">
                   <td>{{ row['clientName'] }}</td>
@@ -1189,7 +1189,7 @@ type PlanLifecycleDialog = {
             <ng-template #noMembershipSalesByCustomer><div class="empty-panel compact-empty"><strong>No membership customer sales rows.</strong><span>Membership sales, renewals, wallet liability and invoice references will appear here.</span></div></ng-template>
           </section>
 
-          <section class="form-panel report-card report-detail-card wide-report-card" *ngIf="activeReportTab() === 'membershipRedeem'">
+          <section class="form-panel report-card report-detail-card wide-report-card inner-form-grid inner-page-card" *ngIf="activeReportTab() === 'membershipRedeem'">
             <div class="section-title compact-section-title">
               <div>
                 <h3>Membership Redeem</h3>
@@ -1204,7 +1204,7 @@ type PlanLifecycleDialog = {
               <article><span>Active Wallet Clients</span><strong>{{ reportMetric('clientsWithActiveWallet') }}</strong></article>
               <article><span>Last Redeemed Today</span><strong>{{ reportMetric('lastRedeemedToday') }}</strong></article>
             </section>
-            <div class="table-wrap compact-table" *ngIf="reportSet('membershipRedeem').length; else noRedeemReport">
+            <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('membershipRedeem').length; else noRedeemReport">
               <table><thead><tr><th>Name</th><th>Contact</th><th>Membership / Plan</th><th>Ewallet</th><th>Last redeemed</th><th>Date</th><th>Time</th><th>Invoice / POS</th><th>Branch</th><th>Action</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('membershipRedeem').slice(0, 30)">
                   <td>{{ row['clientName'] }}</td>
@@ -1227,7 +1227,7 @@ type PlanLifecycleDialog = {
         </div>
       </section>
 
-      <section class="panel rewards-panel" *ngIf="activeTab() === 'rewards'">
+      <section class="panel rewards-panel inner-page-card" *ngIf="activeTab() === 'rewards'">
         <div class="section-title">
           <div>
             <h2>Rewards Ledger + ROI</h2>
@@ -1313,7 +1313,7 @@ type PlanLifecycleDialog = {
           <button type="button" [class.active]="activeRewardTab() === 'abuse'" (click)="setRewardTab('abuse')">Abuse Alerts <span>{{ rewardAbuseRows().length }}</span></button>
         </nav>
 
-        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'ledger'">
+        <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeRewardTab() === 'ledger'">
           <h3>Reward Ledger</h3>
           <div class="table-wrap compact-table reward-ledger-table" *ngIf="rewardLedgerRows().length; else noRewardLedger">
             <table>
@@ -1332,9 +1332,9 @@ type PlanLifecycleDialog = {
           <ng-template #noRewardLedger><div class="empty-panel compact-empty"><strong>No reward ledger rows.</strong><span>Earn, redeem, expiry, reversal and adjustment entries will appear here.</span></div></ng-template>
         </section>
 
-        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'roi'">
+        <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeRewardTab() === 'roi'">
           <h3>Reward ROI</h3>
-          <div class="table-wrap compact-table" *ngIf="rewardRoiRows().length; else noRewardRoi">
+          <div class="table-wrap compact-table inner-table-wrap" *ngIf="rewardRoiRows().length; else noRewardRoi">
             <table><thead><tr><th>Client</th><th>Visits</th><th>Total sale</th><th>Earned</th><th>Redeemed</th><th>Balance</th><th>Repeat revenue</th><th>Suggested action</th></tr></thead>
               <tbody><tr *ngFor="let row of rewardRoiRows().slice(0, 80)">
                 <td>{{ row['clientName'] || clientName(row['clientId']) }}<small>{{ row['clientPhone'] || '' }}</small></td>
@@ -1344,9 +1344,9 @@ type PlanLifecycleDialog = {
           <ng-template #noRewardRoi><div class="empty-panel compact-empty"><strong>No reward ROI rows.</strong><span>Reward users vs non-reward revenue appears after loyalty activity starts.</span></div></ng-template>
         </section>
 
-        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'expiring'">
+        <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeRewardTab() === 'expiring'">
           <h3>Expiring Rewards</h3>
-          <div class="table-wrap compact-table" *ngIf="expiringRewardRows().length; else noExpiringRewards">
+          <div class="table-wrap compact-table inner-table-wrap" *ngIf="expiringRewardRows().length; else noExpiringRewards">
             <table><thead><tr><th>Client</th><th>Phone</th><th>Points expiring</th><th>Expiry date</th><th>Days left</th><th>Value</th><th>Last visit</th><th>Reminder</th></tr></thead>
               <tbody><tr *ngFor="let row of expiringRewardRows().slice(0, 80)">
                 <td>{{ row['clientName'] }}</td><td>{{ row['phone'] || '-' }}</td><td>{{ row['pointsExpiring'] || 0 }}</td><td>{{ row['expiryDate'] }}</td><td><span class="badge" [class.danger]="row['daysLeft'] <= 7">{{ row['daysLeft'] }}d</span></td><td>{{ row['estimatedValue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['lastVisitDate'] || '-' }}</td>
@@ -1356,9 +1356,9 @@ type PlanLifecycleDialog = {
           <ng-template #noExpiringRewards><div class="empty-panel compact-empty"><strong>No rewards expiring in this window.</strong><span>Clients with active points expiring in 30 days appear here.</span></div></ng-template>
         </section>
 
-        <section class="form-panel report-card report-detail-card" *ngIf="activeRewardTab() === 'abuse'">
+        <section class="form-panel report-card report-detail-card inner-form-grid inner-page-card" *ngIf="activeRewardTab() === 'abuse'">
           <h3>Abuse Alerts</h3>
-          <div class="table-wrap compact-table" *ngIf="rewardAbuseRows().length; else noRewardAbuse">
+          <div class="table-wrap compact-table inner-table-wrap" *ngIf="rewardAbuseRows().length; else noRewardAbuse">
             <table><thead><tr><th>Alert type</th><th>Client</th><th>Invoice / ref</th><th>Points</th><th>Staff/user</th><th>Risk</th><th>Suggested action</th></tr></thead>
               <tbody><tr *ngFor="let row of rewardAbuseRows().slice(0, 100)">
                 <td>{{ row['alertType'] }}</td><td>{{ row['client'] || clientName(row['clientId']) }}</td><td>{{ row['invoiceReference'] || '-' }}</td><td>{{ row['points'] || row['amount'] || 0 }}</td><td>{{ row['staffUser'] || 'system' }}</td><td><span class="badge" [ngClass]="riskBadgeClass(row['riskLevel'])">{{ row['riskLevel'] }}</span></td><td>{{ row['suggestedAction'] }}</td>

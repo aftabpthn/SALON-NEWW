@@ -80,8 +80,8 @@ import { VoidInvoiceModalComponent } from '../../ui/void-invoice-modal/void-invo
     @media (max-width: 860px) { .billing-hero, .invoice-actions { grid-template-columns: 1fr; display: grid; } .status-card { text-align: left; } }
   `],
   template: `
-    <section class="invoice-detail-page">
-      <header class="billing-hero">
+    <section class="invoice-detail-page inner-page-shell">
+      <header class="billing-hero inner-page-header">
         <div>
           <h1>Invoice details</h1>
           <p>{{ invoice()?.invoice_no || 'Loading invoice record' }}</p>
@@ -92,7 +92,7 @@ import { VoidInvoiceModalComponent } from '../../ui/void-invoice-modal/void-invo
         </div>
       </header>
 
-      <section class="invoice-workspace">
+      <section class="invoice-workspace inner-page-card">
         <app-invoice-preview [invoice]="invoice()" />
         <div class="invoice-actions">
           <app-refund-modal (refund)="refund($event)" />

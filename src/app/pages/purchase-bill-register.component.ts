@@ -12,7 +12,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="purchase-register-page">
+    <section class="purchase-register-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Purchase Bill Register"
         breadcrumb="Inventory > Purchases > Saved Purchase Bills"
@@ -26,7 +26,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <section class="filters">
+      <section class="filters inner-form-grid">
         <label>
           <span>Branch</span>
           <select [ngModel]="branchId()" (ngModelChange)="branchId.set($event); load()">
@@ -40,14 +40,14 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </label>
       </section>
 
-      <section class="summary-grid">
+      <section class="summary-grid inner-stats-grid">
         <article><span>Bills</span><strong>{{ filteredBills().length }}</strong></article>
         <article><span>Purchase</span><strong>{{ totalAmount() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
         <article><span>Input GST</span><strong>{{ totalGst() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
         <article><span>Pending payable</span><strong>{{ pendingPayableTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
       </section>
 
-      <section class="table-panel report-panel">
+      <section class="table-panel report-panel inner-page-card">
         <h3>GST Register</h3>
         <table>
           <thead>
@@ -72,7 +72,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </table>
       </section>
 
-      <section class="table-panel report-panel">
+      <section class="table-panel report-panel inner-page-card">
         <h3>Vendor Purchases</h3>
         <table>
           <thead>
@@ -97,7 +97,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </table>
       </section>
 
-      <section class="table-panel report-panel">
+      <section class="table-panel report-panel inner-page-card">
         <h3>Pending Payables</h3>
         <table>
           <thead>

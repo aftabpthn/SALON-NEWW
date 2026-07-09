@@ -8,9 +8,9 @@ import { ReportsEnterpriseService, FilterState } from './reports-enterprise.serv
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="export-builder">
-      <section class="panel report-section">
-        <div class="section-title"><h3>Custom Export Builder</h3></div>
+    <div class="export-builder inner-page-shell">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar"><h3>Custom Export Builder</h3></div>
         <div class="export-form">
           <div class="form-row">
             <label class="field">
@@ -100,8 +100,8 @@ import { ReportsEnterpriseService, FilterState } from './reports-enterprise.serv
         </div>
       </section>
 
-      <section class="panel report-section" *ngIf="generated()">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card" *ngIf="generated()">
+        <div class="section-title inner-action-bar">
           <h3>Export Preview</h3>
           <span class="badge">Ready for download</span>
         </div>

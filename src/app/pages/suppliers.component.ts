@@ -62,8 +62,8 @@ interface SupplierCommandRow {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack suppliers-page">
-      <section class="zenoti-supplier-header">
+    <section class="page-stack suppliers-page inner-page-shell">
+      <section class="zenoti-supplier-header inner-page-header">
         <div class="zenoti-heading">
           <div>
             <h1>Supplier command register</h1>
@@ -75,7 +75,7 @@ interface SupplierCommandRow {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <section class="zenoti-supplier-workspace">
-        <div class="zenoti-result-bar">
+        <div class="zenoti-result-bar inner-stats-grid">
           <div>
             <strong>{{ filteredSupplierRows().length }}</strong><span>Results</span>
             <small class="status-chip">Status: supplier control active in this center</small>
@@ -89,7 +89,7 @@ interface SupplierCommandRow {
             <span>Payable <strong>{{ supplierOutstandingTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
           </div>
         </div>
-        <div class="supplier-filter-row">
+        <div class="supplier-filter-row inner-action-bar">
           <label class="search-field">
             <span>Search supplier</span>
             <input [(ngModel)]="query" placeholder="Name, phone, GSTIN, contact, status" />
@@ -114,7 +114,7 @@ interface SupplierCommandRow {
           <div [style.width.px]="supplierScrollWidth()"></div>
         </div>
 
-        <div class="table-wrap zenoti-table-wrap" #supplierTableWrap (scroll)="syncSupplierTableScroll('table')">
+        <div class="table-wrap zenoti-table-wrap inner-table-wrap" #supplierTableWrap (scroll)="syncSupplierTableScroll('table')">
           <table>
             <thead>
               <tr>

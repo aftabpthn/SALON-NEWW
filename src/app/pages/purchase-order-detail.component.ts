@@ -11,7 +11,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack po-detail-page">
+    <section class="page-stack po-detail-page inner-page-shell">
       <app-inventory-zenoti-chrome
         class="no-print"
         [title]="po()?.poNumber || 'Purchase order'"
@@ -27,7 +27,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success no-print" *ngIf="success()">{{ success() }}</div>
 
-      <section class="panel printable-po" *ngIf="po() as row" id="po-print-area">
+      <section class="panel printable-po inner-page-card" *ngIf="po() as row" id="po-print-area">
         <div class="print-header">
           <div>
             <h1>{{ row.poNumber || row.id }}</h1>
@@ -39,7 +39,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </div>
 
-        <div class="quick-actions no-print">
+        <div class="quick-actions no-print inner-action-bar">
           <button class="primary-button mini" type="button" (click)="approve()" [disabled]="row.status !== 'draft' || saving()">Approve</button>
           <button class="ghost-button mini" type="button" (click)="transition('close')" [disabled]="!canClose() || saving()">Close</button>
           <button class="ghost-button mini danger" type="button" (click)="transition('reject')" [disabled]="!canReject() || saving()">Reject</button>
@@ -94,9 +94,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <span><strong>Received value</strong>{{ row.totalReceivedCost | currency: 'INR':'symbol':'1.0-0' }}</span>
         </div>
 
-        <section class="sub-panel">
+        <section class="sub-panel inner-page-card">
           <div class="section-title"><div><h2>Ordered vs received</h2></div></div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Product / HSN</th><th>Ordered</th><th>Received</th><th>MRP</th><th>Rate</th><th>Last rate</th><th>Discount</th><th>GST</th><th>Total</th><th>Batch</th></tr></thead>
               <tbody>

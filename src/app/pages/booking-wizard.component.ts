@@ -12,12 +12,12 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="page-stack compact-wizard">
-      <div class="module-hero compact-hero">
+    <section class="page-stack compact-wizard inner-page-shell">
+      <div class="module-hero compact-hero inner-page-header">
         <div>
           <h2>Service → Staff → Slot → Customer → Confirm</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-page-header-actions">
           <a class="ghost-button" routerLink="/book">Classic booking</a>
           <a class="ghost-button" routerLink="/appointments">Calendar</a>
         </div>

@@ -223,8 +223,8 @@ const emptyRecords: Record<ClientMasterKind, ClientMasterRecord[]> = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="client-masters-page">
-      <header class="topbar">
+    <section class="client-masters-page inner-page-shell">
+      <header class="topbar inner-page-header">
         <div>
           <h1>Client Masters</h1>
         </div>
@@ -235,7 +235,7 @@ const emptyRecords: Record<ClientMasterKind, ClientMasterRecord[]> = {
         </div>
       </header>
 
-      <section class="metrics" aria-label="Client master metrics">
+      <section class="metrics inner-stats-grid" aria-label="Client master metrics">
         <article>
           <span>Client Profiles</span>
           <strong>{{ summary().clientProfiles }}</strong>

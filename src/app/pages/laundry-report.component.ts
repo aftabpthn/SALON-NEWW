@@ -9,19 +9,19 @@ import { ApiRecord, ApiService } from '../core/api.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe],
   template: `
-    <section class="laundry-report-page">
-      <header class="titlebar">
+    <section class="laundry-report-page inner-page-shell">
+      <header class="titlebar inner-page-header">
         <div>
           <span class="eyebrow">Inventory Report</span>
           <h2>Laundry Entries Report</h2>
         </div>
-        <div class="title-actions">
+        <div class="title-actions inner-action-bar">
           <button class="ghost-button" type="button" routerLink="/inventory/laundry-entry">New Entry</button>
           <button class="ghost-button" type="button" routerLink="/inventory">Exit</button>
         </div>
       </header>
 
-      <section class="summary-row">
+      <section class="summary-row inner-stats-grid">
         <article>
           <span>Total entries</span>
           <strong>{{ entries().length }}</strong>
@@ -44,8 +44,8 @@ import { ApiRecord, ApiService } from '../core/api.service';
         </article>
       </section>
 
-      <section class="report-panel">
-        <div class="report-toolbar">
+      <section class="report-panel inner-page-card">
+        <div class="report-toolbar inner-action-bar">
           <label>
             <span>Search</span>
             <input [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Doc no, account, product" />
@@ -53,7 +53,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
           <button class="ghost-button" type="button" (click)="printPage()">Print</button>
         </div>
 
-        <div class="table-shell">
+        <div class="table-shell inner-table-wrap">
           <table>
             <thead>
               <tr>
@@ -90,10 +90,10 @@ import { ApiRecord, ApiService } from '../core/api.service';
         </div>
       </section>
 
-      <section class="detail-panel" *ngIf="selectedEntry() as entry">
+      <section class="detail-panel inner-page-card" *ngIf="selectedEntry() as entry">
         <h3>{{ entry.docNo }} - {{ entry.laundryAccountName }}</h3>
         <p>{{ entry.docDate | date: 'mediumDate' }} <span *ngIf="entry.remarks">- {{ entry.remarks }}</span></p>
-        <div class="table-shell">
+        <div class="table-shell inner-table-wrap">
           <table>
             <thead>
               <tr>

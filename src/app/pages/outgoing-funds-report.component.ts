@@ -62,12 +62,12 @@ type ReportRow = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="report-page">
-      <header class="report-hero">
+    <section class="report-page inner-page-shell">
+      <header class="report-hero inner-page-header">
         <div>
           <h2>Outgoing Funds Saved Entries</h2>
         </div>
-        <div class="actions">
+        <div class="actions inner-action-bar">
           <a class="button primary" routerLink="/transactions/outgoing-funds">New Entry</a>
           <button class="button" type="button" (click)="load()">Refresh</button>
         </div>
@@ -81,7 +81,7 @@ type ReportRow = {
 
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
-      <section class="summary" *ngIf="!loading() && !error()">
+      <section class="summary inner-stats-grid" *ngIf="!loading() && !error()">
         <article><span>Saved rows</span><strong>{{ rows().length }}</strong></article>
         <article><span>Total amount</span><strong>{{ money(total()) }}</strong></article>
         <article><span>Vouchers</span><strong>{{ entries().length }}</strong></article>
@@ -90,7 +90,7 @@ type ReportRow = {
         <article><span>Approval pending</span><strong>{{ pendingApprovalCount() }}</strong></article>
       </section>
 
-      <section class="panel" *ngIf="!loading() && !error()">
+      <section class="panel inner-page-card" *ngIf="!loading() && !error()">
         <div class="table-scroll">
           <table>
             <thead>

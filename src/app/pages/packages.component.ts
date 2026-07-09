@@ -43,14 +43,14 @@ type RedemptionLine = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
   template: `
-    <section class="page-stack packages-page">
+    <section class="page-stack packages-page inner-page-shell">
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="message()">{{ message() }}</p>
 
       <section class="salonist-layout">
         <main class="packages-main">
           <button class="floating-add" type="button" (click)="toggleForm()" aria-label="Add package">+</button>
-          <header class="packages-title">
+          <header class="packages-title inner-page-header">
             <h1>Packages</h1>
             <p>
               Boost revenue with treatment packages, turning clients into loyal regulars. Manage package history for seamless
@@ -59,7 +59,7 @@ type RedemptionLine = {
             <a class="report-link" routerLink="/reports/pending-packages">Pending Packages Report</a>
           </header>
 
-          <div class="list-controls">
+          <div class="list-controls inner-action-bar">
             <label class="show-control">
               <span>Show</span>
               <select [ngModel]="showLimit()" (ngModelChange)="showLimit.set(moneyValue($event))">
@@ -74,7 +74,7 @@ type RedemptionLine = {
             </label>
           </div>
 
-          <div class="salonist-table-wrap">
+          <div class="salonist-table-wrap inner-table-wrap">
             <table class="salonist-table">
               <thead>
                 <tr>

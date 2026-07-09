@@ -11,8 +11,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, FormsModule, CurrencyPipe, DatePipe, StateComponent],
   template: `
-    <section class="page-stack self-service-page">
-      <div class="module-hero compact-hero">
+    <section class="page-stack self-service-page inner-page-shell">
+      <div class="module-hero compact-hero inner-page-header">
         <div>
           <h2>Membership status</h2>
         </div>
@@ -21,7 +21,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="message()">{{ message() }}</div>
 
-      <section class="stats-grid" *ngIf="summary() as data">
+      <section class="stats-grid inner-stats-grid" *ngIf="summary() as data">
         <article class="metric-card">
           <span>Active plan</span>
           <strong>{{ data.wallet?.activePlanName || 'None' }}</strong>
@@ -45,7 +45,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </section>
 
       <div class="two-grid" *ngIf="summary() as data">
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><h2>Membership wallet</h2></div>
           <div class="detail-grid">
             <div><span>Client</span><strong>{{ data.client?.name || data.client?.id }}</strong></div>
@@ -69,7 +69,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
       </div>
 
-      <section class="panel" *ngIf="summary() as data">
+      <section class="panel inner-page-card" *ngIf="summary() as data">
         <div class="section-title"><h2>Requests</h2></div>
         <div class="self-service-actions">
           <button class="primary-button" type="button" (click)="requestRenewLink()" [disabled]="saving() || !data.membershipId">Request renewal payment link</button>
@@ -82,9 +82,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <button class="ghost-button danger-text" type="button" (click)="requestCancel()" [disabled]="saving() || !cancelReason.trim() || !data.membershipId">Request cancellation approval</button>
       </section>
 
-      <section class="panel" *ngIf="summary() as data">
+      <section class="panel inner-page-card" *ngIf="summary() as data">
         <div class="section-title"><h2>Request history</h2></div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>When</th><th>Type</th><th>Status</th><th>Reason</th></tr></thead>
             <tbody>

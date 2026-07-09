@@ -18,7 +18,7 @@ type UploadFile = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack bill-drafts-page">
+    <section class="page-stack bill-drafts-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="AI receiving command center"
         breadcrumb="Inventory > AI Purchase Bill Drafts"
@@ -35,7 +35,7 @@ type UploadFile = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-      <section class="draft-kpis">
+      <section class="draft-kpis inner-stats-grid">
         <article class="metric-card teal"><span>Drafts</span><strong>{{ draftCounts().draft }}</strong></article>
         <article class="metric-card amber"><span>Open lines</span><strong>{{ draftCounts().openLines }}</strong></article>
         <article class="metric-card blue"><span>Confirm-ready</span><strong>{{ draftCounts().confirmReady }}</strong></article>
@@ -45,13 +45,13 @@ type UploadFile = {
       </section>
 
       <div class="draft-workbench">
-        <section class="panel upload-panel">
+        <section class="panel upload-panel inner-page-card">
           <div class="section-title">
             <div>
               <h2>New draft</h2>
             </div>
           </div>
-          <form [formGroup]="uploadForm" (ngSubmit)="createDraft()" class="upload-form">
+          <form [formGroup]="uploadForm" (ngSubmit)="createDraft()" class="upload-form inner-form-grid">
             <label class="field">
               <span>Branch</span>
               <select formControlName="branchId">
@@ -95,7 +95,7 @@ type UploadFile = {
           </form>
         </section>
 
-        <section class="panel draft-list-panel">
+        <section class="panel draft-list-panel inner-page-card">
           <div class="section-title">
             <div>
               <h2>Review before stock</h2>

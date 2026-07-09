@@ -12,8 +12,8 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, DatePipe, RouterLink, StateComponent, AuraKpiCardComponent, HappyHoursBannerComponent],
   template: `
-    <main class="portal-page">
-      <section class="module-hero">
+    <main class="portal-page inner-page-shell">
+      <section class="module-hero inner-page-header">
         <div>
           <h2>{{ context()?.branding?.brandName || 'Book your salon appointment' }}</h2>
         </div>

@@ -18,12 +18,12 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
     .table-actions { display: flex; gap: 8px; flex-wrap: wrap; min-width: 280px; }
   `],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Advance Payment Report</h2>
         </div>
-        <div class="action-row">
+        <div class="action-row inner-action-bar">
           <button class="ghost-button mini" type="button" *ngIf="adjustedDuePendingCount() > 0" (click)="focusAdjustedDueFollowUp()">
             Follow-up pending {{ adjustedDuePendingCount() }}
           </button>
@@ -53,7 +53,7 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="settlement-notice" *ngIf="notice()">{{ notice() }}</p>
 
-      <section class="metrics-grid">
+      <section class="metrics-grid inner-stats-grid">
         <article class="metric-card"><span>Links</span><strong>{{ filteredRows().length }}</strong><small>{{ settlementFilterLabel() }}</small></article>
         <article class="metric-card"><span>Total advance</span><strong>{{ (stats().totalAmount || 0) | currency:'INR':'symbol':'1.0-0' }}</strong></article>
         <article class="metric-card"><span>Advance adjusted</span><strong>{{ filteredAdvanceAdjustedTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
@@ -62,13 +62,13 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
       </section>
 
       <section class="panel">
-        <div class="section-title">
+        <div class="section-title inner-action-bar">
           <div>
             <h2>Deposit links</h2>
             <small>{{ settlementFilterLabel() }} view for staff follow-up and billing handoff.</small>
           </div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead>
               <tr>

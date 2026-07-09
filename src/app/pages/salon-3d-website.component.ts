@@ -13,8 +13,8 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <main class="booking-share-page">
-      <section class="share-hero">
+    <main class="booking-share-page inner-page-shell">
+      <section class="share-hero inner-page-header">
         <div class="share-copy">
           <h1>{{ activeBusinessName() }}</h1>
           <div class="outlet-meta">
@@ -30,7 +30,7 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
         </div>
       </section>
 
-      <section class="link-panel">
+      <section class="link-panel inner-page-card">
         <article>
           <strong>Public customer view</strong>
           <div class="link-row">
@@ -47,7 +47,7 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
         </article>
       </section>
 
-      <section class="preview-section">
+      <section class="preview-section inner-page-card">
         <div class="preview-head">
           <div>
             <h2>Customer app page</h2>
@@ -62,7 +62,7 @@ type TenantOption = ApiRecord & { id: string; name?: string; slug?: string };
         </div>
       </section>
 
-      <section class="ops-grid">
+      <section class="ops-grid inner-stats-grid">
         <article>
           <span>Outlet</span>
           <strong>{{ activeBusinessName() }}</strong>

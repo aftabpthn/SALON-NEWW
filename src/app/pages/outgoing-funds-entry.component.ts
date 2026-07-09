@@ -79,8 +79,8 @@ type OutgoingFundEntry = ApiRecord & {
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
-    <section class="outgoing-page">
-      <header class="module-hero">
+    <section class="outgoing-page inner-page-shell">
+      <header class="module-hero inner-page-header">
         <div>
           <h2>Outgoing Funds Entry</h2>
         </div>
@@ -96,7 +96,7 @@ type OutgoingFundEntry = ApiRecord & {
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
-      <section class="metric-grid" *ngIf="!loading() && !error()">
+      <section class="metric-grid inner-stats-grid" *ngIf="!loading() && !error()">
         <article><span>Total outgoing</span><strong>{{ money(totalOutgoing()) }}</strong></article>
         <article><span>Draft entries</span><strong>{{ draftCount() }}</strong></article>
         <article><span>Posted entries</span><strong>{{ postedCount() }}</strong></article>

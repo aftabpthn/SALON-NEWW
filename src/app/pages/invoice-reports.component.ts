@@ -106,12 +106,12 @@ type InvoiceLine = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero invoice-report-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero invoice-report-hero inner-page-header">
         <div>
           <h2>10x Enterprise Invoice Reports</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/pos/invoices" *ngIf="canAccessPath('/pos/invoices')">POS invoices</a>
           <a class="ghost-button" routerLink="/pos/invoice-activity">Invoice activity</a>
           <a class="ghost-button" routerLink="/reports">Reports</a>
@@ -119,7 +119,7 @@ type InvoiceLine = {
         </div>
       </div>
 
-      <section class="panel report-filter-panel">
+      <section class="panel report-filter-panel inner-page-card">
         <label class="field">
           <span>From</span>
           <input type="date" [(ngModel)]="from" />
@@ -484,12 +484,12 @@ type InvoiceLine = {
         </ng-template>
 
         <section class="panel report-command-panel">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>{{ activeDefinition().title }}</h2>
               <p>{{ activeDefinition().description }}</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <span class="badge">{{ activeRows().length }} line(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()">Export CSV</button>
               <button class="ghost-button" type="button" (click)="exportPdf()">Export PDF</button>

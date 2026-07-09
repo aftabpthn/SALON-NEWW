@@ -18,12 +18,12 @@ type AppointmentDetailReport = {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack appointment-report-page">
-      <div class="module-hero report-hero">
+    <section class="page-stack appointment-report-page inner-page-shell">
+      <div class="module-hero report-hero inner-page-header">
         <div>
           <h2>Detail Appointment List</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <button class="ghost-button" type="button" (click)="goBack()">Back</button>
           <a class="ghost-button" routerLink="/reports">Reports</a>
           <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!rows().length">Download</button>
@@ -72,7 +72,7 @@ type AppointmentDetailReport = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="report() as data">
-        <section class="status-strip">
+        <section class="status-strip inner-stats-grid">
           <article *ngFor="let card of statusCards" class="status-card aura-card" [ngClass]="[card.tone, card.auraStatus]">
             <strong>{{ numberValue(data.summary[card.key]) }}</strong>
             <span>{{ card.label }}</span>
@@ -102,7 +102,7 @@ type AppointmentDetailReport = {
             <span>Total price {{ data.summary.appointmentPrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</span>
           </div>
 
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead>
                 <tr>

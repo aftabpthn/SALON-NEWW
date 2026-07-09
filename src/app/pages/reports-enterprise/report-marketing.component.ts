@@ -10,34 +10,34 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule, CurrencyPipe, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <div class="mkt-metrics">
+      <div class="mkt-metrics inner-stats-grid">
         <div class="metric-card teal"><span>Campaign Revenue</span><strong>{{ d()?.totalRevenue | currency:'INR':'symbol':'1.0-0' }}</strong></div>
         <div class="metric-card green"><span>Avg Conversion Rate</span><strong>{{ d()?.avgConversion }}%</strong></div>
         <div class="metric-card violet"><span>Campaign ROI</span><strong>{{ d()?.campaignRoi }}%</strong></div>
       </div>
 
       <div class="mkt-charts">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Top Performing Campaigns</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Top Performing Campaigns</h3></div>
           <div class="chart-container">
             <base-chart type="horizontalBar" [labels]="campLabels()" [datasets]="campRevenueDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Campaign ROI Comparison</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Campaign ROI Comparison</h3></div>
           <div class="chart-container">
             <base-chart type="bar" [labels]="campLabels()" [datasets]="campRoiDataset()"></base-chart>
           </div>
         </section>
       </div>
 
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>Campaign Performance Table</h3>
           <button class="ghost-button mini" (click)="exportTable()">Export CSV</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>Campaign</th><th>Channel</th><th>Sent</th><th>Conversions</th><th>Revenue</th><th>ROI</th></tr></thead>
             <tbody>

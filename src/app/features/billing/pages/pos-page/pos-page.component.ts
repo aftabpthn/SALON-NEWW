@@ -32,14 +32,14 @@ import { BillingRepository } from '../../data/billing.repository';
     @media (max-width: 900px) { .billing-shell { grid-template-columns: 1fr; } }
   `],
   template: `
-    <section class="stack">
-      <header class="billing-panel status-row">
+    <section class="stack inner-page-shell">
+      <header class="billing-panel status-row inner-page-header">
         <div>
           <h1>Enterprise POS Billing</h1>
         </div>
         <span class="badge" [class.offline]="!offline.online()">{{ offline.badge() }}</span>
       </header>
-      <div class="billing-shell">
+      <div class="billing-shell inner-page-card">
         <section class="stack">
           <app-barcode-input (scanned)="print.resolveBarcode($event, '', billing.selectedBranchId())" />
           <app-service-product-picker (itemPicked)="cart.add($event)" />

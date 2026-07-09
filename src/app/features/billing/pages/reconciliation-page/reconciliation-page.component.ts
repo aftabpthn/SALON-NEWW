@@ -66,8 +66,8 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
     }
   `],
   template: `
-    <section class="recon-shell">
-      <header class="hero">
+    <section class="recon-shell inner-page-shell">
+      <header class="hero inner-page-header">
         <div class="hero-copy">
           <h1>Settlement matching for Razorpay, UPI, card and bank</h1>
         </div>
@@ -78,7 +78,7 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
         </div>
       </header>
 
-      <section class="metric-grid">
+      <section class="metric-grid inner-stats-grid">
         <article class="metric"><strong>{{ money(providerSummary().captured) }}</strong><small class="muted">{{ providerLabel() }} collection</small></article>
         <article class="metric"><strong>{{ money(providerSummary().expected) }}</strong></article>
         <article class="metric"><strong>{{ money(providerSummary().difference) }}</strong><small class="muted">{{ providerSummary().status }}</small></article>
@@ -86,11 +86,11 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
       </section>
 
       <section class="grid">
-        <aside class="settlement-card">
+        <aside class="settlement-card inner-page-card">
           <div>
             <h2>{{ providerLabel() }}</h2>
           </div>
-          <div class="form-row">
+          <div class="form-row inner-form-grid">
             <label class="field">
               <span>Provider</span>
               <select [ngModel]="provider()" (ngModelChange)="setProvider($event)">
@@ -105,7 +105,7 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
               <input type="date" [ngModel]="settlementDate()" (ngModelChange)="settlementDate.set($event); load()" />
             </label>
           </div>
-          <div class="form-row">
+          <div class="form-row inner-form-grid">
             <label class="field">
               <span>Settled amount</span>
               <input type="number" [ngModel]="settledAmount()" (ngModelChange)="settledAmount.set(numberValue($event))" />
@@ -115,7 +115,7 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
               <input type="number" [ngModel]="adjustmentAmount()" (ngModelChange)="adjustmentAmount.set(numberValue($event))" />
             </label>
           </div>
-          <div class="form-row">
+          <div class="form-row inner-form-grid">
             <label class="field">
               <span>Fee %</span>
               <input type="number" [ngModel]="feePercent()" (ngModelChange)="feePercent.set(numberValue($event))" />
@@ -140,8 +140,8 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
           <p class="error" *ngIf="error()">{{ error() }}</p>
         </aside>
 
-        <main class="panel">
-          <div class="toolbar">
+        <main class="panel inner-page-card">
+          <div class="toolbar inner-action-bar">
             <div>
               <h2>Mismatch review queue</h2>
             </div>

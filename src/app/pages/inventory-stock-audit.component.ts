@@ -11,7 +11,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack inventory-enterprise-page">
+    <section class="page-stack inventory-enterprise-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="Stock audit and leakage detection"
         breadcrumb="Inventory > Audit"
@@ -26,7 +26,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="zenoti-audit-workspace">
-        <div class="zenoti-result-bar">
+        <div class="zenoti-result-bar inner-stats-grid">
           <div>
             <strong>{{ activeAuditCount() }}</strong><span>Results</span>
             <small class="status-chip">Status: audit active in this center</small>
@@ -39,7 +39,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </div>
 
-        <div class="zenoti-filter-row">
+        <div class="zenoti-filter-row inner-action-bar">
           <div class="tab-strip">
             <button type="button" [class.active]="activeView() === 'counts'" (click)="activeView.set('counts')">Counts</button>
             <button type="button" [class.active]="activeView() === 'leakage'" (click)="activeView.set('leakage')">Leakage</button>
@@ -48,7 +48,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <button class="primary-button" type="button" (click)="runLeakageScan()" [disabled]="saving()">Run leakage scan</button>
         </div>
 
-        <div class="zenoti-table-wrap" *ngIf="activeView() === 'counts'">
+        <div class="zenoti-table-wrap inner-table-wrap" *ngIf="activeView() === 'counts'">
           <table>
             <thead><tr><th>Count no</th><th>Status</th><th>Branch</th><th>Variance value</th><th>Lines</th><th>Action</th></tr></thead>
             <tbody>
@@ -65,7 +65,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </table>
         </div>
 
-        <div class="zenoti-table-wrap" *ngIf="activeView() === 'leakage'">
+        <div class="zenoti-table-wrap inner-table-wrap" *ngIf="activeView() === 'leakage'">
           <table>
             <thead><tr><th>Finding</th><th>Product</th><th>Severity</th><th>Estimated loss</th><th>Status</th><th>Reference</th></tr></thead>
             <tbody>
@@ -82,7 +82,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </table>
         </div>
 
-        <div class="zenoti-table-wrap" *ngIf="activeView() === 'transfers'">
+        <div class="zenoti-table-wrap inner-table-wrap" *ngIf="activeView() === 'transfers'">
           <table>
             <thead><tr><th>Product</th><th>Source</th><th>Target</th><th>Quantity</th><th>Reason</th><th>Action</th></tr></thead>
             <tbody>
@@ -106,7 +106,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </section>
 
       <div class="enterprise-grid two audit-workdesk">
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Actual quantity entry</h2></div></div>
           <form [formGroup]="countForm" (ngSubmit)="createCount()" class="audit-form">
             <label class="field"><span>Branch</span><select formControlName="branchId"><option value="">Select branch</option><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>

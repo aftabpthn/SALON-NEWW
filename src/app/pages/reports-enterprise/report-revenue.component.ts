@@ -11,7 +11,7 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule, CurrencyPipe, FormsModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <div class="revenue-metrics">
+      <div class="revenue-metrics inner-stats-grid">
         <div class="metric-card teal"><span>Total Revenue</span><strong>{{ d()?.total | currency:'INR':'symbol':'1.0-0' }}</strong></div>
         <div class="metric-card blue"><span>Service Revenue</span><strong>{{ d()?.service | currency:'INR':'symbol':'1.0-0' }}</strong></div>
         <div class="metric-card green"><span>Product Revenue</span><strong>{{ d()?.product | currency:'INR':'symbol':'1.0-0' }}</strong></div>
@@ -21,34 +21,34 @@ import { Subscription } from 'rxjs';
       </div>
 
       <div class="revenue-charts">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Payment Method Breakdown</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Payment Method Breakdown</h3></div>
           <div class="chart-container">
             <base-chart type="doughnut" [labels]="payMethodLabels()" [datasets]="payMethodDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Revenue by Staff</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Revenue by Staff</h3></div>
           <div class="chart-container">
             <base-chart type="horizontalBar" [labels]="staffLabels()" [datasets]="staffDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Revenue by Branch</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Revenue by Branch</h3></div>
           <div class="chart-container">
             <base-chart type="bar" [labels]="branchLabels()" [datasets]="branchDataset()"></base-chart>
           </div>
         </section>
       </div>
 
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>Revenue Transactions</h3>
           <button class="ghost-button mini" (click)="exportTable()">Export CSV</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>Date</th><th>Invoice</th><th>Client</th><th>Staff</th><th>Amount</th><th>Payment</th></tr></thead>
             <tbody>

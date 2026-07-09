@@ -46,15 +46,14 @@ type LedgerResponse = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe, StateComponent],
   template: `
-    <section class="ledger-shell">
-      <div class="ledger-titlebar">
+    <section class="ledger-shell inner-page-shell">
+      <div class="ledger-titlebar inner-page-header">
         <div>
           <h2>Account Ledger</h2>
         </div>
         <a class="close-link" routerLink="/reports" aria-label="Back to reports">×</a>
       </div>
-
-      <div class="ledger-toolbar">
+      <div class="ledger-toolbar inner-action-bar">
         <label class="date-chip">
           <span>From</span>
           <input type="date" [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />

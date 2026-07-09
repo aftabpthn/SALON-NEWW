@@ -10,13 +10,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
-    <section class="petty-page">
-      <header class="titlebar">
+    <section class="petty-page inner-page-shell">
+      <header class="titlebar inner-page-header">
         <div>
           <span class="eyebrow">Finance / Petty Cash</span>
           <h2>Petty Cash Entry</h2>
         </div>
-        <div class="title-actions">
+        <div class="title-actions inner-action-bar">
           <a class="ghost-button" routerLink="/transactions/petty-cash-report">Report</a>
           <a class="ghost-button" routerLink="/finance">Exit</a>
         </div>
@@ -25,8 +25,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
-      <form class="entry-panel" [formGroup]="form" (ngSubmit)="save()" *ngIf="!loading()">
-        <section class="form-grid">
+      <form class="entry-panel inner-page-card" [formGroup]="form" (ngSubmit)="save()" *ngIf="!loading()">
+        <section class="form-grid inner-form-grid">
           <label>
             <span>Branch</span>
             <select formControlName="branchId">

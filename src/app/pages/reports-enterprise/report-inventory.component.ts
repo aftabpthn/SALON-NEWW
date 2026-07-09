@@ -9,14 +9,14 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule, CurrencyPipe],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <div class="inv-metrics">
+      <div class="inv-metrics inner-stats-grid">
         <div class="metric-card teal"><span>Stock Value</span><strong>{{ data()?.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong></div>
         <div class="metric-card green"><span>Product Profit Margin</span><strong>{{ data()?.profitMargin }}%</strong></div>
       </div>
 
       <div class="inv-grid">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Stock Status</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Stock Status</h3></div>
           <div class="stock-list" *ngIf="data()?.products as products">
             <div *ngFor="let p of products" class="stock-item" [class.low]="p.status==='Low Stock'" [class.out]="p.status==='Out of Stock'">
               <div class="stock-info">
@@ -28,8 +28,8 @@ import { Subscription } from 'rxjs';
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Reorder Suggestions</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Reorder Suggestions</h3></div>
           <div class="reorder-list" *ngIf="data()?.reorderSuggestions as reorders">
             <div *ngFor="let r of reorders" class="reorder-item">
               <strong>{{ r.name }}</strong>
@@ -40,12 +40,12 @@ import { Subscription } from 'rxjs';
         </section>
       </div>
 
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>Product Performance Table</h3>
           <button class="ghost-button mini" (click)="exportTable()">Export CSV</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>Product</th><th>Stock</th><th>Sold</th><th>Revenue</th><th>Margin</th><th>Status</th></tr></thead>
             <tbody>

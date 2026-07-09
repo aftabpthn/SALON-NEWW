@@ -10,12 +10,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StateComponent],
   template: `
-    <section class="page-stack supplier-360-page">
-      <div class="module-hero compact-hero">
+    <section class="page-stack supplier-360-page inner-page-shell">
+      <div class="module-hero compact-hero inner-page-header">
         <div>
           <h2>{{ supplier()?.name || 'Supplier details' }}</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/suppliers">Back to suppliers</a>
           <a class="primary-button" routerLink="/inventory/purchase-orders">Open purchase orders</a>
         </div>
@@ -24,7 +24,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="supplier() as vendor">
-        <section class="supplier-kpis">
+        <section class="supplier-kpis inner-stats-grid">
           <article class="metric-card teal"><span>Supplier score</span><strong>{{ supplierScore() | number: '1.0-0' }}</strong></article>
           <article class="metric-card blue"><span>Total purchase</span><strong>{{ purchaseValue() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ purchaseTransactions().length }} purchase entries</small></article>
           <article class="metric-card amber"><span>Open PO</span><strong>{{ openPurchaseOrders().length }}</strong><small>{{ pendingRecommendations().length }} reorder signals</small></article>
@@ -36,7 +36,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="supplier-layout">
-          <section class="panel supplier-card">
+          <section class="panel supplier-card inner-page-card">
             <div class="supplier-avatar">{{ initials(supplierDisplayName(vendor)) }}</div>
             <h2>{{ supplierDisplayName(vendor) }}</h2>
             <p>{{ vendor.status || 'active' }} vendor · GST-ready master</p>
@@ -53,7 +53,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title">
               <div><h2>Approval-safe draft</h2></div>
               <button class="ghost-button" type="button" (click)="buildWhatsAppDraft(vendor)">Build draft</button>
@@ -71,7 +71,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>GSTIN, contact, invoice, status and mapping quality</h2></div></div>
           <div class="status-matrix">
             <span class="mini-status" [class.ok]="!complianceIssues().length" [class.warn]="complianceIssues().length">{{ complianceIssues().length ? complianceIssues().join(', ') : 'Compliance ready' }}</span>
@@ -81,9 +81,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Low-stock products to order from this supplier</h2></div></div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Product</th><th>Qty</th><th>Unit cost</th><th>Total</th><th>Reason</th></tr></thead>
               <tbody>
@@ -101,7 +101,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="supplier-grid">
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><div><h2>Purchase recommendations for this supplier</h2></div></div>
             <div class="timeline">
               <article *ngFor="let row of pendingRecommendations()">
@@ -113,9 +113,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><div><h2>Same product, supplier-wise rate</h2></div></div>
-            <div class="table-wrap">
+            <div class="table-wrap inner-table-wrap">
               <table>
                 <thead><tr><th>Product</th><th>This supplier</th><th>Best supplier</th><th>Saving</th><th>Signal</th></tr></thead>
                 <tbody>

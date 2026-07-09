@@ -74,8 +74,8 @@ type MoneyFlowCheck = {
     }
   `],
   template: `
-    <section class="money-flow-shell">
-      <header class="hero">
+    <section class="money-flow-shell inner-page-shell">
+      <header class="hero inner-page-header">
         <div class="hero-copy">
           <h1>100% readiness control</h1>
         </div>
@@ -87,7 +87,7 @@ type MoneyFlowCheck = {
         </div>
       </header>
 
-      <section class="score-strip">
+      <section class="score-strip inner-stats-grid">
         <article class="metric">
           <strong>{{ readyScore() }}%</strong>
           <span class="muted">{{ doneCount() }}/{{ checks().length }} checks done</span>
@@ -106,12 +106,12 @@ type MoneyFlowCheck = {
         </article>
       </section>
 
-      <section class="panel">
+      <section class="panel inner-page-card">
         <div class="panel-head">
           <div>
             <h2>Core Money Flow tab 100% tab maana jayega jab</h2>
           </div>
-          <div class="toolbar">
+          <div class="toolbar inner-action-bar">
             <button class="ghost" type="button" [disabled]="busy()" (click)="runReconciliation()">Run reconciliation</button>
             <button class="primary" type="button" [disabled]="busy()" (click)="processOutbox()">Process GL outbox</button>
           </div>
@@ -133,7 +133,7 @@ type MoneyFlowCheck = {
         </div>
       </section>
 
-      <section class="action-panel">
+      <section class="action-panel inner-page-card">
         <div class="panel-head">
           <div>
             <h2>{{ blockingCount() ? blockingCount() + ' blocker' : 'No blocker' }}</h2>

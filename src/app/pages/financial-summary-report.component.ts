@@ -132,12 +132,12 @@ type WalletLedgerRow = ApiRecord & {
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="financial-summary-page">
-      <div class="module-hero financial-hero">
+    <section class="financial-summary-page inner-page-shell">
+      <div class="module-hero financial-hero inner-page-header">
         <div>
           <h2>Financial Summary</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/reports">Reports</a>
           <a class="ghost-button" routerLink="/reports/invoices">Invoice reports</a>
           <a class="ghost-button" routerLink="/finance">Finance</a>
@@ -147,7 +147,7 @@ type WalletLedgerRow = ApiRecord & {
         </div>
       </div>
 
-      <div class="report-tabs" role="tablist" aria-label="Financial report views">
+      <div class="report-tabs inner-action-bar" role="tablist" aria-label="Financial report views">
         <button type="button" [class.active]="activeTab === 'summary'" (click)="setActiveTab('summary')">Financial Summary</button>
         <button type="button" [class.active]="activeTab === 'payments'" (click)="setActiveTab('payments')">Payment Distributions</button>
         <button type="button" [class.active]="activeTab === 'daily-sheet'" (click)="setActiveTab('daily-sheet')">Daily Sheet</button>
@@ -260,12 +260,12 @@ type WalletLedgerRow = ApiRecord & {
 
       <ng-container *ngIf="!loading() && !error() && activeTab === 'wallet-ledger'">
         <section class="panel report-section">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h3>Wallet / Ewallet Ledger</h3>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· credit, debit, balance-after and abuse audit.</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!walletLedgerRows().length">Ledger CSV</button>
               <button class="ghost-button" type="button" (click)="exportWalletOwnerPdf()" [disabled]="!walletLedgerRows().length">Owner PDF</button>
               <button class="ghost-button" type="button" (click)="exportWalletAuditPdf()" [disabled]="!walletLedgerAlerts().length">Audit PDF</button>
@@ -280,7 +280,7 @@ type WalletLedgerRow = ApiRecord & {
             </article>
           </div>
 
-          <div class="financial-table-wrap" *ngIf="walletLedgerRows().length; else noWalletLedgerRows">
+          <div class="financial-table-wrap inner-table-wrap" *ngIf="walletLedgerRows().length; else noWalletLedgerRows">
             <table>
               <thead>
                 <tr>
@@ -337,7 +337,7 @@ type WalletLedgerRow = ApiRecord & {
 
         <section class="panel daily-revenue-alerts">
           <div class="mini-section-title"><span>Abuse / audit alerts</span><strong>Wallet control signals</strong></div>
-          <div class="financial-table-wrap" *ngIf="walletLedgerAlerts().length; else noWalletAlerts">
+          <div class="financial-table-wrap inner-table-wrap" *ngIf="walletLedgerAlerts().length; else noWalletAlerts">
             <table>
               <thead>
                 <tr>
@@ -402,18 +402,18 @@ type WalletLedgerRow = ApiRecord & {
         </div>
 
         <section class="panel matrix-panel">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Sales and collection matrix</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· {{ matrixColumns().length - 1 }} {{ periodMode === 'quarter' ? 'quarter(s)' : 'month(s)' }}</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <span class="badge">{{ branchLabel() }}</span>
               <span class="badge">{{ periodModeLabel() }}</span>
             </div>
           </div>
 
-          <div class="financial-table-wrap">
+          <div class="financial-table-wrap inner-table-wrap">
             <table>
               <thead>
                 <tr>
@@ -432,7 +432,7 @@ type WalletLedgerRow = ApiRecord & {
         </section>
 
         <section class="panel insight-panel">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Financial control signals</h2>
             </div>
@@ -475,7 +475,7 @@ type WalletLedgerRow = ApiRecord & {
           </div>
 
           <section class="panel payment-table-panel">
-            <div class="section-title">
+            <div class="section-title inner-action-bar">
               <div>
                 <h2>{{ selectedPaymentReportTitle() }}</h2>
                 <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· {{ paymentDistributionRows().length }} payment row(s)</p>
@@ -489,7 +489,7 @@ type WalletLedgerRow = ApiRecord & {
               </div>
             </div>
 
-            <div class="payment-table-wrap">
+            <div class="payment-table-wrap inner-table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -537,7 +537,7 @@ type WalletLedgerRow = ApiRecord & {
               <h2>Daily Sheet / EOD Financial Control</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· {{ branchLabel() }}</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <span class="badge">{{ dailySheetSummary().totalBills }} bill(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!dailySheetSummary().totalBills">Export CSV</button>
               <button class="ghost-button" type="button" (click)="exportDailySheetPdf()" [disabled]="!dailySheetSummary().totalBills">Owner PDF</button>
@@ -634,7 +634,7 @@ type WalletLedgerRow = ApiRecord & {
               <h2>Daily Revenue 10x Report</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· revenue, collection, due, discounts and owner alerts.</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <span class="badge">{{ dailyRevenueRows().length }} day(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!dailyRevenueRows().length">CSV detailed export</button>
               <button class="ghost-button" type="button" (click)="exportDailyRevenueOwnerPdf()" [disabled]="!dailyRevenueRows().length">Owner PDF</button>
@@ -726,7 +726,7 @@ type WalletLedgerRow = ApiRecord & {
 
           <section class="panel daily-revenue-table-card">
             <div class="mini-section-title"><span>Daily Revenue Table</span><strong>Click any date for drilldown</strong></div>
-            <div class="financial-table-wrap">
+            <div class="financial-table-wrap inner-table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -833,7 +833,7 @@ type WalletLedgerRow = ApiRecord & {
               <h2>Member vs Non-Member Sales</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· compare revenue, visits, ROI and conversion opportunities.</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <span class="badge">{{ visibleMemberSalesRows().length }} client(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!visibleMemberSalesRows().length">CSV full report</button>
               <button class="ghost-button" type="button" (click)="exportMemberSalesOwnerPdf()" [disabled]="!visibleMemberSalesRows().length">Owner PDF</button>
@@ -883,7 +883,7 @@ type WalletLedgerRow = ApiRecord & {
 
           <section class="panel member-wide-card">
             <div class="mini-section-title"><span>Conversion Opportunity</span><strong>Non-member growth list</strong></div>
-            <div class="member-table-wrap">
+            <div class="member-table-wrap inner-table-wrap">
               <table class="member-conversion-table">
                 <thead><tr><th>Client</th><th class="right">Sale</th><th class="right">Visits</th><th>Suggested plan</th><th>Action</th></tr></thead>
                 <tbody>
@@ -904,7 +904,7 @@ type WalletLedgerRow = ApiRecord & {
 
           <section class="panel member-wide-card">
             <div class="mini-section-title"><span>Staff-Wise Impact</span><strong>Conversion accountability</strong></div>
-            <div class="member-table-wrap">
+            <div class="member-table-wrap inner-table-wrap">
               <table class="member-staff-table">
                 <thead><tr><th>Staff</th><th class="right">Member sale</th><th class="right">Non-member sale</th><th class="right" title="Member conversion count">Conversions</th><th class="right" title="Repeat member visits">Repeat visits</th><th class="right">Member due</th><th class="right">Non-member due</th></tr></thead>
                 <tbody>
@@ -938,7 +938,7 @@ type WalletLedgerRow = ApiRecord & {
 
           <section class="panel daily-revenue-table-card">
             <div class="mini-section-title"><span>Client-level table</span><strong>Renew, upsell, convert or recover due</strong></div>
-            <div class="financial-table-wrap">
+            <div class="financial-table-wrap inner-table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -986,7 +986,7 @@ type WalletLedgerRow = ApiRecord & {
               <h2>Sales Tax / GST 10x Report</h2>
               <p>{{ dateLabel(from) }} to {{ dateLabel(to) }} Â· invoice tax register, rate breakup, service/product split and accounting checks.</p>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions inner-action-bar">
               <span class="badge">{{ salesTaxRows().length }} bill(s)</span>
               <button class="ghost-button" type="button" (click)="exportCsv()" [disabled]="!salesTaxRows().length">CSV export</button>
               <button class="ghost-button" type="button" (click)="exportSalesTaxOwnerPdf()" [disabled]="!salesTaxRows().length">Owner PDF</button>
@@ -1060,7 +1060,7 @@ type WalletLedgerRow = ApiRecord & {
 
           <section class="panel daily-revenue-table-card sales-tax-register-card">
             <div class="mini-section-title"><span>Invoice-wise tax register</span><strong>Scroll horizontally for full GST audit columns</strong></div>
-            <div class="financial-table-wrap sales-tax-table-wrap">
+            <div class="financial-table-wrap inner-table-wrap sales-tax-table-wrap">
               <table>
                 <thead>
                   <tr>

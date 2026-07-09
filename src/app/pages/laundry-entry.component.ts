@@ -24,13 +24,13 @@ type LaundryLine = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="laundry-page">
-      <header class="titlebar">
+    <section class="laundry-page inner-page-shell">
+      <header class="titlebar inner-page-header">
         <div>
           <span class="eyebrow">Inventory</span>
           <h2>Laundry (Inward / Outward)</h2>
         </div>
-        <div class="title-actions">
+        <div class="title-actions inner-action-bar">
           <button class="ghost-button" type="button" routerLink="/inventory/laundry-report">Report</button>
           <button class="ghost-button" type="button" routerLink="/inventory">Exit</button>
         </div>
@@ -39,8 +39,8 @@ type LaundryLine = {
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <p class="state success" *ngIf="success()">{{ success() }}</p>
 
-      <section class="entry-panel" *ngIf="!loading()">
-        <div class="top-form">
+      <section class="entry-panel inner-page-card" *ngIf="!loading()">
+        <div class="top-form inner-form-grid">
           <label><span>Doc. No.</span><input [ngModel]="docNo()" readonly /></label>
           <label><span>Doc. Date</span><input type="date" [ngModel]="docDate()" (ngModelChange)="docDate.set($event)" /></label>
           <label class="wide"><span>Laundry A/c</span>
@@ -58,7 +58,7 @@ type LaundryLine = {
           <button class="ghost-button add-line" type="button" (click)="addSelectedProduct()">Add product</button>
         </div>
 
-        <div class="table-shell">
+        <div class="table-shell inner-table-wrap">
           <table>
             <thead>
               <tr>

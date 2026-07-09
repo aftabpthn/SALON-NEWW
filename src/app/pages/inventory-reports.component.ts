@@ -12,7 +12,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack inventory-enterprise-page">
+    <section class="page-stack inventory-enterprise-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="COGS, margin, dead stock and supplier spend"
         breadcrumb="Inventory > Reports"
@@ -26,7 +26,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-      <section class="report-tabs">
+      <section class="report-tabs inner-action-bar">
         <button type="button" [class.active]="activeTab() === 'summary'" (click)="setTab('summary')">Inventory Summary</button>
         <button type="button" [class.active]="activeTab() === 'product-in-out'" (click)="setTab('product-in-out')">Product IN/OUT Retail</button>
         <button type="button" [class.active]="activeTab() === 'dead-stock'" (click)="setTab('dead-stock')">Dead Stock</button>
@@ -35,7 +35,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </section>
 
       <ng-container *ngIf="activeTab() === 'summary'">
-        <section class="report-kpis" *ngIf="report()?.metrics as metrics">
+        <section class="report-kpis inner-stats-grid" *ngIf="report()?.metrics as metrics">
           <article class="metric-card teal"><span>Stock value</span><strong>{{ metrics.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card amber"><span>COGS</span><strong>{{ metrics.cogs | currency:'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card blue"><span>Purchase spend</span><strong>{{ metrics.purchaseSpend | currency:'INR':'symbol':'1.0-0' }}</strong></article>
@@ -44,15 +44,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
       </ng-container>
 
-      <section class="panel product-inout-panel" *ngIf="activeTab() === 'product-in-out'">
-        <div class="section-title">
+      <section class="panel product-inout-panel inner-page-card" *ngIf="activeTab() === 'product-in-out'">
+        <div class="section-title inner-action-bar">
           <div><h2>Product IN/OUT Retail</h2></div>
           <div class="hero-actions">
             <button class="ghost-button" type="button" (click)="exportProductInOutCsv()">Export CSV</button>
             <button class="ghost-button" type="button" (click)="exportProductInOutOwnerPdf()">Owner PDF</button>
           </div>
         </div>
-        <div class="product-report-filters">
+        <div class="product-report-filters inner-form-grid">
           <label class="field"><span>From</span><input type="date" [(ngModel)]="productFrom" /></label>
           <label class="field"><span>To</span><input type="date" [(ngModel)]="productTo" /></label>
           <label class="field"><span>Product / barcode / SKU</span><input [(ngModel)]="productSearch" placeholder="Product, barcode, SKU" /></label>
@@ -86,7 +86,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           Showing first {{ productInOutRows().length }} of {{ productInOutTotalRows() }} rows. Use filters or export for focused review.
         </p>
 
-        <section class="report-kpis product-inout-kpis" *ngIf="productInOutReport()?.summary as summary">
+        <section class="report-kpis product-inout-kpis inner-stats-grid" *ngIf="productInOutReport()?.summary as summary">
           <article class="metric-card teal"><span>Total Product</span><strong>{{ summary.totalProduct || 0 }}</strong></article>
           <article class="metric-card blue"><span>Total Sales Count</span><strong>{{ summary.totalSalesCount || 0 }}</strong></article>
           <article class="metric-card amber"><span>Total In Hand</span><strong>{{ summary.totalInHand || 0 }}</strong></article>
@@ -103,7 +103,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </article>
         </div>
 
-        <div class="table-wrap product-inout-table">
+        <div class="table-wrap product-inout-table inner-table-wrap">
           <table>
             <thead>
               <tr>
@@ -160,7 +160,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid three" *ngIf="activeTab() === 'dead-stock'">
         <section class="panel">
-          <div class="section-title"><div><h2>Cash locked in shelves</h2></div></div>
+          <div class="section-title inner-action-bar"><div><h2>Cash locked in shelves</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.deadStock || []">
             <span>{{ row.name }}</span><strong>{{ row.value | currency:'INR':'symbol':'1.0-0' }}</strong>
           </article>
@@ -170,7 +170,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid three" *ngIf="activeTab() === 'expiry-risk'">
         <section class="panel">
-          <div class="section-title"><div><h2>Batch risk</h2></div></div>
+          <div class="section-title inner-action-bar"><div><h2>Batch risk</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.expiring || []">
             <span>{{ row.productName }} · {{ row.daysToExpiry }} days</span><strong>{{ row.value | currency:'INR':'symbol':'1.0-0' }}</strong>
           </article>
@@ -180,7 +180,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <div class="enterprise-grid three" *ngIf="activeTab() === 'supplier-spend'">
         <section class="panel">
-          <div class="section-title"><div><h2>PO value by supplier</h2></div></div>
+          <div class="section-title inner-action-bar"><div><h2>PO value by supplier</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.supplierSpend || []">
             <span>{{ row.name }} · {{ row.openPoItems }} open</span><strong>{{ row.spend | currency:'INR':'symbol':'1.0-0' }}</strong>
           </article>
@@ -189,8 +189,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </div>
 
       <section class="panel">
-        <div class="section-title"><div><h2>Manual-send queue</h2></div></div>
-        <div class="table-wrap">
+        <div class="section-title inner-action-bar"><div><h2>Manual-send queue</h2></div></div>
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>Supplier</th><th>PO</th><th>Phone</th><th>Status</th><th>Message</th><th>Action</th></tr></thead>
             <tbody>

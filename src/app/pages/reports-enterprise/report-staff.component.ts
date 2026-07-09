@@ -10,8 +10,8 @@ import { Subscription } from 'rxjs';
   imports: [CommonModule, CurrencyPipe, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>Staff Leaderboard</h3>
           <button class="ghost-button mini" (click)="exportReport()">Export</button>
         </div>
@@ -20,12 +20,12 @@ import { Subscription } from 'rxjs';
         </div>
       </section>
 
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>Staff Performance Table</h3>
           <button class="ghost-button mini" (click)="exportTable()">Export CSV</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>Staff</th><th>Bookings</th><th>Revenue</th><th>Product Sales</th><th>Commission</th><th>Utilization</th><th>Rating</th><th>No-Show Impact</th></tr></thead>
             <tbody>

@@ -11,27 +11,27 @@ import { Subscription } from 'rxjs';
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="branch-charts">
-        <section class="panel report-section">
-          <div class="section-title"><h3>Revenue by Branch</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Revenue by Branch</h3></div>
           <div class="chart-container">
             <base-chart type="bar" [labels]="branchNames()" [datasets]="revenueDataset()"></base-chart>
           </div>
         </section>
 
-        <section class="panel report-section">
-          <div class="section-title"><h3>Bookings by Branch</h3></div>
+        <section class="panel report-section inner-page-card">
+          <div class="section-title inner-action-bar"><h3>Bookings by Branch</h3></div>
           <div class="chart-container">
             <base-chart type="bar" [labels]="branchNames()" [datasets]="bookingsDataset()"></base-chart>
           </div>
         </section>
       </div>
 
-      <section class="panel report-section">
-        <div class="section-title">
+      <section class="panel report-section inner-page-card">
+        <div class="section-title inner-action-bar">
           <h3>Branch Ranking Table</h3>
           <button class="ghost-button mini" (click)="exportTable()">Export CSV</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>#</th><th>Branch</th><th>Revenue</th><th>Bookings</th><th>Client Growth</th><th>Staff Productivity</th><th>Profit Estimate</th></tr></thead>
             <tbody>

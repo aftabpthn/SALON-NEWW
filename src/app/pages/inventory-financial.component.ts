@@ -10,7 +10,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, InventoryZenotiChromeComponent, StateComponent],
   template: `
-    <section class="page-stack financial-page">
+    <section class="page-stack financial-page inner-page-shell">
       <app-inventory-zenoti-chrome
         title="COGS, cash and margin"
         breadcrumb="Inventory > Financial Brain"
@@ -24,7 +24,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
-      <section class="financial-kpis">
+      <section class="financial-kpis inner-stats-grid">
         <article class="metric-card teal"><span>Cash locked</span><strong>{{ cashLocked() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
         <article class="metric-card amber"><span>COGS</span><strong>{{ cogs() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
         <article class="metric-card red"><span>Dead stock</span><strong>{{ deadStockValue() | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ deadStockProducts().length }} item(s)</small></article>
@@ -32,7 +32,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       </section>
 
       <div class="financial-grid">
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Cash stuck on shelves</h2></div></div>
           <article class="finance-row" *ngFor="let product of deadStockProducts()">
             <div><strong>{{ product.name }}</strong><span>{{ product.stock || 0 }} unit(s) · no sale/service usage</span></div>
@@ -41,7 +41,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <p class="muted" *ngIf="!deadStockProducts().length">No dead-stock signal right now.</p>
         </section>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Weak-margin products</h2></div></div>
           <article class="finance-row danger" *ngFor="let product of marginLeakageProducts()">
             <div><strong>{{ product.name }}</strong><span>Price {{ product.price | currency:'INR':'symbol':'1.0-0' }} · cost {{ product.unitCost | currency:'INR':'symbol':'1.0-0' }}</span></div>
@@ -51,9 +51,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
       </div>
 
-      <section class="panel">
+      <section class="panel inner-page-card">
         <div class="section-title"><div><h2>Purchase cost by supplier</h2></div></div>
-        <div class="table-wrap">
+        <div class="table-wrap inner-table-wrap">
           <table>
             <thead><tr><th>Supplier</th><th>Purchase entries</th><th>Total purchase</th><th>Last movement</th></tr></thead>
             <tbody>

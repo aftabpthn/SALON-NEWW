@@ -10,12 +10,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StateComponent],
   template: `
-    <section class="page-stack product-360-page">
-      <div class="module-hero compact-hero">
+    <section class="page-stack product-360-page inner-page-shell">
+      <div class="module-hero compact-hero inner-page-header">
         <div>
           <h2>{{ product()?.name || 'Product intelligence' }}</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/inventory">Back to inventory</a>
           <a class="primary-button" routerLink="/inventory/purchase-orders">Create PO draft</a>
         </div>
@@ -24,7 +24,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="product() as item">
-        <section class="product-kpis">
+        <section class="product-kpis inner-stats-grid">
           <article class="metric-card teal"><span>Current stock</span><strong>{{ item.stock || 0 }}</strong><small>Reorder at {{ item.lowStockThreshold || 0 }}</small></article>
           <article class="metric-card amber"><span>Stock value</span><strong>{{ stockValue(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
           <article class="metric-card blue"><span>Gross margin</span><strong>{{ margin(item) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ marginPercent(item) | number: '1.0-0' }}% on sale price</small></article>
@@ -32,7 +32,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <div class="product-layout">
-          <section class="panel product-card aura-card">
+          <section class="panel product-card aura-card inner-page-card">
             <div class="product-avatar">{{ initials(item.name) }}</div>
             <h2>{{ item.name }}</h2>
             <p>{{ item.category || 'Uncategorised' }} · {{ item.usageType || 'retail' }}</p>
@@ -62,9 +62,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Same product across branches</h2></div></div>
-          <div class="table-wrap">
+          <div class="table-wrap inner-table-wrap">
             <table>
               <thead><tr><th>Branch</th><th>Stock</th><th>Reorder level</th><th>Value</th><th>Risk</th></tr></thead>
               <tbody>
@@ -93,7 +93,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel inner-page-card">
             <div class="section-title"><div><h2>POS sales and service consumption</h2></div></div>
             <div class="mini-metrics">
               <div><span>POS sold</span><strong>{{ productSaleUsage(item.id) }}</strong></div>
@@ -111,7 +111,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </section>
         </div>
 
-        <section class="panel">
+        <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Service-wise usage and cost</h2></div></div>
           <div class="mini-metrics">
             <div><span>Purchase rate</span><strong>{{ (item.unitCost || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
@@ -163,7 +163,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div><span>Profit impact</span><strong>{{ (backbarSummary()['actualProfit'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
           </div>
           <div class="control-ledger-grid">
-            <div class="table-wrap">
+            <div class="table-wrap inner-table-wrap">
               <table>
                 <thead><tr><th>Service</th><th>Used</th><th>Product cost</th><th>Revenue</th><th>Profit</th></tr></thead>
                 <tbody>

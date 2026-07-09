@@ -14,12 +14,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
   standalone: true,
   imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
   template: `
-    <section class="page-stack">
-      <div class="module-hero">
+    <section class="page-stack inner-page-shell">
+      <div class="module-hero inner-page-header">
         <div>
           <h2>Staff Sales Report</h2>
         </div>
-        <div class="hero-actions">
+        <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/reports">Reports</a>
           <a class="ghost-button" routerLink="/reports/commission-preview">Commission preview</a>
           <a class="ghost-button" routerLink="/pos/tips">Tip Register</a>
@@ -124,7 +124,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <ng-container *ngIf="report() as data">
-        <div class="metrics-grid">
+        <div class="metrics-grid inner-stats-grid">
           <article class="metric-card">
             <span>Total attributed sales</span>
             <strong>{{ data.totals?.totalRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
@@ -185,7 +185,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </nav>
 
         <section class="panel" *ngIf="activeTab() === 'leaderboard' && leaderboardView() === 'summary'">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Staff summary</h2>
             </div>
@@ -193,7 +193,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <button class="ghost-button mini" type="button" (click)="setLeaderboardView('items')">Staff by item</button>
             </div>
           </div>
-          <div class="table-wrap fit-wrap">
+          <div class="table-wrap fit-wrap inner-table-wrap">
             <table class="leaderboard-table">
               <thead>
                 <tr>
@@ -296,7 +296,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel" *ngIf="activeTab() === 'services'">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Services By Staff</h2>
             </div>
@@ -442,7 +442,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel" *ngIf="activeTab() === 'products'">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Products By Staff</h2>
             </div>
@@ -527,7 +527,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel" *ngIf="activeTab() === 'commission'">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Staff payout preview</h2>
             </div>
@@ -554,7 +554,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </section>
 
         <section class="panel" *ngIf="activeTab() === 'leaderboard' && leaderboardView() === 'items'">
-          <div class="section-title">
+          <div class="section-title inner-action-bar">
             <div>
               <h2>Staff by item</h2>
             </div>
