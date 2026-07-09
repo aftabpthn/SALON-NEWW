@@ -3,6 +3,10 @@ import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { grantsCanAccessPath } from '../core/access-rules';
+import { AuthSessionService } from '../core/auth-session.service';
+import { staticGrantsForRole } from '../core/permission.guard';
+import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
 type AppTone = 'teal' | 'blue' | 'amber' | 'green' | 'red' | 'violet' | 'neutral';
@@ -163,9 +167,9 @@ const SUITE_GROUPS: SuiteGroup[] = [
           <h2>All Apps</h2>
         </div>
         <div class="header-actions">
-          <a class="btn-ghost" routerLink="/dashboard/executive">Executive</a>
-          <a class="btn-primary" routerLink="/appointments">New booking</a>
-          <a class="btn-primary" routerLink="/pos">Fast POS</a>
+          <a class="btn-ghost" routerLink="/dashboard/executive" *ngIf="canAccessPath('/dashboard/executive')">Executive</a>
+          <a class="btn-primary" routerLink="/appointments" *ngIf="canAccessPath('/appointments')">New booking</a>
+          <a class="btn-primary" routerLink="/pos" *ngIf="canAccessPath('/pos')">Fast POS</a>
         </div>
       </header>
 
@@ -189,8 +193,8 @@ const SUITE_GROUPS: SuiteGroup[] = [
         </article>
         <article class="lp-signal">
           <span class="ls-l">Suite coverage</span>
-          <strong class="ls-v">{{ totalApps }}</strong>
-          <small>{{ aiApps }} AI apps · {{ adminApps }} admin controls</small>
+          <strong class="ls-v">{{ totalApps() }}</strong>
+          <small>{{ aiApps() }} AI apps · {{ adminApps() }} admin controls</small>
         </article>
       </div>
 
@@ -201,7 +205,7 @@ const SUITE_GROUPS: SuiteGroup[] = [
         </label>
         <div class="lp-tabs">
           <button type="button" [class.active]="selectedGroup() === 'all'" (click)="selectedGroup.set('all')">All</button>
-          <button type="button" *ngFor="let group of suiteGroups" [class.active]="selectedGroup() === group.id" (click)="selectedGroup.set(group.id)">
+          <button type="button" *ngFor="let group of visibleSuiteGroups()" [class.active]="selectedGroup() === group.id" (click)="selectedGroup.set(group.id)">
             {{ group.label }}
           </button>
         </div>
@@ -524,10 +528,14 @@ export class AppsLaunchpadComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
 
+  readonly visibleSuiteGroups = computed(() => this.suiteGroups
+    .map((group) => ({ ...group, apps: group.apps.filter((app) => this.canAccessPath(app.path)) }))
+    .filter((group) => group.apps.length));
+
   readonly filteredGroups = computed(() => {
     const selected = this.selectedGroup();
     const term = this.query().trim().toLowerCase();
-    return this.suiteGroups
+    return this.visibleSuiteGroups()
       .filter((group) => selected === 'all' || group.id === selected)
       .map((group) => ({
         ...group,
@@ -536,11 +544,11 @@ export class AppsLaunchpadComponent implements OnInit {
       .filter((group) => group.apps.length);
   });
 
-  readonly totalApps = this.suiteGroups.reduce((count, group) => count + group.apps.length, 0);
-  readonly aiApps = this.suiteGroups.flatMap((group) => group.apps).filter((app) => app.status === 'AI').length;
-  readonly adminApps = this.suiteGroups.flatMap((group) => group.apps).filter((app) => app.status === 'Admin').length;
+  readonly totalApps = computed(() => this.visibleSuiteGroups().reduce((count, group) => count + group.apps.length, 0));
+  readonly aiApps = computed(() => this.visibleSuiteGroups().flatMap((group) => group.apps).filter((app) => app.status === 'AI').length);
+  readonly adminApps = computed(() => this.visibleSuiteGroups().flatMap((group) => group.apps).filter((app) => app.status === 'Admin').length);
 
-  constructor(private readonly api: ApiService) {}
+  constructor(private readonly api: ApiService, private readonly state: AppStateService, private readonly session: AuthSessionService) {}
 
   ngOnInit(): void {
     this.load();
@@ -590,5 +598,10 @@ export class AppsLaunchpadComponent implements OnInit {
 
   private appText(app: SuiteApp, group: SuiteGroup): string {
     return `${group.label} ${group.subtitle} ${app.label} ${app.description} ${app.path} ${app.tags.join(' ')}`.toLowerCase();
+  }
+
+  canAccessPath(path: string): boolean {
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...(this.session.currentUser()?.permissions || [])]));
+    return grantsCanAccessPath(grants, path);
   }
 }

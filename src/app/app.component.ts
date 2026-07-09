@@ -5,6 +5,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter } from 'rxjs';
 import { ApiRecord, ApiService } from './core/api.service';
 import { APPOINTMENT_SLOT_MINUTE_OPTIONS, AppointmentToolbarService } from './core/appointment-toolbar.service';
+import { routePermissionForPath } from './core/access-rules';
 import { AuthSessionService } from './core/auth-session.service';
 import { I18nService, LocalePreference } from './core/i18n.service';
 import { NavigationPrefetchService } from './core/navigation-prefetch.service';
@@ -853,35 +854,6 @@ export class AppComponent implements OnDestroy {
   private loadedLocalizationTenantId = '';
 
   @ViewChild('sidebarSearchInput') private sidebarSearchInput?: ElementRef<HTMLInputElement>;
-  private readonly navPermissionRules: Array<{ pattern: RegExp; permission: string | string[] }> = [
-    { pattern: /^\/(security|enterprise-security-shield|security-alerts|security-blocklist|security-policy-center|permissions|compliance|audit-compliance|two-factor)/, permission: ['read:security', 'write:security', 'admin:security'] },
-    { pattern: /^\/(business-details|settings|branches|white-label|localization)/, permission: ['read:settings', 'write:settings', 'read:branches', 'write:branches'] },
-    { pattern: /^\/(appointments|appointment-activity|scheduler|staff\/my-work)/, permission: 'read:appointments' },
-    { pattern: /^\/appointment-deposits/, permission: 'read:appointment_deposits' },
-    { pattern: /^\/(clients|client-masters|customer-360)/, permission: ['read:clients', 'read:customer-360'] },
-    { pattern: /^\/(pos|cash-drawer|checkout|sales)/, permission: ['read:pos', 'read:sales', 'read:invoices'] },
-    { pattern: /^\/(billing|invoices|payments)/, permission: ['read:invoices', 'read:payments', 'read:finance'] },
-    { pattern: /^\/(inventory|products)/, permission: ['read:inventory', 'read:products'] },
-    { pattern: /^\/suppliers/, permission: 'read:suppliers' },
-    { pattern: /^\/(services|packages)/, permission: 'read:services' },
-    { pattern: /^\/(memberships|gift-cards|loyalty)/, permission: ['read:memberships', 'read:services'] },
-    { pattern: /^\/(staff|staff-os|staff-enterprise|payroll|commissions)/, permission: 'read:staff' },
-    { pattern: /^\/(finance|account-master|balance-sheet|transactions)/, permission: 'read:finance' },
-    { pattern: /^\/(reports|analytics|kpi-details|predictive-forecasting|data-warehouse|kpi-monitoring)/, permission: ['read:reports', 'read:analytics'] },
-    { pattern: /^\/(marketing|growth-rank-bot|growth-advisor|discount-rules|reputation|coupons)/, permission: 'read:marketing' },
-    { pattern: /^\/(whatsapp|message-logs)/, permission: 'read:whatsapp' },
-    { pattern: /^\/(ai|command-center|image-analysis|recommendation-engine|knowledge-base|gamification|fraud-detection|appointment-optimization|dynamic-pricing|pricing)/, permission: 'read:ai' },
-    { pattern: /^\/smart-booking/, permission: 'read:smart-booking' },
-    { pattern: /^\/(book|online-booking)/, permission: 'read:booking-portal' },
-    { pattern: /^\/offline/, permission: 'read:offline' },
-    { pattern: /^\/workflows/, permission: 'read:workflows' },
-    { pattern: /^\/quality/, permission: 'read:quality' },
-    { pattern: /^\/deployment/, permission: 'read:deployment' },
-    { pattern: /^\/data-migration/, permission: 'read:migration' },
-    { pattern: /^\/(developer-api|webhooks|plugins|app-marketplace|marketplace-integrations)/, permission: ['read:developer-api', 'read:plugins', 'read:marketplace-integrations'] },
-    { pattern: /^\/(franchise|training-academy)/, permission: 'read:franchise' }
-  ];
-
   readonly favoriteNavItems: NavItem[] = [
     { path: '/home', label: 'Home', icon: 'HM', keywords: 'home dashboard kpi overview' },
     { path: '/apps', label: 'All Apps', icon: 'AP', keywords: 'launchpad modules full suite apps' },
@@ -1512,6 +1484,7 @@ export class AppComponent implements OnDestroy {
     this.isPortal.set(this.isPortalUrl(this.router.url));
     this.activeRoute.set(this.router.url);
     this.ensureActiveGroupExpanded(this.router.url);
+    this.enforceRoutePermission(this.router.url);
     window.addEventListener('aura:app-error', (event) => {
       this.globalError.set(this.readGlobalError((event as CustomEvent<{ message: unknown }>).detail?.message));
     });
@@ -1528,6 +1501,7 @@ export class AppComponent implements OnDestroy {
       this.isPortal.set(this.isPortalUrl(url));
       if (this.routePath(url).startsWith('/appointments')) this.appointmentToolbar.setSlotMinutes(15);
       this.activeRoute.set(url);
+      this.enforceRoutePermission(url);
       this.syncPreviousRouteFromHistory();
       this.ensureActiveGroupExpanded(url);
     });
@@ -1535,6 +1509,7 @@ export class AppComponent implements OnDestroy {
       this.state.selectedTenantId();
       this.session.session();
       if (this.session.isAuthenticated()) {
+        this.enforceRoutePermission(this.activeRoute());
         this.loadTenants();
         this.loadBranches();
         this.loadLocalizationPreference(this.state.selectedTenantId());
@@ -2065,9 +2040,7 @@ export class AppComponent implements OnDestroy {
   }
 
   private navPermissionForPath(path: string): string | string[] {
-    const cleanPath = this.routePath(path);
-    if (!cleanPath || cleanPath === '/' || this.isHomePath(cleanPath) || cleanPath === '/apps') return '';
-    return this.navPermissionRules.find((rule) => rule.pattern.test(cleanPath))?.permission || '';
+    return routePermissionForPath(path);
   }
 
   private canAccessPermission(permission?: string | string[]): boolean {
@@ -2077,6 +2050,14 @@ export class AppComponent implements OnDestroy {
     const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
     if (!grants.length) return false;
     return permissions.some((item) => grantsAllow(grants, item));
+  }
+
+  private enforceRoutePermission(url: string): void {
+    if (!this.session.isAuthenticated()) return;
+    const permission = this.navPermissionForPath(url);
+    if (!this.canAccessPermission(permission)) {
+      void this.router.navigateByUrl('/dashboard');
+    }
   }
 
   private isRouteActive(url: string, path: string): boolean {

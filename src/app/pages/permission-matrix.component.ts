@@ -35,6 +35,7 @@ type StaffPermissionGroup = {
 };
 
 const OWNER_ROLES = new Set(['owner', 'admin', 'superAdmin']);
+const LOCKED_SYSTEM_ROLES = new Set(['manager', 'frontDesk', 'receptionist', 'cashier', 'accountant', 'inventoryManager', 'staff']);
 const BUILTIN_ROLE_OPTIONS: ApiRecord[] = [
   { role: 'owner', name: 'Owner', isSystem: 1 },
   { role: 'superAdmin', name: 'Super Admin', isSystem: 1 },
@@ -45,7 +46,7 @@ const BUILTIN_ROLE_OPTIONS: ApiRecord[] = [
   { role: 'accountant', name: 'Accountant', isSystem: 1 },
   { role: 'inventoryManager', name: 'Inventory Manager', isSystem: 1 },
   { role: 'marketingLead', name: 'Marketing Lead', isSystem: 1 },
-  { role: 'customMarketingLead', name: 'Custom Marketing Lead', isSystem: 1 }
+  { role: 'customMarketingLead', name: 'Custom Marketing Lead', isSystem: 0 }
 ];
 const ROLE_ORDER = new Map(BUILTIN_ROLE_OPTIONS.map((item, index) => [item.role, index]));
 const ACTION_COLUMNS: { key: PermissionAction; label: string; backend: string[] }[] = [
@@ -454,7 +455,7 @@ const RESOURCE_GROUPS = [
               <div class="um-toolbar-actions">
                 <button class="ghost-button" type="button" (click)="copyRightsFromRole()" [disabled]="!copyFromRole()">Copy</button>
                 <button class="ghost-button" type="button" (click)="exportMatrix()">Export matrix</button>
-                <button class="primary-button" type="button" (click)="saveRoleMatrix()" [disabled]="saving() || isOwnerRole(selectedRole())">Save rights</button>
+                <button class="primary-button" type="button" (click)="saveRoleMatrix()" [disabled]="saving() || isRoleReadOnly(selectedRole())">Save rights</button>
               </div>
             </div>
 
@@ -462,7 +463,8 @@ const RESOURCE_GROUPS = [
               <div>
                 <h2>{{ roleName(selectedRole()) }} rights</h2>
                 <span class="um-muted" *ngIf="isOwnerRole(selectedRole())">Owner/admin roles always keep full control across the app.</span>
-                <span class="um-muted" *ngIf="!isOwnerRole(selectedRole())">Changes save into role definitions and security permissions.</span>
+                <span class="um-muted" *ngIf="isLockedSystemRole(selectedRole())">This built-in role is fixed. Create a custom role to change rights.</span>
+                <span class="um-muted" *ngIf="!isRoleReadOnly(selectedRole())">Changes save into role definitions and security permissions.</span>
               </div>
               <span class="um-owner-note" *ngIf="isOwnerRole(selectedRole())">Full owner control</span>
             </div>
@@ -478,13 +480,13 @@ const RESOURCE_GROUPS = [
                   <header>
                     <h4>{{ group.label }}</h4>
                     <label class="salonist-group-select">
-                      <input class="um-check" type="checkbox" [checked]="isFeatureGroupChecked(group)" [disabled]="isOwnerRole(selectedRole())" (change)="toggleFeatureGroup(group, $any($event.target).checked)" />
+                      <input class="um-check" type="checkbox" [checked]="isFeatureGroupChecked(group)" [disabled]="isRoleReadOnly(selectedRole())" (change)="toggleFeatureGroup(group, $any($event.target).checked)" />
                       <span>All</span>
                     </label>
                   </header>
                   <div class="salonist-grid">
                     <label class="salonist-permission" *ngFor="let item of group.items">
-                      <input class="um-check" type="checkbox" [checked]="isFeaturePermissionChecked(item)" [disabled]="isOwnerRole(selectedRole())" (change)="toggleFeaturePermission(item, $any($event.target).checked)" />
+                      <input class="um-check" type="checkbox" [checked]="isFeaturePermissionChecked(item)" [disabled]="isRoleReadOnly(selectedRole())" (change)="toggleFeaturePermission(item, $any($event.target).checked)" />
                       <span>
                         <span>{{ item.label }}</span>
                         <small>{{ item.action }}:{{ item.resource }}</small>
@@ -503,7 +505,7 @@ const RESOURCE_GROUPS = [
                     <th *ngFor="let action of actionColumns">
                       <label>
                         <span>{{ action.label }}</span><br />
-                        <input class="um-check" type="checkbox" [checked]="isColumnChecked(action.key)" [disabled]="isOwnerRole(selectedRole())" (change)="setColumn(action.key, $any($event.target).checked)" />
+                        <input class="um-check" type="checkbox" [checked]="isColumnChecked(action.key)" [disabled]="isRoleReadOnly(selectedRole())" (change)="setColumn(action.key, $any($event.target).checked)" />
                       </label>
                     </th>
                   </tr>
@@ -513,7 +515,7 @@ const RESOURCE_GROUPS = [
                     <tr class="um-group-row">
                       <td>{{ group.label }}</td>
                       <td *ngFor="let action of actionColumns">
-                        <input class="um-check" type="checkbox" [checked]="isGroupChecked(group.key, action.key)" [disabled]="isOwnerRole(selectedRole())" (change)="setGroupColumn(group.key, action.key, $any($event.target).checked)" />
+                        <input class="um-check" type="checkbox" [checked]="isGroupChecked(group.key, action.key)" [disabled]="isRoleReadOnly(selectedRole())" (change)="setGroupColumn(group.key, action.key, $any($event.target).checked)" />
                       </td>
                     </tr>
                     <tr *ngFor="let resource of group.resources">
@@ -524,7 +526,7 @@ const RESOURCE_GROUPS = [
                         </div>
                       </td>
                       <td *ngFor="let action of actionColumns">
-                        <input class="um-check" type="checkbox" [checked]="isPermissionChecked(resource[0], action.key)" [disabled]="isOwnerRole(selectedRole())" (change)="togglePermission(resource[0], action.key, $any($event.target).checked)" />
+                        <input class="um-check" type="checkbox" [checked]="isPermissionChecked(resource[0], action.key)" [disabled]="isRoleReadOnly(selectedRole())" (change)="togglePermission(resource[0], action.key, $any($event.target).checked)" />
                       </td>
                     </tr>
                   </ng-container>
@@ -570,7 +572,7 @@ const RESOURCE_GROUPS = [
             <h3>Lock sensitive actions</h3>
             <div class="um-lock-list">
               <label class="um-lock-item" *ngFor="let item of lockControls">
-                <input class="um-check" type="checkbox" [checked]="isPermissionChecked(item.resource, 'all')" [disabled]="isOwnerRole(selectedRole())" (change)="togglePermission(item.resource, 'all', $any($event.target).checked)" />
+                <input class="um-check" type="checkbox" [checked]="isPermissionChecked(item.resource, 'all')" [disabled]="isRoleReadOnly(selectedRole())" (change)="togglePermission(item.resource, 'all', $any($event.target).checked)" />
                 <span><strong>{{ item.label }}</strong><small class="um-muted">{{ item.detail }}</small></span>
               </label>
             </div>
@@ -926,7 +928,7 @@ export class PermissionMatrixComponent implements OnInit {
 
   saveRoleMatrix(): void {
     const role = this.selectedRole();
-    if (this.isOwnerRole(role)) return;
+    if (this.isRoleReadOnly(role)) return;
     const definition = this.roles().find((item) => item.role === role) || { role, name: this.roleName(role), description: '' };
     const permissionMap = new Map<string, Set<string>>();
     const matrixResources = this.resourceGroups.flatMap((group) => group.resources.map((resource) => resource[0]));
@@ -1002,7 +1004,7 @@ export class PermissionMatrixComponent implements OnInit {
   }
 
   togglePermission(resource: string, action: PermissionAction, checked: boolean): void {
-    if (this.isOwnerRole(this.selectedRole())) return;
+    if (this.isRoleReadOnly(this.selectedRole())) return;
     const next = { ...this.draftPermissions() };
     const set = new Set(next[resource] || []);
     if (action === 'all') {
@@ -1048,7 +1050,7 @@ export class PermissionMatrixComponent implements OnInit {
   }
 
   toggleFeaturePermission(item: StaffPermissionCatalogItem, checked: boolean): void {
-    if (this.isOwnerRole(this.selectedRole())) return;
+    if (this.isRoleReadOnly(this.selectedRole())) return;
     this.featureDraft.set({ ...this.featureDraft(), [this.featureKey(item)]: checked });
   }
 
@@ -1057,7 +1059,7 @@ export class PermissionMatrixComponent implements OnInit {
   }
 
   toggleFeatureGroup(group: StaffPermissionGroup, checked: boolean): void {
-    if (this.isOwnerRole(this.selectedRole())) return;
+    if (this.isRoleReadOnly(this.selectedRole())) return;
     const next = { ...this.featureDraft() };
     group.items.forEach((item) => next[this.featureKey(item)] = checked);
     this.featureDraft.set(next);
@@ -1092,6 +1094,14 @@ export class PermissionMatrixComponent implements OnInit {
 
   isOwnerRole(role: string): boolean {
     return OWNER_ROLES.has(role);
+  }
+
+  isLockedSystemRole(role: string): boolean {
+    return LOCKED_SYSTEM_ROLES.has(role);
+  }
+
+  isRoleReadOnly(role: string): boolean {
+    return this.isOwnerRole(role) || this.isLockedSystemRole(role);
   }
 
   private afterUserMutation(response: ApiRecord, message: string): void {

@@ -1,4 +1,5 @@
-import { forbidden } from "../utils/app-error.js";
+import { randomUUID } from "node:crypto";
+import { forbidden, unauthorized } from "../utils/app-error.js";
 import { db } from "../db.js";
 
 const permissions = {
@@ -26,38 +27,7 @@ const permissions = {
     "write:invoices",
     "write:payments",
     "write:appointment_deposits",
-    "write:memberships",
-    "write:staff",
-    "write:marketing",
-    "write:analytics",
-    "read:analytics",
-    "write:ai",
-    "read:ai",
-    "write:whatsapp",
-    "read:whatsapp",
-    "write:branches",
-    "write:localization",
-    "write:notifications",
-    "write:smart-booking",
-    "read:smart-booking",
-    "read:offline",
-    "write:offline",
-    "read:future-features",
-    "write:future-features",
-    "read:workflows",
-    "write:workflows",
-    "read:finance",
-    "write:finance",
-    "read:customer-360",
-    "write:customer-360",
-    "read:booking-portal",
-    "write:booking-portal",
-    "read:quality",
-    "write:quality",
-    "read:deployment",
-    "write:deployment",
-    "read:migration",
-    "write:migration"
+    "write:staff"
   ],
   receptionist: [
     "read:dashboard",
@@ -74,19 +44,10 @@ const permissions = {
     "write:invoices",
     "write:payments",
     "write:appointment_deposits",
-    "write:ai",
-    "write:whatsapp",
-    "read:whatsapp",
     "write:smart-booking",
     "read:smart-booking",
-    "write:offline",
-    "read:offline",
-    "read:finance",
-    "read:customer-360",
-    "write:customer-360",
     "read:booking-portal",
-    "write:booking-portal",
-    "write:notifications"
+    "write:booking-portal"
   ],
   frontDesk: [
     "read:dashboard",
@@ -103,20 +64,10 @@ const permissions = {
     "write:invoices",
     "write:payments",
     "write:appointment_deposits",
-    "write:ai",
-    "write:whatsapp",
-    "read:whatsapp",
     "write:smart-booking",
     "read:smart-booking",
-    "write:offline",
-    "read:offline",
-    "read:finance",
-    "write:finance",
-    "read:customer-360",
-    "write:customer-360",
     "read:booking-portal",
-    "write:booking-portal",
-    "write:notifications"
+    "write:booking-portal"
   ],
   cashier: [
     "read:dashboard",
@@ -131,14 +82,7 @@ const permissions = {
     "write:invoices",
     "write:payments",
     "read:appointment_deposits",
-    "write:whatsapp",
-    "read:whatsapp",
-    "read:finance",
-    "write:finance",
-    "read:customer-360",
-    "write:customer-360",
-    "read:booking-portal",
-    "write:notifications"
+    "write:appointment_deposits"
   ],
   accountant: [
     "read:dashboard",
@@ -153,13 +97,7 @@ const permissions = {
     "write:payments",
     "read:appointment_deposits",
     "read:reports",
-    "read:analytics",
-    "read:security",
-    "write:security",
-    "read:quality",
-    "write:quality",
-    "read:deployment",
-    "write:deployment"
+    "read:analytics"
   ],
   inventoryManager: [
     "read:dashboard",
@@ -170,9 +108,7 @@ const permissions = {
     "read:inventory-intelligence",
     "write:inventory-intelligence",
     "read:suppliers",
-    "write:suppliers",
-    "read:branches",
-    "write:branches"
+    "write:suppliers"
   ],
   marketingLead: [
     "read:dashboard",
@@ -189,7 +125,9 @@ const permissions = {
     "write:whatsapp",
     "read:notifications",
     "write:notifications",
-    "read:reviews"
+    "read:reviews",
+    "read:reputation",
+    "write:reputation"
   ],
   customMarketingLead: [
     "read:dashboard",
@@ -206,28 +144,21 @@ const permissions = {
     "write:whatsapp",
     "read:notifications",
     "write:notifications",
-    "read:reviews"
+    "read:reviews",
+    "read:reputation",
+    "write:reputation"
   ],
   staff: [
     "read:appointments",
     "read:clients",
     "read:services",
     "read:products",
-    "read:suppliers",
-    "read:branches",
-    "read:inventory",
-    "write:inventory",
-    "read:ai",
-    "read:whatsapp",
-    "write:appointments",
-    "write:ai",
-    "write:whatsapp",
-    "read:smart-booking",
-    "read:customer-360",
-    "read:booking-portal"
+    "write:appointments"
   ],
   analyst: ["read:*", "read:reports", "read:analytics", "write:analytics", "read:ai", "read:whatsapp", "write:ai", "read:security", "read:quality", "read:deployment", "read:future-features", "write:future-features", "read:finance", "read:customer-360", "read:workflows"]
 };
+
+const cappedBuiltinRoles = new Set(["manager", "receptionist", "frontDesk", "cashier", "accountant", "inventoryManager", "staff"]);
 
 export function normalizeRole(role = "") {
   const value = String(role || "").trim();
@@ -289,8 +220,38 @@ function requestAction(action, req) {
   if (action === "read" && /(?:^|\/)(?:export|download|csv|pdf)(?:\/|$)/i.test(req.path || req.originalUrl || "")) return "export";
   return action;
 }
+
+function auditDenied(req, { action = "", resource = "", reason = "forbidden" } = {}) {
+  try {
+    const access = req.access || {};
+    const tenantId = access.tenantId || req.get?.("x-tenant-id") || "tenant_aura";
+    db.prepare(`INSERT INTO security_audit_logs (
+      id, tenantId, branchId, actorUserId, actorRole, action, targetType, targetId, severity, ipAddress, userAgent, details, createdAt
+    ) VALUES (
+      @id, @tenantId, @branchId, @actorUserId, @actorRole, @action, @targetType, @targetId, @severity, @ipAddress, @userAgent, @details, @createdAt
+    )`).run({
+      id: `audit_${randomUUID().slice(0, 10)}`,
+      tenantId,
+      branchId: access.branchId || req.get?.("x-branch-id") || "",
+      actorUserId: access.userId || "",
+      actorRole: access.role || req.user?.role || req.get?.("x-user-role") || "anonymous",
+      action: `access.${reason}`,
+      targetType: resource || "system",
+      targetId: req.params?.id || "",
+      severity: "warning",
+      ipAddress: req.ip || "",
+      userAgent: req.get?.("user-agent") || "",
+      details: JSON.stringify({ method: req.method, path: req.originalUrl || req.url, requiredAction: action, resource, reason }),
+      createdAt: new Date().toISOString()
+    });
+  } catch {
+    // Permission checks must not fail open because audit logging failed.
+  }
+}
+
 export function can(role, action, resource, access = {}) {
   role = normalizeRole(role);
+  if (cappedBuiltinRoles.has(role)) return staticGrantAllows(permissions[role] || [], action, resource);
   if (staticGrantAllows(access.permissions || [], action, resource)) return true;
   const grants = permissions[role] || [];
   if (grants.includes("*")) return true;
@@ -319,6 +280,11 @@ export function can(role, action, resource, access = {}) {
 }
 export function requirePermission(action, resourceResolver = (req) => req.params.resource || "system") {
   return (req, _res, next) => {
+    if (!req.access && !req.user) {
+      auditDenied(req, { action, resource: "system", reason: "unauthorized" });
+      next(unauthorized());
+      return;
+    }
     const resource = resourceResolver(req);
     const role = req.access?.role || req.user?.role || "staff";
     const checkedAction = requestAction(action, req);
@@ -327,6 +293,7 @@ export function requirePermission(action, resourceResolver = (req) => req.params
       return;
     }
     if (!can(role, checkedAction, resource, req.access || {})) {
+      auditDenied(req, { action: checkedAction, resource, reason: "forbidden" });
       next(forbidden());
       return;
     }
@@ -337,6 +304,11 @@ export function requirePermission(action, resourceResolver = (req) => req.params
 
 export function requireAnyPermission(checks = []) {
   return (req, _res, next) => {
+    if (!req.access && !req.user) {
+      auditDenied(req, { action: "any", resource: "system", reason: "unauthorized" });
+      next(unauthorized());
+      return;
+    }
     const role = req.access?.role || req.user?.role || "staff";
     const allowed = checks.some((check) => {
       const action = requestAction(check.action || "read", req);
@@ -344,6 +316,7 @@ export function requireAnyPermission(checks = []) {
       return can(role, action, resource || "system", req.access || {});
     });
     if (!allowed) {
+      auditDenied(req, { action: "any", resource: checks.map((check) => typeof check.resource === "function" ? "dynamic" : check.resource).filter(Boolean).join(",") || "system", reason: "forbidden" });
       next(forbidden());
       return;
     }

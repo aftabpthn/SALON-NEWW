@@ -2,6 +2,10 @@ import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { grantsCanAccessPath } from '../core/access-rules';
+import { AuthSessionService } from '../core/auth-session.service';
+import { staticGrantsForRole } from '../core/permission.guard';
+import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
 @Component({
@@ -19,8 +23,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <p>Track revenue, bookings, payments, clients, and alerts from one operational view.</p>
         </div>
         <div class="greeting-actions">
-          <a class="btn-ghost" routerLink="/reports">Export</a>
-          <a class="btn-primary" routerLink="/appointments">New Booking</a>
+          <a class="btn-ghost" routerLink="/reports" *ngIf="canAccessPath('/reports')">Export</a>
+          <a class="btn-primary" routerLink="/appointments" *ngIf="canAccessPath('/appointments')">New Booking</a>
         </div>
       </div>
 
@@ -42,7 +46,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span class="kpi-l">Total bookings</span>
             <strong class="kpi-v">{{ data.totalBookings }}</strong>
           </a>
-          <a class="kpi" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }">
+          <a class="kpi" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }" *ngIf="canAccessPath('/pos/invoices')">
             <span class="kpi-l">Received due</span>
             <strong class="kpi-v" style="color:#C87D4B">{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }}</strong>
           </a>
@@ -50,11 +54,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span class="kpi-l">Pending payments</span>
             <strong class="kpi-v" style="color:#dc2626">{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }}</strong>
           </a>
-          <a class="kpi" routerLink="/clients">
+          <a class="kpi" routerLink="/clients" *ngIf="canAccessPath('/clients')">
             <span class="kpi-l">New clients</span>
             <strong class="kpi-v" style="color:#d97706">{{ data.newClients }}</strong>
           </a>
-          <a class="kpi" routerLink="/customer-360">
+          <a class="kpi" routerLink="/customer-360" *ngIf="canAccessPath('/customer-360')">
             <span class="kpi-l">Client retention</span>
             <strong class="kpi-v" style="color:#C87D4B">{{ data.clientRetention }}%</strong>
           </a>
@@ -65,46 +69,46 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="card-h">
           <h2>Quick access</h2>
           <div class="card-h-actions">
-            <a class="btn-ghost" routerLink="/dashboard/executive">Executive dashboard</a>
-            <a class="btn-ghost" routerLink="/reports">All reports</a>
+            <a class="btn-ghost" routerLink="/dashboard/executive" *ngIf="canAccessPath('/dashboard/executive')">Executive dashboard</a>
+            <a class="btn-ghost" routerLink="/reports" *ngIf="canAccessPath('/reports')">All reports</a>
           </div>
         </div>
         <div class="hub-grid">
-          <a class="hub-tile" routerLink="/appointments">
+          <a class="hub-tile" routerLink="/appointments" *ngIf="canAccessPath('/appointments')">
             <span class="hub-badge">BK</span>
             <strong>{{ data.totalBookings }} bookings</strong>
             <span class="hub-cta">Open calendar</span>
           </a>
-          <a class="hub-tile" routerLink="/pos">
+          <a class="hub-tile" routerLink="/pos" *ngIf="canAccessPath('/pos')">
             <span class="hub-badge">POS</span>
             <strong>{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }} received due</strong>
             <span class="hub-sub">{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }} still pending</span>
             <span class="hub-cta">Open POS</span>
           </a>
-          <a class="hub-tile" routerLink="/inventory">
+          <a class="hub-tile" routerLink="/inventory" *ngIf="canAccessPath('/inventory')">
             <span class="hub-badge">ST</span>
             <strong>{{ data.lowStockAlerts.length || 0 }} alerts</strong>
             <span class="hub-sub">{{ data.lowStockAlerts[0]?.name || 'Stock is healthy' }}</span>
             <span class="hub-cta">Open stock</span>
           </a>
-          <a class="hub-tile" routerLink="/staff-os/employee-masters">
+          <a class="hub-tile" routerLink="/staff-os/employee-masters" *ngIf="canAccessPath('/staff-os/employee-masters')">
             <span class="hub-badge">TM</span>
             <strong>{{ data.staffPerformance[0]?.name || 'No ranking yet' }}</strong>
             <span class="hub-sub">{{ (data.staffPerformance[0]?.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }} top revenue</span>
             <span class="hub-cta">Open Staff OS</span>
           </a>
-          <a class="hub-tile" routerLink="/customer-360">
+          <a class="hub-tile" routerLink="/customer-360" *ngIf="canAccessPath('/customer-360')">
             <span class="hub-badge">CL</span>
             <strong>{{ data.repeatCustomerRate }}% repeat</strong>
             <span class="hub-sub">{{ data.newClients }} new clients this month</span>
             <span class="hub-cta">Open customer intelligence</span>
           </a>
-          <a class="hub-tile" routerLink="/smart-booking">
+          <a class="hub-tile" routerLink="/smart-booking" *ngIf="canAccessPath('/smart-booking')">
             <span class="hub-badge">WF</span>
             <strong>Workflow</strong>
             <span class="hub-cta">Open workflow</span>
           </a>
-          <a class="hub-tile" routerLink="/memberships">
+          <a class="hub-tile" routerLink="/memberships" *ngIf="canAccessPath('/memberships')">
             <span class="hub-badge">MB</span>
             <strong>{{ data.membershipRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
             <span class="hub-cta">Open memberships</span>
@@ -118,19 +122,19 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <h2>Front desk shortcuts</h2>
           </div>
           <div class="shortcut-grid">
-            <a class="shortcut" routerLink="/appointments">
+            <a class="shortcut" routerLink="/appointments" *ngIf="canAccessPath('/appointments')">
               <span class="shortcut-i">BK</span>
               <strong>Walk-in booking</strong>
             </a>
-            <a class="shortcut" routerLink="/pos">
+            <a class="shortcut" routerLink="/pos" *ngIf="canAccessPath('/pos')">
               <span class="shortcut-i">PS</span>
               <strong>Fast POS checkout</strong>
             </a>
-            <a class="shortcut" routerLink="/inventory">
+            <a class="shortcut" routerLink="/inventory" *ngIf="canAccessPath('/inventory')">
               <span class="shortcut-i">IV</span>
               <strong>Purchase entry</strong>
             </a>
-            <a class="shortcut" routerLink="/marketing">
+            <a class="shortcut" routerLink="/marketing" *ngIf="canAccessPath('/marketing')">
               <span class="shortcut-i">MK</span>
               <strong>Client win-back</strong>
             </a>
@@ -140,7 +144,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="card">
           <div class="card-h">
             <h2>{{ data.staffPerformance.length }} ranked staff</h2>
-            <a class="btn-ghost" routerLink="/staff-os/staff-list">Open staff</a>
+            <a class="btn-ghost" routerLink="/staff-os/staff-list" *ngIf="canAccessPath('/staff-os/staff-list')">Open staff</a>
           </div>
           <div class="staff-card">
             <div class="staff-row">
@@ -156,7 +160,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="card">
           <div class="card-h">
             <h2>{{ data.lowStockAlerts.length || 0 }} low stock alerts</h2>
-            <a class="btn-ghost" routerLink="/inventory">Open stock</a>
+            <a class="btn-ghost" routerLink="/inventory" *ngIf="canAccessPath('/inventory')">Open stock</a>
           </div>
           <div class="alert-card">
             <div class="alert-row" *ngIf="data.lowStockAlerts[0]">
@@ -174,7 +178,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="card">
           <div class="card-h">
             <h2>Operational workflow</h2>
-            <a class="btn-ghost" routerLink="/smart-booking">Open workflow</a>
+            <a class="btn-ghost" routerLink="/smart-booking" *ngIf="canAccessPath('/smart-booking')">Open workflow</a>
           </div>
           <div class="stepper">
             <div class="step done"><span class="step-dot"></span>Requested</div>
@@ -532,7 +536,7 @@ export class DashboardComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
 
-  constructor(private readonly api: ApiService) {}
+  constructor(private readonly api: ApiService, private readonly state: AppStateService, private readonly session: AuthSessionService) {}
 
   ngOnInit(): void {
     this.load();
@@ -594,5 +598,10 @@ export class DashboardComponent implements OnInit {
       fallback;
     if (typeof raw === 'string') return raw;
     return raw?.message || raw?.code || fallback;
+  }
+
+  canAccessPath(path: string): boolean {
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...(this.session.currentUser()?.permissions || [])]));
+    return grantsCanAccessPath(grants, path);
   }
 }

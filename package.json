@@ -14,6 +14,7 @@
     "quality": "npm run check:server && npm test && npm run build",
     "audit:design-system": "node scripts/audit-design-system.mjs",
     "seed:demo": "node scripts/seed-demo-data.mjs",
+    "seed:rbac-test-users": "node scripts/seed-rbac-test-users.mjs",
     "seed:ai-knowledge": "node scripts/seed-aurashine-ai-knowledge.mjs",
     "backup:db": "node scripts/backup-database.mjs",
     "smoke:staff-mobile": "node scripts/smoke-staff-mobile.mjs",

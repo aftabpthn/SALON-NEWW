@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
+import { authenticateJwt } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/rbac.js";
 import { leadManagementService } from "../services/lead-management.service.js";
 
 export const leadManagementRouter = Router();
+
+leadManagementRouter.use(authenticateJwt());
 
 leadManagementRouter.get(
   "/leads/overview",

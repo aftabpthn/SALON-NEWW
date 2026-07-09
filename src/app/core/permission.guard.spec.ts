@@ -6,18 +6,18 @@ const GRANTS: Record<string, string[]> = {
   owner: ['*'],
   admin: ['*'],
   manager: [
-    'read:*', 'write:clients', 'write:appointments', 'write:services',
+    'read:dashboard', 'read:appointments', 'read:clients', 'read:services', 'read:products', 'read:inventory', 'read:sales', 'read:invoices', 'read:payments', 'read:staff', 'read:reports', 'write:clients', 'write:appointments', 'write:services',
     'write:products', 'write:inventory', 'write:sales', 'write:invoices',
     'write:payments', 'write:appointment_deposits', 'write:staff'
   ],
   receptionist: [
-    'read:*', 'write:clients', 'write:appointments', 'write:sales',
-    'write:invoices', 'write:payments', 'write:appointment_deposits'
+    'read:dashboard', 'read:appointments', 'read:clients', 'read:services', 'read:products', 'read:sales', 'read:invoices', 'read:payments', 'write:clients', 'write:appointments', 'write:sales',
+    'write:invoices', 'write:payments', 'write:appointment_deposits', 'read:smart-booking', 'write:smart-booking', 'read:booking-portal', 'write:booking-portal'
   ],
-  cashier: ['read:*', 'write:clients', 'write:sales', 'write:invoices', 'write:payments', 'read:appointment_deposits', 'read:finance', 'write:finance'],
-  accountant: ['read:*', 'write:finance', 'write:invoices', 'write:payments', 'read:appointment_deposits'],
-  inventoryManager: ['read:*', 'write:products', 'write:inventory', 'write:suppliers'],
-  staff: ['read:staff', 'read:appointments', 'read:clients', 'read:services', 'write:appointments'],
+  cashier: ['read:dashboard', 'read:clients', 'read:services', 'read:products', 'read:sales', 'read:invoices', 'read:payments', 'write:clients', 'write:sales', 'write:invoices', 'write:payments', 'read:appointment_deposits', 'write:appointment_deposits'],
+  accountant: ['read:dashboard', 'read:finance', 'read:invoices', 'read:payments', 'write:finance', 'write:invoices', 'write:payments', 'read:appointment_deposits', 'read:reports', 'read:analytics'],
+  inventoryManager: ['read:dashboard', 'read:products', 'read:inventory', 'read:suppliers', 'read:inventory-intelligence', 'write:products', 'write:inventory', 'write:suppliers', 'write:inventory-intelligence'],
+  staff: ['read:appointments', 'read:clients', 'read:services', 'read:products', 'write:appointments'],
   analyst: ['read:*', 'write:analytics']
 };
 
@@ -42,10 +42,10 @@ describe('Permission GRANTS matrix', () => {
   });
 
   // Manager
-  it('manager can write invoices and read anything', () => {
+  it('manager can write invoices and read operational modules', () => {
     expect(allows('manager', 'write:invoices')).toBe(true);
     expect(allows('manager', 'read:clients')).toBe(true);
-    expect(allows('manager', 'read:analytics')).toBe(true);
+    expect(allows('manager', 'read:analytics')).toBe(false);
   });
 
   it('manager cannot write finance', () => {
@@ -66,9 +66,10 @@ describe('Permission GRANTS matrix', () => {
   });
 
   // Cashier
-  it('cashier can read and write finance', () => {
-    expect(allows('cashier', 'read:finance')).toBe(true);
-    expect(allows('cashier', 'write:finance')).toBe(true);
+  it('cashier can handle invoice/payment flow without finance access', () => {
+    expect(allows('cashier', 'write:payments')).toBe(true);
+    expect(allows('cashier', 'read:finance')).toBe(false);
+    expect(allows('cashier', 'write:finance')).toBe(false);
   });
 
   it('cashier cannot write appointments', () => {

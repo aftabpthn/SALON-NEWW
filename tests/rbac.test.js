@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { db } from "../server/db.js";
-import { can } from "../server/middleware/rbac.js";
+import { can, requirePermission } from "../server/middleware/rbac.js";
 
 const access = { tenantId: "tenant_aura" };
 
@@ -25,20 +25,20 @@ test("custom roles are resolved from persisted permissions", () => {
   assert.equal(can("customMarketingLead", "write", "finance", access), false);
 });
 
-test("explicit tenant rows override static manager grants for the same resource", () => {
-  db.prepare("SAVEPOINT rbac_static_override").run();
+test("capped system roles ignore persisted rows for the same resource", () => {
+  db.prepare("SAVEPOINT rbac_system_cap").run();
   try {
     db.prepare("DELETE FROM security_permissions WHERE tenantId = @tenantId AND role = @role AND resource = @resource")
-      .run({ tenantId: access.tenantId, role: "manager", resource: "products" });
+      .run({ tenantId: access.tenantId, role: "manager", resource: "finance" });
     db.prepare(`INSERT INTO security_permissions (
       id, tenantId, role, resource, actions, effect, conditions, status, createdAt, updatedAt
     ) VALUES (
       @id, @tenantId, @role, @resource, @actions, @effect, @conditions, @status, @createdAt, @updatedAt
     )`).run({
-      id: "perm_test_manager_products",
+      id: "perm_test_manager_finance",
       tenantId: access.tenantId,
       role: "manager",
-      resource: "products",
+      resource: "finance",
       actions: JSON.stringify(["read", "update"]),
       effect: "allow",
       conditions: "{}",
@@ -47,12 +47,11 @@ test("explicit tenant rows override static manager grants for the same resource"
       updatedAt: new Date().toISOString()
     });
 
-    assert.equal(can("manager", "read", "products", access), true);
-    assert.equal(can("manager", "update", "products", access), true);
-    assert.equal(can("manager", "delete", "products", access), false);
+    assert.equal(can("manager", "read", "finance", access), false);
+    assert.equal(can("manager", "update", "finance", access), false);
   } finally {
-    db.prepare("ROLLBACK TO rbac_static_override").run();
-    db.prepare("RELEASE rbac_static_override").run();
+    db.prepare("ROLLBACK TO rbac_system_cap").run();
+    db.prepare("RELEASE rbac_system_cap").run();
   }
 });
 
@@ -83,6 +82,33 @@ test("empty deny rows are authoritative for unchecked micro permissions", () => 
   } finally {
     db.prepare("ROLLBACK TO rbac_empty_deny").run();
     db.prepare("RELEASE rbac_empty_deny").run();
+  }
+});
+
+test("failed permission checks are audited", () => {
+  db.prepare("SAVEPOINT rbac_denied_audit").run();
+  try {
+    const before = db.prepare("SELECT COUNT(*) total FROM security_audit_logs WHERE action = 'access.forbidden' AND targetType = 'finance'").get();
+    const req = {
+      method: "POST",
+      path: "/finance/refunds",
+      originalUrl: "/api/v1/finance/refunds",
+      params: {},
+      access: { tenantId: access.tenantId, branchId: "branch_main", role: "staff", userId: "qa_staff" },
+      get(name) {
+        return name === "user-agent" ? "rbac-test" : "";
+      }
+    };
+    let error;
+    requirePermission("write", () => "finance")(req, {}, (nextError) => {
+      error = nextError;
+    });
+    assert.ok(error, "forbidden error should be passed to next");
+    const after = db.prepare("SELECT COUNT(*) total FROM security_audit_logs WHERE action = 'access.forbidden' AND targetType = 'finance'").get();
+    assert.equal(Number(after.total), Number(before.total) + 1);
+  } finally {
+    db.prepare("ROLLBACK TO rbac_denied_audit").run();
+    db.prepare("RELEASE rbac_denied_audit").run();
   }
 });
 
