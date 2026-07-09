@@ -6,15 +6,15 @@ const GRANTS: Record<string, string[]> = {
   owner: ['*'],
   admin: ['*'],
   manager: [
-    'read:dashboard', 'read:appointments', 'read:clients', 'read:services', 'read:products', 'read:inventory', 'read:sales', 'read:invoices', 'read:payments', 'read:staff', 'read:reports', 'write:clients', 'write:appointments', 'write:services',
+    'read:dashboard', 'read:appointments', 'read:clients', 'read:services', 'read:products', 'read:inventory', 'read:sales', 'use:pos', 'read:invoices', 'read:payments', 'read:staff', 'read:reports', 'write:clients', 'write:appointments', 'write:services',
     'write:products', 'write:inventory', 'write:sales', 'write:invoices',
     'write:payments', 'write:appointment_deposits', 'write:staff'
   ],
   receptionist: [
-    'read:dashboard', 'read:appointments', 'read:clients', 'read:services', 'read:products', 'read:sales', 'read:invoices', 'read:payments', 'write:clients', 'write:appointments', 'write:sales',
+    'read:dashboard', 'read:appointments', 'read:clients', 'read:services', 'read:products', 'read:sales', 'use:pos', 'read:invoices', 'read:payments', 'write:clients', 'write:appointments', 'write:sales',
     'write:invoices', 'write:payments', 'write:appointment_deposits', 'read:smart-booking', 'write:smart-booking', 'read:booking-portal', 'write:booking-portal'
   ],
-  cashier: ['read:dashboard', 'read:clients', 'read:services', 'read:products', 'read:sales', 'read:invoices', 'read:payments', 'write:clients', 'write:sales', 'write:invoices', 'write:payments', 'read:appointment_deposits', 'write:appointment_deposits'],
+  cashier: ['read:dashboard', 'read:clients', 'read:services', 'read:products', 'read:sales', 'use:pos', 'read:invoices', 'read:payments', 'write:clients', 'write:sales', 'write:invoices', 'write:payments', 'read:appointment_deposits', 'write:appointment_deposits'],
   accountant: ['read:dashboard', 'read:finance', 'read:invoices', 'read:payments', 'write:finance', 'write:invoices', 'write:payments', 'read:appointment_deposits', 'read:reports', 'read:analytics'],
   inventoryManager: ['read:dashboard', 'read:products', 'read:inventory', 'read:suppliers', 'read:inventory-intelligence', 'write:products', 'write:inventory', 'write:suppliers', 'write:inventory-intelligence'],
   staff: ['read:appointments', 'read:clients', 'read:services', 'read:products', 'write:appointments'],
@@ -45,6 +45,7 @@ describe('Permission GRANTS matrix', () => {
   it('manager can write invoices and read operational modules', () => {
     expect(allows('manager', 'write:invoices')).toBe(true);
     expect(allows('manager', 'read:clients')).toBe(true);
+    expect(allows('manager', 'use:pos')).toBe(true);
     expect(allows('manager', 'read:analytics')).toBe(false);
   });
 
@@ -55,6 +56,7 @@ describe('Permission GRANTS matrix', () => {
   // Receptionist
   it('receptionist can write appointments', () => {
     expect(allows('receptionist', 'write:appointments')).toBe(true);
+    expect(allows('receptionist', 'use:pos')).toBe(true);
   });
 
   it('receptionist cannot write finance', () => {
@@ -68,6 +70,7 @@ describe('Permission GRANTS matrix', () => {
   // Cashier
   it('cashier can handle invoice/payment flow without finance access', () => {
     expect(allows('cashier', 'write:payments')).toBe(true);
+    expect(allows('cashier', 'use:pos')).toBe(true);
     expect(allows('cashier', 'read:finance')).toBe(false);
     expect(allows('cashier', 'write:finance')).toBe(false);
   });
@@ -84,6 +87,10 @@ describe('Permission GRANTS matrix', () => {
 
   it('accountant cannot write clients', () => {
     expect(allows('accountant', 'write:clients')).toBe(false);
+  });
+
+  it('accountant cannot use POS checkout', () => {
+    expect(allows('accountant', 'use:pos')).toBe(false);
   });
 
   // Inventory manager
@@ -107,6 +114,11 @@ describe('Permission GRANTS matrix', () => {
 
   it('staff cannot read analytics', () => {
     expect(allows('staff', 'read:analytics')).toBe(false);
+  });
+
+  it('analyst read wildcard does not allow POS checkout', () => {
+    expect(allows('analyst', 'read:reports')).toBe(true);
+    expect(allows('analyst', 'use:pos')).toBe(false);
   });
 
   // Unknown role

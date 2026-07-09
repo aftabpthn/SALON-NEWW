@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthSessionService } from '../../../core/auth-session.service';
 import { AppStateService } from '../../../core/state/app-state.service';
+import { grantsAllow, staticGrantsForRole } from '../../../core/permission.guard';
+import { routePermissionForPath } from '../../../core/access-rules';
 import { SidebarStore } from '../../../shell/sidebar/sidebar.store';
 
 type PanelId = 'notifications' | 'profile' | null;
@@ -19,7 +21,7 @@ type PanelId = 'notifications' | 'profile' | null;
   template: `
     <div class="hdr-actions">
       <!-- Notifications -->
-      <div class="hdr-pop">
+      <div class="hdr-pop" *ngIf="canAccessPath('/notification-center')">
         <button
           class="hdr-icon-btn"
           type="button"
@@ -76,9 +78,9 @@ type PanelId = 'notifications' | 'profile' | null;
             </span>
           </button>
           <nav class="hdr-menu-links">
-            <a routerLink="/settings/general" (click)="closeAll()"><span class="hdr-link-icon">⚙</span> Settings</a>
-            <a routerLink="/two-factor" (click)="closeAll()"><span class="hdr-link-icon">🛡</span> Security &amp; 2FA</a>
-            <a routerLink="/business-details" (click)="closeAll()"><span class="hdr-link-icon">🏢</span> Business details</a>
+            <a routerLink="/settings/general" *ngIf="canAccessPath('/settings/general')" (click)="closeAll()"><span class="hdr-link-icon">⚙</span> Settings</a>
+            <a routerLink="/two-factor" *ngIf="canAccessPath('/two-factor')" (click)="closeAll()"><span class="hdr-link-icon">🛡</span> Security &amp; 2FA</a>
+            <a routerLink="/business-details" *ngIf="canAccessPath('/business-details')" (click)="closeAll()"><span class="hdr-link-icon">🏢</span> Business details</a>
           </nav>
           <button class="hdr-logout" type="button" (click)="logout()">Sign out</button>
         </div>
@@ -283,6 +285,15 @@ export class HeaderActionsComponent {
   logout(): void {
     this.closeAll();
     this.session.logout();
+  }
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
   }
 
   @HostListener('document:click', ['$event'])

@@ -34,6 +34,9 @@ import { StaffAppService } from "../../core/staff-app.service";
           @if (message()) {
             <div class="notice success">{{ message() }}</div>
           }
+          @if (staff.biometricEnabled() && staff.hasSavedSession()) {
+            <button type="button" class="biometric-button" [disabled]="staff.loading()" (click)="unlockBiometric()">Unlock with biometric</button>
+          }
 
           <form class="staff-form" (ngSubmit)="login($event)">
             <label>Tenant ID</label>
@@ -49,6 +52,12 @@ import { StaffAppService } from "../../core/staff-app.service";
               @if (staff.loading()) { <ion-spinner name="crescent"></ion-spinner> } @else { Open staff app }
             </button>
           </form>
+
+          @if (staff.hasSavedSession() && staff.biometricSupported()) {
+            <button type="button" class="secondary-button" [disabled]="staff.loading()" (click)="toggleBiometric()">
+              {{ staff.biometricEnabled() ? 'Turn off biometric unlock' : 'Enable biometric unlock' }}
+            </button>
+          }
 
           <a routerLink="/" class="customer-link">Open customer app</a>
         </section>
@@ -78,6 +87,8 @@ import { StaffAppService } from "../../core/staff-app.service";
     input:focus { border-color: #c38b2b; outline: 3px solid rgba(214, 169, 74, .22); }
     button { margin-top: 14px; min-height: 56px; border: 0; border-radius: 18px; background: linear-gradient(135deg, #f9df98, #d6a94a 55%, #9b6418); color: #1b1207; font-weight: 950; cursor: pointer; box-shadow: 0 18px 32px rgba(139, 93, 21, .22); }
     button:disabled { cursor: progress; opacity: .72; }
+    .biometric-button, .secondary-button { width: 100%; margin-top: 14px; min-height: 52px; border: 1px solid #d6aa55; border-radius: 18px; background: #fffdf8; color: #6e4810; font-weight: 950; cursor: pointer; box-shadow: 0 12px 24px rgba(139, 93, 21, .12); }
+    .biometric-button { background: linear-gradient(135deg, #1d1307, #6e4810); color: #fff8e8; border-color: rgba(255,255,255,.18); }
     .notice { margin: 18px 0; padding: 14px 16px; border: 1px solid #eac36f; border-radius: 16px; color: #6b4a18; background: #fff4d8; font-weight: 800; }
     .success { border-color: #afd8a8; color: #1f6b2d; background: #effbea; }
     .customer-link { display: block; margin-top: 18px; color: #815712; font-weight: 900; text-align: center; text-decoration: none; }
@@ -103,6 +114,28 @@ export class StaffLoginPage {
       await this.router.navigateByUrl("/staff/dashboard");
     } catch {
       this.message.set("");
+    }
+  }
+
+  async unlockBiometric() {
+    if (this.staff.loading()) return;
+    try {
+      await this.staff.unlockWithBiometric();
+      this.message.set("Biometric verified. Opening dashboard...");
+      await this.router.navigateByUrl("/staff/dashboard");
+    } catch (error) {
+      this.staff.error.set(error instanceof Error ? error.message : "Biometric unlock failed.");
+    }
+  }
+
+  async toggleBiometric() {
+    if (this.staff.loading()) return;
+    try {
+      const next = !this.staff.biometricEnabled();
+      await this.staff.setBiometricEnabled(next);
+      this.message.set(next ? "Biometric unlock enabled on this device." : "Biometric unlock disabled.");
+    } catch (error) {
+      this.staff.error.set(error instanceof Error ? error.message : "Unable to update biometric unlock.");
     }
   }
 }

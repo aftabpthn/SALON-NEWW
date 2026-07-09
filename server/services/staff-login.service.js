@@ -572,6 +572,36 @@ export class StaffLoginService {
     };
   }
 
+  clients(query = {}, access) {
+    const dashboard = this.staffDashboard({}, access);
+    const branchId = dashboard.staff.branchId || access.branchId || "";
+    const columns = columnsFor("clients");
+    const q = String(query.q || query.search || "").trim().toLowerCase();
+    const params = {
+      tenantId: access.tenantId,
+      branchId,
+      q: q ? `%${q}%` : "",
+      limit: Math.min(Math.max(number(query.limit || 80), 1), 200)
+    };
+    const filters = [];
+    if (columns.includes("tenantId")) filters.push("tenantId = @tenantId");
+    if (columns.includes("branchId") && branchId) filters.push("branchId = @branchId");
+    if (params.q) filters.push("(lower(COALESCE(name, '')) LIKE @q OR lower(COALESCE(phone, '')) LIKE @q OR lower(COALESCE(email, '')) LIKE @q)");
+    const where = filters.length ? filters.join(" AND ") : "1 = 1";
+    return safeAll(`SELECT * FROM clients WHERE ${where} ORDER BY COALESCE(lastVisitAt, updatedAt, createdAt, '') DESC, name ASC LIMIT @limit`, params).map((row) => ({
+      id: row.id,
+      name: row.name || row.fullName || row.id,
+      phone: row.phone || row.mobile || "",
+      email: row.email || "",
+      branchId: row.branchId || "",
+      tags: parseJsonArray(row.tags),
+      totalSpend: number(row.totalSpend || row.totalSpendPaise || 0),
+      visitCount: number(row.visitCount || 0),
+      lastVisitAt: row.lastVisitAt || row.lastVisit || "",
+      membershipStatus: row.membershipStatus || row.membership || ""
+    }));
+  }
+
   client360(clientId, query = {}, access) {
     ensureStaffSelfAppSchema();
     const dashboard = this.staffDashboard(query, access);
@@ -1151,19 +1181,21 @@ export class StaffLoginService {
 
   resolveStaffId(query = {}, access = {}) {
     const requestedStaffId = String(query.staffId || query.staff_id || "").trim();
+    const user = access.userId
+      ? db.prepare("SELECT staffId FROM tenant_users WHERE id = ? AND tenantId = ?").get(access.userId, access.tenantId)
+      : null;
+    const staffId = String(access.staffId || user?.staffId || "").trim();
+    if (staffId) {
+      if (requestedStaffId && requestedStaffId !== staffId) throw forbidden("Staff can view only their own work");
+      return staffId;
+    }
     const role = normalizeRole(access.role);
     if (requestedStaffId && privilegedRoles.has(role)) return requestedStaffId;
     if (!requestedStaffId && privilegedRoles.has(role)) {
       const defaultStaff = this.defaultStaffForManager(access);
       if (defaultStaff?.id) return defaultStaff.id;
     }
-    const user = access.userId
-      ? db.prepare("SELECT staffId FROM tenant_users WHERE id = ? AND tenantId = ?").get(access.userId, access.tenantId)
-      : null;
-    const staffId = String(access.staffId || user?.staffId || "").trim();
-    if (!staffId) throw forbidden("This login is not linked with a staff profile");
-    if (requestedStaffId && requestedStaffId !== staffId) throw forbidden("Staff can view only their own work");
-    return staffId;
+    throw forbidden("This login is not linked with a staff profile");
   }
 
   defaultStaffForManager(access = {}) {

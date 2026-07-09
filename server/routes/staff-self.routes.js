@@ -25,6 +25,15 @@ staffSelfRouter.get(
 );
 
 staffSelfRouter.get(
+  "/staff-self/clients",
+  authenticateJwt(),
+  requirePermission("read", () => "appointments"),
+  asyncHandler((req, res) => {
+    res.json(staffLoginService.clients(req.query, req.access));
+  })
+);
+
+staffSelfRouter.get(
   "/staff-self/clients/:clientId/360",
   authenticateJwt(),
   requirePermission("read", () => "appointments"),

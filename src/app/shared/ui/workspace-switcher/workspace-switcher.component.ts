@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ApiRecord } from '../../../core/api.service';
 import { AppStateService } from '../../../core/state/app-state.service';
 import { I18nService } from '../../../core/i18n.service';
+import { AuthSessionService } from '../../../core/auth-session.service';
 
 type Panel = 'branch' | 'workspace' | null;
 
@@ -17,9 +18,10 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'accountant', label: 'Accountant' },
   { value: 'inventoryManager', label: 'Inventory manager' },
   { value: 'analyst', label: 'Analyst' },
-  { value: 'marketingLead', label: 'Marketing lead' },
   { value: 'customMarketingLead', label: 'Marketing lead' }
 ];
+
+const ROLE_PICKER_ROLES = new Set(['owner', 'superadmin', 'admin']);
 
 /**
  * Premium workspace + branch switcher. Replaces the raw topbar <select>s.
@@ -87,7 +89,7 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
             </div>
           </div>
 
-          <div class="wsw-section">
+          <div class="wsw-section" *ngIf="canPickRole()">
             <div class="wsw-menu-head">Acting role</div>
             <div class="wsw-chips">
               <button
@@ -205,6 +207,7 @@ export class WorkspaceSwitcherComponent {
 
   readonly panel = signal<Panel>(null);
   readonly roles = ROLE_OPTIONS;
+  readonly canPickRole = computed(() => ROLE_PICKER_ROLES.has(this.compactRole(this.session.currentUser()?.role || this.state.userRole())));
 
   readonly branchLabel = computed(() => {
     const id = this.state.selectedBranchId();
@@ -219,7 +222,11 @@ export class WorkspaceSwitcherComponent {
     ROLE_OPTIONS.find((r) => r.value === this.state.userRole())?.label || this.state.userRole()
   );
 
-  constructor(readonly state: AppStateService, readonly i18n: I18nService) {}
+  constructor(readonly state: AppStateService, readonly i18n: I18nService, private readonly session: AuthSessionService) {}
+
+  private compactRole(role: string): string {
+    return String(role || '').trim().replace(/[\s_-]+/g, '').toLowerCase();
+  }
 
   toggle(id: Exclude<Panel, null>): void {
     this.panel.set(this.panel() === id ? null : id);

@@ -27,6 +27,36 @@ function sum(items, selector) {
   return items.reduce((total, item) => total + Number(selector(item) || 0), 0);
 }
 
+const CONTACT_MASKED_ROLES = new Set(["marketingLead", "customMarketingLead"]);
+
+function maskPhone(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (digits.length <= 4) return "****";
+  return `${"*".repeat(Math.max(4, digits.length - 4))}${digits.slice(-4)}`;
+}
+
+function maskEmail(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const [name = "", domain = ""] = text.split("@");
+  if (!domain) return "***";
+  return `${name.slice(0, 1) || "*"}***@${domain}`;
+}
+
+function maskClientContacts(row, access = {}) {
+  if (!CONTACT_MASKED_ROLES.has(String(access.role || access.userRole || ""))) return row;
+  const next = { ...row, contactMasked: true };
+  for (const key of ["phone", "mobile", "clientPhone", "customerPhone"]) {
+    if (next[key] !== undefined) next[key] = maskPhone(next[key]);
+  }
+  for (const key of ["email", "clientEmail", "customerEmail"]) {
+    if (next[key] !== undefined) next[key] = maskEmail(next[key]);
+  }
+  return next;
+}
+
 export class AiMarketingService {
   context(input = {}, access) {
     tenantService.ensureSubscriptionActive(access.tenantId);
@@ -141,7 +171,7 @@ export class AiMarketingService {
     return {
       name: input.name || this.segmentName({ tag, minSpend, minVisits, inactiveDays, membershipOnly, highValue }),
       count: clients.length,
-      clients
+      clients: clients.map((client) => maskClientContacts(client, access))
     };
   }
 

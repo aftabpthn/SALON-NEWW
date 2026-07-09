@@ -323,7 +323,7 @@ type ActiveModuleTabs = {
               (countryChange)="selectCountry($event)"
               (languageChange)="selectLanguage($event)">
             </aura-workspace-switcher>
-            <a class="dark-button" routerLink="/pos" (mouseenter)="prefetchNavPath('/pos')" (focus)="prefetchNavPath('/pos')">{{ i18n.t('shell.fastPos', 'Fast POS') }}</a>
+            <a class="dark-button" routerLink="/pos" *ngIf="canAccessPath('/pos')" (mouseenter)="prefetchNavPath('/pos')" (focus)="prefetchNavPath('/pos')">{{ i18n.t('shell.fastPos', 'Fast POS') }}</a>
             <span class="topbar-divider" aria-hidden="true"></span>
             <aura-header-actions></aura-header-actions>
           </div>
@@ -1606,6 +1606,10 @@ export class AppComponent implements OnDestroy {
   }
 
   loadBranches(): void {
+    if (!this.canAccessPath('/branches')) {
+      this.branches.set(this.currentBranchOption());
+      return;
+    }
     this.api.list<ApiRecord[]>('branches').subscribe({
       next: (branches) => {
         const rows = (branches || []).filter((branch) => branch && branch.id);
@@ -1626,6 +1630,10 @@ export class AppComponent implements OnDestroy {
   }
 
   loadTenants(): void {
+    if (!this.canAccessPath('/settings')) {
+      this.tenants.set(this.currentTenantOption());
+      return;
+    }
     this.api.list<ApiRecord[]>('tenants', { limit: 1000 }).subscribe({
       next: (tenants) => {
         const safeTenants = (tenants || []).filter((tenant) => tenant && tenant.id);
@@ -1671,6 +1679,7 @@ export class AppComponent implements OnDestroy {
 
   private loadLocalizationPreference(tenantId: string): void {
     if (!tenantId || this.loadedLocalizationTenantId === tenantId) return;
+    if (!this.canAccessPath('/localization')) return;
     this.loadedLocalizationTenantId = tenantId;
     this.api.list<{ preference?: LocalePreference }>('localization/preference', { includeAllBranches: true }).subscribe({
       next: (result) => {
@@ -2043,6 +2052,10 @@ export class AppComponent implements OnDestroy {
     return routePermissionForPath(path);
   }
 
+  canAccessPath(path: string): boolean {
+    return this.canAccessPermission(this.navPermissionForPath(path));
+  }
+
   private canAccessPermission(permission?: string | string[]): boolean {
     if (!permission || (Array.isArray(permission) && !permission.length)) return true;
     const permissions = Array.isArray(permission) ? permission : [permission];
@@ -2079,6 +2092,16 @@ export class AppComponent implements OnDestroy {
 
   private routePath(url: string): string {
     return (url || '/').split(/[?#]/)[0] || '/';
+  }
+
+  private currentTenantOption(): ApiRecord[] {
+    const tenantId = this.state.selectedTenantId() || this.session.currentUser()?.branchId || 'tenant_aura';
+    return tenantId ? [{ id: tenantId, name: tenantId }] : [];
+  }
+
+  private currentBranchOption(): ApiRecord[] {
+    const branchId = this.state.selectedBranchId() || this.session.currentUser()?.branchId || '';
+    return branchId ? [{ id: branchId, name: branchId }] : [];
   }
 
   private isBackHistoryCandidate(url: string): boolean {

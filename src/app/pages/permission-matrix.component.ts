@@ -943,7 +943,7 @@ export class PermissionMatrixComponent implements OnInit {
     };
 
     Object.entries(this.draftPermissions()).forEach(([resource, actions]) => {
-      const backend = catalogResources.has(resource) ? this.granularBackendActions(actions) : this.backendActions(actions);
+      const backend = catalogResources.has(resource) ? this.granularBackendActions(actions) : this.backendActions(resource, actions);
       backend.forEach((action) => addAction(resource, action));
     });
     this.permissionCatalog().forEach((item) => {
@@ -1234,6 +1234,7 @@ export class PermissionMatrixComponent implements OnInit {
   private mapBackendAction(action: string): PermissionAction[] {
     const normalized = String(action || '').toLowerCase();
     if (normalized === '*' || normalized === 'admin' || normalized === 'all') return ACTION_COLUMNS.map((item) => item.key);
+    if (normalized === 'use') return ['access'];
     if (normalized === 'read' || normalized === 'access' || normalized === 'view') return ['access'];
     if (normalized === 'create' || normalized === 'add') return ['add'];
     if (normalized === 'update' || normalized === 'edit') return ['edit'];
@@ -1245,12 +1246,12 @@ export class PermissionMatrixComponent implements OnInit {
     return [];
   }
 
-  private backendActions(actions: PermissionAction[]): string[] {
+  private backendActions(resource: string, actions: PermissionAction[]): string[] {
     const selected = new Set(actions);
     const backend = new Set<string>();
     ACTION_COLUMNS.forEach((column) => {
       if (!selected.has(column.key)) return;
-      column.backend.forEach((action) => backend.add(action));
+      column.backend.forEach((action) => backend.add(resource === 'pos' && action === 'read' ? 'use' : action));
     });
     return Array.from(backend);
   }

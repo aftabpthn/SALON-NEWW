@@ -1,4 +1,4 @@
-import { HttpClient, HttpHeaders } from "@angular/common/http";
+import { HttpClient, HttpErrorResponse, HttpHeaders } from "@angular/common/http";
 import { Injectable, signal } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 import { environment } from "../../environments/environment";
@@ -7,6 +7,8 @@ const STAFF_ACCESS_TOKEN_KEY = "auraStaffAccessToken";
 const STAFF_REFRESH_TOKEN_KEY = "auraStaffRefreshToken";
 const STAFF_SESSION_KEY = "auraStaffSession";
 const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
+const STAFF_BIOMETRIC_ENABLED_KEY = "auraStaffBiometricEnabled";
+const STAFF_BIOMETRIC_CREDENTIAL_KEY = "auraStaffBiometricCredentialId";
 
 export type StaffUser = {
   id: string;
@@ -111,6 +113,19 @@ export type StaffClient360 = {
   aiRecommendations: string[];
 };
 
+export type StaffClientListItem = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  branchId: string;
+  tags: string[];
+  totalSpend: number;
+  visitCount: number;
+  lastVisitAt: string;
+  membershipStatus: string;
+};
+
 export type StaffChatThread = { id: string; tenantId: string; branchId: string; title: string; channel: string; messageCount?: number; lastMessageAt?: string };
 export type StaffChatMessage = { id: string; threadId: string; senderStaffId: string; senderName: string; body: string; createdAt: string; readByJson?: string };
 export type StaffLearningModule = { id: string; title: string; description: string; category: string; durationMinutes: number; progressStatus: string; completedAt: string };
@@ -181,6 +196,12 @@ type StaffLoginResponse = {
   user: StaffUser;
 };
 
+type StaffRefreshResponse = {
+  accessToken: string;
+  refreshToken?: string;
+  user?: StaffUser;
+};
+
 type ApiEnvelope<T> = { success?: boolean; data?: T; error?: { message?: string } | string; message?: string };
 
 @Injectable({ providedIn: "root" })
@@ -189,11 +210,17 @@ export class StaffAppService {
   readonly loading = signal(false);
   readonly error = signal("");
   readonly user = signal<StaffUser | null>(this.readSession());
+  readonly biometricEnabled = signal(this.readFlag(STAFF_BIOMETRIC_ENABLED_KEY));
+  readonly biometricLocked = signal(this.readFlag(STAFF_BIOMETRIC_ENABLED_KEY) && !!this.readSession() && !!this.accessToken());
 
   constructor(private readonly http: HttpClient) {}
 
   isAuthenticated(): boolean {
-    return !!this.accessToken() && !!this.user()?.staffId;
+    return !this.biometricLocked() && !!(this.accessToken() || this.refreshToken()) && !!this.user()?.staffId;
+  }
+
+  hasSavedSession(): boolean {
+    return !!(this.accessToken() || this.refreshToken()) && !!this.user()?.staffId;
   }
 
   async ensureDemoSession(): Promise<boolean> {
@@ -255,16 +282,17 @@ export class StaffAppService {
     }
   }
 
-  async dashboard(): Promise<StaffDashboard> {
-    const token = this.accessToken();
-    if (!token) throw new Error("Staff login required.");
+  async dashboard(params: Record<string, string> = {}): Promise<StaffDashboard> {
     this.loading.set(true);
     this.error.set("");
     try {
-      const response = await firstValueFrom(this.http.get<StaffDashboard | ApiEnvelope<StaffDashboard>>(`${this.baseUrl}/staff-self/dashboard`, {
-        headers: new HttpHeaders({ Authorization: `Bearer ${token}` })
-      }));
-      return this.unwrap(response);
+      return await this.withRefreshRetry(async () => {
+        const response = await firstValueFrom(this.http.get<StaffDashboard | ApiEnvelope<StaffDashboard>>(`${this.baseUrl}/staff-self/dashboard`, {
+          headers: this.authHeaders(),
+          params
+        }));
+        return this.unwrap(response);
+      });
     } catch (error) {
       const message = this.errorMessage(error, "Unable to load staff dashboard.");
       this.error.set(message);
@@ -274,12 +302,16 @@ export class StaffAppService {
     }
   }
 
-  async enterpriseOs(): Promise<StaffEnterpriseOs> {
-    return this.get<StaffEnterpriseOs>("/staff-self/enterprise-os");
+  async enterpriseOs(query: Record<string, string> = {}): Promise<StaffEnterpriseOs> {
+    return this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query);
   }
 
   async client360(clientId: string): Promise<StaffClient360> {
     return this.get<StaffClient360>(`/staff-self/clients/${encodeURIComponent(clientId)}/360`);
+  }
+
+  async clients(query = ""): Promise<StaffClientListItem[]> {
+    return this.get<StaffClientListItem[]>("/staff-self/clients", { q: query.trim() });
   }
 
   async updateNotification(id: string, status: "read" | "unread" | "archived" = "read"): Promise<unknown> {
@@ -382,7 +414,64 @@ export class StaffAppService {
     localStorage.removeItem(STAFF_ACCESS_TOKEN_KEY);
     localStorage.removeItem(STAFF_REFRESH_TOKEN_KEY);
     localStorage.removeItem(STAFF_SESSION_KEY);
+    this.biometricLocked.set(false);
     this.user.set(null);
+  }
+
+  biometricSupported(): boolean {
+    return typeof window !== "undefined" && typeof PublicKeyCredential !== "undefined" && !!navigator.credentials;
+  }
+
+  async setBiometricEnabled(enabled: boolean): Promise<void> {
+    this.error.set("");
+    if (!enabled) {
+      localStorage.removeItem(STAFF_BIOMETRIC_ENABLED_KEY);
+      localStorage.removeItem(STAFF_BIOMETRIC_CREDENTIAL_KEY);
+      this.biometricEnabled.set(false);
+      this.biometricLocked.set(false);
+      return;
+    }
+    if (!this.hasSavedSession()) throw new Error("Login once before enabling biometric unlock.");
+    if (!this.biometricSupported()) throw new Error("Biometric unlock is not supported on this device.");
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge: this.randomChallenge(),
+        rp: { name: "Aura Staff" },
+        user: {
+          id: this.randomChallenge(),
+          name: this.user()?.loginId || this.user()?.email || "staff",
+          displayName: this.user()?.name || "Aura Staff"
+        },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+        authenticatorSelection: { userVerification: "required", residentKey: "preferred" },
+        timeout: 60000,
+        attestation: "none"
+      }
+    });
+    if (!credential?.id) throw new Error("Biometric setup was cancelled.");
+    localStorage.setItem(STAFF_BIOMETRIC_CREDENTIAL_KEY, credential.id);
+    localStorage.setItem(STAFF_BIOMETRIC_ENABLED_KEY, "true");
+    this.biometricEnabled.set(true);
+    this.biometricLocked.set(false);
+  }
+
+  async unlockWithBiometric(): Promise<void> {
+    this.error.set("");
+    if (!this.biometricEnabled()) throw new Error("Biometric unlock is not enabled.");
+    if (!this.hasSavedSession()) throw new Error("No saved staff session found. Login once with password.");
+    if (!this.biometricSupported()) throw new Error("Biometric unlock is not supported on this device.");
+    const credentialId = localStorage.getItem(STAFF_BIOMETRIC_CREDENTIAL_KEY) || "";
+    if (!credentialId) throw new Error("Biometric credential is missing. Enable it again after login.");
+    await navigator.credentials.get({
+      publicKey: {
+        challenge: this.randomChallenge(),
+        allowCredentials: [{ id: this.base64UrlToArrayBuffer(credentialId), type: "public-key" }],
+        userVerification: "required",
+        timeout: 60000
+      }
+    });
+    this.biometricLocked.set(false);
+    if (!this.accessToken() && this.refreshToken()) await this.refreshSession();
   }
 
   openSession(session: { accessToken: string; refreshToken?: string; user: StaffUser }) {
@@ -430,6 +519,10 @@ export class StaffAppService {
     return localStorage.getItem(STAFF_ACCESS_TOKEN_KEY) || "";
   }
 
+  private refreshToken(): string {
+    return localStorage.getItem(STAFF_REFRESH_TOKEN_KEY) || "";
+  }
+
   private staffId(): string {
     const staffId = this.user()?.staffId || "";
     if (!staffId) throw new Error("Staff profile is not linked.");
@@ -446,8 +539,10 @@ export class StaffAppService {
     this.loading.set(true);
     this.error.set("");
     try {
-      const response = await firstValueFrom(this.http.get<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, { headers: this.authHeaders(), params }));
-      return this.unwrap(response);
+      return await this.withRefreshRetry(async () => {
+        const response = await firstValueFrom(this.http.get<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, { headers: this.authHeaders(), params }));
+        return this.unwrap(response);
+      });
     } catch (error) {
       const message = this.errorMessage(error, "Unable to load staff data.");
       this.error.set(message);
@@ -466,8 +561,10 @@ export class StaffAppService {
       return { queued: true } as T;
     }
     try {
-      const response = await firstValueFrom(this.http.post<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, body, { headers: this.authHeaders() }));
-      return this.unwrap(response);
+      return await this.withRefreshRetry(async () => {
+        const response = await firstValueFrom(this.http.post<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, body, { headers: this.authHeaders() }));
+        return this.unwrap(response);
+      });
     } catch (error) {
       const message = this.errorMessage(error, "Unable to update staff data.");
       this.error.set(message);
@@ -486,8 +583,10 @@ export class StaffAppService {
       return { queued: true } as T;
     }
     try {
-      const response = await firstValueFrom(this.http.patch<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, body, { headers: this.authHeaders() }));
-      return this.unwrap(response);
+      return await this.withRefreshRetry(async () => {
+        const response = await firstValueFrom(this.http.patch<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, body, { headers: this.authHeaders() }));
+        return this.unwrap(response);
+      });
     } catch (error) {
       const message = this.errorMessage(error, "Unable to update staff data.");
       this.error.set(message);
@@ -504,6 +603,38 @@ export class StaffAppService {
     this.user.set(session.user);
   }
 
+  private async withRefreshRetry<T>(request: () => Promise<T>): Promise<T> {
+    try {
+      if (!this.accessToken() && this.refreshToken()) await this.refreshSession();
+      return await request();
+    } catch (error) {
+      if (!this.isUnauthorized(error) || !this.refreshToken()) throw error;
+      await this.refreshSession();
+      return request();
+    }
+  }
+
+  private async refreshSession(): Promise<void> {
+    const refreshToken = this.refreshToken();
+    if (!refreshToken) throw new Error("Staff login required.");
+    const response = await firstValueFrom(this.http.post<StaffRefreshResponse | ApiEnvelope<StaffRefreshResponse>>(`${this.baseUrl}/auth/refresh`, {
+      refreshToken,
+      device: { type: "staff-app", name: "Aura Staff App", platform: "web" }
+    }));
+    const session = this.unwrap(response);
+    if (!session.accessToken) throw new Error("Staff session refresh failed.");
+    localStorage.setItem(STAFF_ACCESS_TOKEN_KEY, session.accessToken);
+    if (session.refreshToken) localStorage.setItem(STAFF_REFRESH_TOKEN_KEY, session.refreshToken);
+    if (session.user?.staffId) {
+      localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(session.user));
+      this.user.set(session.user);
+    }
+  }
+
+  private isUnauthorized(error: unknown): boolean {
+    return error instanceof HttpErrorResponse && error.status === 401;
+  }
+
   private readSession(): StaffUser | null {
     try {
       const raw = localStorage.getItem(STAFF_SESSION_KEY);
@@ -511,6 +642,29 @@ export class StaffAppService {
     } catch {
       return null;
     }
+  }
+
+  private readFlag(key: string): boolean {
+    try {
+      return localStorage.getItem(key) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  private randomChallenge(): Uint8Array {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    return bytes;
+  }
+
+  private base64UrlToArrayBuffer(value: string): ArrayBuffer {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=");
+    const raw = atob(padded);
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+    return bytes.buffer;
   }
 
   private isStaffRole(role: string): boolean {

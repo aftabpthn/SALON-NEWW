@@ -61,6 +61,26 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
         <a class="basic-home-card" routerLink="/staff/calendar"><span>Shift</span><strong>{{ shiftStartLabel() }}</strong><small>{{ shiftLabel() }}</small></a>
         <a class="basic-home-card wide" routerLink="/staff/appointments"><span>Next client</span><strong>{{ nextClientLabel() }}</strong><small>{{ nextClientHint() }}</small></a>
         <a class="basic-home-card wide ai" routerLink="/staff/ai-coach"><span>AI coach</span><strong>{{ aiCoachTitle() }}</strong><small>{{ aiCoachHint() }}</small></a>
+        <a class="basic-home-card" routerLink="/staff/clients"><span>Clients</span><strong>360</strong><small>search profiles, notes, history</small></a>
+        <a class="basic-home-card" routerLink="/staff/notifications"><span>Alerts</span><strong>{{ unreadCount() }}</strong><small>{{ activeAlertCount() }} floor cues</small></a>
+        <a class="basic-home-card" routerLink="/staff/performance"><span>Performance</span><strong>{{ os()?.performance?.productivityScore || 0 }}</strong><small>productivity score</small></a>
+        <a class="basic-home-card" routerLink="/staff/leaderboard"><span>Leaderboard</span><strong>{{ leaderboardRankLabel() }}</strong><small>team rank and score</small></a>
+        <a class="basic-home-card" routerLink="/staff/leaves"><span>Leave</span><strong>{{ leaveBalanceTotal() }}</strong><small>available balance</small></a>
+        <a class="basic-home-card" routerLink="/staff/learning"><span>Learning</span><strong>{{ os()?.gamification?.level || 0 }}</strong><small>level and growth badges</small></a>
+        <a class="basic-home-card" routerLink="/staff/chat"><span>Chat</span><strong>{{ os()?.notifications?.length || 0 }}</strong><small>updates and team messages</small></a>
+        <a class="basic-home-card" routerLink="/staff/reports"><span>Reports</span><strong>{{ data()?.summary?.completedAppointments || 0 }}</strong><small>completed work today</small></a>
+        @if (canSeeRevenue()) {
+          <a class="basic-home-card revenue" routerLink="/staff/reports"><span>Revenue</span><strong>{{ revenueValue() | currency:'INR':'symbol':'1.0-0' }}</strong><small>connected sales/bookings</small></a>
+        }
+      </section>
+
+      <section class="home-workbench">
+        <a routerLink="/staff/appointments"><b>{{ appointmentCount() }}</b><span>Appointments</span></a>
+        <a routerLink="/staff/queue"><b>{{ data()?.summary?.liveAppointments || 0 }}</b><span>Live floor</span></a>
+        <a routerLink="/staff/tasks"><b>{{ openTaskCount() }}</b><span>Tasks</span></a>
+        <a routerLink="/staff/notifications"><b>{{ unreadCount() }}</b><span>Unread</span></a>
+        <a routerLink="/staff/ai-coach"><b>{{ os()?.aiCoach?.length || 0 }}</b><span>AI cues</span></a>
+        <a routerLink="/staff/attendance"><b>{{ clockButtonLabel() }}</b><span>Attendance</span></a>
       </section>
 
       @if (customizerOpen()) {
@@ -448,6 +468,18 @@ export class StaffDashboardPage implements OnInit {
   leaderboardRankLabel(): string {
     const mine = (this.os()?.leaderboard || []).find((entry) => entry.isMe);
     return mine ? `Rank #${mine.rank}` : "Live board";
+  }
+
+  appointmentCount(): number {
+    return Number(this.data()?.summary?.todayAppointments || this.os()?.home?.todayAppointments || 0);
+  }
+
+  leaveBalanceTotal(): number {
+    return this.leaveBalances().reduce((total, item) => total + Number(item.balance || 0), 0);
+  }
+
+  revenueValue(): number {
+    return Number(this.os()?.home?.expectedRevenue || this.data()?.summary?.revenue || 0);
   }
 
   moneyCompact(value: number): string {

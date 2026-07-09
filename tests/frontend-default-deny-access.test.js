@@ -30,4 +30,11 @@ test("sensitive frontend route groups have explicit permission mappings", () => 
   assert.match(accessRules, /business-details\|settings\|setting\|branches[\s\S]*permission: \['read:settings', 'write:settings', 'read:branches', 'write:branches'\]/);
   assert.match(accessRules, /finance\|profit-intelligence\|account-master\|balance-sheet\|transactions[\s\S]*permission: 'read:finance'/);
   assert.match(accessRules, /marketing\|growth-rank-bot[\s\S]*permission: 'read:marketing'/);
+  assert.match(accessRules, /pos\|checkout[\s\S]*permission: 'use:pos'/);
+});
+
+test("restricted shell actions are hidden behind shared access checks", () => {
+  assert.match(appComponent, /routerLink="\/pos" \*ngIf="canAccessPath\('\/pos'\)"/, "Fast POS header action must require POS access");
+  assert.match(appComponent, /if \(!this\.canAccessPath\('\/branches'\)\)/, "branch admin calls must be skipped for non-admin roles");
+  assert.match(appComponent, /if \(!this\.canAccessPath\('\/settings'\)\)/, "tenant admin calls must be skipped for non-admin roles");
 });

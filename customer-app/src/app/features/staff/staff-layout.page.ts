@@ -40,7 +40,7 @@ type StaffRecentItem = { label: string; path: string };
         <button type="button" class="nav-logout" (click)="logout()">Logout</button>
       </aside>
 
-      <div class="staff-main-shell">
+      <div class="staff-main-shell" #mainShell>
         <header class="staff-topbar">
           <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu"><span></span><span></span><span></span></button>
           <div>
@@ -63,6 +63,8 @@ type StaffRecentItem = { label: string; path: string };
         </header>
         <main class="staff-content"><router-outlet /></main>
       </div>
+
+      <button type="button" class="scroll-top-button" (click)="scrollToTop()" aria-label="Go to top">Top</button>
 
       @if (commandOpen()) {
         <section class="command-backdrop" (click)="closeCommand()">
@@ -158,9 +160,10 @@ type StaffRecentItem = { label: string; path: string };
     .notice-list span { margin-top: 6px; color: #8a611e; font-size: .76rem; font-weight: 950; text-transform: capitalize; }
     .notice-list button { margin-top: 8px; border: 1px solid #d6aa55; border-radius: 999px; background: #fff8ea; color: #6e4810; font-weight: 950; padding: 7px 10px; }
     .staff-toast { position: fixed; left: 50%; bottom: 18px; z-index: 80; transform: translateX(-50%); max-width: min(420px, calc(100vw - 24px)); padding: 11px 14px; border: 1px solid #d6aa55; border-radius: 999px; background: #1d1307; color: #fff8e8; font-weight: 950; box-shadow: 0 18px 44px rgba(34,19,5,.28); }
+    .scroll-top-button { display: none; }
     @media (max-width: 900px) {
       .staff-app-shell { display: block; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
-      .staff-main-shell { display: block; min-height: 100dvh; height: auto; overflow: visible; }
+      .staff-main-shell { display: block; height: 100dvh; min-height: 100dvh; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
       .staff-topbar { position: sticky; top: 0; z-index: 20; padding: 11px 13px; box-shadow: 0 10px 28px rgba(92,65,28,.12); }
       .menu-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid #d6aa55; border-radius: 14px; background: #fff8ea; color: #5d3607; font-size: .78rem; font-weight: 950; }
       .staff-topbar p { font-size: .66rem; }
@@ -171,7 +174,8 @@ type StaffRecentItem = { label: string; path: string };
       .topbar-actions button { padding: 7px 10px; }
       .topbar-actions .bell-button { width: 40px; height: 40px; min-width: 40px; padding: 0; border-radius: 15px; }
       .bell-icon { width: 19px; height: 19px; }
-      .staff-content { overflow: visible; padding: 14px 12px 18px; }
+      .staff-content { overflow: visible; padding: 14px 12px calc(24px + env(safe-area-inset-bottom)); }
+      .scroll-top-button { position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 28; display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid rgba(184,122,20,.46); border-radius: 999px; background: linear-gradient(145deg, #f7d77f, #c89024); color: #281806; font-weight: 950; box-shadow: 0 16px 34px rgba(139,93,21,.24); }
       .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 29; border: 0; opacity: 0; pointer-events: none; background: rgba(75,48,12,.28); backdrop-filter: blur(2px); transition: opacity .18s ease; }
       .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
       .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: min(84vw, 318px); height: 100dvh; overflow: auto; padding: 14px; border-right: 1px solid rgba(214,170,85,.3); transform: translateX(-104%); transition: transform .2s ease; box-shadow: 24px 0 60px rgba(34,19,5,.18); }
@@ -192,6 +196,7 @@ type StaffRecentItem = { label: string; path: string };
 })
 export class StaffLayoutPage implements OnInit, OnDestroy {
   @ViewChild("commandInput") private commandInput?: ElementRef<HTMLInputElement>;
+  @ViewChild("mainShell") private mainShell?: ElementRef<HTMLElement>;
   readonly menuOpen = signal(false);
   readonly commandOpen = signal(false);
   readonly notificationsOpen = signal(false);
@@ -351,6 +356,12 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   closeNotifications() {
     this.notificationsOpen.set(false);
+  }
+
+  scrollToTop() {
+    const shell = this.mainShell?.nativeElement;
+    if (shell) shell.scrollTo({ top: 0, behavior: "smooth" });
+    else window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   go(item: StaffRecentItem) {

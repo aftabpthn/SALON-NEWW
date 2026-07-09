@@ -39,6 +39,16 @@ function normalizeAccess(access = {}) {
   return { ...access, role: normalizeRole(access.role) };
 }
 
+function resolveSelfStaffId(input = {}, access = {}) {
+  const linkedStaffId = String(access.staffId || "").trim();
+  const requestedStaffId = String(input.staffId || input.staff_id || "").trim();
+  if (linkedStaffId) {
+    if (requestedStaffId && requestedStaffId !== linkedStaffId) throw forbidden("Staff app can access only the logged-in staff profile");
+    return linkedStaffId;
+  }
+  return requestedStaffId;
+}
+
 function pickBranch(payload = {}, access = {}) {
   return payload.branchId || payload.branch_id || access.requestedBranchId || access.branchId || "";
 }
@@ -1898,7 +1908,7 @@ export class StaffOsService {
     const params = {
       tenant_id: access.tenantId,
       branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
-      staff_id: query.staffId || query.staff_id || "",
+      staff_id: resolveSelfStaffId(query, access),
       role_scope: query.roleScope || query.role_scope || "",
       status: query.status || "",
       q: query.q ? `%${String(query.q).toLowerCase()}%` : "",
@@ -2437,7 +2447,7 @@ export class StaffOsService {
     const params = {
       tenant_id: access.tenantId,
       branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
-      staff_id: query.staffId || query.staff_id || "",
+      staff_id: resolveSelfStaffId(query, access),
       from: query.from || query.dateFrom || "",
       to: query.to || query.dateTo || "",
       limit: Math.min(parseNumber(query.limit, 100), 500)
@@ -2772,7 +2782,7 @@ export class StaffOsService {
     const row = payload.breakId || payload.break_id
       ? db.prepare("SELECT * FROM staff_breaks WHERE id = ? AND tenant_id = ?").get(payload.breakId || payload.break_id, access.tenantId)
       : db.prepare(`SELECT * FROM staff_breaks WHERE tenant_id = ? AND staff_id = ? AND status = 'active'
-          ORDER BY created_at DESC LIMIT 1`).get(access.tenantId, payload.staffId || payload.staff_id || access.userId);
+          ORDER BY created_at DESC LIMIT 1`).get(access.tenantId, resolveSelfStaffId(payload, access));
     if (!row) throw notFound("Active break not found");
     assertBranch(access, row.branch_id);
     const endedAt = payload.endedAt || payload.ended_at || now();
@@ -2786,7 +2796,7 @@ export class StaffOsService {
     const params = {
       tenant_id: access.tenantId,
       branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
-      staff_id: query.staffId || query.staff_id || "",
+      staff_id: resolveSelfStaffId(query, access),
       from: query.from || query.dateFrom || "",
       to: query.to || query.dateTo || "",
       limit: Math.min(parseNumber(query.limit, 100), 500)
@@ -3379,7 +3389,8 @@ export class StaffOsService {
 
   mobileDashboard(query = {}, access) {
     access = normalizeAccess(access);
-    const staffId = query.staffId || access.userId;
+    const staffId = resolveSelfStaffId(query, access);
+    if (!staffId) throw badRequest("staffId is required");
     const staff = this.getStaff(staffId, access);
     return {
       staff,
@@ -3391,7 +3402,8 @@ export class StaffOsService {
 
   mobileToday(query = {}, access) {
     access = normalizeAccess(access);
-    const staffId = query.staffId || access.userId;
+    const staffId = resolveSelfStaffId(query, access);
+    if (!staffId) throw badRequest("staffId is required");
     const staff = this.getStaff(staffId, access);
     const date = query.date || businessDate();
     return {
@@ -3406,26 +3418,26 @@ export class StaffOsService {
     const appointmentId = payload.appointmentId || payload.appointment_id || "";
     if (!appointmentId) throw badRequest("appointmentId is required");
     const result = appointmentLifecycleService.startService(appointmentId, access);
-    return { started: true, staffId: payload.staffId || access.staffId || access.userId, appointmentId, startedAt: now(), ...result };
+    return { started: true, staffId: access.staffId || payload.staffId || payload.staff_id || "", appointmentId, startedAt: now(), ...result };
   }
 
   completeService(payload = {}, access) {
     const appointmentId = payload.appointmentId || payload.appointment_id || "";
     if (!appointmentId) throw badRequest("appointmentId is required");
     const result = appointmentLifecycleService.complete(appointmentId, { notes: payload.notes || "" }, access);
-    return { completed: true, staffId: payload.staffId || access.staffId || access.userId, appointmentId, completedAt: now(), notes: payload.notes || "", ...result };
+    return { completed: true, staffId: access.staffId || payload.staffId || payload.staff_id || "", appointmentId, completedAt: now(), notes: payload.notes || "", ...result };
   }
 
   mobilePayroll(query = {}, access) {
     access = normalizeAccess(access);
-    const staffId = query.staffId || access.userId;
+    const staffId = resolveSelfStaffId(query, access);
     return db.prepare("SELECT * FROM staff_payroll_items WHERE tenant_id = ? AND staff_id = ? ORDER BY created_at DESC LIMIT 12")
       .all(access.tenantId, staffId).map(rowToCamel);
   }
 
   mobileTargets(query = {}, access) {
     access = normalizeAccess(access);
-    const staffId = query.staffId || access.userId;
+    const staffId = resolveSelfStaffId(query, access);
     return db.prepare("SELECT * FROM staff_targets WHERE tenant_id = ? AND staff_id = ? ORDER BY created_at DESC LIMIT 12")
       .all(access.tenantId, staffId).map(rowToCamel);
   }
@@ -3435,7 +3447,7 @@ export class StaffOsService {
     const params = {
       tenant_id: access.tenantId,
       branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
-      staff_id: query.staffId || query.staff_id || "",
+      staff_id: resolveSelfStaffId(query, access),
       status: query.status || "",
       limit: Math.min(parseNumber(query.limit, 100), 500)
     };
@@ -3550,10 +3562,9 @@ export class StaffOsService {
   }
 
   resolveMobileStaff(payload = {}, access) {
-    const staffId = payload.staffId || payload.staff_id || access.staffId || access.userId;
+    const staffId = resolveSelfStaffId(payload, access);
     if (!staffId) throw badRequest("staffId is required");
     const staff = this.getStaff(staffId, access);
-    if (access.role === "staff" && access.userId !== staffId) throw forbidden("Staff mobile endpoints are limited to the current staff identity");
     return staff;
   }
 

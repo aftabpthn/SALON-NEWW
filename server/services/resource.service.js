@@ -48,6 +48,40 @@ function compactClientRow(row) {
   };
 }
 
+const CONTACT_MASKED_ROLES = new Set(["marketingLead", "customMarketingLead"]);
+
+function maskPhone(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (digits.length <= 4) return "****";
+  return `${"*".repeat(Math.max(4, digits.length - 4))}${digits.slice(-4)}`;
+}
+
+function maskEmail(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const [name = "", domain = ""] = text.split("@");
+  if (!domain) return "***";
+  return `${name.slice(0, 1) || "*"}***@${domain}`;
+}
+
+function shouldMaskClientContacts(access = {}) {
+  return CONTACT_MASKED_ROLES.has(String(access.role || access.userRole || ""));
+}
+
+function maskClientContacts(row, access) {
+  if (!row || !shouldMaskClientContacts(access)) return row;
+  const next = { ...row, contactMasked: true };
+  for (const key of ["phone", "mobile", "clientPhone", "customerPhone"]) {
+    if (next[key] !== undefined) next[key] = maskPhone(next[key]);
+  }
+  for (const key of ["email", "clientEmail", "customerEmail"]) {
+    if (next[key] !== undefined) next[key] = maskEmail(next[key]);
+  }
+  return next;
+}
+
 function clientListNumber(value, fallback, max) {
   const next = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(next) || next <= 0) return fallback;
@@ -64,9 +98,10 @@ export class ResourceService {
     const rows = this.repository(resource).list(listQuery, this.listScope(resource, listQuery, access));
     if (resource === "clients" && !truthy(query?.includeDeleted)) {
       const activeRows = rows.filter((row) => !row.deletedAt);
-      return truthy(query?.compact) ? activeRows.map(compactClientRow) : activeRows;
+      const visibleRows = truthy(query?.compact) ? activeRows.map(compactClientRow) : activeRows;
+      return visibleRows.map((row) => maskClientContacts(row, access));
     }
-    return rows;
+    return resource === "clients" ? rows.map((row) => maskClientContacts(row, access)) : rows;
   }
 
   listCompactClients(query = {}, access = {}) {
@@ -95,14 +130,14 @@ export class ResourceService {
       WHERE ${where.join(" AND ")}
       ORDER BY createdAt DESC
       LIMIT @limit OFFSET @offset
-    `).all(params).map((row) => compactClientRow(deserialize("clients", row)));
+    `).all(params).map((row) => maskClientContacts(compactClientRow(deserialize("clients", row)), access));
   }
 
   get(resource, id, access) {
     const row = this.repository(resource).getById(id, tenantService.accessScope(access, resource));
     if (!row) throw notFound(`${resource} record not found`);
     if (row.branchId) tenantService.assertBranchAccess(access, row.branchId);
-    return row;
+    return resource === "clients" ? maskClientContacts(row, access) : row;
   }
 
   create(resource, payload, access, options = {}) {
