@@ -2,6 +2,10 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -33,7 +37,7 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
             <a routerLink="/inventory/product-consume">Product consume</a>
             <a routerLink="/inventory/reports">Supplier orders</a>
             <a routerLink="/inventory/financial">Profit link</a>
-            <a routerLink="/pos">POS</a>
+            <a routerLink="/pos" *ngIf="canAccessPath('/pos')">POS</a>
           </nav>
         </div>
 
@@ -1547,7 +1551,21 @@ export class InventoryComponent implements OnInit {
     notes: ['']
   });
 
-  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly fb: UntypedFormBuilder,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   private isLaundryProduct(product: ApiRecord): boolean {
     const local = this.localLaundryProduct(product.id);

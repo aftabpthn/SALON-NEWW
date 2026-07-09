@@ -3,6 +3,10 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -315,7 +319,9 @@ type WalletLedgerRow = ApiRecord & {
                   <td>{{ row.source || '-' }}</td>
                   <td>
                     <a class="row-action" *ngIf="row.clientId" [routerLink]="'/clients/' + row.clientId">Client</a>
-                    <a class="row-action" *ngIf="row.invoiceId || row.invoiceNumber" routerLink="/pos/invoices" [queryParams]="invoiceQueryParams(row.invoiceNumber || row.invoiceId)">Invoice</a>
+                    <ng-container *ngIf="canAccessPath('/pos/invoices')">
+                      <a class="row-action" *ngIf="row.invoiceId || row.invoiceNumber" routerLink="/pos/invoices" [queryParams]="invoiceQueryParams(row.invoiceNumber || row.invoiceId)">Invoice</a>
+                    </ng-container>
                   </td>
                 </tr>
               </tbody>
@@ -511,7 +517,7 @@ type WalletLedgerRow = ApiRecord & {
                     <td>{{ row.paymentDate }}</td>
                     <td>{{ row.notes || '-' }}</td>
                     <td>
-                      <a class="row-action" routerLink="/pos/invoices" [queryParams]="invoiceQueryParams(row.invoiceNo || row.invoiceId)">Open</a>
+                      <a class="row-action" routerLink="/pos/invoices" [queryParams]="invoiceQueryParams(row.invoiceNo || row.invoiceId)" *ngIf="canAccessPath('/pos/invoices')">Open</a>
                     </td>
                   </tr>
                   <tr *ngIf="!visiblePaymentDistributionRows().length">
@@ -2004,7 +2010,20 @@ export class FinancialSummaryReportComponent implements OnInit {
     { key: 'tips', label: 'Tips' }
   ];
 
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     this.load();

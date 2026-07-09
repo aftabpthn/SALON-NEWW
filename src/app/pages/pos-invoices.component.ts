@@ -3,6 +3,9 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, of } from 'rxjs';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { PosHeldInvoiceDraft, PosPaymentMode, PosSettingsService } from '../core/pos-settings.service';
 import { AppStateService } from '../core/state/app-state.service';
@@ -212,7 +215,7 @@ type ProductConsumeDraftRow = {
                     <td><span class="badge">{{ client.source }}</span></td>
                     <td class="right">
                       <button class="ghost-button mini" type="button" (click)="openWalletClient(client)">Open client</button>
-                      <button class="ghost-button mini" type="button" (click)="openWalletRedemption(client)">Open POS</button>
+                      <button class="ghost-button mini" type="button" (click)="openWalletRedemption(client)" *ngIf="canAccessPath('/pos')">Open POS</button>
                     </td>
                   </tr>
                 </tbody>
@@ -1146,8 +1149,18 @@ export class PosInvoicesComponent implements OnInit {
     private readonly settings: PosSettingsService,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-    private readonly appState: AppStateService
+    private readonly appState: AppStateService,
+    private readonly session: AuthSessionService
   ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.appState.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     this.paymentModes.set(this.settings.loadPaymentModes());

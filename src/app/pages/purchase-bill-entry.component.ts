@@ -3,6 +3,10 @@ import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -30,7 +34,7 @@ type PurchaseBillLine = {
       <div class="top-command">
         <a class="command-button" routerLink="/inventory">Back</a>
         <span>Inventory</span>
-        <button class="command-button dark" type="button" routerLink="/pos">Fast POS</button>
+        <button class="command-button dark" type="button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Fast POS</button>
       </div>
 
       <app-inventory-zenoti-chrome
@@ -402,7 +406,21 @@ export class PurchaseBillEntryComponent implements OnInit {
     paymentRef: ['']
   });
 
-  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly fb: UntypedFormBuilder,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     this.headerForm.patchValue({ branchId: this.api.selectedBranchId() });

@@ -2,6 +2,10 @@ import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError } from 'rxjs';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -23,7 +27,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
         <div class="hero-actions">
           <a class="ghost-button" routerLink="/memberships">Back to memberships</a>
-          <a class="ghost-button" routerLink="/pos">Sell in POS</a>
+          <a class="ghost-button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Sell in POS</a>
         </div>
       </div>
 
@@ -375,7 +379,21 @@ export class Membership360Component implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
 
-  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly route: ActivatedRoute,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id') || '';

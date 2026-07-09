@@ -2,6 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -461,7 +465,9 @@ interface ClientScoreRow {
                   <small>{{ row.cancelReason || row.notes || 'No note' }}</small>
                 </td>
                 <td>
-                  <a [routerLink]="['/pos/invoices']" [queryParams]="{ search: row.invoiceNumber }" *ngIf="row.invoiceNumber; else noInvoice">{{ row.invoiceNumber }}</a>
+                  <ng-container *ngIf="canAccessPath('/pos/invoices')">
+                    <a [routerLink]="['/pos/invoices']" [queryParams]="{ search: row.invoiceNumber }" *ngIf="row.invoiceNumber; else noInvoice">{{ row.invoiceNumber }}</a>
+                  </ng-container>
                   <ng-template #noInvoice><strong>No invoice</strong></ng-template>
                   <small>{{ label(row.paymentStatus) }} · {{ row.total | currency: 'INR':'symbol':'1.0-0' }} / {{ row.paid | currency: 'INR':'symbol':'1.0-0' }} / {{ row.balance | currency: 'INR':'symbol':'1.0-0' }}</small>
                 </td>
@@ -567,8 +573,10 @@ interface ClientScoreRow {
         <div class="drawer-actions">
           <a class="ghost-button mini" routerLink="/appointments">Open calendar</a>
           <a class="ghost-button mini" [routerLink]="['/clients', register.clientId]" *ngIf="register.clientId">Open client</a>
-          <a class="ghost-button mini" routerLink="/pos/invoices" [queryParams]="{ search: register.invoiceNumber }" *ngIf="register.invoiceNumber">Open invoice</a>
-          <a class="ghost-button mini" routerLink="/pos" [queryParams]="{ appointmentId: register.appointmentId }" *ngIf="!register.invoiceNumber">Open POS</a>
+          <ng-container *ngIf="canAccessPath('/pos/invoices')">
+            <a class="ghost-button mini" routerLink="/pos/invoices" [queryParams]="{ search: register.invoiceNumber }" *ngIf="register.invoiceNumber">Open invoice</a>
+          </ng-container>
+          <a class="ghost-button mini" routerLink="/pos" [queryParams]="{ appointmentId: register.appointmentId }" *ngIf="!register.invoiceNumber && canAccessPath('/pos')">Open POS</a>
         </div>
 
         <section>
@@ -1273,7 +1281,20 @@ export class AppointmentActivityComponent implements OnInit {
   cancellationReasons: ApiRecord[] = [];
   exportRows: ApiRecord[] = [];
 
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   setActivityView(view: ActivityViewKey): void {
     this.activeActivityView.set(view);

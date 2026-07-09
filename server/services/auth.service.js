@@ -189,7 +189,7 @@ export class AuthService {
       .filter((row) => normalizeRole(row.role) === role && (row.status || "active") === "active");
     if (!permissionRows.length) return Array.from(new Set(staticGrants)).sort();
 
-    const actions = ["read", "write", "create", "update", "delete", "back", "print", "export", "admin", "allow"];
+    const actions = ["read", "write", "create", "update", "delete", "back", "print", "export", "admin", "allow", "use"];
     const grants = new Set(staticGrants);
     permissionResources.forEach((resource) => {
       actions.forEach((action) => {

@@ -2,6 +2,10 @@ import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -114,7 +118,9 @@ type CompletedPackagesReport = {
                   <td><span [class.expired]="row.status === 'expired'">{{ row.expiredOn ? (row.expiredOn | date: 'mediumDate') : '-' }}</span></td>
                   <td class="actions-cell">
                     <a class="ghost-button mini" *ngIf="row.clientId" [routerLink]="['/clients', row.clientId]">Client</a>
-                    <a class="ghost-button mini" *ngIf="row.invoiceId" routerLink="/pos/invoices" [queryParams]="{ q: row.invoiceId }">Invoice</a>
+                    <ng-container *ngIf="canAccessPath('/pos/invoices')">
+                      <a class="ghost-button mini" *ngIf="row.invoiceId" routerLink="/pos/invoices" [queryParams]="{ q: row.invoiceId }">Invoice</a>
+                    </ng-container>
                   </td>
                 </tr>
                 <tr *ngIf="!rows().length">
@@ -319,7 +325,20 @@ export class CompletedPackagesReportComponent implements OnInit {
   limit = 25;
   offset = 0;
 
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     this.runReport();

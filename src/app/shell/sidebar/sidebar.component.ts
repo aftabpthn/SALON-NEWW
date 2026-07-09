@@ -3,6 +3,9 @@ import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, On
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { Subject, filter, takeUntil } from 'rxjs';
+import { AuthSessionService } from '../../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../../core/permission.guard';
+import { routePermissionForPath } from '../../core/access-rules';
 import { AppStateService, UserRole } from '../../core/state/app-state.service';
 import { WebSocketService } from '../../core/websocket.service';
 import { EnterpriseNavItem, SidebarService } from './sidebar.service';
@@ -42,7 +45,7 @@ export class EnterpriseSidebarComponent implements OnInit, OnDestroy {
   private resizeStartWidth = 292;
 
   readonly roles: UserRole[] = ['owner', 'superAdmin', 'admin', 'manager', 'receptionist', 'frontDesk', 'staff', 'accountant', 'inventoryManager', 'analyst', 'customMarketingLead'];
-  readonly railItems = [
+  private readonly allRailItems = [
     { label: 'Home', path: '/dashboard', icon: 'H' },
     { label: 'Calendar', path: '/appointments', icon: 'C' },
     { label: 'POS', path: '/pos', icon: 'P' },
@@ -53,10 +56,15 @@ export class EnterpriseSidebarComponent implements OnInit, OnDestroy {
     { label: 'Settings', path: '/settings/general', icon: 'SET' }
   ];
 
+  get railItems() {
+    return this.allRailItems.filter((i) => this.canAccessPath(i.path));
+  }
+
   constructor(
     readonly store: SidebarStore,
     readonly sidebar: SidebarService,
     readonly state: AppStateService,
+    readonly session: AuthSessionService,
     readonly realtime: WebSocketService,
     private readonly router: Router
   ) {}
@@ -105,6 +113,15 @@ export class EnterpriseSidebarComponent implements OnInit, OnDestroy {
 
   roleLabel(role: string): string {
     return role.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
+  }
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
   }
 
   startResize(event: PointerEvent): void {

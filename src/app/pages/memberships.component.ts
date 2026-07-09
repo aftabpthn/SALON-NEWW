@@ -3,6 +3,10 @@ import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable, catchError, forkJoin, of } from 'rxjs';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { PosMembershipPlan, PosSettingsService } from '../core/pos-settings.service';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -75,7 +79,7 @@ type PlanLifecycleDialog = {
     <section class="page-stack memberships-page">
       <div class="module-hero membership-hero membership-action-bar">
         <div class="hero-actions membership-quick-actions">
-          <a class="ghost-button" routerLink="/pos">Sell in POS</a>
+          <a class="ghost-button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Sell in POS</a>
           <button class="ghost-button" type="button" (click)="openPlanWorkspace('packages')">Packages</button>
           <button class="ghost-button" type="button" (click)="generateReminders()">Generate reminders</button>
         </div>
@@ -166,7 +170,7 @@ type PlanLifecycleDialog = {
             <h3>{{ report().expiringSoon?.length || 0 }} renewal follow-ups</h3>
           </div>
           <div class="overview-actions">
-            <a class="primary-button" routerLink="/pos">Sell membership in POS</a>
+            <a class="primary-button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Sell membership in POS</a>
             <button class="ghost-button" type="button" (click)="setTab('reminders')">Open reminders</button>
           </div>
         </article>
@@ -1176,7 +1180,9 @@ type PlanLifecycleDialog = {
                   <td class="inline-actions">
                     <a class="ghost-button mini" *ngIf="row['clientId']" [routerLink]="['/clients', row['clientId']]">Client 360</a>
                     <a class="ghost-button mini" *ngIf="row['membershipId']" [routerLink]="['/memberships', row['membershipId']]">Membership 360</a>
-                    <a class="ghost-button mini" *ngIf="row['invoiceId']" [routerLink]="['/pos/invoices']" [queryParams]="{ invoice: row['invoiceId'] }">Invoice</a>
+                    <ng-container *ngIf="canAccessPath('/pos/invoices')">
+                      <a class="ghost-button mini" *ngIf="row['invoiceId']" [routerLink]="['/pos/invoices']" [queryParams]="{ invoice: row['invoiceId'] }">Invoice</a>
+                    </ng-container>
                   </td>
                 </tr></tbody></table>
             </div>
@@ -1319,7 +1325,7 @@ type PlanLifecycleDialog = {
                 <td><span class="badge" [class.danger]="row['transactionType'] === 'reversed'">{{ row['transactionType'] }}</span></td>
                 <td>{{ row['earnedPoints'] || 0 }}</td><td>{{ row['redeemedPoints'] || 0 }}</td><td>{{ row['expiredPoints'] || 0 }}</td><td>{{ row['balanceAfter'] || 0 }}</td>
                 <td>{{ row['reason'] || '-' }}</td><td>{{ row['createdBy'] || 'system' }}</td><td>{{ row['branch'] || row['branchId'] || '-' }}</td>
-                <td><a class="ghost-button mini" [routerLink]="['/clients', row['clientId']]">Client</a><a class="ghost-button mini" *ngIf="row['invoiceId']" routerLink="/pos/invoices">Invoice</a></td>
+                <td><a class="ghost-button mini" [routerLink]="['/clients', row['clientId']]">Client</a><ng-container *ngIf="canAccessPath('/pos/invoices')"><a class="ghost-button mini" *ngIf="row['invoiceId']" routerLink="/pos/invoices">Invoice</a></ng-container></td>
               </tr></tbody>
             </table>
           </div>
@@ -2916,7 +2922,23 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   readonly expiringRewardRows = computed(() => this.rewardReport().expiring || []);
   readonly rewardAbuseRows = computed(() => this.rewardReport().abuseAlerts || []);
 
-  constructor(private readonly api: ApiService, private readonly fb: UntypedFormBuilder, private readonly posSettings: PosSettingsService, private readonly route: ActivatedRoute) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly fb: UntypedFormBuilder,
+    private readonly posSettings: PosSettingsService,
+    private readonly route: ActivatedRoute,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     this.applyQueryParams();

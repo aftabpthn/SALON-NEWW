@@ -3,6 +3,10 @@ import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, sign
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
+import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 
@@ -279,8 +283,8 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             </div>
             <div class="client360-action-buttons">
               <a class="primary-button smart-action-primary" [routerLink]="['/appointments']" [queryParams]="{ clientId: client.id }">Book Again</a>
-              <a class="ghost-button" [routerLink]="['/pos']" [queryParams]="{ clientId: client.id }">Create Invoice</a>
-              <a class="ghost-button" [routerLink]="['/pos/invoices']" [queryParams]="{ clientId: client.id, due: 1 }">Receive Due</a>
+              <a class="ghost-button" [routerLink]="['/pos']" [queryParams]="{ clientId: client.id }" *ngIf="canAccessPath('/pos')">Create Invoice</a>
+              <a class="ghost-button" [routerLink]="['/pos/invoices']" [queryParams]="{ clientId: client.id, due: 1 }" *ngIf="canAccessPath('/pos/invoices')">Receive Due</a>
               <button class="ghost-button" type="button" (click)="selectHistoryTab('notes', 'frontDesk')">Add Note</button>
               <button class="ghost-button" type="button" (click)="selectHistoryTab('treatments')">Add Consultation</button>
               <a class="ghost-button" [href]="whatsAppLink(client)" target="_blank" rel="noopener">WhatsApp Client</a>
@@ -788,7 +792,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <div class="empty-state">
                 <strong>No product purchases yet</strong>
                 <span>Retail product bills from POS will appear here automatically.</span>
-                <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }">Open POS</a>
+                <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }" *ngIf="canAccessPath('/pos')">Open POS</a>
               </div>
             </ng-template>
           </section>
@@ -850,7 +854,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <div class="empty-state wallet-empty-state">
                 <strong>No wallet ledger yet</strong>
                 <span>Wallet credit, debit, refund, advance and due-received entries will appear here once posted.</span>
-                <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }">Open POS</a>
+                <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }" *ngIf="canAccessPath('/pos')">Open POS</a>
               </div>
             </ng-template>
           </section>
@@ -1024,14 +1028,16 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 </div>
                 <div class="package-history-actions">
                   <span class="badge">{{ row.status }}</span>
-                  <a
-                    class="ghost-button fit"
-                    *ngIf="row.status === 'Active'"
-                    routerLink="/pos"
-                    [queryParams]="{ clientId: client.id }"
-                  >
-                    Redeem package
-                  </a>
+                  <ng-container *ngIf="canAccessPath('/pos')">
+                    <a
+                      class="ghost-button fit"
+                      *ngIf="row.status === 'Active'"
+                      routerLink="/pos"
+                      [queryParams]="{ clientId: client.id }"
+                    >
+                      Redeem package
+                    </a>
+                  </ng-container>
                 </div>
               </div>
               <div class="info-grid package-metrics">
@@ -1058,7 +1064,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <div class="empty-state package-empty-state">
               <strong>No package purchased yet</strong>
               <span>Sell a prepaid salon package from POS to track sessions, expiry, value and redemptions here.</span>
-              <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }">Sell package</a>
+              <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }" *ngIf="canAccessPath('/pos')">Sell package</a>
             </div>
           </ng-template>
         </section>
@@ -1103,7 +1109,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <div class="empty-state membership-empty-state">
               <strong>No membership purchased yet</strong>
               <span>Sell or assign a salon membership to track credits, expiry, sale value and redemptions here.</span>
-              <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }">Sell membership</a>
+              <a class="primary-button fit" routerLink="/pos" [queryParams]="{ clientId: client.id }" *ngIf="canAccessPath('/pos')">Sell membership</a>
             </div>
           </ng-template>
         </section>
@@ -2753,13 +2759,24 @@ export class ClientDetailComponent implements OnInit {
   constructor(
     private readonly api: ApiService,
     private readonly route: ActivatedRoute,
-    private readonly router: Router
+    private readonly router: Router,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
   ) {}
 
   ngOnInit(): void {
     const requestedTab = this.route.snapshot.queryParamMap.get('tab') || '';
     if (this.isHistoryTab(requestedTab)) this.activeHistoryTab.set(requestedTab);
     this.load();
+  }
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
   }
 
   selectHistoryTab(tabId: string, noteFocus?: ClientNoteFocus): void {

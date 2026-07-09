@@ -3,6 +3,10 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { catchError, firstValueFrom, forkJoin, of, Observable } from 'rxjs';
+import { AuthSessionService } from '../../../../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../../../../core/permission.guard';
+import { routePermissionForPath } from '../../../../core/access-rules';
+import { AppStateService } from '../../../../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../../../../core/api.service';
 
 type BillingInvoiceResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
@@ -79,7 +83,7 @@ type MoneyFlowCheck = {
           <a class="button ghost" routerLink="/pos/invoices">Back to invoices</a>
           <input type="date" [ngModel]="asOfDate()" (ngModelChange)="asOfDate.set($event); load()" />
           <button class="ghost" type="button" [disabled]="loading()" (click)="load()">Refresh</button>
-          <a class="button primary" routerLink="/pos">Open POS</a>
+          <a class="button primary" routerLink="/pos" *ngIf="canAccessPath('/pos')">Open POS</a>
         </div>
       </header>
 
@@ -152,6 +156,8 @@ type MoneyFlowCheck = {
 })
 export class CoreMoneyFlowPageComponent {
   private readonly api = inject(ApiService);
+  private readonly state = inject(AppStateService);
+  private readonly session = inject(AuthSessionService);
 
   readonly asOfDate = signal(new Date().toISOString().slice(0, 10));
   readonly invoiceRows = signal<ApiRecord[]>([]);
@@ -168,6 +174,15 @@ export class CoreMoneyFlowPageComponent {
   readonly error = signal('');
   readonly actionMessage = signal('');
   readonly apiIssues = signal<string[]>([]);
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   readonly paidInvoiceCount = computed(() => this.invoiceRows().filter((invoice) => this.invoicePaid(invoice)).length);
   readonly dueInvoiceCount = computed(() => this.invoiceRows().filter((invoice) => this.invoiceDueAmount(invoice) > 0).length);

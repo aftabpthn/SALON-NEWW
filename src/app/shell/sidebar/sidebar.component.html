@@ -73,7 +73,7 @@
 
     <div class="quick-strip" aria-label="Quick actions">
       <a routerLink="/appointments" (click)="navigate('/appointments')">New booking</a>
-      <a routerLink="/pos" (click)="navigate('/pos')">Fast POS</a>
+      <a routerLink="/pos" (click)="navigate('/pos')" *ngIf="canAccessPath('/pos')">Fast POS</a>
     </div>
 
     <nav class="sidebar-scroll" aria-label="Grouped navigation">

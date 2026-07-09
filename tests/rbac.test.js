@@ -25,6 +25,47 @@ test("custom roles are resolved from persisted permissions", () => {
   assert.equal(can("customMarketingLead", "write", "finance", access), false);
 });
 
+test("role defaults keep POS and notifications need-based", () => {
+  assert.equal(can("manager", "use", "pos", access), true);
+  assert.equal(can("receptionist", "use", "pos", access), true);
+  assert.equal(can("frontDesk", "use", "pos", access), true);
+  assert.equal(can("cashier", "use", "pos", access), true);
+  assert.equal(can("accountant", "use", "pos", access), false);
+  assert.equal(can("inventoryManager", "use", "pos", access), false);
+  assert.equal(can("analyst", "use", "pos", access), false);
+  assert.equal(can("marketingLead", "read", "notifications", access), true);
+  assert.equal(can("customMarketingLead", "read", "notifications", access), true);
+});
+
+test("custom roles can explicitly grant POS access", () => {
+  db.prepare("SAVEPOINT rbac_custom_pos").run();
+  try {
+    db.prepare("DELETE FROM security_permissions WHERE tenantId = @tenantId AND role = @role AND resource = @resource")
+      .run({ tenantId: access.tenantId, role: "customMarketingLead", resource: "pos" });
+    db.prepare(`INSERT INTO security_permissions (
+      id, tenantId, role, resource, actions, effect, conditions, status, createdAt, updatedAt
+    ) VALUES (
+      @id, @tenantId, @role, @resource, @actions, @effect, @conditions, @status, @createdAt, @updatedAt
+    )`).run({
+      id: "perm_test_custom_pos",
+      tenantId: access.tenantId,
+      role: "customMarketingLead",
+      resource: "pos",
+      actions: JSON.stringify(["use"]),
+      effect: "allow",
+      conditions: "{}",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    assert.equal(can("customMarketingLead", "use", "pos", access), true);
+  } finally {
+    db.prepare("ROLLBACK TO rbac_custom_pos").run();
+    db.prepare("RELEASE rbac_custom_pos").run();
+  }
+});
+
 test("capped system roles ignore persisted rows for the same resource", () => {
   db.prepare("SAVEPOINT rbac_system_cap").run();
   try {

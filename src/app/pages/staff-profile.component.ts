@@ -3,6 +3,9 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { environment } from '../../environments/environment';
+import { AuthSessionService } from '../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
+import { routePermissionForPath } from '../core/access-rules';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
@@ -20,7 +23,7 @@ type RosterView = 'day' | 'week' | 'month';
         <a class="ghost-button fit" routerLink="/staff-os/staff-list">Back to staff</a>
         <div class="command-actions" *ngIf="staff() as staff">
           <button class="ghost-button" type="button" routerLink="/appointments">Open calendar</button>
-          <button class="ghost-button" type="button" routerLink="/pos">Open POS</button>
+          <button class="ghost-button" type="button" routerLink="/pos" *ngIf="canAccessPath('/pos')">Open POS</button>
           <button class="ghost-button" type="button" (click)="createNotification('shift_reminder')" [disabled]="saving()">Draft reminder</button>
           <button class="primary-button" type="button" (click)="load()">Refresh profile</button>
         </div>
@@ -614,8 +617,18 @@ export class StaffProfileComponent implements OnInit {
   constructor(
     private readonly api: ApiService,
     private readonly route: ActivatedRoute,
-    private readonly appState: AppStateService
+    private readonly appState: AppStateService,
+    private readonly session: AuthSessionService
   ) {}
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.appState.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   ngOnInit(): void {
     this.resetDrafts();

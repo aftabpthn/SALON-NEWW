@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, HostListener, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AuthSessionService } from '../../../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../../../core/permission.guard';
+import { routePermissionForPath } from '../../../core/access-rules';
+import { AppStateService } from '../../../core/state/app-state.service';
 
 export type CommandKind = 'action' | 'nav';
 
@@ -206,10 +210,10 @@ export class CommandPaletteComponent {
 
   readonly filtered = computed(() => {
     const term = this.query().trim().toLowerCase();
-    if (!term) return this.entries;
-    return this.entries.filter((e) =>
+    const base = term ? this.entries.filter((e) =>
       `${e.label} ${e.hint} ${e.keywords || ''} ${e.kind}`.toLowerCase().includes(term)
-    );
+    ) : this.entries;
+    return base.filter((e) => this.canAccessPath(e.path));
   });
 
   readonly grouped = computed(() => {
@@ -222,7 +226,11 @@ export class CommandPaletteComponent {
     return groups;
   });
 
-  constructor(private readonly router: Router) {}
+  constructor(
+    private readonly router: Router,
+    private readonly state: AppStateService,
+    private readonly session: AuthSessionService
+  ) {}
 
   @HostListener('window:keydown', ['$event'])
   onGlobalKey(event: KeyboardEvent): void {
@@ -278,6 +286,15 @@ export class CommandPaletteComponent {
       const current = items.find((i) => i.id === this.activeId()) || items[0];
       if (current) this.run(current);
     }
+  }
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
   }
 
   run(item: CommandEntry): void {
