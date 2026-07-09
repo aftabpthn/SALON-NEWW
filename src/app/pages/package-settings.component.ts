@@ -120,7 +120,7 @@ function stringValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="package-settings-page">
+    <section class="package-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -146,13 +146,13 @@ function stringValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Packages</span>
             <h1>Packages Settings Control</h1>
             <p>Control package sale visibility, credit redemption, expiry rules, package pricing, online booking and reminder behavior.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -170,8 +170,8 @@ function stringValue(value: unknown, fallback: string): string {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Package Catalog</h2>
             <label class="switch-row"><span><strong>Package sales enabled</strong><small>Allow package creation and sale workflow.</small></span><input type="checkbox" [(ngModel)]="settings.packageCatalog.packageSalesEnabled" /><i></i></label>
             <label class="switch-row"><span><strong>Visible in POS</strong><small>Show packages in POS sale screens.</small></span><input type="checkbox" [(ngModel)]="settings.packageCatalog.visibleInPos" /><i></i></label>
@@ -179,7 +179,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Paid package addon enabled</strong><small>Allow paid add-ons inside package sales.</small></span><input type="checkbox" [(ngModel)]="settings.packageCatalog.paidPackageAddonEnabled" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Credits & Redemption</h2>
             <label class="switch-row"><span><strong>Allow partial redemption</strong><small>Permit using only part of available package credits.</small></span><input type="checkbox" [(ngModel)]="settings.creditsRedemption.allowPartialRedemption" /><i></i></label>
             <label class="switch-row"><span><strong>Allow cross-service redemption</strong><small>Allow credits to redeem against substitute services.</small></span><input type="checkbox" [(ngModel)]="settings.creditsRedemption.allowCrossServiceRedemption" /><i></i></label>
@@ -187,7 +187,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Require staff confirmation</strong><small>Ask staff to confirm package redemption at billing.</small></span><input type="checkbox" [(ngModel)]="settings.creditsRedemption.requireStaffConfirmation" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Expiry & Renewal</h2>
             <label class="switch-row"><span><strong>Expiry days enabled</strong><small>Use expiry date on package credits.</small></span><input type="checkbox" [(ngModel)]="settings.expiryRenewal.expiryDaysEnabled" /><i></i></label>
             <label class="field-row"><span>Default expiry days</span><input type="number" min="0" max="3650" [(ngModel)]="settings.expiryRenewal.defaultExpiryDays" /></label>
@@ -195,7 +195,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="field-row"><span>Expired pending action</span><select [(ngModel)]="settings.expiryRenewal.expiredPendingAction"><option value="allow">Allow</option><option value="warn">Warn</option><option value="block">Block</option></select></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Pricing & Payment</h2>
             <label class="switch-row"><span><strong>Allow discount on package</strong><small>Permit discount on package sale price.</small></span><input type="checkbox" [(ngModel)]="settings.pricingPayment.allowDiscountOnPackage" /><i></i></label>
             <label class="switch-row"><span><strong>Package tax applicable</strong><small>Apply tax setting to package sales.</small></span><input type="checkbox" [(ngModel)]="settings.pricingPayment.packageTaxApplicable" /><i></i></label>
@@ -203,14 +203,14 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Allow due on package sale</strong><small>Permit unpaid/due balance on package sale.</small></span><input type="checkbox" [(ngModel)]="settings.pricingPayment.allowDueOnPackageSale" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Online Booking</h2>
             <label class="switch-row"><span><strong>Show packages online</strong><small>Display packages on client-facing booking/profile surfaces.</small></span><input type="checkbox" [(ngModel)]="settings.onlineBooking.showPackagesOnline" /><i></i></label>
             <label class="switch-row"><span><strong>Allow client package purchase</strong><small>Allow clients to buy packages online.</small></span><input type="checkbox" [(ngModel)]="settings.onlineBooking.allowClientPackagePurchase" /><i></i></label>
             <label class="switch-row"><span><strong>Allow package service booking</strong><small>Let clients book services using available package credits.</small></span><input type="checkbox" [(ngModel)]="settings.onlineBooking.allowPackageServiceBooking" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Reminders & Risk</h2>
             <label class="switch-row"><span><strong>Pending credit reminder</strong><small>Remind clients when credits remain unused.</small></span><input type="checkbox" [(ngModel)]="settings.remindersRisk.pendingCreditReminder" /><i></i></label>
             <label class="switch-row"><span><strong>Expiry reminder</strong><small>Send reminders before package expiry.</small></span><input type="checkbox" [(ngModel)]="settings.remindersRisk.expiryReminder" /><i></i></label>
@@ -218,7 +218,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="field-row"><span>High pending value threshold</span><input type="number" min="0" [(ngModel)]="settings.remindersRisk.highPendingValueThreshold" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Defaults</h2>
             <label class="field-row"><span>Default package status</span><select [(ngModel)]="settings.defaults.defaultStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label class="field-row"><span>Default package type</span><select [(ngModel)]="settings.defaults.defaultPackageType"><option value="serviceCredits">Service Credits</option><option value="valueWallet">Value Wallet</option><option value="mixed">Mixed</option></select></label>

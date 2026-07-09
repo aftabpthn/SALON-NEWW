@@ -230,7 +230,7 @@ function mergeBoolMap(input: unknown, defaults: BoolMap): BoolMap {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="bill-settings-page">
+    <section class="bill-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -257,13 +257,13 @@ function mergeBoolMap(input: unknown, defaults: BoolMap): BoolMap {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Invoice</span>
             <h1>Bill Settings Control</h1>
             <p>Control invoice layout, print options, terms, messages and dual-language bill labels.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -283,7 +283,7 @@ function mergeBoolMap(input: unknown, defaults: BoolMap): BoolMap {
 
         <section *ngIf="activeTab() === 'common'" class="common-grid">
           <div class="side-stack">
-            <article class="settings-card">
+            <article class="settings-card inner-page-card">
               <h2>Feedback Setting</h2>
               <label class="toggle-row" *ngFor="let item of feedbackToggles">
                 <span>{{ item.label }}</span>
@@ -292,7 +292,7 @@ function mergeBoolMap(input: unknown, defaults: BoolMap): BoolMap {
               </label>
             </article>
 
-            <article class="settings-card">
+            <article class="settings-card inner-page-card">
               <h2>Print Setting</h2>
               <label class="toggle-row" *ngFor="let item of printToggles">
                 <span>{{ item.label }}</span>

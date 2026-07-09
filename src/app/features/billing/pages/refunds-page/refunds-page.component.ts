@@ -4,6 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { catchError, firstValueFrom, of, Observable } from 'rxjs';
 import { ApiRecord, ApiService } from '../../../../core/api.service';
+import { AuthSessionService } from '../../../../core/auth-session.service';
+import { grantsAllow, staticGrantsForRole } from '../../../../core/permission.guard';
+import { routePermissionForPath } from '../../../../core/access-rules';
+import { AppStateService } from '../../../../core/state/app-state.service';
 
 type ActionKind = 'refund' | 'void' | 'credit-note';
 type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
@@ -66,7 +70,7 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
         </div>
         <div class="hero-actions">
           <button class="ghost" type="button" [disabled]="loading()" (click)="load()">Refresh</button>
-          <a class="button ghost" routerLink="/pos/invoices">Open POS invoices</a>
+          <a class="button ghost" routerLink="/pos/invoices" *ngIf="canAccessPath('/pos/invoices')">Open POS invoices</a>
           <a class="button primary" routerLink="/billing/core-money-flow">Core Money Flow</a>
         </div>
       </header>
@@ -172,6 +176,17 @@ type InvoiceListResponse = { rows?: ApiRecord[]; total?: number } | ApiRecord[];
 })
 export class RefundsPageComponent {
   private readonly api = inject(ApiService);
+  private readonly state = inject(AppStateService);
+  private readonly session = inject(AuthSessionService);
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   readonly invoices = signal<ApiRecord[]>([]);
   readonly loading = signal(false);

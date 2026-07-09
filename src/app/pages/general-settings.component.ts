@@ -120,7 +120,7 @@ function stringValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="general-settings-page">
+    <section class="general-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a class="active" routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -146,13 +146,13 @@ function stringValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / General</span>
             <h1>General Settings Control</h1>
             <p>Control workspace defaults, country/language, branch behavior, date-time display, interface and notification defaults.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -170,15 +170,15 @@ function stringValue(value: unknown, fallback: string): string {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Workspace Profile</h2>
             <label class="field-row"><span>Workspace name</span><input [(ngModel)]="settings.workspace.workspaceName" /></label>
             <label class="field-row"><span>Default landing page</span><select [(ngModel)]="settings.workspace.defaultLandingPage"><option *ngFor="let page of landingPages" [value]="page.value">{{ page.label }}</option></select></label>
             <label class="switch-row"><span><strong>Fast POS enabled</strong><small>Show quick access to POS in the header.</small></span><input type="checkbox" [(ngModel)]="settings.workspace.fastPosEnabled" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Localization</h2>
             <label class="field-row"><span>Country</span><input [(ngModel)]="settings.localization.country" /></label>
             <label class="field-row"><span>Language</span><input [(ngModel)]="settings.localization.language" /></label>
@@ -187,14 +187,14 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="field-row"><span>Locale</span><input [(ngModel)]="settings.localization.locale" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Branch Behavior</h2>
             <label class="switch-row"><span><strong>Remember last branch</strong><small>Keep the last selected branch for this workspace.</small></span><input type="checkbox" [(ngModel)]="settings.branchBehavior.rememberLastBranch" /><i></i></label>
             <label class="switch-row"><span><strong>Require branch selection</strong><small>Ask users to confirm branch context.</small></span><input type="checkbox" [(ngModel)]="settings.branchBehavior.requireBranchSelection" /><i></i></label>
             <label class="switch-row"><span><strong>Allow branch switch</strong><small>Allow permitted users to change branch.</small></span><input type="checkbox" [(ngModel)]="settings.branchBehavior.allowBranchSwitch" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Date & Time</h2>
             <label class="field-row"><span>Date format</span><select [(ngModel)]="settings.dateTime.dateFormat"><option *ngFor="let item of dateFormats" [value]="item">{{ item }}</option></select></label>
             <label class="field-row"><span>Time format</span><select [(ngModel)]="settings.dateTime.timeFormat"><option *ngFor="let item of timeFormats" [value]="item">{{ item }}</option></select></label>
@@ -202,21 +202,21 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="field-row"><span>Week starts on</span><select [(ngModel)]="settings.dateTime.weekStartsOn"><option *ngFor="let item of weekStarts" [value]="item">{{ item }}</option></select></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Interface</h2>
             <label class="switch-row"><span><strong>Compact mode</strong><small>Use tighter spacing on operational screens.</small></span><input type="checkbox" [(ngModel)]="settings.interface.compactMode" /><i></i></label>
             <label class="switch-row"><span><strong>Show module badges</strong><small>Display module count/status badges in navigation.</small></span><input type="checkbox" [(ngModel)]="settings.interface.showModuleBadges" /><i></i></label>
             <label class="switch-row"><span><strong>Enable command search</strong><small>Allow global module and command search.</small></span><input type="checkbox" [(ngModel)]="settings.interface.enableCommandSearch" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Alerts & Defaults</h2>
             <label class="switch-row"><span><strong>Refresh reports on open</strong><small>Load fresh report data when report pages open.</small></span><input type="checkbox" [(ngModel)]="settings.defaults.refreshReportsOnOpen" /><i></i></label>
             <label class="switch-row"><span><strong>Owner notifications</strong><small>Enable owner-level app notifications by default.</small></span><input type="checkbox" [(ngModel)]="settings.defaults.ownerNotifications" /><i></i></label>
             <label class="switch-row"><span><strong>Staff hints</strong><small>Show short operational hints to staff users.</small></span><input type="checkbox" [(ngModel)]="settings.defaults.staffHints" /><i></i></label>
           </article>
 
-          <article class="settings-card preview-card">
+          <article class="settings-card preview-card inner-page-card">
             <h2>Policy Preview</h2>
             <p>{{ settings.workspace.workspaceName }} opens on {{ settings.workspace.defaultLandingPage }} with {{ settings.workspace.fastPosEnabled ? 'Fast POS ON' : 'Fast POS OFF' }}.</p>
             <p>{{ settings.localization.country }} / {{ settings.localization.language }} / {{ settings.localization.currency }} using {{ settings.localization.timezone }}.</p>

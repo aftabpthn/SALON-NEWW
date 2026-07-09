@@ -155,7 +155,7 @@ function stringValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="booking-settings-page">
+    <section class="booking-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -182,13 +182,13 @@ function stringValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Booking</span>
             <h1>Booking Settings Control</h1>
             <p>Manage online booking, appointment slot rules, deposits, client rules, staff resources and booking notifications.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -200,8 +200,8 @@ function stringValue(value: unknown, fallback: string): string {
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
         <p class="phase-note">This setting affects Calendar, Online Booking, Appointment creation and POS appointment flow in the next phase.</p>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Booking Control</h2>
             <label class="switch-row">
               <span><strong>Online Booking</strong><small>Allow customers to book online.</small></span>
@@ -235,7 +235,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Slot Rules</h2>
             <label class="field-row">
               <span>Booking Slot Duration</span>
@@ -269,7 +269,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Cancellation / Reschedule</h2>
             <label class="switch-row">
               <span><strong>Allow Cancellation</strong><small>Permit customer/front desk cancellation.</small></span>
@@ -301,7 +301,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Deposit / Payment</h2>
             <label class="switch-row">
               <span><strong>Deposit Required</strong><small>Require payment before booking confirmation.</small></span>
@@ -334,7 +334,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Client Rules</h2>
             <label class="switch-row">
               <span><strong>New Client Booking Allow</strong><small>Allow first-time clients to book.</small></span>
@@ -369,7 +369,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Staff & Resource</h2>
             <label class="switch-row">
               <span><strong>Staff Auto Assign</strong><small>Let the system pick available staff.</small></span>
@@ -398,7 +398,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Notifications</h2>
             <div class="channel-row">
               <label><input type="checkbox" [(ngModel)]="settings.notifications.clientConfirmationSms" /> SMS</label>

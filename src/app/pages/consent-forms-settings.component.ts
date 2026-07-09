@@ -93,7 +93,7 @@ function textValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="consent-settings-page">
+    <section class="consent-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -120,13 +120,13 @@ function textValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Consent Forms</span>
             <h1>Consent Forms Settings Control</h1>
             <p>Control service consent forms, signatures, minor guardian consent, client reminders and signed form retention policy.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -138,8 +138,8 @@ function textValue(value: unknown, fallback: string): string {
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
         <p class="phase-note">Next phase will connect appointment creation, online booking, client profile and signed document storage to these saved consent rules.</p>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Consent Control</h2>
             <label class="switch-row">
               <span><strong>Consent Forms Enabled</strong><small>Enable consent control for appointment and service flows.</small></span>
@@ -168,7 +168,7 @@ function textValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Capture Rules</h2>
             <label class="switch-row">
               <span><strong>Digital Signature Required</strong><small>Require client signature on consent form.</small></span>
@@ -219,7 +219,7 @@ function textValue(value: unknown, fallback: string): string {
             <button class="ghost-button add-button" type="button" (click)="addTemplate()">Add More</button>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Notifications</h2>
             <label class="switch-row">
               <span><strong>Remind Client Before Appointment</strong><small>Send consent reminder before appointment.</small></span>
@@ -238,7 +238,7 @@ function textValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Retention</h2>
             <label class="field-row">
               <span>Retain Signed Forms Years</span>

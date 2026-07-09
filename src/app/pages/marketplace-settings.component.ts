@@ -81,7 +81,7 @@ const DEFAULT_SUMMARY: ReputationSummary = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DecimalPipe],
   template: `
-    <section class="marketplace-settings-page">
+    <section class="marketplace-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/setting/calendar">Calendar Settings</a>
@@ -95,11 +95,11 @@ const DEFAULT_SUMMARY: ReputationSummary = {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <h1>Review & Marketplace Reputation Control</h1>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -110,7 +110,7 @@ const DEFAULT_SUMMARY: ReputationSummary = {
         <p class="state success" *ngIf="message()">{{ message() }}</p>
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
 
-        <section class="dashboard-grid" aria-label="Reputation Dashboard">
+        <section class="dashboard-grid inner-stats-grid" aria-label="Reputation Dashboard">
           <article>
             <span>Total Reviews</span>
             <strong>{{ summary().totalReviews }}</strong>
@@ -137,8 +137,8 @@ const DEFAULT_SUMMARY: ReputationSummary = {
           </article>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-section">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Review Channels</h2>
             </div>
@@ -159,7 +159,7 @@ const DEFAULT_SUMMARY: ReputationSummary = {
             </label>
           </article>
 
-          <article class="settings-section">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Auto Review Request</h2>
             </div>
@@ -183,7 +183,7 @@ const DEFAULT_SUMMARY: ReputationSummary = {
             </label>
           </article>
 
-          <article class="settings-section">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Rating Rules</h2>
             </div>
@@ -213,7 +213,7 @@ const DEFAULT_SUMMARY: ReputationSummary = {
             </div>
           </article>
 
-          <article class="settings-section">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Tracking & Alerts</h2>
             </div>

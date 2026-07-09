@@ -73,7 +73,7 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
         </div>
         <div class="hero-actions">
           <button class="ghost" type="button" [disabled]="loading()" (click)="load()">Refresh</button>
-          <a class="button ghost" routerLink="/pos/invoices">Invoice payments</a>
+          <a class="button ghost" routerLink="/pos/invoices" *ngIf="canAccessPath('/pos/invoices')">Invoice payments</a>
           <a class="button primary" routerLink="/billing/core-money-flow">Core Money Flow</a>
         </div>
       </header>
@@ -177,6 +177,17 @@ const PROVIDER_MODES: Record<ProviderKey, string[]> = {
 })
 export class ReconciliationPageComponent {
   private readonly api = inject(ApiService);
+  private readonly state = inject(AppStateService);
+  private readonly session = inject(AuthSessionService);
+
+  canAccessPath(path: string): boolean {
+    const permission = routePermissionForPath(path);
+    if (!permission || (Array.isArray(permission) && !permission.length)) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    const dynamicGrants = this.session.currentUser()?.permissions || [];
+    const grants = Array.from(new Set([...staticGrantsForRole(this.state.userRole()), ...dynamicGrants]));
+    return permissions.some((item) => grantsAllow(grants, item));
+  }
 
   readonly provider = signal<ProviderKey>('razorpay');
   readonly settlementDate = signal(new Date().toISOString().slice(0, 10));

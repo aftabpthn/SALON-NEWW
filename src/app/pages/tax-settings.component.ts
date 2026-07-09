@@ -56,7 +56,7 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DecimalPipe],
   template: `
-    <section class="tax-settings-page">
+    <section class="tax-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/setting/calendar">Calendar Settings</a>
@@ -70,11 +70,11 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <h1>Tax Settings</h1>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">{{ saving() ? 'Saving...' : 'Save' }}</button>
           </div>
@@ -121,8 +121,8 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           </div>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-section">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Service Tax</h2>
             </div>
@@ -148,7 +148,7 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
             </div>
           </article>
 
-          <article class="settings-section">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Product Tax</h2>
             </div>
@@ -174,7 +174,7 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
             </div>
           </article>
 
-          <article class="settings-section">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Bill Settings</h2>
             </div>
@@ -190,7 +190,7 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
             </div>
           </article>
 
-          <article class="settings-section">
+          <article class="settings-section inner-page-card">
             <div class="section-intro">
               <h2>Debit / Credit Fees</h2>
             </div>

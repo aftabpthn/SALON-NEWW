@@ -51,13 +51,13 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
   imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink],
   template: `
     <section
-      class="staff-os"
+      class="staff-os inner-page-shell"
       [class.staff-list-mode]="section !== 'workspace'"
       [class.staff-attendance-mode]="section === 'attendance-dashboard'"
       [class.staff-roster-mode]="section === 'roster-calendar'"
       [class.staff-payroll-mode]="section === 'payroll-dashboard'"
     >
-      <header class="topbar" *ngIf="section === 'workspace'">
+      <header class="topbar inner-page-header" *ngIf="section === 'workspace'">
         <div>
           <h1>{{ title }}</h1>
         </div>
@@ -116,7 +116,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
       <div *ngIf="store.error()" class="state error">{{ store.error() }}</div>
 
       <section class="panel staff-workspace-panel" *ngIf="section === 'workspace'">
-        <div class="panel-heading workspace-heading">
+        <div class="panel-heading workspace-heading inner-page-header">
           <div>
             <h2>Staff Workspace</h2>
             <span>Live directory, attendance, salary, commission and roster in one page</span>
@@ -153,20 +153,20 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             </header>
 
             <article *ngSwitchCase="'overview'" class="workspace-detail-body">
-              <section class="workspace-kpi-grid">
+              <section class="workspace-kpi-grid inner-stats-grid">
                 <article><span>Total staff</span><strong>{{ staffDirectoryRows().length }}</strong><small>{{ activeStaffForAttendance().length }} active for attendance</small></article>
                 <article><span>Present today</span><strong>{{ attendanceRows().length }}</strong><small>{{ attendanceDate() }}</small></article>
                 <article><span>Salary rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong><small>{{ store.payrollStructures().length }} salary structures</small></article>
                 <article><span>Commission rows</span><strong>{{ store.performance().rows.length }}</strong></article>
               </section>
-              <div class="workspace-actions">
+              <div class="workspace-actions inner-action-bar">
                 <a routerLink="/staff-os/employee-masters">Employee Masters</a>
                 <a routerLink="/staff-os/attendance-dashboard" [queryParams]="staffContextParams()">Attendance</a>
                 <a routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
                 <a routerLink="/staff-os/commission-dashboard" [queryParams]="staffContextParams()">Commission</a>
                 <a routerLink="/staff-os/roster-calendar" [queryParams]="staffContextParams()">Roster</a>
               </div>
-              <div class="table compact workspace-table">
+              <div class="table compact workspace-table inner-table-wrap">
                 <div class="row header"><span>Category</span><span>Scope</span><span>Default</span><span>Status</span></div>
                 <div class="row" *ngFor="let category of store.staffCategories()">
                   <span><strong>{{ category.name }}</strong><small>{{ category.department || 'Department not set' }}</small></span>
@@ -179,12 +179,12 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             </article>
 
             <article *ngSwitchCase="'directory'" class="workspace-detail-body">
-              <div class="workspace-actions">
+              <div class="workspace-actions inner-action-bar">
                 <button type="button" class="primary" (click)="openAddStaff()">Add Staff</button>
                 <a routerLink="/staff-os/staff-list">Open full list</a>
                 <a routerLink="/staff-os/staff-categories">Staff categories</a>
               </div>
-              <div class="table workspace-directory-table">
+              <div class="table workspace-directory-table inner-table-wrap">
                 <div class="row header"><span>Name</span><span>Branch</span><span>Category</span><span>Live data</span><span>Status</span><span>Links</span><span>Action</span></div>
                 <div class="row" *ngFor="let staff of staffDirectoryRows()">
                   <span><strong>{{ staff.fullName }}</strong><small>{{ staff.employeeCode || staff.employeeDetails?.shortName || 'No code' }}</small></span>
@@ -204,13 +204,13 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             </article>
 
             <article *ngSwitchCase="'attendance'" class="workspace-detail-body">
-              <section class="attendance-stats">
+              <section class="attendance-stats inner-stats-grid">
                 <article><span>Attendance</span><strong>{{ attendanceSummary()['attendanceEvents'] || attendanceRows().length || 0 }}</strong><small>{{ attendanceDate() }}</small></article>
                 <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong></article>
                 <article><span>Queue</span><strong>{{ attendanceSummary()['queuedEvents'] || 0 }}</strong><small>{{ attendanceSummary()['failedEvents'] || 0 }} failed</small></article>
                 <article><span>Suspicious</span><strong>{{ attendanceSummary()['suspiciousEvents'] || 0 }}</strong></article>
               </section>
-              <form class="staff-form camera-form manual-form workspace-manual-form" [formGroup]="manualAttendanceForm" (ngSubmit)="submitManualAttendance()">
+              <form class="staff-form camera-form manual-form workspace-manual-form inner-form-grid" [formGroup]="manualAttendanceForm" (ngSubmit)="submitManualAttendance()">
                 <label class="field">
                   <span>Branch</span>
                   <select formControlName="branchId" (change)="refreshAttendanceCenter()">
@@ -245,7 +245,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
               </form>
               <div class="state error" *ngIf="attendanceError()">{{ attendanceError() }}</div>
               <div class="state success" *ngIf="attendanceMessage()">{{ attendanceMessage() }}</div>
-              <div class="table compact evidence-table">
+              <div class="table compact evidence-table inner-table-wrap">
                 <div class="row header"><span>Staff</span><span>Source</span><span>Clock</span><span>Status</span></div>
                 <div class="row" *ngFor="let row of attendanceRows()">
                   <span><strong>{{ displayStaffName(row) }}</strong><small>{{ row['businessDate'] || row['business_date'] }}</small></span>
@@ -258,26 +258,26 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             </article>
 
             <article *ngSwitchCase="'salary'" class="workspace-detail-body">
-              <section class="workspace-kpi-grid">
+              <section class="workspace-kpi-grid inner-stats-grid">
                 <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong></article>
                 <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong></article>
                 <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong></article>
                 <article><span>Risks</span><strong>{{ store.attendanceRisks().length }}</strong></article>
               </section>
-              <div class="workspace-actions">
+              <div class="workspace-actions inner-action-bar">
                 <a routerLink="/staff-os/payroll-salary-structure">Salary Structure</a>
                 <a routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
                 <a routerLink="/staff-os/payroll-dashboard" [queryParams]="staffContextParams()">Payroll Dashboard</a>
               </div>
-              <section class="salary-editor-card" *ngIf="salaryEditorStaff() as activeStaff">
-                <div class="panel-heading">
+              <section class="salary-editor-card">
+                <div class="panel-heading inner-page-header">
                   <div>
                     <h2>Set Staff Salary</h2>
-                    <span>{{ activeStaff.fullName }} · {{ activeStaff.employeeCode || activeStaff.designation || 'Staff' }}</span>
+                    <span *ngIf="salaryEditorStaff() as activeStaff">{{ activeStaff.fullName }} · {{ activeStaff.employeeCode || activeStaff.designation || 'Staff' }}</span>
                   </div>
                   <button type="button" class="refresh" (click)="closeSalaryEditor()">Close</button>
                 </div>
-                <form class="salary-editor-form" [formGroup]="salaryEditorForm" (ngSubmit)="saveStaffSalary()">
+                <form class="salary-editor-form inner-form-grid" [formGroup]="salaryEditorForm" (ngSubmit)="saveStaffSalary()">
                   <label class="field">
                     <span>Basic salary</span>
                     <input formControlName="basicSalary" type="number" min="0" step="1" />
@@ -439,17 +439,17 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
       </section>
 
-      <section class="panel" [class.staff-register-panel]="isStaffRegisterSection()" *ngIf="isStaffRegisterSection()">
+      <section class="panel inner-page-card" [class.staff-register-panel]="isStaffRegisterSection()" *ngIf="isStaffRegisterSection()">
         <div class="staff-register-layout">
           <input #attendanceUploadInput class="hidden-file" type="file" accept=".csv,text/csv" (change)="uploadAttendanceCsv($event)" />
           <div class="staff-register-main">
-            <div class="panel-heading staff-register-heading">
+            <div class="panel-heading staff-register-heading inner-page-header">
               <div>
                 <p class="eyebrow">{{ staffRegisterEyebrow() }}</p>
                 <h2>{{ staffRegisterTitle() }}</h2>
                 <span>{{ staffRegisterSubtitle() }}</span>
               </div>
-              <div class="staff-register-actions">
+              <div class="staff-register-actions inner-page-header-actions">
                 <span>{{ staffListFilteredRows().length }} of {{ staffDirectoryRows().length }} records</span>
                 <button type="button" class="refresh" (click)="store.load()">Refresh</button>
                 <button type="button" class="refresh" (click)="exportStaffCsv()" [disabled]="!staffListFilteredRows().length">Export CSV</button>
@@ -460,14 +460,14 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
               </div>
             </div>
 
-            <div class="staff-register-kpis" *ngIf="isStaffRegisterSection()">
+            <div class="staff-register-kpis inner-stats-grid" *ngIf="isStaffRegisterSection()">
               <article><span>Total staff</span><strong>{{ staffDirectoryRows().length }}</strong></article>
               <article><span>Active</span><strong>{{ activeStaffForAttendance().length }}</strong></article>
               <article><span>Inactive</span><strong>{{ inactiveStaffCount() }}</strong></article>
               <article><span>Login linked</span><strong>{{ loginLinkedCount() }}</strong></article>
             </div>
 
-            <div class="staff-list-toolbar" *ngIf="isStaffRegisterSection()">
+            <div class="staff-list-toolbar inner-action-bar" *ngIf="isStaffRegisterSection()">
               <label>
                 <span>Show</span>
                 <select [ngModel]="staffListPageSize()" (ngModelChange)="setStaffListPageSize($event)">
@@ -490,7 +490,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <input [ngModel]="staffListQuery()" (ngModelChange)="setStaffListQuery($event)" placeholder="Name, phone, staff ID, email, designation" />
               </label>
             </div>
-            <div class="staff-register-scroll">
+            <div class="staff-register-scroll inner-table-wrap">
               <table class="staff-register-table">
                 <thead>
                   <tr>
@@ -1345,14 +1345,14 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
         <main class="attendance-dashboard-detail">
 
-      <section class="panel attendance-command" *ngIf="visibleAttendanceDashboardView('overview')">
+      <section class="panel attendance-command inner-page-card" *ngIf="visibleAttendanceDashboardView('overview')">
         <input #attendanceCommandUploadInput class="hidden-file" type="file" accept=".csv,text/csv" (change)="uploadAttendanceCsv($event)" />
-        <div class="panel-heading">
+        <div class="panel-heading inner-page-header">
           <div>
             <h2>Advanced Attendance Control</h2>
             <span>Physical entry, biometric devices, camera punch and payroll attendance</span>
           </div>
-          <div class="attendance-controls">
+          <div class="attendance-controls inner-page-header-actions">
             <select [ngModel]="attendanceBranchId()" (ngModelChange)="setAttendanceBranch($event)" aria-label="Attendance branch">
               <option value="">Select branch</option>
               <option *ngFor="let branch of branchOptions()" [value]="branch.id">{{ branch.name || branch.id }}</option>
@@ -1367,7 +1367,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             </button>
           </div>
         </div>
-        <div class="attendance-stats">
+        <div class="attendance-stats inner-stats-grid">
           <article><span>Devices</span><strong>{{ attendanceSummary()['activeDevices'] || 0 }}/{{ attendanceSummary()['devices'] || 0 }}</strong></article>
           <article><span>Gateway</span><strong>{{ attendanceSummary()['onlineGateways'] || 0 }}/{{ attendanceSummary()['gateways'] || 0 }}</strong></article>
           <article><span>Attendance</span><strong>{{ attendanceSummary()['attendanceEvents'] || 0 }}</strong><small>{{ attendanceDate() }}</small></article>
@@ -1403,7 +1403,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         <div class="state success" *ngIf="attendanceMessage()">{{ attendanceMessage() }}</div>
       </section>
 
-      <section class="attendance-ops-grid" *ngIf="visibleAttendanceDashboardView('ops')">
+      <section class="attendance-ops-grid inner-stats-grid" *ngIf="visibleAttendanceDashboardView('ops')">
         <article class="attendance-op-card" *ngFor="let card of attendanceOpsCards()" [ngClass]="card.tone">
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
@@ -1411,17 +1411,17 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </article>
       </section>
 
-      <section class="panel attendance-exception-panel" *ngIf="visibleAttendanceDashboardView('exceptions')">
-        <div class="panel-heading">
+      <section class="panel attendance-exception-panel inner-page-card" *ngIf="visibleAttendanceDashboardView('exceptions')">
+        <div class="panel-heading inner-page-header">
           <div>
             <h2>Attendance Exceptions</h2>
           </div>
-          <div class="attendance-controls">
+          <div class="attendance-controls inner-page-header-actions">
             <button type="button" class="refresh" [disabled]="fraudScanning()" (click)="runFraudScan()">{{ fraudScanning() ? 'Checking...' : 'Run risk check' }}</button>
             <button type="button" class="primary" [disabled]="payrollPreviewForm.invalid || payrollPreviewSaving()" (click)="generatePayrollPreview()">{{ payrollPreviewSaving() ? 'Generating...' : 'Generate payroll preview' }}</button>
           </div>
         </div>
-        <div class="table compact exception-table">
+        <div class="table compact exception-table inner-table-wrap">
           <div class="row header"><span>Signal</span><span>Staff</span><span>Impact</span><span>Status</span></div>
           <div class="row" *ngFor="let item of attendanceExceptionRows()">
             <span><strong>{{ item['title'] }}</strong><small>{{ item['meta'] }}</small></span>
@@ -1806,26 +1806,26 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </main>
       </div>
 
-      <section class="panel roster-register-panel" *ngIf="section === 'roster-calendar'">
-        <div class="panel-heading roster-register-heading">
+      <section class="panel roster-register-panel inner-page-card" *ngIf="section === 'roster-calendar'">
+        <div class="panel-heading roster-register-heading inner-page-header">
           <div>
             <h2>Roster And Attendance</h2>
           </div>
-          <div class="staff-register-actions">
+          <div class="staff-register-actions inner-page-header-actions">
             <span>{{ store.schedules().length }} shifts</span>
             <a class="refresh" routerLink="/staff-os/shift-master" [queryParams]="staffContextParams()">Shift Master</a>
             <button type="button" class="refresh" (click)="store.load()">Refresh</button>
           </div>
         </div>
 
-        <div class="roster-kpi-strip">
+        <div class="roster-kpi-strip inner-stats-grid">
           <article><span>Roster shifts</span><strong>{{ store.schedules().length }}</strong></article>
           <article><span>Available staff</span><strong>{{ activeStaffForRoster().length }}</strong></article>
           <article><span>Shift templates</span><strong>{{ rosterShiftOptions().length }}</strong></article>
           <article><span>Today attendance</span><strong>{{ attendanceRows().length }}</strong><small>{{ attendanceDate() }}</small></article>
         </div>
 
-        <form class="staff-form camera-form task-create-form roster-assign-form" [formGroup]="rosterForm" (ngSubmit)="assignRosterShift()">
+        <form class="staff-form camera-form task-create-form roster-assign-form inner-form-grid" [formGroup]="rosterForm" (ngSubmit)="assignRosterShift()">
           <label class="field">
             <span>Branch</span>
             <select formControlName="branchId">
@@ -1863,7 +1863,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         <div class="heatmap roster-heatmap" aria-label="Roster heatmap">
           <span *ngFor="let cell of heatmapCells; let index = index" [style.opacity]="opacity(index)"></span>
         </div>
-        <div class="roster-register-scroll">
+        <div class="roster-register-scroll inner-table-wrap">
           <table class="roster-register-table">
             <thead>
               <tr>
@@ -1896,12 +1896,12 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
       </section>
 
-      <section class="panel" *ngIf="section === 'leave-management'">
-        <div class="panel-heading">
+      <section class="panel inner-page-card" *ngIf="section === 'leave-management'">
+        <div class="panel-heading inner-page-header">
           <h2>Leave Request And Approval</h2>
           <span>{{ store.leaves().length }} live leave rows</span>
         </div>
-        <form class="staff-form camera-form task-create-form" [formGroup]="leaveForm" (ngSubmit)="submitLeaveRequest()">
+        <form class="staff-form camera-form task-create-form inner-form-grid" [formGroup]="leaveForm" (ngSubmit)="submitLeaveRequest()">
           <label class="field">
             <span>Branch</span>
             <select formControlName="branchId" (change)="refreshLeaveManagement()">
@@ -1961,8 +1961,8 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
       </section>
 
-      <section class="panel" *ngIf="section === 'performance-dashboard' || section === 'leaderboard' || section === 'commission-dashboard'">
-        <div class="panel-heading">
+      <section class="panel inner-page-card" *ngIf="section === 'performance-dashboard' || section === 'leaderboard' || section === 'commission-dashboard'">
+        <div class="panel-heading inner-page-header">
           <h2>Performance Intelligence</h2>
           <span>Avg score {{ store.performance().summary.avgScore | number:'1.0-0' }}</span>
         </div>
@@ -1987,7 +1987,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
             <span>Avg utilization</span>
           </article>
         </div>
-        <div class="table compact">
+        <div class="table compact inner-table-wrap">
           <div class="row header"><span>Staff</span><span>Score</span><span>Revenue</span><span>Utilization</span></div>
           <div class="row" *ngFor="let row of store.performance().rows">
             <span>{{ row.staffId }}</span>
@@ -2003,12 +2003,12 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
       </section>
 
-      <section class="panel payroll-register-panel" *ngIf="section === 'payroll-dashboard'">
-        <div class="panel-heading payroll-register-heading">
+      <section class="panel payroll-register-panel inner-page-card" *ngIf="section === 'payroll-dashboard'">
+        <div class="panel-heading payroll-register-heading inner-page-header">
           <div>
             <h2>Salary And Payroll Control</h2>
           </div>
-          <div class="staff-register-actions">
+          <div class="staff-register-actions inner-page-header-actions">
             <span>{{ staffDirectoryRows().length }} staff</span>
             <a class="refresh" routerLink="/staff-os/payroll-history" [queryParams]="staffContextParams()">Payroll History</a>
             <a class="refresh" routerLink="/staff-os/salary-generate" [queryParams]="staffContextParams()">Salary Generate</a>
@@ -2017,14 +2017,14 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
           </div>
         </div>
 
-        <div class="payroll-kpi-strip">
+        <div class="payroll-kpi-strip inner-stats-grid">
           <article><span>Salary profiles</span><strong>{{ salaryProfileCount() }}</strong></article>
           <article><span>Structures</span><strong>{{ store.payrollStructures().length }}</strong></article>
           <article><span>Preview rows</span><strong>{{ store.attendancePayrollPreview().length }}</strong></article>
           <article><span>Risk signals</span><strong>{{ store.attendanceRisks().length }}</strong></article>
         </div>
 
-        <div class="payroll-register-scroll">
+        <div class="payroll-register-scroll inner-table-wrap">
           <table class="payroll-register-table">
             <thead>
               <tr>
@@ -2072,12 +2072,12 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </div>
       </section>
 
-      <section class="panel" *ngIf="section === 'task-board' || section === 'mobile-staff-dashboard-preview'">
-        <div class="panel-heading">
+      <section class="panel inner-page-card" *ngIf="section === 'task-board' || section === 'mobile-staff-dashboard-preview'">
+        <div class="panel-heading inner-page-header">
           <h2>Tasks And Mobile Ops</h2>
           <span>{{ store.tasks().length }} open items</span>
         </div>
-        <form class="staff-form camera-form task-create-form" [formGroup]="taskForm" (ngSubmit)="submitTask()">
+        <form class="staff-form camera-form task-create-form inner-form-grid" [formGroup]="taskForm" (ngSubmit)="submitTask()">
           <label class="field">
             <span>Branch</span>
             <select formControlName="branchId">
@@ -2141,7 +2141,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     </section>
   `,
   styles: [`
-    .staff-os { box-sizing: border-box; display: grid; gap: 16px; min-width: 0; width: 100%; padding: 0; color: #10201a; }
+    .staff-os { box-sizing: border-box; display: grid; gap: 16px; min-width: 0; width: 100%; color: #10201a; }
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .eyebrow { margin: 0 0 4px; color: #547066; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
@@ -2223,7 +2223,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-clean-shell > .attendance-workspace { background: #fff; border-bottom: 1px solid #d8e1ea; border-right: 0; border-top: 0; padding: 12px 16px; }
     .staff-clean-shell .staff-unified-side { border-right: 0; position: sticky; top: 12px; }
     .staff-clean-shell .staff-unified-side a.active { background: #e9e9e9; color: #05070d; }
-    .staff-register-panel { overflow: hidden; padding: 0; }
+    .staff-register-panel { }
     .staff-register-layout { align-items: start; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
     .staff-register-main { border-left: 0; min-width: 0; }
     .staff-register-side { align-content: start; background: #fff; display: grid; gap: 4px; min-width: 0; padding: 14px 12px; position: sticky; top: 12px; }
@@ -2431,7 +2431,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-roster-mode .metrics { gap: 0; border: 1px solid #d8e1ea; background: #fff; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .staff-roster-mode .metric { border: 0; border-right: 1px solid #e5edf4; border-radius: 0; min-height: 62px; padding: 10px 14px; }
     .staff-roster-mode .metric:last-child { border-right: 0; }
-    .roster-register-panel { border-color: #d8e1ea; overflow: hidden; padding: 0; }
+    .roster-register-panel { border-color: #d8e1ea; }
     .roster-register-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
     .roster-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8e1ea; }
     .roster-kpi-strip article { border-right: 1px solid #e5edf4; display: grid; gap: 3px; padding: 10px 16px; }
@@ -2465,7 +2465,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
     .staff-payroll-mode .metrics { gap: 0; border: 1px solid #d8e1ea; background: #fff; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .staff-payroll-mode .metric { border: 0; border-right: 1px solid #e5edf4; border-radius: 0; min-height: 62px; padding: 10px 14px; }
     .staff-payroll-mode .metric:last-child { border-right: 0; }
-    .payroll-register-panel { border-color: #d8e1ea; overflow: hidden; padding: 0; }
+    .payroll-register-panel { border-color: #d8e1ea; }
     .payroll-register-heading { border-bottom: 1px solid #d8e1ea; padding: 13px 16px; }
     .payroll-kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8e1ea; }
     .payroll-kpi-strip article { border-right: 1px solid #e5edf4; display: grid; gap: 3px; padding: 10px 16px; }

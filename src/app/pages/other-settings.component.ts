@@ -120,7 +120,7 @@ const SETTING_ITEMS: OtherSettingItem[] = [
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="other-settings-page">
+    <section class="other-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -147,13 +147,13 @@ const SETTING_ITEMS: OtherSettingItem[] = [
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / POS & Appointment</span>
             <h1>Other Settings</h1>
             <p>Manage additional point-of-sale, package, product search, tip, barcode, and appointment settings.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="ghost-button" type="button" (click)="resetDefaults()">Reset to defaults</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">

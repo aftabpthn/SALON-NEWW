@@ -132,13 +132,13 @@ function boolValue(value: unknown, fallback: boolean): boolean {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Business</span>
             <h1>Business Details Settings Control</h1>
             <p>Manage salon identity, branch contact details, invoice identity, branding, online profile links and registration details.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <a class="ghost-button" routerLink="/business-details">Manage Existing Profile</a>
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
@@ -152,14 +152,14 @@ function boolValue(value: unknown, fallback: boolean): boolean {
         <p class="phase-note">Next phase will connect invoices, receipts, WhatsApp templates, reports headers and online booking profile to these saved details.</p>
 
         <section class="settings-grid">
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Business Profile</h2>
             <label class="field-row"><span>Business name</span><input [(ngModel)]="settings.businessProfile.businessName" /></label>
             <label class="field-row"><span>Branch display name</span><input [(ngModel)]="settings.businessProfile.branchDisplayName" /></label>
             <label class="field-row"><span>Owner name</span><input [(ngModel)]="settings.businessProfile.ownerName" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Contact Details</h2>
             <label class="field-row"><span>Phone</span><input [(ngModel)]="settings.contactDetails.phone" /></label>
             <label class="field-row"><span>WhatsApp number</span><input [(ngModel)]="settings.contactDetails.whatsappNumber" /></label>
@@ -167,7 +167,7 @@ function boolValue(value: unknown, fallback: boolean): boolean {
             <label class="field-row"><span>Website</span><input [(ngModel)]="settings.contactDetails.website" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Address & Location</h2>
             <label class="field-row"><span>Address line 1</span><input [(ngModel)]="settings.addressLocation.addressLine1" /></label>
             <label class="field-row"><span>Address line 2</span><input [(ngModel)]="settings.addressLocation.addressLine2" /></label>
@@ -177,7 +177,7 @@ function boolValue(value: unknown, fallback: boolean): boolean {
             <label class="field-row"><span>Postal code</span><input [(ngModel)]="settings.addressLocation.postalCode" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Invoice Identity</h2>
             <label class="field-row"><span>Invoice business name</span><input [(ngModel)]="settings.invoiceIdentity.invoiceBusinessName" /></label>
             <label class="field-row"><span>Invoice footer name</span><input [(ngModel)]="settings.invoiceIdentity.invoiceFooterName" /></label>
@@ -193,7 +193,7 @@ function boolValue(value: unknown, fallback: boolean): boolean {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Branding</h2>
             <label class="field-row"><span>Logo URL</span><input [(ngModel)]="settings.branding.logoUrl" /></label>
             <label class="field-row color-row">
@@ -203,7 +203,7 @@ function boolValue(value: unknown, fallback: boolean): boolean {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Social / Online Profile</h2>
             <label class="field-row"><span>Instagram link</span><input [(ngModel)]="settings.socialOnlineProfile.instagramLink" /></label>
             <label class="field-row"><span>Facebook link</span><input [(ngModel)]="settings.socialOnlineProfile.facebookLink" /></label>
@@ -211,7 +211,7 @@ function boolValue(value: unknown, fallback: boolean): boolean {
             <label class="field-row"><span>Online booking profile slug</span><input [(ngModel)]="settings.socialOnlineProfile.onlineBookingProfileSlug" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Legal / Registration</h2>
             <label class="field-row"><span>GSTIN / Tax ID / TRN / VAT No</span><input [(ngModel)]="settings.legalRegistration.registrationNumber" /></label>
             <label class="field-row"><span>Registration label</span><input [(ngModel)]="settings.legalRegistration.registrationLabel" /></label>

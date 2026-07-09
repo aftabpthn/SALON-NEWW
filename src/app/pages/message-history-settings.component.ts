@@ -122,7 +122,7 @@ function numberValue(value: unknown, fallback: number): number {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="message-settings-page">
+    <section class="message-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -148,13 +148,13 @@ function numberValue(value: unknown, fallback: number): number {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Messages</span>
             <h1>Message History Settings Control</h1>
             <p>Control what gets logged, how long history is retained, delivery tracking, exports, alerts and resend policy.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <a class="ghost-button" routerLink="/message-logs">Open Message Logs</a>
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
@@ -173,8 +173,8 @@ function numberValue(value: unknown, fallback: number): number {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Message Channels</h2>
             <p>Choose which communication channels and business messages should be logged.</p>
             <label class="switch-row"><span><strong>SMS logs</strong><small>Store SMS activity in message history.</small></span><input type="checkbox" [(ngModel)]="settings.logging.sms" /><i></i></label>
@@ -185,7 +185,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Engagement messages</strong><small>Log marketing and client engagement messages.</small></span><input type="checkbox" [(ngModel)]="settings.logging.engagementMessages" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Retention & Archive</h2>
             <p>Control how long message history stays visible and when older rows are archived.</p>
             <label class="field-row"><span>Retention days</span><input type="number" min="1" [(ngModel)]="settings.retention.retentionDays" /></label>
@@ -193,7 +193,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Hide deleted logs</strong><small>Keep removed rows hidden from staff views.</small></span><input type="checkbox" [(ngModel)]="settings.retention.hideDeletedLogs" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Visibility & Privacy</h2>
             <p>Decide which message types appear and how contact details are shown.</p>
             <label class="switch-row"><span><strong>Show client messages</strong><small>Display client-facing messages.</small></span><input type="checkbox" [(ngModel)]="settings.visibility.showClientMessages" /><i></i></label>
@@ -202,7 +202,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Mask phone numbers</strong><small>Mask contact numbers in shared views.</small></span><input type="checkbox" [(ngModel)]="settings.visibility.maskPhoneNumbers" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Delivery Tracking</h2>
             <p>Store provider delivery states for audit and troubleshooting.</p>
             <label class="switch-row"><span><strong>Track queued</strong><small>Record queued messages.</small></span><input type="checkbox" [(ngModel)]="settings.deliveryTracking.trackQueued" /><i></i></label>
@@ -212,7 +212,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Capture provider reference</strong><small>Save provider ids for reconciliation.</small></span><input type="checkbox" [(ngModel)]="settings.deliveryTracking.captureProviderReference" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Search & Export</h2>
             <p>Control backend search and CSV export behavior for message history.</p>
             <label class="switch-row"><span><strong>Backend search enabled</strong><small>Search message history from backend data.</small></span><input type="checkbox" [(ngModel)]="settings.searchExport.backendSearchEnabled" /><i></i></label>
@@ -220,7 +220,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Include payload in export</strong><small>Include provider payload in exports.</small></span><input type="checkbox" [(ngModel)]="settings.searchExport.includePayloadInExport" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Alerts</h2>
             <p>Notify owners when delivery quality drops or messages fail.</p>
             <label class="switch-row"><span><strong>Failed message alert</strong><small>Alert owner when a message fails.</small></span><input type="checkbox" [(ngModel)]="settings.alerts.failedMessageAlert" /><i></i></label>
@@ -229,7 +229,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="field-row"><span>Failure rate threshold %</span><input type="number" min="1" max="100" [(ngModel)]="settings.alerts.failureRateThreshold" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Resend Policy</h2>
             <p>Control manual resend behavior for failed or customer-requested messages.</p>
             <label class="switch-row"><span><strong>Allow manual resend</strong><small>Staff can retry eligible messages.</small></span><input type="checkbox" [(ngModel)]="settings.resendPolicy.allowManualResend" /><i></i></label>

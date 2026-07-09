@@ -116,7 +116,7 @@ function stringValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="payment-settings-page">
+    <section class="payment-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -142,13 +142,13 @@ function stringValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Payments</span>
             <h1>Payment Methods Settings Control</h1>
             <p>Control POS payment modes, split billing, dues, refunds, settlement rules and wallet or gift card behavior.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <a class="ghost-button" routerLink="/pos/payment-modes">Manage POS Modes</a>
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
@@ -161,8 +161,8 @@ function stringValue(value: unknown, fallback: string): string {
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
         <p class="phase-note">Next phase will connect POS billing, invoice payment, settlement reports, cash drawer and due recovery to this saved policy.</p>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Payment Modes</h2>
             <label class="switch-row">
               <span><strong>Cash ON/OFF</strong><small>Allow cash collection in POS billing.</small></span>
@@ -191,7 +191,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Split Payment Rules</h2>
             <label class="switch-row">
               <span><strong>Split Payment allow/block</strong><small>Allow multiple payment modes on one invoice.</small></span>
@@ -205,7 +205,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Due / Partial Payment</h2>
             <label class="switch-row">
               <span><strong>Partial payment allow/block</strong><small>Allow invoice save with partial paid amount.</small></span>
@@ -220,7 +220,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Refund Rules</h2>
             <label class="field-row">
               <span>Refund to original mode / cash / wallet</span>
@@ -244,7 +244,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Card / UPI Settlement</h2>
             <label class="switch-row">
               <span><strong>Card settlement required</strong><small>Require settlement tracking for card payments.</small></span>
@@ -266,7 +266,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Wallet / Gift Card</h2>
             <label class="switch-row">
               <span><strong>Wallet redemption allowed</strong><small>Allow wallet balance usage on invoice.</small></span>
@@ -285,7 +285,7 @@ function stringValue(value: unknown, fallback: string): string {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>POS Billing Behavior</h2>
             <label class="switch-row">
               <span><strong>Block disabled payment modes</strong><small>Hide disabled payment methods from billing.</small></span>

@@ -108,7 +108,7 @@ function numberValue(value: unknown, fallback: number): number {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="security-settings-page">
+    <section class="security-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -134,13 +134,13 @@ function numberValue(value: unknown, fallback: number): number {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Security</span>
             <h1>Security Settings Control</h1>
             <p>Control login sessions, password rules, two-factor policy, device risk, export protection and audit alerts.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <a class="ghost-button" routerLink="/security">Open Security Center</a>
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
@@ -159,8 +159,8 @@ function numberValue(value: unknown, fallback: number): number {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Login & Session</h2>
             <p>Set session timeout, refresh duration and sensitive action checks.</p>
             <label class="field-row"><span>Session timeout minutes</span><input type="number" min="5" [(ngModel)]="settings.loginSession.sessionTimeoutMinutes" /></label>
@@ -169,7 +169,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Session kill switch enabled</strong><small>Allow owner/admin to invalidate risky sessions.</small></span><input type="checkbox" [(ngModel)]="settings.loginSession.sessionKillSwitchEnabled" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Password Policy</h2>
             <p>Define minimum password strength and expiry policy.</p>
             <label class="field-row"><span>Minimum password length</span><input type="number" min="6" [(ngModel)]="settings.passwordPolicy.minLength" /></label>
@@ -179,7 +179,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="field-row"><span>Password expiry days</span><input type="number" min="0" [(ngModel)]="settings.passwordPolicy.expiryDays" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Two Factor</h2>
             <p>Control 2FA requirements for owners and staff users.</p>
             <label class="switch-row"><span><strong>Owner two-factor required</strong><small>Require 2FA for owner level accounts.</small></span><input type="checkbox" [(ngModel)]="settings.twoFactor.ownerRequired" /><i></i></label>
@@ -187,7 +187,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="field-row"><span>Remember device days</span><input type="number" min="0" [(ngModel)]="settings.twoFactor.rememberDeviceDays" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Device & IP Protection</h2>
             <p>Detect risky devices, IPs, locations and failed login attempts.</p>
             <label class="switch-row"><span><strong>Unknown device alert</strong><small>Notify owner on new device login.</small></span><input type="checkbox" [(ngModel)]="settings.deviceIpProtection.unknownDeviceAlert" /><i></i></label>
@@ -196,7 +196,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="field-row"><span>Max failed attempts</span><input type="number" min="1" [(ngModel)]="settings.deviceIpProtection.maxFailedAttempts" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Export & Data Access</h2>
             <p>Protect CSV/download flows and client contact visibility.</p>
             <label class="switch-row"><span><strong>Export protection enabled</strong><small>Apply stricter checks before data export.</small></span><input type="checkbox" [(ngModel)]="settings.exportDataAccess.exportProtectionEnabled" /><i></i></label>
@@ -204,7 +204,7 @@ function numberValue(value: unknown, fallback: number): number {
             <label class="switch-row"><span><strong>Mask client contact for staff</strong><small>Hide full phone/contact in staff views.</small></span><input type="checkbox" [(ngModel)]="settings.exportDataAccess.maskClientContactForStaff" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Approval & Audit</h2>
             <p>Configure audit logs, security alerts and role-change approvals.</p>
             <label class="switch-row"><span><strong>Audit log enabled</strong><small>Keep security events in audit logs.</small></span><input type="checkbox" [(ngModel)]="settings.approvalsAudit.auditLogEnabled" /><i></i></label>

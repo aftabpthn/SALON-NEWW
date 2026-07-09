@@ -112,7 +112,7 @@ function numberValue(value: unknown, fallback: number): number {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="product-settings-page">
+    <section class="product-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/services">Services Settings</a>
@@ -139,13 +139,13 @@ function numberValue(value: unknown, fallback: number): number {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Products</span>
             <h1>Products Settings Control</h1>
             <p>Control product catalog rules, stock tracking, POS behavior, product consume guardrails and inventory notifications.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -157,8 +157,8 @@ function numberValue(value: unknown, fallback: number): number {
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
         <p class="phase-note">Next phase will connect product create/edit, POS billing, product consume and inventory alerts to these saved rules.</p>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Product Catalog</h2>
             <ng-container *ngFor="let item of catalogControls">
               <label class="switch-row">
@@ -169,7 +169,7 @@ function numberValue(value: unknown, fallback: number): number {
             </ng-container>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Stock Control</h2>
             <label class="switch-row">
               <span><strong>Stock Tracking Enabled</strong><small>Track product stock movement.</small></span>
@@ -202,7 +202,7 @@ function numberValue(value: unknown, fallback: number): number {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Pricing & Tax</h2>
             <label class="switch-row">
               <span><strong>Cost Price Required</strong><small>Require cost price on product records.</small></span>
@@ -235,7 +235,7 @@ function numberValue(value: unknown, fallback: number): number {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>POS Behavior</h2>
             <ng-container *ngFor="let item of posControls">
               <label class="switch-row">
@@ -246,7 +246,7 @@ function numberValue(value: unknown, fallback: number): number {
             </ng-container>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Product Consume</h2>
             <label class="switch-row">
               <span><strong>Allow Product Consume</strong><small>Enable internal product consumption workflow.</small></span>
@@ -270,7 +270,7 @@ function numberValue(value: unknown, fallback: number): number {
             </label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Notifications</h2>
             <label class="switch-row">
               <span><strong>Notify Owner on Low Stock</strong><small>Owner receives low stock alert.</small></span>

@@ -55,7 +55,7 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="calendar-settings-page">
+    <section class="calendar-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a class="active" routerLink="/setting/calendar">Calendar Settings</a>
@@ -69,7 +69,7 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <h1>Calendar settings</h1>
           </div>
@@ -123,7 +123,7 @@ const DEFAULT_SETTINGS: CalendarSettingsState = {
           </div>
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section inner-page-card">
           <div class="section-intro">
             <h2>Calendar Color settings</h2>
           </div>

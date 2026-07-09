@@ -128,7 +128,7 @@ function stringValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="membership-settings-page">
+    <section class="membership-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -154,13 +154,13 @@ function stringValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Membership</span>
             <h1>Membership Settings Control</h1>
             <p>Control membership sale visibility, benefits, expiry, renewal, payment behavior, redemption rules and alerts.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -178,8 +178,8 @@ function stringValue(value: unknown, fallback: string): string {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Membership Catalog</h2>
             <label class="switch-row"><span><strong>Membership sales enabled</strong><small>Allow membership creation and sale workflow.</small></span><input type="checkbox" [(ngModel)]="settings.membershipCatalog.membershipSalesEnabled" /><i></i></label>
             <label class="switch-row"><span><strong>Visible in POS</strong><small>Show memberships in POS sale screens.</small></span><input type="checkbox" [(ngModel)]="settings.membershipCatalog.visibleInPos" /><i></i></label>
@@ -188,7 +188,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Paid membership enabled</strong><small>Allow paid membership plans.</small></span><input type="checkbox" [(ngModel)]="settings.membershipCatalog.paidMembershipEnabled" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Credits & Benefits</h2>
             <label class="switch-row"><span><strong>Service credits enabled</strong><small>Allow service credit benefits.</small></span><input type="checkbox" [(ngModel)]="settings.creditsBenefits.serviceCreditsEnabled" /><i></i></label>
             <label class="switch-row"><span><strong>Wallet credits enabled</strong><small>Allow wallet balance benefits.</small></span><input type="checkbox" [(ngModel)]="settings.creditsBenefits.walletCreditsEnabled" /><i></i></label>
@@ -197,7 +197,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Allow benefit stacking</strong><small>Allow multiple membership benefits on one bill.</small></span><input type="checkbox" [(ngModel)]="settings.creditsBenefits.allowBenefitStacking" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Renewal & Expiry</h2>
             <label class="switch-row"><span><strong>Auto renew enabled</strong><small>Prepare memberships for auto-renewal policy.</small></span><input type="checkbox" [(ngModel)]="settings.renewalExpiry.autoRenewEnabled" /><i></i></label>
             <label class="switch-row"><span><strong>Expiry days enabled</strong><small>Use expiry dates on membership benefits.</small></span><input type="checkbox" [(ngModel)]="settings.renewalExpiry.expiryDaysEnabled" /><i></i></label>
@@ -206,7 +206,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="field-row"><span>Expired benefit action</span><select [(ngModel)]="settings.renewalExpiry.expiredBenefitAction"><option value="allow">Allow</option><option value="warn">Warn</option><option value="block">Block</option></select></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Payment & Billing</h2>
             <label class="switch-row"><span><strong>Allow due on membership sale</strong><small>Permit unpaid/due balance on membership sale.</small></span><input type="checkbox" [(ngModel)]="settings.paymentBilling.allowDueOnMembershipSale" /><i></i></label>
             <label class="switch-row"><span><strong>Membership tax applicable</strong><small>Apply tax setting to membership sales.</small></span><input type="checkbox" [(ngModel)]="settings.paymentBilling.membershipTaxApplicable" /><i></i></label>
@@ -214,7 +214,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Invoice membership snapshot</strong><small>Store membership benefit snapshot with invoice.</small></span><input type="checkbox" [(ngModel)]="settings.paymentBilling.invoiceMembershipSnapshot" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Redemption Rules</h2>
             <label class="switch-row"><span><strong>Block redemption when expired</strong><small>Prevent expired membership benefits from being used.</small></span><input type="checkbox" [(ngModel)]="settings.redemptionRules.blockRedemptionWhenExpired" /><i></i></label>
             <label class="switch-row"><span><strong>Require staff confirmation</strong><small>Ask staff to confirm membership redemption at billing.</small></span><input type="checkbox" [(ngModel)]="settings.redemptionRules.requireStaffConfirmation" /><i></i></label>
@@ -222,7 +222,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Allow family sharing</strong><small>Allow approved family/client group sharing.</small></span><input type="checkbox" [(ngModel)]="settings.redemptionRules.allowFamilySharing" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Notifications & Risk</h2>
             <label class="switch-row"><span><strong>Renewal reminder</strong><small>Send reminder before membership renewal/expiry.</small></span><input type="checkbox" [(ngModel)]="settings.notificationsRisk.renewalReminder" /><i></i></label>
             <label class="switch-row"><span><strong>Low credit reminder</strong><small>Notify clients when membership credits are low.</small></span><input type="checkbox" [(ngModel)]="settings.notificationsRisk.lowCreditReminder" /><i></i></label>
@@ -230,7 +230,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="field-row"><span>High balance threshold</span><input type="number" min="0" [(ngModel)]="settings.notificationsRisk.highBalanceThreshold" /></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Defaults</h2>
             <label class="field-row"><span>Default membership status</span><select [(ngModel)]="settings.defaults.defaultStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label class="field-row"><span>Default membership type</span><select [(ngModel)]="settings.defaults.defaultMembershipType"><option value="free">Free</option><option value="paid">Paid</option><option value="packageLinked">Package Linked</option></select></label>

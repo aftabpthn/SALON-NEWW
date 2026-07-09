@@ -88,7 +88,7 @@ function slug(value: string, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="custom-fields-page">
+    <section class="custom-fields-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -114,13 +114,13 @@ function slug(value: string, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Custom Fields</span>
             <h1>Custom Fields Settings Control</h1>
             <p>Create branch-specific custom fields for clients, appointments, invoices, services and staff records.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -138,8 +138,8 @@ function slug(value: string, fallback: string): string {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Custom Field Control</h2>
             <label class="switch-row"><span><strong>Custom fields enabled</strong><small>Enable custom fields across selected modules.</small></span><input type="checkbox" [(ngModel)]="settings.enabled" /><i></i></label>
             <label class="switch-row"><span><strong>Show on POS</strong><small>Allow POS and invoice screens to show relevant fields.</small></span><input type="checkbox" [(ngModel)]="settings.showOnPos" /><i></i></label>

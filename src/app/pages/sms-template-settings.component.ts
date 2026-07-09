@@ -122,7 +122,7 @@ function textValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <section class="sms-settings-page">
+    <section class="sms-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -149,13 +149,13 @@ function textValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / SMS Template</span>
             <h1>SMS Template Settings Control</h1>
             <p>Control SMS sending policy, sender identity, automation triggers, DLT IDs, templates and delivery alerts.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -167,8 +167,8 @@ function textValue(value: unknown, fallback: string): string {
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
         <p class="phase-note">Next phase will connect booking, billing, due recovery, package expiry, consent and review flows to these saved SMS templates.</p>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>SMS Control</h2>
             <ng-container *ngFor="let item of smsControls">
               <label class="switch-row">
@@ -179,7 +179,7 @@ function textValue(value: unknown, fallback: string): string {
             </ng-container>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Sender & Quiet Hours</h2>
             <label class="field-row">
               <span>Sender ID</span>
@@ -211,7 +211,7 @@ function textValue(value: unknown, fallback: string): string {
             </div>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Automation Triggers</h2>
             <ng-container *ngFor="let item of automationControls">
               <label class="switch-row">
@@ -222,7 +222,7 @@ function textValue(value: unknown, fallback: string): string {
             </ng-container>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Alerts</h2>
             <label class="switch-row">
               <span><strong>Notify Owner on Failed SMS</strong><small>Owner alert when SMS fails.</small></span>

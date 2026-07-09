@@ -128,7 +128,7 @@ function stringValue(value: unknown, fallback: string): string {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, DatePipe],
   template: `
-    <section class="service-settings-page">
+    <section class="service-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
         <a routerLink="/settings/general">General Settings</a>
         <a routerLink="/settings/products">Products Settings</a>
@@ -154,13 +154,13 @@ function stringValue(value: unknown, fallback: string): string {
       </aside>
 
       <main class="settings-content">
-        <header class="settings-hero">
+        <header class="settings-hero inner-page-header">
           <div>
             <span class="eyebrow">Setup / Services</span>
             <h1>Services Settings Control</h1>
             <p>Control service catalog behavior, pricing defaults, staff assignment, online booking visibility, recipes, commission and quality rules.</p>
           </div>
-          <div class="hero-actions">
+          <div class="hero-actions inner-action-bar">
             <button class="ghost-button" type="button" (click)="load()">Refresh</button>
             <button class="primary-button" type="button" (click)="save()" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save' }}
@@ -178,8 +178,8 @@ function stringValue(value: unknown, fallback: string): string {
           <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
         </section>
 
-        <section class="settings-grid">
-          <article class="settings-card">
+        <section class="settings-grid inner-form-grid">
+          <article class="settings-card inner-page-card">
             <h2>Service Catalog</h2>
             <label class="switch-row"><span><strong>Service groups enabled</strong><small>Use category/group organization on services.</small></span><input type="checkbox" [(ngModel)]="settings.serviceCatalog.serviceGroupsEnabled" /><i></i></label>
             <label class="switch-row"><span><strong>Service add-ons enabled</strong><small>Allow add-on services during billing or booking.</small></span><input type="checkbox" [(ngModel)]="settings.serviceCatalog.serviceAddonsEnabled" /><i></i></label>
@@ -187,7 +187,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Membership services enabled</strong><small>Allow service credits to be linked with memberships.</small></span><input type="checkbox" [(ngModel)]="settings.serviceCatalog.membershipServicesEnabled" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Pricing & Duration</h2>
             <label class="field-row"><span>Default duration minutes</span><input type="number" min="5" max="480" [(ngModel)]="settings.pricingDuration.defaultDurationMinutes" /></label>
             <label class="switch-row"><span><strong>Allow custom duration</strong><small>Permit custom service duration on edit.</small></span><input type="checkbox" [(ngModel)]="settings.pricingDuration.allowCustomDuration" /><i></i></label>
@@ -195,7 +195,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Tax inclusive default</strong><small>New service prices default to tax-inclusive.</small></span><input type="checkbox" [(ngModel)]="settings.pricingDuration.taxInclusiveDefault" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Staff Assignment</h2>
             <label class="switch-row"><span><strong>Staff assignment required</strong><small>Require staff selection for each service.</small></span><input type="checkbox" [(ngModel)]="settings.staffAssignment.staffAssignmentRequired" /><i></i></label>
             <label class="switch-row"><span><strong>Allow multi-staff</strong><small>Allow more than one staff member on a service.</small></span><input type="checkbox" [(ngModel)]="settings.staffAssignment.allowMultiStaff" /><i></i></label>
@@ -203,7 +203,7 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Room / resource required</strong><small>Require room or chair mapping for services.</small></span><input type="checkbox" [(ngModel)]="settings.staffAssignment.roomResourceRequired" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Online Booking</h2>
             <label class="switch-row"><span><strong>Show services online</strong><small>Allow services to appear on booking profile.</small></span><input type="checkbox" [(ngModel)]="settings.onlineBooking.showServicesOnline" /><i></i></label>
             <label class="switch-row"><span><strong>Hide inactive services</strong><small>Keep inactive services hidden from clients.</small></span><input type="checkbox" [(ngModel)]="settings.onlineBooking.hideInactiveServices" /><i></i></label>
@@ -211,28 +211,28 @@ function stringValue(value: unknown, fallback: string): string {
             <label class="switch-row"><span><strong>Require deposit for online services</strong><small>Use deposit requirement for online service bookings.</small></span><input type="checkbox" [(ngModel)]="settings.onlineBooking.requireDepositForOnlineServices" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Recipe & Inventory</h2>
             <label class="switch-row"><span><strong>Require recipe for service</strong><small>Ask service owners to maintain product recipe.</small></span><input type="checkbox" [(ngModel)]="settings.recipeInventory.requireRecipeForService" /><i></i></label>
             <label class="switch-row"><span><strong>Block consume without recipe</strong><small>Stop product consume confirmation when recipe is missing.</small></span><input type="checkbox" [(ngModel)]="settings.recipeInventory.blockConsumeWithoutRecipe" /><i></i></label>
             <label class="switch-row"><span><strong>Warn high wastage</strong><small>Show warnings when product consume wastage is high.</small></span><input type="checkbox" [(ngModel)]="settings.recipeInventory.warnHighWastage" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Commission</h2>
             <label class="switch-row"><span><strong>Staff commission enabled</strong><small>Mark services eligible for staff commission.</small></span><input type="checkbox" [(ngModel)]="settings.commission.staffCommissionEnabled" /><i></i></label>
             <label class="field-row"><span>Commission basis</span><select [(ngModel)]="settings.commission.commissionBasis"><option value="servicePrice">Service Price</option><option value="netOfDiscount">Net of Discount</option><option value="netOfTax">Net of Tax</option></select></label>
             <label class="switch-row"><span><strong>Incentive eligible</strong><small>Allow services to participate in incentive rules.</small></span><input type="checkbox" [(ngModel)]="settings.commission.incentiveEligible" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Quality Control</h2>
             <label class="switch-row"><span><strong>Require service notes</strong><small>Ask staff to add notes for selected services.</small></span><input type="checkbox" [(ngModel)]="settings.qualityControl.requireServiceNotes" /><i></i></label>
             <label class="switch-row"><span><strong>Require before / after photo</strong><small>Capture visual record for quality-sensitive services.</small></span><input type="checkbox" [(ngModel)]="settings.qualityControl.requireBeforeAfterPhoto" /><i></i></label>
             <label class="switch-row"><span><strong>Consent required for risk services</strong><small>Require consent flow for chemical or risk services.</small></span><input type="checkbox" [(ngModel)]="settings.qualityControl.consentRequiredForRiskServices" /><i></i></label>
           </article>
 
-          <article class="settings-card">
+          <article class="settings-card inner-page-card">
             <h2>Defaults</h2>
             <label class="field-row"><span>Default service status</span><select [(ngModel)]="settings.defaults.defaultStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label class="field-row"><span>Default GST / tax rate %</span><input type="number" min="0" max="100" [(ngModel)]="settings.defaults.defaultGstRate" /></label>
