@@ -69,10 +69,10 @@ export class StaffOsStore {
   load(): void {
     this.loading.set(true);
     this.error.set('');
-    this.api.staff()
+    this.api.staff({ limit: 200, noCache: true })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: (staff) => this.staff.set(staff),
+        next: (staff) => this.staff.set(staff || []),
         error: (error: Error) => this.error.set(error.message || 'Unable to load staff')
     });
     this.api.branches({ limit: 1000 }).subscribe({ next: (rows) => this.branches.set(rows), error: () => undefined });
@@ -86,7 +86,7 @@ export class StaffOsStore {
     this.api.shiftMasters({ visibleOnly: 'true', limit: 500 }).subscribe({ next: (rows) => this.shiftMasters.set(rows || []), error: () => this.shiftMasters.set([]) });
     this.api.schedules().subscribe({ next: (rows) => this.schedules.set(rows), error: () => undefined });
     this.loadAttendanceCenter();
-    this.api.performance().subscribe({ next: (response) => this.performance.set(response), error: () => undefined });
+    this.api.performance().subscribe({ next: (response) => this.performance.set(response || emptyPerformance), error: () => undefined });
     this.api.targetIncentives({ limit: 500 }).subscribe({ next: (rows) => this.targetIncentives.set(rows || []), error: () => this.targetIncentives.set([]) });
     this.api.burnoutRisk().subscribe({ next: (rows) => this.risks.set(rows), error: () => undefined });
     this.api.tasks({ status: 'open' }).subscribe({ next: (rows) => this.tasks.set(rows), error: () => undefined });

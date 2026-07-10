@@ -204,20 +204,23 @@ export class Customer360Service {
     const branchId = includeAllBranches ? "" : query.branchId || access.branchId || "";
     if (branchId) tenantService.assertBranchAccess(access, branchId);
     const limit = boundedLimit(query.limit, 10000, 50000);
-    const clientQuery = branchId ? { branchId, limit } : { limit };
+    const clientScope = scope(access, branchId, { allBranches: includeAllBranches });
+    const clientQuery = branchId ? { branchId } : {};
     const snapshotQuery = branchId ? { branchId, limit: 50 } : { limit: 50 };
-    const clients = repositories.clients.list(clientQuery, scope(access, branchId, { allBranches: includeAllBranches })).filter(activeClient).map(normalizeClient);
-    const profiles = clients.map((client) => maskProfileContacts(this.summaryProfile(client), access));
+    const clients = repositories.clients.list({ ...clientQuery, limit: 1000000 }, clientScope).filter(activeClient).map(normalizeClient);
+    const allProfiles = clients.map((client) => this.summaryProfile(client));
+    const visibleClients = clients.slice(0, limit);
+    const profiles = allProfiles.slice(0, limit).map((profile) => maskProfileContacts(profile, access));
     const result = {
       metrics: {
-        clients: profiles.length,
-        totalLtv: money(profiles.reduce((sum, item) => sum + Number(item.metrics.lifetimeValue || 0), 0)),
-        avgSpend: profiles.length ? money(profiles.reduce((sum, item) => sum + Number(item.metrics.averageSpend || 0), 0) / profiles.length) : 0,
-        highRisk: profiles.filter((item) => item.metrics.riskScore >= 70).length,
+        clients: clients.length,
+        totalLtv: money(allProfiles.reduce((sum, item) => sum + Number(item.metrics.lifetimeValue || 0), 0)),
+        avgSpend: allProfiles.length ? money(allProfiles.reduce((sum, item) => sum + Number(item.metrics.averageSpend || 0), 0) / allProfiles.length) : 0,
+        highRisk: allProfiles.filter((item) => item.metrics.riskScore >= 70).length,
         vip: clients.filter((client) => (client.tags || []).includes("VIP")).length
       },
       profiles,
-      clientList: clients.map((client) => maskClientContacts({
+      clientList: visibleClients.map((client) => maskClientContacts({
         id: client.id,
         name: client.name,
         phone: client.phone || "",
@@ -229,6 +232,7 @@ export class Customer360Service {
       }, access)),
       snapshots: repositories.customerIntelligenceSnapshots.list(snapshotQuery, scope(access, branchId, { allBranches: includeAllBranches }))
     };
+    return result;
   }
 
   summaryProfile(client = {}) {
@@ -258,6 +262,7 @@ export class Customer360Service {
         : { action: "Ask for review after next visit", reason: "Healthy customer profile", channel: "WhatsApp", priority: "normal" },
       insights: []
     };
+    return profile;
   }
   profile(clientId, access) {
     return this.intelligenceForClient(clientId, access, true);

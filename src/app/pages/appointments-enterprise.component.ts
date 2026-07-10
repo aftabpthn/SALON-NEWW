@@ -1423,7 +1423,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   readonly selectedDate = signal(new Date().toISOString().slice(0, 10));
   readonly staffOffset = signal(0);
   readonly staffGridSwiping = signal(false);
-  readonly slotMinutes = signal(15);
+  readonly slotMinutes = signal(10);
   readonly activeSlotMinutes = computed(() => normalizeAppointmentSlotMinutes(this.slotMinutes()));
   readonly statusFilter = signal('');
   readonly staffSearch = signal('');
@@ -1668,8 +1668,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.appointmentToolbar.visible.set(true);
-    this.slotMinutes.set(15);
-    this.appointmentToolbar.setSlotMinutes(15);
+    this.slotMinutes.set(normalizeAppointmentSlotMinutes(this.appointmentToolbar.slotMinutes()));
     this.appointmentToolbar.setCalendarLayout(this.calendarLayout());
     this.applyRouteDateSelection();
     this.load();

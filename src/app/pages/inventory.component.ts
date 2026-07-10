@@ -1600,7 +1600,7 @@ export class InventoryComponent implements OnInit {
   load(): void {
     this.loading.set(true);
     Promise.all([
-      this.api.list<ApiRecord[]>('products', { branchId: this.api.selectedBranchId() }).toPromise(),
+      this.api.list<ApiRecord[]>('products', { branchId: this.api.selectedBranchId(), noLimit: true, noCache: true }).toPromise(),
       this.api.list<ApiRecord[]>('inventory', { branchId: this.api.selectedBranchId(), limit: 100 }).toPromise(),
       this.api.list<ApiRecord[]>('branches').toPromise(),
       this.api.list<ApiRecord[]>('suppliers').toPromise(),

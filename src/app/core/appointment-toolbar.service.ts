@@ -8,13 +8,13 @@ const APPOINTMENT_SLOT_MINUTE_SET = new Set<number>(APPOINTMENT_SLOT_MINUTE_OPTI
 
 export function normalizeAppointmentSlotMinutes(value: string | number): AppointmentSlotMinutes {
   const minutes = Number(value);
-  return (APPOINTMENT_SLOT_MINUTE_SET.has(minutes) ? minutes : 15) as AppointmentSlotMinutes;
+  return (APPOINTMENT_SLOT_MINUTE_SET.has(minutes) ? minutes : 10) as AppointmentSlotMinutes;
 }
 
 @Injectable({ providedIn: 'root' })
 export class AppointmentToolbarService {
   readonly visible = signal(false);
-  readonly slotMinutes = signal<AppointmentSlotMinutes>(15);
+  readonly slotMinutes = signal<AppointmentSlotMinutes>(10);
   readonly calendarLayout = signal<AppointmentCalendarLayout>('grid');
   readonly scheduledStaffVisibleCount = signal(0);
   readonly staffPanelOpen = signal(false);

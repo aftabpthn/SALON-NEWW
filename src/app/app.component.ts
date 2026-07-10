@@ -1499,7 +1499,6 @@ export class AppComponent implements OnDestroy {
         }
       }
       this.isPortal.set(this.isPortalUrl(url));
-      if (this.routePath(url).startsWith('/appointments')) this.appointmentToolbar.setSlotMinutes(15);
       this.activeRoute.set(url);
       this.enforceRoutePermission(url);
       this.syncPreviousRouteFromHistory();
@@ -1660,7 +1659,9 @@ export class AppComponent implements OnDestroy {
   }
 
   selectBranch(branchId: string): void {
+    if (branchId === this.state.selectedBranchId()) return;
     this.state.setBranch(branchId);
+    window.location.reload();
   }
 
   selectRole(role: UserRole): void {

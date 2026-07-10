@@ -285,7 +285,7 @@ export class ResourceService {
   duplicateClients(query = {}, access = {}) {
     const scope = this.listScope("clients", { includeAllBranches: truthy(query.includeAllBranches) || truthy(query.allBranches) }, access);
     const clients = listClientsForDuplicateScan(scope);
-    return buildDuplicateClientGroups(clients, { matchType: query.matchType });
+    return buildDuplicateClientGroups(clients, { matchType: query.matchType || "phone" });
   }
 
   mergeAllDuplicateClients(payload = {}, access = {}) {

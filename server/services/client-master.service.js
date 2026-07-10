@@ -420,8 +420,8 @@ export class ClientMasterService {
       if (branchId) filters.push("(branch_id = @branch_id OR branch_id = '')");
       return Number(db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${filters.join(" AND ")}`).get(params)?.count || 0);
     };
-    const clientsFilters = [];
-    const clientParams = {};
+    const clientsFilters = ["tenantId = @tenant_id", "(deletedAt IS NULL OR deletedAt = '')"];
+    const clientParams = { tenant_id: access.tenantId };
     if (branchId) {
       clientsFilters.push("branchId = @branch_id");
       clientParams.branch_id = branchId;

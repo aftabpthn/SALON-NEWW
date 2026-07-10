@@ -305,7 +305,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
               class="staff-lane"
               *ngFor="let person of visibleStaff(); trackBy: trackStaff"
               [style.min-height.px]="schedulerBoardHeight()"
-              (click)="openQuickBookingFromLane(person, $event)"
+              (mouseup)="openQuickBookingFromLane(person, $event)"
               (mousemove)="previewSlotHover(person, $event)"
               (mouseleave)="clearSlotHover()"
               (contextmenu)="openSchedulerActionMenu(person, $event)"
@@ -355,6 +355,16 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
                 *ngIf="currentTimeVisible()"
                 [style.top.px]="currentTimeTop()"
               ></span>
+              <button
+                type="button"
+                class="scheduler-slot-hit"
+                *ngFor="let slot of schedulerSlots(); trackBy: trackSchedulerSlot"
+                [style.top.px]="schedulerSlotTop(slot.minutes)"
+                [style.height.px]="slotHeight()"
+                [attr.aria-label]="'Book ' + person.name + ' at ' + slot.label"
+                (mouseup)="$event.stopPropagation()"
+                (click)="openQuickBookingFromSlotButton(person, slot.minutes, $event)"
+              ></button>
               <button
                 type="button"
                 class="scheduler-card"
@@ -1601,6 +1611,29 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       display: block;
     }
 
+    .scheduler-slot-hit {
+      position: absolute;
+      left: 0;
+      right: 0;
+      z-index: 4;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .scheduler-slot-hit:hover {
+      background: rgba(15, 118, 110, 0.06);
+      outline: 1px solid rgba(15, 118, 110, 0.18);
+      outline-offset: -1px;
+    }
+
+    .scheduler-slot-hit:focus-visible {
+      outline: 2px solid var(--teal);
+      outline-offset: -2px;
+    }
+
     .staff-head {
       position: sticky;
       top: 0;
@@ -1992,6 +2025,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
       position: relative;
       z-index: 2;
       margin: 12px 8px 0;
+      pointer-events: none;
     }
 
     .week-board,
@@ -2644,7 +2678,7 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
   readonly statusFilter = signal('');
   readonly staffWindowStart = signal(0);
   readonly selectedDate = signal(this.toDateInput(new Date()));
-  readonly slotMinutes = signal(15);
+  readonly slotMinutes = signal(10);
   readonly slotMinuteOptions = APPOINTMENT_SLOT_MINUTE_OPTIONS;
   readonly currentMinuteTicker = signal(Date.now());
   readonly selectedAppointment = signal<ApiRecord | null>(null);
@@ -3080,8 +3114,10 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
   }
 
   openQuickBookingFromLane(person: ApiRecord, event: MouseEvent): void {
+    if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest('.scheduler-card') || target.closest('.resize-handle') || target.closest('.staff-head') || target.closest('.staff-action-menu')) return;
+    event.preventDefault();
     this.closeSchedulerActionMenu();
     const lane = event.currentTarget as HTMLElement;
     const rect = lane.getBoundingClientRect();
@@ -3093,6 +3129,18 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
       return;
     }
     this.openQuickBookingForSlot(person, minutes);
+  }
+
+  openQuickBookingFromSlotButton(person: ApiRecord, minutes: number, event: MouseEvent): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeSchedulerActionMenu();
+    if (this.blockedTimesForStaffAtMinute(person, minutes).length) {
+      this.openRemoveBlockedTime(person, minutes);
+      return;
+    }
+    this.openQuickBookingForSlot(person, this.snapMinutes(minutes));
   }
 
   openSchedulerActionMenu(person: ApiRecord, event: MouseEvent): void {
@@ -3632,6 +3680,10 @@ export class AppointmentsComponent implements OnInit, OnDestroy {
 
   slotHeightStyle(): string {
     return `${this.slotHeight()}px`;
+  }
+
+  schedulerSlotTop(minutes: number): number {
+    return this.topForMinutes(minutes);
   }
 
   schedulerBoardHeight(): number {

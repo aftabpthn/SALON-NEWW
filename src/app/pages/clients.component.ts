@@ -1,5 +1,5 @@
 import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
@@ -77,6 +77,32 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <section class="panel client-database-panel inner-page-card">
         <p class="client-notice" *ngIf="notice()">{{ notice() }}</p>
+        <section class="duplicate-phone-panel" *ngIf="duplicatePhoneLoading() || duplicatePhoneError() || duplicatePhoneMessage() || duplicatePhoneGroups().length">
+          <div class="duplicate-phone-head">
+            <div>
+              <h3>Duplicate phone numbers</h3>
+              <p>{{ duplicatePhoneGroups().length }} same-number group(s). Same name is allowed; same phone number is not.</p>
+            </div>
+            <div class="duplicate-phone-actions">
+              <button class="ghost-button mini" type="button" (click)="loadDuplicatePhoneGroups()" [disabled]="duplicatePhoneLoading()">{{ duplicatePhoneLoading() ? 'Scanning...' : 'Scan again' }}</button>
+              <button class="primary-button mini" type="button" (click)="mergeAllDuplicatePhoneGroups()" [disabled]="duplicatePhoneMerging() || duplicatePhoneLoading() || !duplicatePhoneGroups().length">{{ duplicatePhoneMerging() ? 'Merging...' : 'Merge all numbers' }}</button>
+            </div>
+          </div>
+          <app-state [loading]="duplicatePhoneLoading()" [error]="duplicatePhoneError()"></app-state>
+          <p class="duplicate-phone-message" *ngIf="duplicatePhoneMessage()">{{ duplicatePhoneMessage() }}</p>
+          <div class="duplicate-phone-list" *ngIf="!duplicatePhoneLoading() && duplicatePhoneGroups().length">
+            <article class="duplicate-phone-group" *ngFor="let group of visibleDuplicatePhoneGroups()">
+              <div>
+                <strong>{{ duplicatePhoneLabel(group) }}</strong>
+                <small>{{ duplicateGroupClients(group).length }} clients found</small>
+              </div>
+              <div class="duplicate-phone-clients">
+                <span *ngFor="let client of duplicateGroupClients(group)">{{ duplicateClientName(client) }} · {{ duplicateClientPhone(client) }}</span>
+              </div>
+              <button class="primary-button mini" type="button" (click)="mergeDuplicatePhoneGroup(group)" [disabled]="duplicatePhoneMerging()">Merge group</button>
+            </article>
+          </div>
+        </section>
         <div class="table-toolbar inner-action-bar">
           <label class="field">
             <span>Client Type</span>
@@ -109,6 +135,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <button class="dark-button" type="button" (click)="toggleActionMenu($event)">Action ▾</button>
             <div class="dropdown-panel" *ngIf="actionMenuOpen()" (click)="$event.stopPropagation()">
               <button type="button" (click)="openClientGroups()">Client Groups</button>
+              <button type="button" (click)="loadDuplicatePhoneGroups()">Find duplicate numbers</button>
+              <button type="button" (click)="mergeAllDuplicatePhoneGroups()">Merge duplicate numbers</button>
               <button type="button" (click)="downloadClientSample()">Sample File Download</button>
               <button type="button" (click)="openImportClient()">Import Client</button>
             </div>
@@ -378,6 +406,66 @@ import { StateComponent } from '../shared/ui/state/state.component';
       margin: 6px 0 0;
       color: var(--muted);
       font-weight: 650;
+    }
+
+    .duplicate-phone-panel {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .duplicate-phone-head,
+    .duplicate-phone-group,
+    .duplicate-phone-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .duplicate-phone-head h3,
+    .duplicate-phone-head p {
+      margin: 0;
+    }
+
+    .duplicate-phone-head p,
+    .duplicate-phone-group small,
+    .duplicate-phone-message {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .duplicate-phone-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .duplicate-phone-group {
+      border: 1px solid rgba(118, 85, 76, 0.16);
+      border-radius: 10px;
+      background: #fff8fb;
+      padding: 10px;
+    }
+
+    .duplicate-phone-clients {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: min(100%, 360px);
+    }
+
+    .duplicate-phone-clients span {
+      border: 1px solid rgba(118, 85, 76, 0.16);
+      border-radius: 999px;
+      background: #fff;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 750;
     }
 
     .floating-add-client {
@@ -1124,7 +1212,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
     }
   `]
 })
-export class ClientsComponent implements OnInit {
+export class ClientsComponent implements OnInit, OnDestroy {
   readonly clients = signal<ApiRecord[]>([]);
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -1137,6 +1225,11 @@ export class ClientsComponent implements OnInit {
   readonly dateFromFilter = signal('');
   readonly dateToFilter = signal('');
   readonly actionMenuOpen = signal(false);
+  readonly duplicatePhoneGroups = signal<ApiRecord[]>([]);
+  readonly duplicatePhoneLoading = signal(false);
+  readonly duplicatePhoneMerging = signal(false);
+  readonly duplicatePhoneError = signal('');
+  readonly duplicatePhoneMessage = signal('');
   readonly columnEditorOpen = signal(false);
   readonly rowActionClientId = signal('');
   readonly visibleColumnKeys = signal<string[]>([
@@ -1157,8 +1250,9 @@ export class ClientsComponent implements OnInit {
   readonly clientListHasMore = signal(false);
   readonly clientListLoadingMore = signal(false);
   readonly clientTotalCount = signal(0);
-  private readonly clientListPageSize = 150;
+  private readonly clientListPageSize = 500;
   private clientQueryTimer: ReturnType<typeof setTimeout> | null = null;
+  private clientAutoLoadTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly usefulMetricCardIds = new Set([
     'last-visit',
     'favorite-service',
@@ -1246,6 +1340,11 @@ export class ClientsComponent implements OnInit {
     this.pendingEditClientId = this.route.snapshot.queryParamMap.get('edit') || '';
     this.load();
     this.loadReports();
+  }
+
+  ngOnDestroy(): void {
+    if (this.clientQueryTimer) clearTimeout(this.clientQueryTimer);
+    if (this.clientAutoLoadTimer) clearTimeout(this.clientAutoLoadTimer);
   }
 
   get filteredClients(): ApiRecord[] {
@@ -1423,6 +1522,129 @@ export class ClientsComponent implements OnInit {
     return String(client.id || '');
   }
 
+  loadDuplicatePhoneGroups(successMessage = ''): void {
+    if (this.duplicatePhoneLoading()) return;
+    this.actionMenuOpen.set(false);
+    this.duplicatePhoneLoading.set(true);
+    this.duplicatePhoneError.set('');
+    if (!successMessage) this.duplicatePhoneMessage.set('');
+    this.api.list<ApiRecord[]>('clients/duplicates', { includeAllBranches: true, matchType: 'phone' }).subscribe({
+      next: (groups) => {
+        const phoneGroups = (Array.isArray(groups) ? groups : []).filter((group) => this.isPhoneDuplicateGroup(group));
+        this.duplicatePhoneGroups.set(phoneGroups);
+        this.duplicatePhoneMessage.set(successMessage || (phoneGroups.length ? '' : 'No duplicate phone numbers found.'));
+        this.duplicatePhoneLoading.set(false);
+      },
+      error: (error) => {
+        this.duplicatePhoneError.set(this.api.errorText(error, 'Unable to scan duplicate phone numbers'));
+        this.duplicatePhoneLoading.set(false);
+      }
+    });
+  }
+
+  visibleDuplicatePhoneGroups(): ApiRecord[] {
+    return this.duplicatePhoneGroups().slice(0, 25);
+  }
+
+  duplicateGroupClients(group: ApiRecord | null | undefined): ApiRecord[] {
+    return Array.isArray(group?.clients) ? group.clients : [];
+  }
+
+  duplicatePhoneLabel(group: ApiRecord | null | undefined): string {
+    const values = Array.isArray(group?.matchValues) ? group.matchValues.filter(Boolean).map(String) : [];
+    return values[0] || String(group?.groupKey || '').replace(/^phone:/, '') || 'Same phone';
+  }
+
+  duplicateClientName(client: ApiRecord | null | undefined): string {
+    return String(client?.name || client?.fullName || client?.clientName || client?.phone || client?.id || 'Client');
+  }
+
+  duplicateClientPhone(client: ApiRecord | null | undefined): string {
+    return String(client?.phone || client?.mobile || client?.mobileNumber || client?.contactNumber || '-');
+  }
+
+  mergeDuplicatePhoneGroup(group: ApiRecord): void {
+    const clients = this.duplicateGroupClients(group);
+    const primaryId = String(group.suggestedPrimaryId || clients[0]?.id || '');
+    const duplicateClientIds = clients.map((client) => String(client.id || '')).filter((id) => id && id !== primaryId);
+    if (!primaryId || !duplicateClientIds.length) return;
+    const primary = clients.find((client) => String(client.id || '') === primaryId);
+    if (!window.confirm(`Merge ${duplicateClientIds.length} duplicate number client(s) into "${this.duplicateClientName(primary)}"?`)) return;
+    this.duplicatePhoneMerging.set(true);
+    this.duplicatePhoneError.set('');
+    this.api.post<ApiRecord>(`clients/${encodeURIComponent(primaryId)}/merge-duplicates`, {
+      duplicateClientIds,
+      includeAllBranches: true,
+      reason: 'Merged duplicate phone number from clients page'
+    }).subscribe({
+      next: (result) => {
+        const archivedIds = Array.isArray(result?.archivedClientIds) ? result.archivedClientIds : duplicateClientIds;
+        const successMessage = `Merged ${archivedIds.length} duplicate client(s).`;
+        this.duplicatePhoneMessage.set(successMessage);
+        this.duplicatePhoneMerging.set(false);
+        this.load();
+        this.loadDuplicatePhoneGroups(successMessage);
+      },
+      error: (error) => {
+        this.duplicatePhoneError.set(this.api.errorText(error, 'Unable to merge duplicate phone group'));
+        this.duplicatePhoneMerging.set(false);
+      }
+    });
+  }
+
+  mergeAllDuplicatePhoneGroups(): void {
+    if (this.duplicatePhoneMerging()) return;
+    this.actionMenuOpen.set(false);
+    if (!this.duplicatePhoneGroups().length) {
+      this.loadDuplicatePhoneGroups();
+      return;
+    }
+    if (!window.confirm(`Merge all ${this.duplicatePhoneGroups().length} duplicate phone group(s)?`)) return;
+    this.duplicatePhoneMerging.set(true);
+    this.duplicatePhoneError.set('');
+    this.duplicatePhoneMessage.set('Merging duplicate phone numbers...');
+    this.runDuplicatePhoneMergeBatch({ mergedClients: 0, mergedGroups: 0, skippedGroupKeys: [] });
+  }
+
+  private runDuplicatePhoneMergeBatch(totals: { mergedClients: number; mergedGroups: number; skippedGroupKeys: string[] }): void {
+    this.api.post<ApiRecord>('clients/duplicates/merge-all', {
+      includeAllBranches: true,
+      allBranches: true,
+      matchType: 'phone',
+      limit: 100,
+      skipGroupKeys: totals.skippedGroupKeys,
+      reason: 'Merged duplicate phone numbers from clients page'
+    }).subscribe({
+      next: (result) => {
+        totals.mergedClients += Number(result?.mergedClients || 0);
+        totals.mergedGroups += Number(result?.mergedGroups || 0);
+        const skippedGroupKeys = Array.isArray(result?.skippedGroupKeys) ? result.skippedGroupKeys.map(String).filter(Boolean) : [];
+        totals.skippedGroupKeys = [...new Set([...totals.skippedGroupKeys, ...skippedGroupKeys])];
+        const remainingGroups = Number(result?.remainingGroups || 0);
+        this.duplicatePhoneMessage.set(`Merging duplicate phone numbers... ${totals.mergedClients} clients merged across ${totals.mergedGroups} groups. ${remainingGroups} groups remaining.`);
+        if (remainingGroups > 0 && Number(result?.processedGroups || result?.scannedGroups || 0) > 0) {
+          this.runDuplicatePhoneMergeBatch(totals);
+          return;
+        }
+        const successMessage = `Merge complete: ${totals.mergedClients} duplicate client(s) merged across ${totals.mergedGroups} group(s).`;
+        this.duplicatePhoneMessage.set(successMessage);
+        this.duplicatePhoneMerging.set(false);
+        this.load();
+        this.loadDuplicatePhoneGroups(successMessage);
+      },
+      error: (error) => {
+        this.duplicatePhoneError.set(this.api.errorText(error, 'Unable to merge duplicate phone numbers'));
+        this.duplicatePhoneMerging.set(false);
+      }
+    });
+  }
+
+  private isPhoneDuplicateGroup(group: ApiRecord | null | undefined): boolean {
+    const type = String(group?.matchType || '').toLowerCase();
+    const key = String(group?.groupKey || '').toLowerCase();
+    return type === 'phone' || key.startsWith('phone:');
+  }
+
   load(options: { append?: boolean } = {}): void {
     const append = options.append === true;
     if (append) {
@@ -1430,6 +1652,7 @@ export class ClientsComponent implements OnInit {
     } else {
       this.loading.set(true);
       this.clientListHasMore.set(false);
+      this.clearClientAutoLoadTimer();
     }
     this.error.set('');
     const branchId = this.api.selectedBranchId();
@@ -1452,6 +1675,7 @@ export class ClientsComponent implements OnInit {
         this.clients.set(append ? [...this.clients(), ...hydratedClients] : hydratedClients);
         this.clientTotalCount.set(Number(clientSummary?.clientProfiles || 0) || this.clients().length);
         this.clientListHasMore.set(rows.length === this.clientListPageSize);
+        this.scheduleClientAutoLoad(rows.length);
         this.selectedClientIds.set(this.selectedClientIds().filter((id) => this.clients().some((client) => client.id === id)));
         this.openPendingEditClient();
         const focusClientId = this.reportFocusClientId();
@@ -1476,6 +1700,18 @@ export class ClientsComponent implements OnInit {
   loadMoreClients(): void {
     if (!this.clientListHasMore() || this.clientListLoadingMore()) return;
     this.load({ append: true });
+  }
+
+  private scheduleClientAutoLoad(lastBatchCount: number): void {
+    this.clearClientAutoLoadTimer();
+    if (lastBatchCount < this.clientListPageSize || !this.clientListHasMore()) return;
+    this.clientAutoLoadTimer = setTimeout(() => this.loadMoreClients(), 150);
+  }
+
+  private clearClientAutoLoadTimer(): void {
+    if (!this.clientAutoLoadTimer) return;
+    clearTimeout(this.clientAutoLoadTimer);
+    this.clientAutoLoadTimer = null;
   }
 
   loadReports(): void {

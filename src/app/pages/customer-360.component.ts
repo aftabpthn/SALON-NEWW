@@ -28,7 +28,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div class="duplicate-panel-header">
           <div>
             <h3>Duplicate contacts</h3>
-            <p>{{ duplicateGroups().length }} possible group(s) · {{ phoneDuplicateGroupCount() }} exact phone auto-merge group(s)</p>
+            <p>{{ duplicateGroups().length }} same-number group(s). Same email is allowed; same phone number should be merged.</p>
           </div>
           <div class="duplicate-panel-actions">
             <button class="primary-button mini" type="button" *ngIf="phoneDuplicateGroupCount()" (click)="mergeAllDuplicateGroups()" [disabled]="duplicateMergeAllLoading() || duplicateSaving()">{{ duplicateMergeAllLoading() ? 'Merging...' : 'Merge phone groups' }}</button>
@@ -478,7 +478,7 @@ export class Customer360Component implements OnInit, OnDestroy {
     this.duplicateLoading.set(true);
     this.duplicateError.set('');
     if (!successMessage) this.duplicateMessage.set('');
-    this.api.list<ApiRecord[]>('clients/duplicates', { includeAllBranches: true }).subscribe({
+    this.api.list<ApiRecord[]>('clients/duplicates', { matchType: 'phone' }).subscribe({
       next: (groups) => {
         const duplicateGroups = Array.isArray(groups) ? groups : [];
         this.duplicateGroups.set(duplicateGroups);
@@ -564,8 +564,6 @@ export class Customer360Component implements OnInit, OnDestroy {
 
   private runDuplicateMergeBatch(totals: { mergedClients: number; mergedGroups: number; skippedGroups: number; processedGroups: number; skippedGroupKeys: string[] }): void {
     this.api.post<ApiRecord>('clients/duplicates/merge-all', {
-      includeAllBranches: true,
-      allBranches: true,
       matchType: 'phone',
       limit: 25,
       skipGroupKeys: totals.skippedGroupKeys,
@@ -657,7 +655,7 @@ export class Customer360Component implements OnInit, OnDestroy {
       this.loading.set(true);
       this.error.set('');
     }
-    this.api.list<ApiRecord>('customer-360/summary', { includeAllBranches: true, limit: this.summaryLimit }).subscribe({
+    this.api.list<ApiRecord>('customer-360/summary', { limit: this.summaryLimit }).subscribe({
       next: (summary) => {
         this.summary.set(summary);
         const profiles = Array.isArray(summary.profiles) ? summary.profiles.filter((item: ApiRecord) => item && typeof item === 'object') : [];
@@ -692,7 +690,7 @@ export class Customer360Component implements OnInit, OnDestroy {
 
   select(clientId: string): void {
     if (!clientId) return;
-    this.api.list<ApiRecord>(`customer-360/clients/${encodeURIComponent(clientId)}`, { includeAllBranches: true }).subscribe({
+    this.api.list<ApiRecord>(`customer-360/clients/${encodeURIComponent(clientId)}`).subscribe({
       next: (profile) => this.profile.set(profile),
       error: (error) => this.error.set(this.api.errorText(error, 'Unable to load customer profile'))
     });

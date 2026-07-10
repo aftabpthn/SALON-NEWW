@@ -1,5 +1,6 @@
 import { resources } from "../db.js";
 import { BaseRepository } from "./base.repository.js";
+import { ProductRepository } from "./product.repository.js";
 import { WaitlistRepository } from "./waitlist.repository.js";
 
 const tableRepositories = new Map();
@@ -59,7 +60,7 @@ export const repositories = {
   payments: repositoryForTable("payments"),
   payrollExports: repositoryForTable("payroll_exports"),
   platformAnalytics: repositoryForTable("platform_analytics_snapshots"),
-  products: repositoryForTable("products"),
+  products: new ProductRepository(),
   pushNotifications: repositoryForTable("push_notifications"),
   pushSubscriptions: repositoryForTable("push_subscriptions"),
   realtimeEvents: repositoryForTable("realtime_events"),

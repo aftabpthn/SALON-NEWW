@@ -268,6 +268,51 @@ function rowToStaff(row) {
   };
 }
 
+function rowToLegacyStaff(row) {
+  if (!row) return null;
+  const name = String(row.name || "").trim();
+  const [firstName = name, ...rest] = name.split(/\s+/).filter(Boolean);
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    branchId: row.branchId,
+    employeeCode: row.id,
+    firstName,
+    lastName: rest.join(" "),
+    fullName: name,
+    mobile: row.phone || "",
+    email: row.email || "",
+    gender: "",
+    dob: "",
+    profilePhoto: "",
+    joiningDate: row.createdAt || "",
+    employmentType: "",
+    status: row.status || "active",
+    roleId: "staff",
+    staffCategoryId: "",
+    staffCategoryName: "",
+    staffCategoryScope: "",
+    loginUserId: "",
+    loginId: "",
+    loginEmail: "",
+    loginStatus: "",
+    loginPasswordSet: false,
+    department: "",
+    designation: row.role || "",
+    emergencyContactName: "",
+    emergencyContactMobile: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    notes: "",
+    version: 1,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    employeeDetails: null
+  };
+}
+
 function rowToStaffCategory(row) {
   if (!row) return null;
   return {
@@ -1161,9 +1206,10 @@ function buildEmployeeDetailsPayload(staffId, branchId, payload = {}, access, ex
 export class StaffOsService {
   listStaff(query = {}, access) {
     access = normalizeAccess(access);
+    const includeAllBranches = (query.includeAllBranches === true || query.includeAllBranches === "true") && managerRoles.has(access.role);
     const params = {
       tenant_id: access.tenantId,
-      branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
+      branch_id: includeAllBranches ? "" : (query.branchId || query.branch_id || access.requestedBranchId || ""),
       status: query.status || "",
       q: query.q ? `%${String(query.q).toLowerCase()}%` : "",
       limit: Math.min(parseNumber(query.limit, 50), 200)
@@ -1171,7 +1217,7 @@ export class StaffOsService {
     const filters = [branchScopedWhere(access, params, "sm")];
     if (params.status) filters.push("sm.status = @status");
     if (params.q) filters.push("(lower(sm.full_name) LIKE @q OR lower(sm.mobile) LIKE @q OR lower(sm.email) LIKE @q OR lower(sc.name) LIKE @q)");
-    return db.prepare(`SELECT sm.*, sc.id AS staff_category_id, sc.name AS staff_category_name, sc.scope AS staff_category_scope,
+    const rows = db.prepare(`SELECT sm.*, sc.id AS staff_category_id, sc.name AS staff_category_name, sc.scope AS staff_category_scope,
         tu.id AS login_user_id, tu.loginId AS login_id, tu.email AS login_email,
         tu.status AS login_status, CASE WHEN COALESCE(tu.passwordHash, '') != '' THEN 1 ELSE 0 END AS login_password_set
       FROM staff_master sm
@@ -1183,6 +1229,19 @@ export class StaffOsService {
         ...rowToStaff(row),
         employeeDetails: this.getStaffEmployeeDetails(row.id, access, true)
       }));
+    const legacyFilters = ["tenantId = @tenant_id"];
+    if (params.branch_id) legacyFilters.push("branchId = @branch_id");
+    if (["staff", "frontDesk"].includes(access.role) && access.branchId) {
+      legacyFilters.push("branchId = @access_branch_id");
+      params.access_branch_id = access.branchId;
+    }
+    if (params.status) legacyFilters.push("status = @status");
+    if (params.q) legacyFilters.push("(lower(name) LIKE @q OR lower(phone) LIKE @q OR lower(email) LIKE @q OR lower(role) LIKE @q)");
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const row of db.prepare(`SELECT * FROM staff WHERE ${legacyFilters.join(" AND ")} ORDER BY name ASC LIMIT @limit`).all(params).map(rowToLegacyStaff)) {
+      if (row && !byId.has(row.id)) byId.set(row.id, row);
+    }
+    return [...byId.values()].sort((left, right) => String(left.fullName || "").localeCompare(String(right.fullName || ""))).slice(0, params.limit);
   }
 
   createStaff(payload = {}, access) {
