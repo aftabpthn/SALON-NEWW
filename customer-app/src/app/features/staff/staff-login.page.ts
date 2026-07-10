@@ -93,7 +93,13 @@ import { StaffAppService } from "../../core/staff-app.service";
     .success { border-color: #afd8a8; color: #1f6b2d; background: #effbea; }
     .customer-link { display: block; margin-top: 18px; color: #815712; font-weight: 900; text-align: center; text-decoration: none; }
     @media (max-width: 820px) { .login-grid { grid-template-columns: 1fr; padding: 18px 0; } .brand-panel { min-height: 360px; padding: 28px; } .staff-card { padding: 26px; } .status-row { position: relative; left: auto; right: auto; bottom: auto; margin-top: 24px; } }
-  `]
+    .staff-login-shell { --background: radial-gradient(circle at 18% 8%, rgba(246,200,189,.55) 0, transparent 27%), radial-gradient(circle at 92% 4%, rgba(226,171,103,.35) 0, transparent 24%), linear-gradient(135deg, #241625, #563346 52%, #dcae83); }
+    .brand-panel { background: linear-gradient(145deg, rgba(255,255,255,.18), rgba(50,25,44,.42)); }
+    .staff-card { background: rgba(255,250,246,.96); box-shadow: 0 28px 90px rgba(50,25,44,.28); }
+    .dark { color: #a05b6c; }
+    button { background: linear-gradient(135deg, #f6c8bd, #e2ab67 58%, #a05b6c); }
+    .biometric-button { background: linear-gradient(135deg, #321827, #694052); }
+    .customer-link { color: #8d4f62; }  `]
 })
 export class StaffLoginPage {
   readonly message = signal("");

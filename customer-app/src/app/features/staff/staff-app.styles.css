@@ -175,3 +175,32 @@ input[type="file"] { padding: 9px 12px; }
   .button, button.link-button { padding: 8px 11px; font-size: .86rem; }
   input { width: 100%; }
 }
+
+/* Aura Shine staff theme: shared across every staff workspace page. */
+.page { gap: 18px; }
+.page-head h1 { color: #321827; font-size: clamp(2rem, 4vw, 3.4rem); }
+.page-head p, .muted { color: #76586b; }
+.eyebrow { color: #a05b6c; }
+.panel, .state, .notice { border-color: rgba(160,91,108,.26); background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(255,248,244,.95)); box-shadow: 0 16px 36px rgba(73,35,58,.09); }
+.panel.dark { color: #fff8ef; border-color: rgba(255,226,190,.24); background: linear-gradient(135deg, #321827, #694052); box-shadow: 0 18px 42px rgba(50,25,44,.2); }
+.panel.dark h2, .panel.dark strong { color: #fff8ef; }
+.panel.dark span, .panel.dark small, .panel.dark p { color: rgba(255,248,239,.72); }
+.panel-title h2 { color: #321827; }
+.panel-title span, .pill { color: #9b5b69; }
+.kpi { border-color: rgba(160,91,108,.22); background: rgba(255,255,255,.94); box-shadow: 0 12px 28px rgba(73,35,58,.08); }
+.kpi span { color: #a05b6c; }
+.kpi strong, .row strong { color: #321827; }
+.kpi small, .row p, .row small, .empty { color: #76586b; }
+.row { border-top-color: rgba(160,91,108,.14); }
+.button, button.link-button { border-color: rgba(160,91,108,.34); color: #63364c; background: #fffaf6; box-shadow: 0 8px 18px rgba(73,35,58,.08); }
+.button.primary { color: #321827; border-color: rgba(226,171,103,.58); background: linear-gradient(135deg, #f6c8bd, #e2ab67); }
+button.active-toggle { color: #321827; background: #f4d6a0; }
+.badge { color: #63364c; background: #fbe5dd; }
+.timer-track { background: #f2dfe0; }
+.timer-track span { background: linear-gradient(90deg, #9d5269, #e2ab67); }
+input { border-color: rgba(160,91,108,.26); }
+input:focus { border-color: #a05b6c; outline-color: rgba(160,91,108,.2); }
+@media (max-width: 700px) {
+  .page-head h1 { font-size: clamp(1.85rem, 10vw, 2.6rem); }
+  .panel, .state, .notice { box-shadow: 0 10px 24px rgba(73,35,58,.07); }
+}
