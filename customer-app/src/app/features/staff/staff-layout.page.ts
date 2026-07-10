@@ -363,19 +363,24 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   private searchScore(label: string, group: string, query: string): number {
-    const haystack = `${label} ${group}`.toLowerCase();
-    if (haystack.includes(query)) return 1000 - haystack.indexOf(query);
-    let cursor = 0;
-    let matched = 0;
-    for (const character of query) {
-      const index = haystack.indexOf(character, cursor);
-      if (index < 0) return -1;
-      matched += index === cursor ? 3 : 1;
-      cursor = index + 1;
+    const candidates = [label, group].map((value) => String(value || '').toLowerCase());
+    let best = -1;
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const exactIndex = candidate.indexOf(query);
+      if (exactIndex >= 0) best = Math.max(best, 1000 - exactIndex);
+      let cursor = 0;
+      let matched = 0;
+      for (const character of query) {
+        const index = candidate.indexOf(character, cursor);
+        if (index < 0) { matched = -1; break; }
+        matched += index === cursor ? 3 : 1;
+        cursor = index + 1;
+      }
+      if (matched >= 0) best = Math.max(best, matched + (candidate === candidates[0] ? 100 : 0));
     }
-    return matched;
+    return best;
   }
-
   onCommandKeydown(event: KeyboardEvent) {
     if (event.key !== "Enter") return;
     const first = this.commandResults()[0];
