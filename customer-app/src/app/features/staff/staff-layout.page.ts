@@ -259,7 +259,13 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const coach = (this.os()?.aiCoach || []).map((card) => ({ label: card.title, path: "/staff/ai-coach", iconPath: this.iconFor("AI Coach"), group: card.body }));
     const queue = (this.os()?.timeline || []).map((item) => ({ label: item.clientName, path: "/staff/queue", iconPath: this.iconFor("Today's Queue"), group: item.serviceNames?.join(", ") || "Appointment" }));
     const all = [...navItems, ...notices, ...coach, ...queue];
-    return (text ? all.filter((item) => `${item.label} ${item.group}`.toLowerCase().includes(text)) : all).slice(0, 12);
+    if (!text) return all.slice(0, 12);
+    return all
+      .map((item) => ({ item, score: this.searchScore(item.label, item.group, text) }))
+      .filter((match) => match.score >= 0)
+      .sort((left, right) => right.score - left.score)
+      .map((match) => match.item)
+      .slice(0, 12);
   });
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
