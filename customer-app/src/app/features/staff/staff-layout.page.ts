@@ -167,7 +167,8 @@ type StaffRecentItem = { label: string; path: string };
     .notice-list span { margin-top: 6px; color: #8a611e; font-size: .76rem; font-weight: 950; text-transform: capitalize; }
     .notice-list button { margin-top: 8px; border: 1px solid #d6aa55; border-radius: 999px; background: #fff8ea; color: #6e4810; font-weight: 950; padding: 7px 10px; }
     .staff-toast { position: fixed; left: 50%; bottom: 18px; z-index: 80; transform: translateX(-50%); max-width: min(420px, calc(100vw - 24px)); padding: 11px 14px; border: 1px solid #d6aa55; border-radius: 999px; background: #1d1307; color: #fff8e8; font-weight: 950; box-shadow: 0 18px 44px rgba(34,19,5,.28); }
-    .mobile-bottom-nav { display: none; }    .scroll-top-button { display: none; }
+    .mobile-bottom-nav { display: none; }
+    .scroll-top-button { display: none; }
     @media (max-width: 900px) {
       .staff-app-shell { display: block; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
       .staff-main-shell { display: block; height: 100dvh; min-height: 100dvh; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
