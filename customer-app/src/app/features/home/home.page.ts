@@ -1419,6 +1419,29 @@ interface ConsultationChatMessage {
       }
     }
 
+    @media (max-width: 767px) {
+      .visited-rail {
+        grid-auto-columns: 178px;
+      }
+
+      .visited-card {
+        width: 178px !important;
+        min-width: 178px !important;
+        height: 68px !important;
+        min-height: 68px !important;
+        grid-template-columns: 42px minmax(0, 1fr) 26px !important;
+        grid-template-rows: auto auto auto !important;
+        overflow: hidden;
+        padding: 7px !important;
+      }
+
+      .visited-card img {
+        width: 42px !important;
+        height: 42px !important;
+        aspect-ratio: 1 / 1 !important;
+      }
+    }
+
     @media (min-width: 1024px) {
       ion-header {
         display: none;
