@@ -1480,7 +1480,6 @@ export class AppComponent implements OnDestroy {
     private readonly router: Router,
     private readonly prefetcher: NavigationPrefetchService
   ) {
-    delete document.documentElement.dataset.theme;
     this.isPortal.set(this.isPortalUrl(this.router.url));
     this.activeRoute.set(this.router.url);
     this.ensureActiveGroupExpanded(this.router.url);

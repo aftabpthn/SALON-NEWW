@@ -19045,3 +19045,1411 @@ app-purchase-bill-drafts .warning-list {
     justify-content: flex-start;
   }
 }
+
+/* Dark mode polish: final scoped layer to override hardcoded light component styles only in dark theme. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --dark-bg-0: #101722;
+  --dark-bg-1: #172033;
+  --dark-surface-1: rgba(31, 41, 55, 0.98);
+  --dark-surface-2: rgba(24, 34, 50, 0.98);
+  --dark-surface-3: rgba(45, 57, 76, 0.94);
+  --dark-line: rgba(177, 190, 210, 0.3);
+  --dark-line-soft: rgba(177, 190, 210, 0.2);
+  --dark-text: #f8fafc;
+  --dark-muted: #b6c2d2;
+  --dark-faint: #8ea0b5;
+  --dark-accent: #f0a8c2;
+  --dark-accent-strong: #f6bdd2;
+  --dark-accent-soft: rgba(240, 168, 194, 0.13);
+  --dark-success: #86efac;
+  --dark-warning: #facc15;
+  --dark-danger: #fb7185;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] app-root,
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .enterprise-app-shell,
+:root[data-theme="dark"] .workspace,
+:root[data-theme="dark"] .workspace-route-shell,
+:root[data-theme="dark"] .workspace-route-content,
+:root[data-theme="dark"] .page-stack,
+:root[data-theme="dark"] .inner-page-shell {
+  background:
+    radial-gradient(circle at 14% 0%, rgba(240, 168, 194, 0.12), transparent 320px),
+    radial-gradient(circle at 88% 8%, rgba(96, 165, 250, 0.1), transparent 300px),
+    linear-gradient(180deg, var(--dark-bg-1) 0%, var(--dark-bg-0) 100%) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .page, .page-shell, .module-page, .page-content, .content, .dashboard, .workspace-page,
+  .zenoti-page, .crm-page, .clients-page, .inventory-page, .appointments-page,
+  .report-page, .settings-page, .inner-page, .inner-page-body
+) {
+  background: transparent !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .topbar, .workspace-header, .workspace-module-tabs, .workspace-local-rail,
+  .command-bar, .zenoti-header, .page-heading, .page-head, .module-hero,
+  .inner-page-header, .header, .toolbar, .filter-bar, .action-bar, .subnav,
+  .tabs, .tabbar, .desk-tabs, .month-strip-band, .scheduled-staff-window,
+  .enterprise-sidebar, .sidebar-panel, .sidebar-rail, .sidebar, .sidebar-callout
+) {
+  background: rgba(24, 34, 50, 0.9) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.34) !important;
+  backdrop-filter: blur(16px) saturate(1.08);
+}
+
+:root[data-theme="dark"] :where(
+  .card, .panel, .content-card, .form-panel, .section-card, .metric-card, .metric,
+  .kpi-card, .summary-card, .status-card, .report-card, .report-panel,
+  .dashboard-panel, .dashboard-greeting, .dashboard-command-panel, .dashboard-hub-card,
+  .action-card, .quick-card, .control-card, .state, .empty-state, .layout-empty,
+  .workdesk, .register-panel, .drawer-panel, .drawer-section, .bill-drawer,
+  .bill-header, .bill-tabs, .bill-panel, .bill-main, .bill-side, .checkout-panel,
+  .client-card, .client-bill-card, .thread-card, .review-card, .template-card,
+  .service-card, .product-card, .supplier-card, .approval-item, .record-row,
+  .source-row, .suggestion-row, .workflow-card, .workflow-map-card, .preview-grid > div,
+  .channel-grid > div, .inner-card, .inner-stats-grid > *, .daily-sheet-card,
+  .score-panel, .score-card, .ledger-preview, .ledger-suggestion, .calendar-panel,
+  .ops-panel button, .waitlist-row, .ai-slot-detail-grid button, .previous-service-list article,
+  .salon-profile, .scope-field, .sidebar-search, .quick-btn, .nav-group, .group-header,
+  .nav-item, .user-profile-bottom
+) {
+  background: linear-gradient(180deg, var(--dark-surface-1), var(--dark-surface-2)) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.32) !important;
+}
+
+:root[data-theme="dark"] :where(
+  h1, h2, h3, h4, h5, h6, strong, b, label, legend,
+  .title, .page-title, .section-title, .panel-title, .card-title, .metric-value,
+  .kpi-value, .brand-block strong, .identity-cell strong, .profile-header h2,
+  .inner-page-header h1, .inner-stats-grid strong, .table-link
+) {
+  color: var(--dark-text) !important;
+  text-shadow: none !important;
+}
+
+:root[data-theme="dark"] :where(
+  p, small, span, em, td, th, li, .muted, .hint, .subtext, .eyebrow,
+  .help-text, .table-meta, .metric-label, .metric-card small, .metric-card span,
+  .kpi-card small, .kpi-card span, .summary-card small, .summary-card span,
+  .inner-page-header p, .inner-stats-grid span, .inner-stats-grid small
+) {
+  border-color: var(--dark-line-soft);
+  color: inherit !important;
+}
+
+:root[data-theme="dark"] :where(.muted, .hint, .subtext, .eyebrow, .help-text, .table-meta, small, .metric-label, .inner-stats-grid span, .inner-stats-grid small) {
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] :where(
+  input, select, textarea, .field-input, .small-input, .cell-input, .picker-search,
+  .command-select, .search-field input, .field input, .field select, .field textarea,
+  .inner-form-grid input, .inner-form-grid select, .inner-form-grid textarea,
+  .ng-select-container, .ng-input input
+) {
+  background: rgba(17, 27, 42, 0.9) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+:root[data-theme="dark"] :where(input::placeholder, textarea::placeholder) {
+  color: rgba(182, 194, 210, 0.58) !important;
+}
+
+:root[data-theme="dark"] :where(input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible) {
+  border-color: rgba(240, 168, 194, 0.58) !important;
+  box-shadow: 0 0 0 3px rgba(240, 168, 194, 0.22) !important;
+  outline: none !important;
+}
+
+:root[data-theme="dark"] :where(
+  table, thead, tbody, .table-wrap, .tbl-wrap, .aura-table-wrap, .compact-table-wrap,
+  .form-table-wrap, .inner-table-wrap, .metric-strip, .clients-crm-table,
+  .zenoti-products-table, .smart-search-results
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(th, thead td, .inner-table-wrap th) {
+  background: rgba(30, 41, 59, 0.94) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] :where(td, .inner-table-wrap td) {
+  background: rgba(15, 23, 42, 0.82) !important;
+  border-color: var(--dark-line-soft) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(tr:hover td, tbody tr:hover td, .inner-table-wrap tr:hover td, .selected-row, .row-active) {
+  background: rgba(240, 168, 194, 0.11) !important;
+  color: #fff !important;
+}
+
+:root[data-theme="dark"] :where(
+  button, .button, .ghost-button, .outline-button, .zenoti-button, .secondary-button,
+  .filter-chip, .event-chip, .payment-mode-chip, .workspace-module-tab,
+  .month-strip button, .scheduled-staff-button, .scheduler-staff-window button,
+  .staff-menu-button, .staff-action-menu button, .calendar-list-row, .hdr-icon-btn,
+  .hdr-profile-btn, .wsw-btn, .wsw-opt, .wsw-chip, .smart-search-results button,
+  .sidebar-toggle, .search-clear, .quick-btn, .group-header, .nav-item
+) {
+  background: rgba(29, 40, 58, 0.92) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  button:hover, .button:hover, .ghost-button:hover, .outline-button:hover,
+  .zenoti-button:hover, .filter-chip:hover, .event-chip:hover, .workspace-module-tab:hover,
+  .month-strip button:hover, .scheduled-staff-button:hover, .calendar-list-row:hover,
+  .hdr-icon-btn:hover, .hdr-profile-btn:hover, .wsw-btn:hover, .wsw-opt:hover
+) {
+  background: rgba(240, 168, 194, 0.14) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+:root[data-theme="dark"] :where(
+  .primary-button, .save-button, .pos-save-button, .cta-button, .dark-button,
+  button[type='submit'], .zenoti-button.primary, .primary-button.active,
+  .desk-tabs .active, .filter-row button.active, .scheduled-staff-button.active,
+  .workspace-module-tab.active, .month-strip button.active
+) {
+  background: linear-gradient(135deg, #be3d7b, #7f1d4e) !important;
+  border-color: rgba(240, 168, 194, 0.5) !important;
+  color: #fff !important;
+  box-shadow: 0 14px 30px rgba(127, 29, 78, 0.38) !important;
+}
+
+:root[data-theme="dark"] :where(
+  a, .link, .table-link, .workspace-local-nav a, .nav-subitem, .hdr-menu-links a
+) {
+  color: var(--dark-accent-strong) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .workspace-local-nav a.active, .workspace-local-nav a:hover, .workspace-local-nav a:focus-visible,
+  .nav-subitem.active, .nav-subitem:hover, .workspace-module-tab.active,
+  .desk-tabs .active, .tabs .active, .tabbar .active, .wsw-opt.active,
+  .nav-item.active, .nav-item:hover, .nav-group.active-section > .group-header
+) {
+  background: rgba(240, 168, 194, 0.16) !important;
+  border-color: rgba(240, 168, 194, 0.38) !important;
+  color: #fff !important;
+}
+
+:root[data-theme="dark"] :where(
+  .badge, .pill, .chip, .status-pill, .hdr-pill, .tag, .label, .avatar,
+  .staff-avatar, .client-avatar, .product-avatar, .supplier-avatar, .brand-mark,
+  .logo-ring, .swatch, .smart-search-results .multi-select-box
+) {
+  background: rgba(30, 41, 59, 0.88) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .success, .badge.success, .status-pill.completed, .status-pill.success
+) {
+  background: rgba(34, 197, 94, 0.14) !important;
+  color: var(--dark-success) !important;
+  border-color: rgba(134, 239, 172, 0.28) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .warning, .badge.warning, .status-pill.started, .status-pill.warning
+) {
+  background: rgba(250, 204, 21, 0.14) !important;
+  color: var(--dark-warning) !important;
+  border-color: rgba(250, 204, 21, 0.3) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .danger, .badge.danger, .status-pill.cancelled, .status-pill.not_came, .status-pill.danger
+) {
+  background: rgba(251, 113, 133, 0.14) !important;
+  color: #fecdd3 !important;
+  border-color: rgba(251, 113, 133, 0.3) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .modal, .drawer, .detail-drawer, .side-drawer, .action-menu, .dropdown-menu,
+  .menu-panel, .context-menu, .row-action-menu, .staff-action-menu, .hdr-menu,
+  .hdr-notif-empty, .hdr-profile-card, .hdr-theme-toggle, .wsw-menu, .wsw-menu-wide,
+  .appointment-detail-popover, .smart-search-results
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+  box-shadow: 0 26px 68px rgba(0, 0, 0, 0.54) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .calendar-board, .day-board-scroll, .week-board, .month-grid, .timeline-board,
+  .resource-grid, .scheduler-grid-shell, .scheduler-grid, .enterprise-scheduler,
+  .appointment-grid, .slot-grid, .timeline-scale-track, .timeline-track
+) {
+  background: rgba(20, 30, 46, 0.98) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(.lane-cell, .time-head, .staff-head, .time-column) {
+  background: rgba(24, 36, 54, 0.96) !important;
+  border-color: var(--dark-line-soft) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(.lane-cell:hover, .slot-hover) {
+  background: rgba(240, 168, 194, 0.12) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+:root[data-theme="dark"] :where(
+  hr, .divider, .topbar-divider, .hdr-menu-links, .wsw-section + .wsw-section,
+  .bill-header, .bill-tabs, .staff-action-menu button, .drawer-section
+) {
+  border-color: var(--dark-line-soft) !important;
+}
+
+:root[data-theme="dark"] ::selection {
+  background: rgba(240, 168, 194, 0.32);
+  color: #fff;
+}
+
+html:root[data-theme="dark"] body app-root :where(
+  .card, .panel, .content-card, .form-panel, .section-card, .metric-card, .kpi-card,
+  .summary-card, .status-card, .report-card, .report-panel, .page-heading, .page-head,
+  .zenoti-header, .workdesk, .register-panel, .table-wrap, .tbl-wrap, .inner-table-wrap,
+  .drawer-panel, .bill-drawer, .bill-header, .bill-tabs, .client-card, .thread-card,
+  .review-card, .template-card, .service-card, .product-card, .supplier-card,
+  .calendar-panel, .layout-empty, .empty-state, .smart-search-results, .appointment-detail-popover
+) {
+  background: linear-gradient(180deg, var(--dark-surface-1), var(--dark-surface-2)) !important;
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(input, select, textarea, button, .ghost-button, .outline-button, .zenoti-button, .filter-chip, .workspace-module-tab) {
+  border-color: var(--dark-line) !important;
+  color: var(--dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(input, select, textarea) {
+  background: rgba(17, 27, 42, 0.9) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(table, thead, tbody, th, td, tr) {
+  border-color: var(--dark-line-soft) !important;
+  color: var(--dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(th, thead td) {
+  background: rgba(30, 41, 59, 0.94) !important;
+  color: var(--dark-muted) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(td) {
+  background: rgba(24, 36, 54, 0.92) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .calendar-board, .day-board-scroll, .week-board, .month-grid, .timeline-board,
+  .resource-grid, .scheduler-grid-shell, .scheduler-grid, .enterprise-scheduler,
+  .appointment-grid, .slot-grid, .timeline-scale-track, .timeline-track, .staff-lane
+) {
+  background: #1b2638 !important;
+  border-color: rgba(190, 202, 220, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .lane-cell, .time-head, .staff-head, .time-column, .scheduled-staff-row
+) {
+  background: #202d42 !important;
+  border-color: rgba(190, 202, 220, 0.26) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .lane-cell:nth-child(even), .timeline-track:nth-child(even)
+) {
+  background: #243149 !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .lane-cell:hover, .slot-hover
+) {
+  background: rgba(240, 168, 194, 0.18) !important;
+  border-color: rgba(240, 168, 194, 0.46) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .status-card, .metric-card, .summary-card, .calendar-summary-card, .appointment-summary-card,
+  .summary-strip > article, .summary-strip > button, .status-strip > *, .metric-strip > *,
+  .stats-grid > *, .insight-card, .guard-card
+) {
+  background: linear-gradient(180deg, #2b3548, #202b3d) !important;
+  border-color: rgba(190, 202, 220, 0.28) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.summary-strip > article span, .summary-strip > button span) {
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.summary-strip > article strong, .summary-strip > button strong) {
+  color: #ffffff !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .date-strip, .month-strip, .month-strip-band, .scheduler-staff-window, .staff-action-menu,
+  .appointment-detail-popover
+) {
+  background: #1f2a3d !important;
+  border-color: rgba(190, 202, 220, 0.3) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .month-strip button, .scheduled-staff-button, .staff-menu-button
+) {
+  background: #27344a !important;
+  border-color: rgba(190, 202, 220, 0.3) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(.primary-button, .save-button, .pos-save-button, .cta-button, .dark-button, button[type='submit']) {
+  background: linear-gradient(135deg, #be3d7b, #7f1d4e) !important;
+  border-color: rgba(240, 168, 194, 0.5) !important;
+  color: #fff !important;
+}
+
+/* Appointments dark mode premium pass: warmer salon tone, lighter grid, clearer hierarchy. */
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.enterprise-scheduler, .inner-page-shell) {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(190, 61, 123, 0.18), transparent 360px),
+    radial-gradient(circle at 90% 4%, rgba(212, 165, 116, 0.1), transparent 320px),
+    linear-gradient(180deg, #201827 0%, #171b26 44%, #141824 100%) !important;
+  color: #fbf7fb !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(
+  .month-strip-band, .scheduler-grid-shell, .scheduled-staff-panel, .date-strip,
+  .scheduler-staff-window, .staff-action-menu, .appointment-detail-popover
+) {
+  background: rgba(39, 32, 49, 0.92) !important;
+  border: 1px solid rgba(226, 205, 219, 0.18) !important;
+  color: #fbf7fb !important;
+  box-shadow: 0 18px 44px rgba(8, 10, 18, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.summary-strip) {
+  background: rgba(246, 236, 229, 0.08) !important;
+  border: 1px solid rgba(226, 205, 219, 0.2) !important;
+  border-radius: 18px !important;
+  padding: 10px 12px !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.summary-strip > article, .summary-strip > button) {
+  background:
+    linear-gradient(135deg, rgba(67, 52, 75, 0.98), rgba(36, 42, 58, 0.98)) !important;
+  border: 1px solid rgba(226, 205, 219, 0.2) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 12px 26px rgba(8, 10, 18, 0.2) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.waitlist-summary-action) {
+  background: linear-gradient(135deg, #4a3550, #2b3246) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.scheduler-grid) {
+  background: #222a3a !important;
+  border-color: rgba(226, 205, 219, 0.18) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.staff-head, .time-head) {
+  background: linear-gradient(180deg, #30354a, #252d40) !important;
+  border-color: rgba(226, 205, 219, 0.2) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.staff-lane, .time-column) {
+  background: #202838 !important;
+  border-color: rgba(226, 205, 219, 0.16) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.lane-cell) {
+  background: linear-gradient(180deg, rgba(39, 49, 68, 0.78), rgba(35, 45, 63, 0.78)) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(226, 205, 219, 0.14) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.lane-cell:nth-child(even)) {
+  background: linear-gradient(180deg, rgba(43, 54, 74, 0.82), rgba(38, 49, 68, 0.82)) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.lane-cell:hover) {
+  background: rgba(190, 61, 123, 0.22) !important;
+  outline: 1px solid rgba(240, 168, 194, 0.46) !important;
+  outline-offset: -1px !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.time-row) {
+  color: #aeb9ca !important;
+  border-color: rgba(226, 205, 219, 0.14) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.current-time-line) {
+  height: 2px !important;
+  background: linear-gradient(90deg, rgba(240, 168, 194, 0), #f0a8c2 12%, #f0a8c2 88%, rgba(240, 168, 194, 0)) !important;
+  box-shadow: 0 0 12px rgba(240, 168, 194, 0.55) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.current-time-badge) {
+  background: #f0a8c2 !important;
+  border-color: #ffd7e5 !important;
+  color: #3a1327 !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.month-strip button, .scheduled-staff-button, .staff-menu-button) {
+  background: rgba(47, 55, 75, 0.92) !important;
+  border-color: rgba(226, 205, 219, 0.2) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(app-appointments-enterprise, app-appointments) :where(.month-strip button.active, .scheduled-staff-button.active) {
+  background: linear-gradient(135deg, #be3d7b, #7f1d4e) !important;
+  border-color: rgba(255, 215, 229, 0.52) !important;
+  color: #fff !important;
+}
+
+/* POS dark mode premium pass: eliminate white cards and give checkout a cohesive glass/plum theme. */
+html:root[data-theme="dark"] body app-root app-pos :where(.page-stack, .inner-page-shell) {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(190, 61, 123, 0.18), transparent 360px),
+    radial-gradient(circle at 94% 10%, rgba(212, 165, 116, 0.1), transparent 320px),
+    linear-gradient(180deg, #191722 0%, #111827 48%, #0f1724 100%) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.pos-command-hero, .module-hero) {
+  background:
+    linear-gradient(110deg, rgba(75, 39, 64, 0.96), rgba(24, 34, 50, 0.94) 54%, rgba(17, 24, 39, 0.96)) !important;
+  border: 1px solid rgba(240, 168, 194, 0.2) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(5, 10, 18, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(
+  .pos-layout > .panel, .checkout-panel, .form-panel, .invoice-preview, .tip-box,
+  .client-search-row, .catalog-picker, .benefit-lines, .summary-control-grid,
+  .payment-grid, .tip-draft-grid, .client-crm-tile, .package-redeem-grid,
+  .settlement-preview-metrics article, .summary-lines, .payment-mode-card,
+  .package-billing-alert, .package-billing-alert--expired, .package-redeem-panel,
+  .benefit-mapping-box, .membership-redemption-panel, .generated-settlement-card,
+  .settlement-preview-bar, .unpaid-receive-box, .round-off-box, .payment-header,
+  .checkout-title, .payment-title-copy, .tip-lines article, .generated-settlement-lines div
+) {
+  background: linear-gradient(180deg, rgba(31, 39, 55, 0.98), rgba(21, 30, 45, 0.98)) !important;
+  border: 1px solid rgba(226, 205, 219, 0.18) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 34px rgba(5, 10, 18, 0.24) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.client-search-row, .catalog-picker, .benefit-lines, .summary-control-grid, .payment-grid, .tip-draft-grid) {
+  border-radius: 16px !important;
+  padding: 14px !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.checkout-panel) {
+  background: linear-gradient(180deg, rgba(18, 27, 41, 0.98), rgba(14, 22, 35, 0.98)) !important;
+  border-color: rgba(240, 168, 194, 0.18) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(
+  h1, h2, h3, strong, b, label, .checkout-title h2, .payment-title-copy h2,
+  .client-crm-tile strong, .summary-lines strong, .payment-mode-card strong
+) {
+  color: #ffffff !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(
+  p, small, span, .field > span, .pos-eyebrow, .client-crm-tile span,
+  .settlement-preview-metrics span, .summary-lines span, .payment-mode-card span,
+  .package-billing-alert span, .package-redeem-header small, .package-redeem-expiry
+) {
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(
+  input, select, textarea, .small-input, .line-discount-control input,
+  .line-discount-control select, .package-redeem-grid input, .package-redeem-grid select
+) {
+  background: rgba(12, 18, 29, 0.94) !important;
+  border: 1px solid rgba(203, 213, 225, 0.22) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(input::placeholder, textarea::placeholder) {
+  color: rgba(203, 213, 225, 0.54) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(input:focus, select:focus, textarea:focus) {
+  border-color: rgba(240, 168, 194, 0.58) !important;
+  box-shadow: 0 0 0 3px rgba(240, 168, 194, 0.18) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.ghost-button, button, .client-result-card, .service-result-option) {
+  background: rgba(31, 41, 59, 0.92) !important;
+  border-color: rgba(203, 213, 225, 0.2) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.ghost-button:hover, button:hover, .client-result-card:hover, .service-result-option:hover, .client-result-card.active) {
+  background: rgba(240, 168, 194, 0.14) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.primary-button, .save-button, .walkin-button, .pos-save-button, button[type='submit']) {
+  background: linear-gradient(135deg, #c23f80, #81204f) !important;
+  border-color: rgba(255, 215, 229, 0.46) !important;
+  color: #fff !important;
+  box-shadow: 0 14px 30px rgba(129, 32, 79, 0.32) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(button:disabled, .ghost-button:disabled) {
+  background: rgba(55, 65, 81, 0.62) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  color: rgba(226, 232, 240, 0.58) !important;
+  box-shadow: none !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.summary-lines .total, .payment-mode-card:hover, .payment-mode-card.filled) {
+  background: linear-gradient(135deg, rgba(75, 39, 64, 0.98), rgba(31, 41, 59, 0.98)) !important;
+  border-color: rgba(240, 168, 194, 0.3) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(table, thead, tbody, tr, th, td) {
+  background: transparent !important;
+  border-color: rgba(203, 213, 225, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(th) {
+  background: rgba(31, 41, 59, 0.96) !important;
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(tbody tr:hover td) {
+  background: rgba(240, 168, 194, 0.09) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.smart-search-results, .pos-search-results) {
+  background: rgba(17, 24, 39, 0.98) !important;
+  border-color: rgba(240, 168, 194, 0.24) !important;
+  box-shadow: 0 24px 58px rgba(5, 10, 18, 0.48) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.pos-command-hero, .module-hero) {
+  background:
+    linear-gradient(105deg, rgba(68, 41, 62, 0.98) 0%, rgba(32, 36, 52, 0.96) 48%, rgba(17, 24, 39, 0.98) 100%) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.branch-context-card) {
+  background:
+    linear-gradient(135deg, rgba(75, 39, 64, 0.98), rgba(31, 41, 59, 0.98)) !important;
+  border: 1px solid rgba(240, 168, 194, 0.28) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.branch-context-card span) {
+  color: #f0a8c2 !important;
+}
+
+html:root[data-theme="dark"] body app-root app-pos :where(.branch-context-card strong) {
+  color: #ffffff !important;
+}
+
+/* Unified all-pages dark mode baseline. Keep this generic and dark-scoped only. */
+html:root[data-theme="dark"] body app-root .workspace-route-content,
+html:root[data-theme="dark"] body app-root .workspace-route-shell,
+html:root[data-theme="dark"] body app-root .workspace,
+html:root[data-theme="dark"] body app-root .page-stack,
+html:root[data-theme="dark"] body app-root .inner-page-shell {
+  --aura-dark-page: #151b28;
+  --aura-dark-page-2: #1b2232;
+  --aura-dark-panel: #242c3d;
+  --aura-dark-panel-2: #1d2636;
+  --aura-dark-card: #283145;
+  --aura-dark-card-2: #202a3b;
+  --aura-dark-border: rgba(203, 213, 225, 0.22);
+  --aura-dark-border-strong: rgba(240, 168, 194, 0.28);
+  --aura-dark-text: #f8fafc;
+  --aura-dark-muted: #c3ccd9;
+  --aura-dark-soft: #93a4ba;
+  --aura-dark-accent: #f0a8c2;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(190, 61, 123, 0.12), transparent 340px),
+    radial-gradient(circle at 92% 8%, rgba(212, 165, 116, 0.08), transparent 300px),
+    linear-gradient(180deg, var(--aura-dark-page-2), var(--aura-dark-page)) !important;
+  color: var(--aura-dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  .page, .page-shell, .module-page, .workspace-page, .page-content, .content,
+  .inner-page, .inner-page-body, .crm-page, .report-page, .settings-page,
+  .analytics-page, .marketing-page, .inventory-page, .clients-page, .staff-page,
+  .dashboard-page, .booking-page, .accounting-page, .launchpad-page
+) {
+  background: transparent !important;
+  color: var(--aura-dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  .module-hero, .page-head, .page-heading, .inner-page-header, .header, .toolbar,
+  .command-bar, .filter-bar, .action-bar, .subnav, .tabs, .tabbar, .desk-tabs,
+  .workspace-header, .section-header, .panel-header, .card-header
+) {
+  background: linear-gradient(135deg, rgba(55, 44, 65, 0.95), rgba(30, 40, 58, 0.95)) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-text) !important;
+  box-shadow: 0 16px 36px rgba(5, 10, 18, 0.24) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  .card, .panel, .content-card, .form-panel, .section-card, .metric-card,
+  .kpi-card, .summary-card, .status-card, .report-card, .report-panel,
+  .dashboard-panel, .dashboard-card, .dashboard-hub-card, .action-card, .quick-card,
+  .control-card, .client-card, .staff-card, .service-card, .product-card,
+  .supplier-card, .template-card, .review-card, .thread-card, .workflow-card,
+  .workflow-map-card, .daily-sheet-card, .score-panel, .score-card, .ledger-preview,
+  .ledger-suggestion, .state, .empty-state, .layout-empty, .record-row, .source-row,
+  .suggestion-row, .approval-item, .drawer-panel, .drawer-section, .checkout-panel,
+  .billing-panel, .bill-panel, .bill-main, .bill-side, .workdesk, .register-panel,
+  [class*="-card"], [class*="-panel"], [class*="-tile"]
+) {
+  background: linear-gradient(180deg, var(--aura-dark-card), var(--aura-dark-card-2)) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-text) !important;
+  box-shadow: 0 14px 32px rgba(5, 10, 18, 0.22) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  h1, h2, h3, h4, h5, h6, strong, b, label, legend,
+  .title, .page-title, .section-title, .panel-title, .card-title,
+  .metric-value, .kpi-value, .table-link, .identity-cell strong
+) {
+  color: var(--aura-dark-text) !important;
+  text-shadow: none !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  p, small, .muted, .hint, .subtext, .eyebrow, .help-text, .table-meta,
+  .metric-label, .kpi-label, .caption, .description, [class*="meta"], [class*="hint"]
+) {
+  color: var(--aura-dark-muted) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  input, select, textarea, .field-input, .small-input, .cell-input, .command-select,
+  .search-field input, .field input, .field select, .field textarea, .ng-select-container
+) {
+  background: rgba(14, 21, 34, 0.94) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(input::placeholder, textarea::placeholder) {
+  color: rgba(203, 213, 225, 0.56) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(input:focus, select:focus, textarea:focus) {
+  border-color: rgba(240, 168, 194, 0.58) !important;
+  box-shadow: 0 0 0 3px rgba(240, 168, 194, 0.18) !important;
+  outline: none !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  table, thead, tbody, .table-wrap, .tbl-wrap, .aura-table-wrap, .compact-table-wrap,
+  .form-table-wrap, .inner-table-wrap, .data-table, .list-table
+) {
+  background: var(--aura-dark-panel-2) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(th, thead td) {
+  background: rgba(38, 48, 66, 0.96) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-muted) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(td) {
+  background: rgba(28, 38, 55, 0.72) !important;
+  border-color: rgba(203, 213, 225, 0.16) !important;
+  color: var(--aura-dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(tbody tr:hover td, tr:hover td) {
+  background: rgba(240, 168, 194, 0.1) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  button, .button, .ghost-button, .outline-button, .secondary-button, .filter-chip,
+  .event-chip, .payment-mode-chip, .workspace-module-tab, .chip, .pill, .badge,
+  .status-pill, .tag
+) {
+  background: rgba(35, 45, 63, 0.94) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-text) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  button:hover, .button:hover, .ghost-button:hover, .outline-button:hover,
+  .filter-chip:hover, .workspace-module-tab:hover
+) {
+  background: rgba(240, 168, 194, 0.14) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  .primary-button, .save-button, .cta-button, .dark-button, button[type='submit'],
+  .active, .selected
+) {
+  border-color: var(--aura-dark-border-strong) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  .primary-button, .save-button, .cta-button, .dark-button, button[type='submit']
+) {
+  background: linear-gradient(135deg, #c23f80, #81204f) !important;
+  color: #fff !important;
+  box-shadow: 0 14px 30px rgba(129, 32, 79, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  .modal, .drawer, .detail-drawer, .side-drawer, .action-menu, .dropdown-menu,
+  .menu-panel, .context-menu, .row-action-menu, .smart-search-results,
+  .popover, .tooltip, .suggestions, .search-results
+) {
+  background: rgba(24, 32, 47, 0.98) !important;
+  border-color: var(--aura-dark-border) !important;
+  color: var(--aura-dark-text) !important;
+  box-shadow: 0 24px 58px rgba(5, 10, 18, 0.48) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(a, .link, .table-link) {
+  color: #ffd7e5 !important;
+}
+
+/* Re-assert custom dark treatments for complex screens after the generic all-pages baseline. */
+html:root[data-theme="dark"] body app-root .workspace-route-content app-pos :where(.page-stack, .inner-page-shell) {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(190, 61, 123, 0.18), transparent 360px),
+    radial-gradient(circle at 94% 10%, rgba(212, 165, 116, 0.1), transparent 320px),
+    linear-gradient(180deg, #191722 0%, #111827 48%, #0f1724 100%) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-pos :where(.pos-command-hero, .module-hero) {
+  background: linear-gradient(105deg, rgba(68, 41, 62, 0.98) 0%, rgba(32, 36, 52, 0.96) 48%, rgba(17, 24, 39, 0.98) 100%) !important;
+  border-color: rgba(240, 168, 194, 0.2) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-pos :where(
+  .pos-layout > .panel, .checkout-panel, .form-panel, .invoice-preview, .tip-box,
+  .client-search-row, .catalog-picker, .benefit-lines, .summary-control-grid,
+  .payment-grid, .tip-draft-grid, .client-crm-tile, .package-redeem-grid,
+  .settlement-preview-metrics article, .summary-lines, .payment-mode-card,
+  .package-billing-alert, .package-billing-alert--expired, .package-redeem-panel,
+  .benefit-mapping-box, .membership-redemption-panel, .generated-settlement-card,
+  .settlement-preview-bar, .unpaid-receive-box, .round-off-box, .payment-header,
+  .checkout-title, .payment-title-copy, .tip-lines article, .generated-settlement-lines div
+) {
+  background: linear-gradient(180deg, rgba(31, 39, 55, 0.98), rgba(21, 30, 45, 0.98)) !important;
+  border-color: rgba(226, 205, 219, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-pos :where(.branch-context-card) {
+  background: linear-gradient(135deg, rgba(75, 39, 64, 0.98), rgba(31, 41, 59, 0.98)) !important;
+  border-color: rgba(240, 168, 194, 0.28) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(app-appointments-enterprise, app-appointments) :where(.enterprise-scheduler, .inner-page-shell) {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(190, 61, 123, 0.18), transparent 360px),
+    radial-gradient(circle at 90% 4%, rgba(212, 165, 116, 0.1), transparent 320px),
+    linear-gradient(180deg, #201827 0%, #171b26 44%, #141824 100%) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(app-appointments-enterprise, app-appointments) :where(.scheduler-grid) {
+  background: #222a3a !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(app-appointments-enterprise, app-appointments) :where(.staff-head, .time-head) {
+  background: linear-gradient(180deg, #30354a, #252d40) !important;
+  border-color: rgba(226, 205, 219, 0.2) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(app-appointments-enterprise, app-appointments) :where(.lane-cell) {
+  background: linear-gradient(180deg, rgba(39, 49, 68, 0.78), rgba(35, 45, 63, 0.78)) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(226, 205, 219, 0.14) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Final coverage for standalone/portal pages and component styles with hardcoded white !important. */
+html:root[data-theme="dark"] body app-root :where(
+  [class*="page"], [class*="shell"], [class*="workspace"], [class*="layout"],
+  [class*="section"], [class*="content"], [class*="body"]
+) {
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(
+  [class*="card"], [class*="panel"], [class*="tile"], [class*="box"],
+  [class*="wrap"], [class*="strip"], [class*="bar"], [class*="drawer"],
+  [class*="modal"], [class*="popover"], [class*="menu"], [class*="result"],
+  [class*="item"], [class*="row"], [class*="notice"], [class*="alert"]
+) {
+  background: linear-gradient(180deg, #283145, #202a3b) !important;
+  border-color: rgba(203, 213, 225, 0.22) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.2) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(
+  h1, h2, h3, h4, h5, h6, strong, b, label, legend,
+  [class*="title"], [class*="heading"], [class*="name"], [class*="value"]
+) {
+  color: #f8fafc !important;
+  text-shadow: none !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(
+  p, small, span, em, li, [class*="muted"], [class*="hint"], [class*="meta"],
+  [class*="caption"], [class*="label"], [class*="eyebrow"], [class*="description"]
+) {
+  border-color: rgba(203, 213, 225, 0.18) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(
+  small, [class*="muted"], [class*="hint"], [class*="meta"], [class*="caption"],
+  [class*="eyebrow"], [class*="description"]
+) {
+  color: #c3ccd9 !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(input, select, textarea, .form-input, .field-input, .small-input, .cell-input) {
+  background: rgba(14, 21, 34, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.24) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(input::placeholder, textarea::placeholder) {
+  color: rgba(203, 213, 225, 0.56) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(input:focus, select:focus, textarea:focus) {
+  border-color: rgba(240, 168, 194, 0.58) !important;
+  box-shadow: 0 0 0 3px rgba(240, 168, 194, 0.18) !important;
+  outline: none !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(table, thead, tbody, tr, th, td, [class*="table"]) {
+  border-color: rgba(203, 213, 225, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(table, [class*="table-wrap"], [class*="table-panel"]) {
+  background: #1d2636 !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(th, thead td, [class*="table-head"]) {
+  background: #263042 !important;
+  color: #c3ccd9 !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(td) {
+  background: rgba(28, 38, 55, 0.72) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(tbody tr:hover td, tr:hover td) {
+  background: rgba(240, 168, 194, 0.1) !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(button, .button, .btn, [class*="button"], [class*="chip"], [class*="pill"], [class*="badge"], [class*="tab"]) {
+  background: rgba(35, 45, 63, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.22) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(button:hover, .button:hover, .btn:hover, [class*="button"]:hover, [class*="tab"]:hover) {
+  background: rgba(240, 168, 194, 0.14) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(.primary-button, .btn-primary, .save-button, .cta-button, .dark-button, button[type='submit']) {
+  background: linear-gradient(135deg, #c23f80, #81204f) !important;
+  border-color: rgba(255, 215, 229, 0.46) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(.secondary-button, .btn-secondary, .active, .selected, .is-active) {
+  background: rgba(240, 168, 194, 0.16) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root :where(a, .link) {
+  color: #ffd7e5 !important;
+}
+
+/* Home dashboard final polish after broad fallback. */
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .page-stack {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(190, 61, 123, 0.16), transparent 360px),
+    radial-gradient(circle at 94% 8%, rgba(212, 165, 116, 0.1), transparent 320px),
+    linear-gradient(180deg, #1a1724 0%, #121a27 52%, #101722 100%) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .greeting {
+  background:
+    linear-gradient(105deg, rgba(72, 42, 66, 0.98) 0%, rgba(33, 39, 58, 0.96) 48%, rgba(18, 26, 40, 0.98) 100%) !important;
+  border: 1px solid rgba(240, 168, 194, 0.24) !important;
+  box-shadow: 0 20px 46px rgba(5, 10, 18, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .greeting::after {
+  background: linear-gradient(180deg, #f0a8c2, #be3d7b 54%, rgba(212, 165, 116, 0.72)) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard :where(.greeting h1, .card-h h2, .kpi-v, .hub-tile strong, .shortcut strong, .staff-row strong, .alert-row strong) {
+  color: #ffffff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard :where(.greeting p, .card-date, .kpi-l, .hub-sub, .hub-cta, .staff-row span, .alert-empty span) {
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .greeting-eyebrow {
+  color: #f0a8c2 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .card {
+  background: linear-gradient(180deg, rgba(34, 43, 61, 0.96), rgba(24, 34, 50, 0.96)) !important;
+  border: 1px solid rgba(203, 213, 225, 0.18) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 16px 36px rgba(5, 10, 18, 0.24) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .kpi {
+  background: linear-gradient(135deg, rgba(75, 39, 64, 0.9), rgba(36, 46, 65, 0.96)) !important;
+  border: 1px solid rgba(240, 168, 194, 0.24) !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.22) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .hub-tile {
+  background: linear-gradient(180deg, rgba(36, 46, 65, 0.96), rgba(26, 37, 55, 0.96)) !important;
+  border: 1px solid rgba(240, 168, 194, 0.2) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.2) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .hub-tile:hover,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .kpi:hover,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .shortcut:hover {
+  background: linear-gradient(135deg, rgba(95, 48, 78, 0.98), rgba(42, 52, 72, 0.98)) !important;
+  border-color: rgba(240, 168, 194, 0.38) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard :where(.shortcut, .staff-card, .alert-card) {
+  background: rgba(15, 23, 34, 0.72) !important;
+  border: 1px solid rgba(203, 213, 225, 0.2) !important;
+  color: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard :where(.hub-badge, .shortcut-i, .staff-rank) {
+  background: rgba(240, 168, 194, 0.16) !important;
+  border-color: rgba(240, 168, 194, 0.3) !important;
+  color: #ffd7e5 !important;
+}
+
+/* Analytics and AI assistant need explicit selectors because component-scoped CSS uses hardcoded light surfaces. */
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .page-stack,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-command-page {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(190, 61, 123, 0.14), transparent 360px),
+    radial-gradient(circle at 94% 8%, rgba(212, 165, 116, 0.08), transparent 320px),
+    linear-gradient(180deg, #171927 0%, #111827 54%, #0f1724 100%) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .module-hero,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-hero {
+  background: linear-gradient(105deg, rgba(68, 41, 62, 0.98) 0%, rgba(32, 36, 52, 0.96) 48%, rgba(17, 24, 39, 0.98) 100%) !important;
+  border: 1px solid rgba(240, 168, 194, 0.22) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(5, 10, 18, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .panel,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .form-panel,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .analytics-nav-card,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .action-card,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .summary-lines div,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .rank-list article,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .heatmap-grid article,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .panel,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-open-page,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-kpi,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-page-card,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .workflow-card,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .governance-stack article,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .queue-stack article {
+  background: linear-gradient(180deg, rgba(36, 46, 65, 0.98), rgba(24, 34, 50, 0.98)) !important;
+  border-color: rgba(203, 213, 225, 0.2) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 32px rgba(5, 10, 18, 0.22) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .analytics-nav-card.active,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-page-card.active,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .workflow-card.active {
+  background: linear-gradient(135deg, rgba(75, 39, 64, 0.98), rgba(31, 41, 59, 0.98)) !important;
+  border-color: rgba(240, 168, 194, 0.34) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .heatmap-grid article,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .rank-list article,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .workflow-card {
+  border-left: 3px solid rgba(240, 168, 194, 0.62) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine :is(h1, h2, h3, strong, b),
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant :is(h1, h2, h3, strong, b) {
+  color: #ffffff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine :is(small, span, .field span),
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant :is(small, span, .hero-signal-row span) {
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .nav-icon,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .analytics-nav-card i,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .workflow-icon,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-page-card-icon,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .badge,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .hero-signal-row span,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .category-tabs button {
+  background: rgba(240, 168, 194, 0.16) !important;
+  border-color: rgba(240, 168, 194, 0.3) !important;
+  color: #ffd7e5 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine input,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine select,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant input,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant select,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant textarea {
+  background: rgba(14, 21, 34, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.24) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .workflow-card-footer,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .workflow-card-topline {
+  background: transparent !important;
+}
+
+/* Settings, white-label, marketing and finance final dark pass. */
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-product-settings, app-supplier-settings, app-inventory-settings,
+  app-service-settings, app-package-settings, app-membership-settings, app-custom-fields-settings,
+  app-consent-forms-settings, app-calendar-settings, app-booking-settings,
+  app-multiple-location-settings, app-client-custom-form-settings, app-tax-settings,
+  app-marketplace-settings, app-other-settings, app-bill-settings, app-business-details-settings,
+  app-payment-method-settings, app-message-history-settings, app-security-settings,
+  app-white-label, app-ai-marketing-automation, app-finance-engine
+) :where(.page-stack, .inner-page-shell, .general-settings-page, .marketing-workspace, .finance-workspace) {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(190, 61, 123, 0.14), transparent 360px),
+    radial-gradient(circle at 94% 8%, rgba(212, 165, 116, 0.08), transparent 320px),
+    linear-gradient(180deg, #171927 0%, #111827 54%, #0f1724 100%) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-white-label, app-ai-marketing-automation, app-finance-engine
+) :where(.settings-hero, .module-hero, .page-heading, .page-title) {
+  background: linear-gradient(105deg, rgba(68, 41, 62, 0.98) 0%, rgba(32, 36, 52, 0.96) 48%, rgba(17, 24, 39, 0.98) 100%) !important;
+  border: 1px solid rgba(240, 168, 194, 0.22) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 42px rgba(5, 10, 18, 0.28) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-white-label, app-ai-marketing-automation, app-finance-engine
+) :where(
+  .settings-nav, .settings-content, .settings-card, .inner-page-card, .audit-strip,
+  .phase-note, .form-panel, .panel, .metric-strip, .metric-strip article,
+  .marketing-section-workspace, .marketing-side-nav, .marketing-nav-card, .workdesk,
+  .register-panel, .zenoti-form, .segment-result, .finance-workspace .metrics-grid,
+  .finance-workspace .metrics-grid article, .workdesk-grid form, .table-wrap,
+  .profile-header, .dashboard-grid, .action-card, .result-json
+) {
+  background: linear-gradient(180deg, rgba(36, 46, 65, 0.98), rgba(24, 34, 50, 0.98)) !important;
+  border-color: rgba(203, 213, 225, 0.2) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 32px rgba(5, 10, 18, 0.22) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-white-label, app-ai-marketing-automation, app-finance-engine
+) :where(.settings-nav a, .marketing-nav-card, .desk-tabs button, .badge, .chip-row span) {
+  background: rgba(35, 45, 63, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.22) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-ai-marketing-automation
+) :where(.settings-nav a.active, .marketing-nav-card.active, .desk-tabs button.active) {
+  background: linear-gradient(135deg, rgba(75, 39, 64, 0.98), rgba(31, 41, 59, 0.98)) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-white-label, app-ai-marketing-automation, app-finance-engine
+) :is(h1, h2, h3, strong, b, label) {
+  color: #ffffff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-white-label, app-ai-marketing-automation, app-finance-engine
+) :is(p, small, span, .eyebrow, .field span) {
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-general-settings, app-white-label, app-ai-marketing-automation, app-finance-engine
+) :where(input, select, textarea) {
+  background: rgba(14, 21, 34, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.24) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-white-label, app-finance-engine, app-ai-marketing-automation
+) :where(table, thead, tbody, tr, th, td) {
+  background: transparent !important;
+  border-color: rgba(203, 213, 225, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content :where(
+  app-white-label, app-finance-engine, app-ai-marketing-automation
+) :where(th) {
+  background: #263042 !important;
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-white-label .profile-header {
+  background: linear-gradient(135deg, rgba(75, 39, 64, 0.98), rgba(31, 41, 59, 0.98)) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-marketing-automation .marketing-nav-icon,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-marketing-automation .marketing-nav-card em {
+  background: rgba(240, 168, 194, 0.16) !important;
+  border-color: rgba(240, 168, 194, 0.3) !important;
+  color: #ffd7e5 !important;
+}
+
+/* Routed-page component hardening: beats Angular component-scoped hardcoded light styles. */
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) {
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  .page-stack, .inner-page-shell, .page-shell, .module-page, .workspace-page,
+  .marketing-workspace, .finance-workspace, .migration-shell, .care-shell,
+  .birthday-page, .apps-shell, .shield-workspace
+) {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(190, 61, 123, 0.12), transparent 340px),
+    radial-gradient(circle at 94% 8%, rgba(212, 165, 116, 0.08), transparent 300px),
+    linear-gradient(180deg, #171927 0%, #111827 54%, #0f1724 100%) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  .module-hero, .page-heading, .page-head, .inner-page-header, .command-header,
+  .lp-header, .settings-hero, .page-title, .toolbar, .command-bar, .header,
+  .panel-head, .section-title, .desk-heading, .register-heading
+) {
+  background: linear-gradient(105deg, rgba(68, 41, 62, 0.96), rgba(32, 36, 52, 0.94) 52%, rgba(17, 24, 39, 0.96)) !important;
+  border-color: rgba(240, 168, 194, 0.22) !important;
+  color: #fff !important;
+  box-shadow: 0 16px 36px rgba(5, 10, 18, 0.24) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  .card, .panel, .form-panel, .content-card, .settings-card, .inner-page-card,
+  .metric-card, .kpi-card, .summary-card, .action-card, .score-card, .status-card,
+  .report-card, .report-panel, .dashboard-panel, .dashboard-card, .client-card,
+  .staff-card, .service-card, .product-card, .supplier-card, .workflow-card,
+  .workdesk, .register-panel, .table-wrap, .tbl-wrap, .compact-table-wrap,
+  .metric-strip, .metric-strip article, .quick-grid > article, .stats-grid > *,
+  .control-strip article, .queue-card, .check-item, .profile-item, .mapping-row,
+  .preview-row, .job-item, .detail-card, .ask-section, .answer-card, .anomaly-card,
+  .history-card, .booking-card, .auto-stage-panel, .call-slot-panel, .timeline-card,
+  .cash-workspace-detail, .cash-category-tile, .risk-events article,
+  .settlement-notice, .suggestion, .marketing-nav-card, .zenoti-form,
+  .segment-result, .package-redeem-panel, .benefit-mapping-box, .empty-state,
+  .layout-empty, .drawer-panel, .detail-drawer, .side-drawer, .modal, .popover,
+  .dropdown-menu, .smart-search-results, .search-results
+) {
+  background: linear-gradient(180deg, rgba(36, 46, 65, 0.98), rgba(24, 34, 50, 0.98)) !important;
+  border-color: rgba(203, 213, 225, 0.2) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 28px rgba(5, 10, 18, 0.2) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  h1, h2, h3, h4, h5, h6, strong, b, label, legend,
+  .title, .page-title, .section-title, .card-title, .panel-title,
+  .metric-value, .kpi-value, .stat-value
+) {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  p, small, span, em, li, .muted, .hint, .subtext, .eyebrow, .card-label,
+  .metric-label, .kpi-label, .meta, .caption, .description, .field span
+) {
+  border-color: rgba(203, 213, 225, 0.18) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  small, .muted, .hint, .subtext, .eyebrow, .card-label, .metric-label,
+  .kpi-label, .meta, .caption, .description
+) {
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  input, select, textarea, .form-input, .field-input, .small-input, .cell-input,
+  .command-select, .picker-search
+) {
+  background: rgba(14, 21, 34, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.24) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(input::placeholder, textarea::placeholder) {
+  color: rgba(203, 213, 225, 0.56) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  table, thead, tbody, tr, th, td, .data-table, .compact-table, .register-table
+) {
+  border-color: rgba(203, 213, 225, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(th, thead td, .table-head) {
+  background: #263042 !important;
+  color: #cbd5e1 !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(td) {
+  background: rgba(28, 38, 55, 0.72) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  button, .button, .btn, .ghost-button, .btn-secondary, .secondary-button,
+  .filter-btn, .zenoti-button, .chip, .pill, .badge, .status-pill, .tag,
+  .channel-pill, .shortcut-row a, .workspace-module-tab
+) {
+  background: rgba(35, 45, 63, 0.94) !important;
+  border-color: rgba(203, 213, 225, 0.22) !important;
+  color: #f8fafc !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  .primary-button, .btn-primary, .save-button, .cta-button, .dark-button,
+  .solid, button[type='submit']
+) {
+  background: linear-gradient(135deg, #c23f80, #81204f) !important;
+  border-color: rgba(255, 215, 229, 0.46) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(
+  .active, .selected, .is-active, button.active, a.active
+) {
+  background: rgba(240, 168, 194, 0.16) !important;
+  border-color: rgba(240, 168, 194, 0.36) !important;
+  color: #fff !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content > :not(router-outlet) :is(a, .link, .table-link) {
+  color: #ffd7e5 !important;
+}
+
+/* Keep premium pages distinct after the hardening pass. */
+html:root[data-theme="dark"] body app-root .workspace-route-content app-dashboard .greeting,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-pos .pos-command-hero,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-analytics-engine .module-hero,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-assistant .ai-hero,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-ai-marketing-automation .page-heading,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-finance-engine .page-title,
+html:root[data-theme="dark"] body app-root .workspace-route-content app-general-settings .settings-hero {
+  background: linear-gradient(105deg, rgba(68, 41, 62, 0.98) 0%, rgba(32, 36, 52, 0.96) 48%, rgba(17, 24, 39, 0.98) 100%) !important;
+  border-color: rgba(240, 168, 194, 0.24) !important;
+}
+
+html:root[data-theme="dark"] body app-root .workspace-route-content app-appointments-enterprise .lane-cell {
+  background: linear-gradient(180deg, rgba(39, 49, 68, 0.78), rgba(35, 45, 63, 0.78)) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(226, 205, 219, 0.14) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
