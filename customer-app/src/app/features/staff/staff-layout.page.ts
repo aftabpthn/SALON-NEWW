@@ -72,7 +72,8 @@ type StaffRecentItem = { label: string; path: string };
         <section class="command-backdrop" (click)="closeCommand()">
           <div class="command-palette" role="dialog" aria-modal="true" aria-labelledby="staff-command-title" tabindex="-1" #commandDialog (keydown)="trapFocus($event, commandDialog)" (click)="$event.stopPropagation()">
             <div class="command-head"><strong id="staff-command-title">Command palette</strong><button type="button" (click)="closeCommand()">Close</button></div>
-            <input [(ngModel)]="query" placeholder="Search pages, appointments, AI notes..." #commandInput autofocus />
+            <input [(ngModel)]="query" (keydown)="onCommandKeydown($event)" placeholder="Search staff pages, clients, queue..." #commandInput autofocus />
+            @if (query.trim()) { <small class="search-hint">{{ commandResults().length }} matches · Press Enter to open the first result</small> }
             <div class="command-list">
               @for (item of commandResults(); track item.path + item.label) {
                 <button type="button" (click)="go(item)"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="item.iconPath"></path></svg></span><div><strong>{{ item.label }}</strong><small>{{ item.group }}</small></div></button>
@@ -148,7 +149,8 @@ type StaffRecentItem = { label: string; path: string };
     .command-head, .drawer-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid #ead5aa; }
     .command-head strong, .drawer-title strong { color: #1d1307; }
     .command-head button, .drawer-title button { border: 1px solid #d6aa55; border-radius: 999px; background: #fff; color: #6e4810; font-weight: 950; padding: 7px 10px; }
-    .command-palette input { width: calc(100% - 28px); margin: 14px; min-height: 46px; border: 1px solid #d6aa55; border-radius: 16px; padding: 0 13px; color: #1d1307; }
+    .command-palette input { width: calc(100% - 28px); margin: 14px 14px 8px; min-height: 46px; border: 1px solid #d6aa55; border-radius: 16px; padding: 0 13px; color: #1d1307; }
+    .search-hint { display: block; margin: 0 16px 8px; color: #8a611e; font-size: .72rem; font-weight: 850; }
     .command-list { display: grid; gap: 6px; padding: 0 14px 14px; }
     .command-list button { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: center; border: 1px solid #ead5aa; border-radius: 16px; padding: 10px; background: #fff; text-align: left; }
     .command-list button span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: #fff1cc; color: #7b4d0d; font-size: .72rem; font-weight: 950; }
@@ -352,6 +354,28 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   closeMenu() {
     this.menuOpen.set(false);
+  }
+
+  private searchScore(label: string, group: string, query: string): number {
+    const haystack = `${label} ${group}`.toLowerCase();
+    if (haystack.includes(query)) return 1000 - haystack.indexOf(query);
+    let cursor = 0;
+    let matched = 0;
+    for (const character of query) {
+      const index = haystack.indexOf(character, cursor);
+      if (index < 0) return -1;
+      matched += index === cursor ? 3 : 1;
+      cursor = index + 1;
+    }
+    return matched;
+  }
+
+  onCommandKeydown(event: KeyboardEvent) {
+    if (event.key !== "Enter") return;
+    const first = this.commandResults()[0];
+    if (!first) return;
+    event.preventDefault();
+    this.go(first);
   }
 
   openCommand() {
