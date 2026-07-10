@@ -427,7 +427,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   onMainScroll() {
-    this.showScrollTop.set((this.mainShell?.nativeElement.scrollTop || 0) > 120);
+    this.showScrollTop.set((this.mainShell?.nativeElement.scrollTop || 0) > 180);
   }
 
   scrollToTop() {
