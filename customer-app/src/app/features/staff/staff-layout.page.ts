@@ -132,7 +132,9 @@ type StaffRecentItem = { label: string; path: string };
     .staff-topbar strong { color: #1d1307; }
     .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex-wrap: wrap; }
     .topbar-actions span { color: #75552b; font-weight: 900; }
-    .search-button, .bell-button { border: 1px solid #d6aa55; border-radius: 999px; background: #fffdf7; color: #6e4810; font-weight: 950; padding: 8px 12px; box-shadow: 0 8px 20px rgba(139,93,21,.08); }\n    .search-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; }\n    .search-button svg { width: 18px; height: 18px; fill: currentColor; }
+    .search-button, .bell-button { border: 1px solid #d6aa55; border-radius: 999px; background: #fffdf7; color: #6e4810; font-weight: 950; padding: 8px 12px; box-shadow: 0 8px 20px rgba(139,93,21,.08); }
+    .search-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+    .search-button svg { width: 18px; height: 18px; fill: currentColor; }
     .search-button:hover, .search-button:focus-visible, .bell-button:focus-visible, .menu-button:focus-visible, nav a:focus-visible, .nav-logout:focus-visible { outline: 3px solid rgba(214,169,74,.28); outline-offset: 2px; }
     .search-button small { margin-left: 6px; opacity: .72; }
     .bell-button { position: relative; overflow: visible; display: inline-grid; place-items: center; width: 42px; height: 42px; min-width: 42px; padding: 0; border-radius: 16px; background: linear-gradient(145deg, #ffffff, #fff4d8); }
@@ -303,7 +305,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   @HostListener("window:touchstart", ["$event"])
   onTouchStart(event: TouchEvent) {
-    this.touchStartX = event.touches[0]?.clientX || 0;\n    this.touchStartY = event.touches[0]?.clientY || 0;
+    this.touchStartX = event.touches[0]?.clientX || 0;
+    this.touchStartY = event.touches[0]?.clientY || 0;
   }
 
   @HostListener("window:touchend", ["$event"])
