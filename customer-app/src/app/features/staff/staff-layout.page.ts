@@ -303,7 +303,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   @HostListener("window:touchstart", ["$event"])
   onTouchStart(event: TouchEvent) {
-    this.touchStartX = event.touches[0]?.clientX || 0;
+    this.touchStartX = event.touches[0]?.clientX || 0;\n    this.touchStartY = event.touches[0]?.clientY || 0;
   }
 
   @HostListener("window:touchend", ["$event"])
