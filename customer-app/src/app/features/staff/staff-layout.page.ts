@@ -175,7 +175,7 @@ type StaffRecentItem = { label: string; path: string };
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
       .staff-identity { flex: 1 1 auto; gap: 5px; white-space: nowrap; }
       .staff-identity span { flex: 0 1 auto; max-width: 76px; font-size: .56rem; }
-      .staff-identity strong { flex: 0 1 auto; max-width: 88px; font-size: .8rem; }
+      .staff-identity strong { flex: 0 1 auto; max-width: 112px; font-size: .8rem; }
       .staff-topbar p { font-size: .66rem; }
       .topbar-actions { gap: 5px; flex: 0 0 auto; }
       .search-button small, .topbar-actions > span:not(.queue-status) { display: none; }
