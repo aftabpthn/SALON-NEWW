@@ -15,8 +15,8 @@ type StaffRecentItem = { label: string; path: string };
       <aside class="staff-sidebar" [class.open]="menuOpen()">
         <button type="button" class="drawer-close" (click)="closeMenu()" aria-label="Close menu">Close</button>
         <div class="brand-card">
-          <span>Aura</span>
-          <strong>Staff OS</strong>
+          <span class="brand-kicker">Aura Shine</span>
+          <strong>Staff Portal</strong>
           <small>{{ staff.user()?.role || 'staff' }} workspace</small>
         </div>
         <div class="user-card">
@@ -55,8 +55,8 @@ type StaffRecentItem = { label: string; path: string };
               </svg>
               <span class="bell-badge">{{ unreadCount() }}</span>
             </button>
-            <span class="net-status" [class.offline]="!realtimeConnected()">{{ realtimeConnected() ? 'Live' : 'Polling' }}</span>
-            <span class="net-status" [class.offline]="!online()">{{ online() ? 'Online' : 'Offline' }}</span>
+            <span class="net-status realtime-status" [class.offline]="!realtimeConnected()" aria-live="polite">{{ realtimeConnected() ? 'Live sync' : 'Polling' }}</span>
+            <span class="net-status network-status" [class.offline]="!online()" aria-live="polite">{{ online() ? 'Online' : 'Offline' }}</span>
             @if (offlinePending()) { <span class="queue-status">{{ offlinePending() }} queued</span> }
             <span>{{ staff.user()?.branchId || 'branch scoped' }}</span>
           </div>
@@ -128,6 +128,7 @@ type StaffRecentItem = { label: string; path: string };
     .topbar-actions { display: flex; align-items: center; gap: 10px; }
     .topbar-actions span { color: #75552b; font-weight: 900; }
     .search-button, .bell-button { border: 1px solid #d6aa55; border-radius: 999px; background: #fffdf7; color: #6e4810; font-weight: 950; padding: 8px 12px; box-shadow: 0 8px 20px rgba(139,93,21,.08); }
+    .search-button:hover, .search-button:focus-visible, .bell-button:focus-visible, .menu-button:focus-visible, nav a:focus-visible, .nav-logout:focus-visible { outline: 3px solid rgba(214,169,74,.28); outline-offset: 2px; }
     .search-button small { margin-left: 6px; opacity: .72; }
     .bell-button { position: relative; display: inline-grid; place-items: center; width: 42px; height: 42px; min-width: 42px; padding: 0; border-radius: 16px; background: linear-gradient(145deg, #ffffff, #fff4d8); }
     .bell-button:hover, .bell-button.has-unread { border-color: #c88d23; color: #3b2608; background: linear-gradient(145deg, #fffaf0, #f4cf73); }
@@ -189,7 +190,8 @@ type StaffRecentItem = { label: string; path: string };
     @media (max-width: 560px) {
       .staff-topbar { align-items: center; display: flex; }
       .staff-topbar strong { display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .net-status { display: none; }
+      .network-status { display: none; }
+      .realtime-status { display: inline-flex; }
       nav a { padding: 12px 13px; }
     }
   `]
