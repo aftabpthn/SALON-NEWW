@@ -127,7 +127,7 @@ type StaffRecentItem = { label: string; path: string };
     .staff-main-shell { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; overflow: hidden; }
     .staff-topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid rgba(234,210,162,.58); background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,250,239,.94)); box-shadow: 0 8px 24px rgba(92,65,28,.07); backdrop-filter: blur(16px); }
     .staff-identity { display: grid; align-content: center; min-width: 0; gap: 1px; }
-    .staff-identity span { overflow: hidden; color: #8a611e; font-size: .66rem; font-weight: 950; letter-spacing: .1em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
+    .staff-identity span { flex: 0 0 auto; overflow: visible; color: #8a611e; font-size: .66rem; font-weight: 950; letter-spacing: .1em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
     .staff-identity strong { overflow: hidden; color: #1d1307; font-size: .92rem; text-overflow: ellipsis; white-space: nowrap; }
     .staff-topbar strong { color: #1d1307; }
     .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex-wrap: wrap; }
