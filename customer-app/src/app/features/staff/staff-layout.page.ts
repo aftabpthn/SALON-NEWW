@@ -45,7 +45,7 @@ type StaffRecentItem = { label: string; path: string };
           <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu"><span></span><span></span><span></span></button>
           <div class="staff-identity"><span>Staff portal</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong></div>
           <div class="topbar-actions">
-            <button type="button" class="search-button" (click)="openCommand()">Search <small>Ctrl K</small></button>
+            <button type="button" class="search-button" (click)="openCommand()" aria-label="Search staff workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg></button>
             <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications">
               <svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 10.8c0-3.5-2.1-6.1-5-6.7V3a1 1 0 0 0-2 0v1.1c-2.9.6-5 3.2-5 6.7V15l-1.6 2.4A1 1 0 0 0 5.2 19h13.6a1 1 0 0 0 .8-1.6L18 15v-4.2zM9.7 20a2.4 2.4 0 0 0 4.6 0H9.7z"></path>
@@ -126,13 +126,13 @@ type StaffRecentItem = { label: string; path: string };
     .nav-logout { width: 100%; margin-top: 12px; padding: 11px 13px; border: 1px solid rgba(214,170,85,.34); border-radius: 16px; background: #fff8ea; color: #7a4510; font-weight: 950; text-align: left; }
     .staff-main-shell { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; overflow: hidden; }
     .staff-topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid rgba(234,210,162,.58); background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,250,239,.94)); box-shadow: 0 8px 24px rgba(92,65,28,.07); backdrop-filter: blur(16px); }
-    .staff-identity { display: flex; align-items: baseline; min-width: 0; gap: 7px; }
+    .staff-identity { display: grid; align-content: center; min-width: 0; gap: 1px; }
     .staff-identity span { overflow: hidden; color: #8a611e; font-size: .66rem; font-weight: 950; letter-spacing: .1em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
     .staff-identity strong { overflow: hidden; color: #1d1307; font-size: .92rem; text-overflow: ellipsis; white-space: nowrap; }
     .staff-topbar strong { color: #1d1307; }
     .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex-wrap: wrap; }
     .topbar-actions span { color: #75552b; font-weight: 900; }
-    .search-button, .bell-button { border: 1px solid #d6aa55; border-radius: 999px; background: #fffdf7; color: #6e4810; font-weight: 950; padding: 8px 12px; box-shadow: 0 8px 20px rgba(139,93,21,.08); }
+    .search-button, .bell-button { border: 1px solid #d6aa55; border-radius: 999px; background: #fffdf7; color: #6e4810; font-weight: 950; padding: 8px 12px; box-shadow: 0 8px 20px rgba(139,93,21,.08); }\n    .search-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; }\n    .search-button svg { width: 18px; height: 18px; fill: currentColor; }
     .search-button:hover, .search-button:focus-visible, .bell-button:focus-visible, .menu-button:focus-visible, nav a:focus-visible, .nav-logout:focus-visible { outline: 3px solid rgba(214,169,74,.28); outline-offset: 2px; }
     .search-button small { margin-left: 6px; opacity: .72; }
     .bell-button { position: relative; overflow: visible; display: inline-grid; place-items: center; width: 42px; height: 42px; min-width: 42px; padding: 0; border-radius: 16px; background: linear-gradient(145deg, #ffffff, #fff4d8); }
@@ -175,13 +175,13 @@ type StaffRecentItem = { label: string; path: string };
       .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: 50px; padding: 0 8px 0 0; gap: 8px; box-shadow: 0 10px 28px rgba(92,65,28,.12); }
       .menu-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; width: 44px; height: 44px; margin-left: 0; border: 1px solid #d6aa55; border-radius: 14px; background: #fff8ea; color: #5d3607; font-size: .78rem; font-weight: 950; }
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
-      .staff-identity { flex: 1 1 auto; gap: 5px; white-space: nowrap; }
+      .staff-identity { flex: 1 1 auto; gap: 1px; }
       .staff-identity span { flex: 0 1 auto; max-width: 76px; font-size: .56rem; }
-      .staff-identity strong { flex: 0 1 auto; max-width: 112px; font-size: .8rem; }
+      .staff-identity strong { max-width: none; font-size: .8rem; }
       .staff-topbar p { font-size: .66rem; }
       .topbar-actions { gap: 5px; flex: 0 0 auto; }
       .search-button small, .topbar-actions > span:not(.queue-status) { display: none; }
-      .search-button { padding: 7px 9px; }
+      .search-button { width: 38px; height: 38px; padding: 0; }
       .topbar-actions span { max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
       .topbar-actions button { padding: 7px 10px; }
       .topbar-actions .bell-button { width: 40px; height: 40px; min-width: 40px; padding: 0; border-radius: 15px; }
