@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 export type AppointmentCalendarLayout = 'grid' | 'compact-grid' | 'timeline' | 'list';
-export const APPOINTMENT_SLOT_MINUTE_OPTIONS = [15, 10, 30, 60] as const;
+export const APPOINTMENT_SLOT_MINUTE_OPTIONS = [10, 15, 30, 60] as const;
 export type AppointmentSlotMinutes = (typeof APPOINTMENT_SLOT_MINUTE_OPTIONS)[number];
 
 const APPOINTMENT_SLOT_MINUTE_SET = new Set<number>(APPOINTMENT_SLOT_MINUTE_OPTIONS);
