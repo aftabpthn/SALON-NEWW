@@ -1494,29 +1494,34 @@ interface ConsultationChatMessage {
         position: sticky !important;
         top: calc(54px + var(--safe-top)) !important;
         z-index: 30 !important;
-        display: grid !important;
-        grid-template-columns: minmax(0, 1fr) auto !important;
-        align-items: center;
-        gap: 8px !important;
+        display: block !important;
         margin-inline: -2px;
         padding: 8px !important;
         border-radius: 18px !important;
         box-shadow: 0 12px 30px rgba(92, 65, 28, 0.14) !important;
       }
       .home-page .home-search-wrap {
-        grid-column: 1;
+        position: relative;
+        width: 100%;
         min-width: 0;
       }
       .home-page .home-search-wrap ion-searchbar {
+        width: 100% !important;
         min-height: 48px !important;
+        padding-right: 112px !important;
+        --padding-end: 112px !important;
         --border-radius: 15px !important;
       }
       .home-page .home-control-row {
-        grid-column: 2;
+        position: absolute !important;
+        top: 50%;
+        right: 8px;
+        z-index: 2;
         display: flex !important;
         flex-wrap: nowrap !important;
         gap: 5px !important;
         padding: 0 !important;
+        transform: translateY(-50%);
       }
       .home-page .home-control-button {
         width: 36px !important;
@@ -1533,6 +1538,11 @@ interface ConsultationChatMessage {
         height: 17px !important;
         margin: 0 !important;
         font-size: 17px !important;
+      }
+      .home-page .home-suggestion-panel {
+        left: 0 !important;
+        right: 0 !important;
+        width: auto !important;
       }
     }
     @media (min-width: 1024px) {
