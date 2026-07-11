@@ -1521,7 +1521,9 @@ interface ConsultationChatMessage {
         display: flex !important;
         flex-wrap: nowrap !important;
         gap: 5px !important;
-        padding: 0 !important;
+        padding: 3px !important;
+        border-radius: 22px;
+        background: #ffffff;
         transform: translateY(-50%);
       }
       .home-page .home-control-button {
@@ -1531,6 +1533,7 @@ interface ConsultationChatMessage {
         min-height: 36px !important;
         padding: 0 !important;
         border-radius: 50% !important;
+        background: #ffffff !important;
         box-shadow: 0 5px 12px rgba(92, 65, 28, 0.08) !important;
       }
       .home-page .home-control-button span { display: none !important; }
