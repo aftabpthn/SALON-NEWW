@@ -8,6 +8,7 @@ import { AuthService } from "../../core/auth.service";
 import { HomePage } from "../home/home.page";
 import { SearchPage } from "../search/search.page";
 import { BookingsPage } from "../bookings/bookings.page";
+import { ProfilePage } from "../profile/profile.page";
 
 @Component({
   standalone: true,
@@ -746,7 +747,7 @@ import { BookingsPage } from "../bookings/bookings.page";
 export class TabsPage {
   readonly locationLabel = signal(this.readLocationLabel());
   readonly menuOpen = signal(false);
-  private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings"];
+  private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings", "/tabs/profile"];
   private swipeStartX = 0;
   private swipeStartY = 0;
   private swipeOutlet: HTMLElement | null = null;
