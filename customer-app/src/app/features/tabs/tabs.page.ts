@@ -133,7 +133,7 @@ import { AuthService } from "../../core/auth.service";
         </a>
       </div>
     </nav>
-    <ion-tabs (touchstart)="startSwipe($event)" (touchend)="finishSwipe($event)">
+    <ion-tabs (touchstart)="startSwipe($event)" (touchmove)="moveSwipe($event)" (touchend)="finishSwipe($event)">
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="home" href="/tabs/home">
           <ion-icon name="home-outline"></ion-icon>
@@ -195,6 +195,12 @@ import { AuthService } from "../../core/auth.service";
 
     ion-tabs ion-router-outlet {
       flex: 1 1 auto;
+    }
+
+    @media (max-width: 599px) {
+      ion-tabs {
+        touch-action: pan-y;
+      }
     }
 
     ion-tab-bar {
@@ -718,6 +724,8 @@ export class TabsPage {
   private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings"];
   private swipeStartX = 0;
   private swipeStartY = 0;
+  private swipeOutlet: HTMLElement | null = null;
+  private swipeTracking = false;
 
   constructor(readonly auth: AuthService, private readonly router: Router) {
     addIcons({ homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
@@ -736,18 +744,57 @@ export class TabsPage {
     if (target?.closest("ion-tab-bar, button, a, input, textarea, select")) return;
     this.swipeStartX = event.touches[0].clientX;
     this.swipeStartY = event.touches[0].clientY;
+    this.swipeOutlet = (event.currentTarget as HTMLElement | null)?.querySelector("ion-router-outlet") || null;
+    this.swipeOutlet?.style.setProperty("transition", "none");
+    this.swipeTracking = true;
+  }
+
+  moveSwipe(event: TouchEvent) {
+    if (!this.swipeTracking || !this.swipeOutlet || event.touches.length !== 1) return;
+    const deltaX = event.touches[0].clientX - this.swipeStartX;
+    const deltaY = event.touches[0].clientY - this.swipeStartY;
+    if (Math.abs(deltaX) <= Math.abs(deltaY) || Math.abs(deltaX) < 8) return;
+    event.preventDefault();
+    const boundedDelta = Math.max(-window.innerWidth, Math.min(window.innerWidth, deltaX));
+    this.swipeOutlet.style.transform = `translate3d(${boundedDelta}px, 0, 0)`;
   }
 
   finishSwipe(event: TouchEvent) {
+    if (!this.swipeTracking) return;
     const deltaX = event.changedTouches[0]?.clientX - this.swipeStartX;
     const deltaY = event.changedTouches[0]?.clientY - this.swipeStartY;
+    const outlet = this.swipeOutlet;
+    this.swipeTracking = false;
+    this.swipeOutlet = null;
     this.swipeStartX = 0;
     this.swipeStartY = 0;
-    if (!deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    if (!outlet || !deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) {
+      this.resetSwipe(outlet);
+      return;
+    }
     const currentIndex = this.mobileSwipeRoutes.findIndex((route) => this.router.url.split("?")[0] === route);
     const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
     const nextRoute = this.mobileSwipeRoutes[nextIndex];
-    if (nextRoute) void this.router.navigateByUrl(nextRoute);
+    if (!nextRoute) {
+      this.resetSwipe(outlet);
+      return;
+    }
+    const direction = deltaX < 0 ? -1 : 1;
+    outlet.style.transition = "transform 220ms cubic-bezier(0.22, 0.8, 0.24, 1)";
+    outlet.style.transform = `translate3d(${direction * 100}%, 0, 0)`;
+    void this.router.navigateByUrl(nextRoute).then(
+      () => window.setTimeout(() => this.resetSwipe(outlet), 220),
+      () => this.resetSwipe(outlet)
+    );
+  }
+
+  private resetSwipe(outlet: HTMLElement | null) {
+    if (!outlet) return;
+    outlet.style.transition = "transform 180ms cubic-bezier(0.22, 0.8, 0.24, 1)";
+    outlet.style.transform = "translate3d(0, 0, 0)";
+    window.setTimeout(() => {
+      outlet.style.transition = "";
+    }, 190);
   }
   unlock() {
     void this.auth.verifyBiometricUnlock().catch(() => undefined);
