@@ -25,7 +25,12 @@
                 "input": "src/assets",
                 "output": "assets"
               },
-              "src/manifest.webmanifest"
+              "src/manifest.webmanifest",
+              {
+                "glob": "_redirects",
+                "input": "public",
+                "output": "."
+              }
             ],
             "styles": ["src/theme/variables.scss", "src/styles.scss"],
             "scripts": []
