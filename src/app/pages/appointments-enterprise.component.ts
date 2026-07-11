@@ -1011,7 +1011,7 @@ const STATUS_TONES: Record<string, string> = {
       background: #f4f8f7;
       isolation: isolate;
     }
-    .scheduler-grid-shell--fullscreen .scheduler-grid { min-height: calc(100dvh - 32px); max-height: none; }
+    .scheduler-grid-shell--fullscreen .scheduler-grid { height: calc(100dvh - 32px) !important; min-height: calc(100dvh - 32px) !important; max-height: none !important; }
     .calendar-fullscreen-close { position: absolute; top: 22px; right: 22px; z-index: 80; width: 36px; height: 36px; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 22px; line-height: 1; cursor: pointer; }
     .month-range-label { min-width: 84px; color: #172033; font-size: 14px; font-weight: 900; text-align: center; white-space: nowrap; }
     .month-strip-band > button { height: 40px; width: 40px; border-radius: 10px; border: 1px solid #e2d5df; background: #fff; color: #4b1238; font-weight: 900; }
