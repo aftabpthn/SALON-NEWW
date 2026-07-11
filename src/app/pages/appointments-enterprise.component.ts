@@ -276,7 +276,7 @@ const STATUS_TONES: Record<string, string> = {
           </footer>
         </section>
 
-        <section class="month-strip-band">
+        <section class="month-strip-band" [class.calendar-context-hidden]="calendarFullscreen()">
           <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month">&lt;&lt;</button>
           <strong class="month-range-label">{{ selectedDate() | date: 'MMM yyyy' }}</strong>
           <button type="button" (click)="shiftMonth(1)" aria-label="Next month">&gt;&gt;</button>
@@ -296,7 +296,7 @@ const STATUS_TONES: Record<string, string> = {
           <button type="button" class="calendar-fullscreen-toggle" (click)="toggleCalendarFullscreen()" aria-label="Toggle fullscreen calendar" title="Toggle fullscreen calendar">{{ calendarFullscreen() ? "×" : "⛶" }}</button>
         </section>
 
-        <section class="summary-strip">
+        <section class="summary-strip" [class.calendar-context-hidden]="calendarFullscreen()">
           <article><span>Booked</span><strong>{{ summaryValue('booked') }}</strong></article>
           <article class="pending-summary-card"><span>Pending</span><strong>{{ pendingAppointmentCount() }}</strong></article>
           <article><span>Arrived</span><strong>{{ summaryValue('arrived') }}</strong></article>
@@ -993,24 +993,32 @@ const STATUS_TONES: Record<string, string> = {
     .month-strip-band { display: grid; grid-template-columns: 42px 84px 42px minmax(0, 1fr) 36px; gap: 8px; align-items: center; min-height: 76px; padding: 10px 14px; border-radius: 14px; }
     .calendar-fullscreen-toggle { width: 34px; height: 34px; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 19px; line-height: 1; cursor: pointer; }
     .calendar-fullscreen-toggle:hover { border-color: #0f8f7f; color: #0f8f7f; }
-    .scheduler-grid-shell--fullscreen { position: static !important; padding: 0 !important; border: 0 !important; background: transparent !important; overflow: visible !important; }
+    .calendar-context-hidden { display: none !important; }
+    .scheduler-grid-shell--fullscreen {
+      position: relative !important;
+      height: calc(100dvh - 116px) !important;
+      min-height: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+      overflow: hidden !important;
+    }
     .scheduler-grid-shell--fullscreen .scheduler-grid {
-      position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100dvh !important;
+      position: relative !important;
+      width: 100% !important;
+      height: 100% !important;
       min-width: 0 !important;
+      min-height: 0 !important;
       max-width: none !important;
       max-height: none !important;
       margin: 0 !important;
-      padding: 16px !important;
-      z-index: 2000 !important;
+      padding: 0 !important;
+      z-index: 1 !important;
       overflow: auto !important;
       overscroll-behavior: contain;
       border-radius: 0;
       background: #f4f8f7;
       isolation: isolate;
-      min-height: 100dvh;
       align-content: start;
       grid-template-rows: auto max-content;
       grid-auto-rows: max-content;
@@ -1133,6 +1141,8 @@ const STATUS_TONES: Record<string, string> = {
       position: relative;
       display: grid;
       grid-template-columns: var(--time-width) repeat(var(--staff-count), var(--staff-width));
+      grid-template-rows: auto max-content;
+      grid-auto-rows: max-content;
       overflow: auto;
       max-height: 720px;
       border: 1px solid #d7e4e1;
