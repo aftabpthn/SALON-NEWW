@@ -1533,9 +1533,9 @@ interface ConsultationChatMessage {
         min-height: 36px !important;
         padding: 0 !important;
         border-radius: 50% !important;
-        background: rgba(255, 255, 255, 0.68) !important;
-        border-color: rgba(214, 169, 74, 0.18) !important;
-        box-shadow: 0 3px 8px rgba(92, 65, 28, 0.05) !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
       }
       .home-page .home-control-button span { display: none !important; }
       .home-page .home-control-button ion-icon {
