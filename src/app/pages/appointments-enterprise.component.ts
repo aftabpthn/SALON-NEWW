@@ -323,6 +323,7 @@ const STATUS_TONES: Record<string, string> = {
             (pointercancel)="cancelStaffGridSwipe()"
             (pointerleave)="endStaffGridSwipe($event)"
           >
+            <button *ngIf="calendarFullscreen()" type="button" class="calendar-fullscreen-close" (click)="toggleCalendarFullscreen()" aria-label="Exit fullscreen calendar">×</button>
             <div class="time-head">Time</div>
             <div class="staff-head" *ngFor="let person of visibleStaff(); trackBy: trackStaff">
               <span class="avatar">{{ initials(person.name) }}</span>
@@ -942,7 +943,7 @@ const STATUS_TONES: Record<string, string> = {
         <button class="toast-link" type="button" *ngIf="showClientHistoryToastAction()" (click)="openClientHistoryById(lastBookedClientId())">Client History</button>
       </div>
     </section>
-    <button *ngIf="calendarFullscreen()" type="button" class="calendar-fullscreen-close" (click)="toggleCalendarFullscreen()" aria-label="Exit fullscreen calendar">×</button>
+
   `,
   styles: [`
     :host { display: block; }
@@ -1011,7 +1012,7 @@ const STATUS_TONES: Record<string, string> = {
       isolation: isolate;
       grid-template-rows: auto minmax(0, 1fr);
     }
-    .calendar-fullscreen-close { position: fixed !important; top: 16px; right: 16px; z-index: 3000; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
+    .calendar-fullscreen-close { position: absolute; top: 16px; right: 16px; z-index: 100; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
     .month-range-label { min-width: 84px; color: #172033; font-size: 14px; font-weight: 900; text-align: center; white-space: nowrap; }
     .month-strip-band > button { height: 40px; width: 40px; border-radius: 10px; border: 1px solid #e2d5df; background: #fff; color: #4b1238; font-weight: 900; }
     .month-strip { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 0 0 5px; min-width: 0; scrollbar-gutter: stable; scrollbar-width: thin; }
