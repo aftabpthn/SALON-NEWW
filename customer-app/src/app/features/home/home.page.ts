@@ -1489,7 +1489,10 @@ interface ConsultationChatMessage {
     }
 
     @media (max-width: 599px) {
-      .home-page .hero { margin-top: -6px; }
+      ion-toolbar { --min-height: 48px !important; }
+      .home-page .home-toolbar { min-height: 48px !important; padding-block: 4px !important; }
+      .home-page .location-row strong { font-size: 0.86rem !important; }
+      .home-page .hero { margin-top: -8px; }
       .home-page .search-panel {
         position: sticky !important;
         top: calc(54px + var(--safe-top)) !important;
