@@ -20577,3 +20577,41 @@ html:root[data-theme="dark"] body app-root :is(.portal-page, .booking-page, .pag
   border-color: rgba(203, 213, 225, 0.24) !important;
   color: #f8fafc !important;
 }
+
+/* Calendar-only fullscreen mode. */
+body.calendar-fullscreen-active {
+  overflow: hidden !important;
+}
+
+body.calendar-fullscreen-active .app-shell {
+  display: block !important;
+  min-height: 100dvh !important;
+}
+
+body.calendar-fullscreen-active .app-shell > .enterprise-sidebar,
+body.calendar-fullscreen-active .workspace > .topbar,
+body.calendar-fullscreen-active .workspace-route-shell > .workspace-local-rail,
+body.calendar-fullscreen-active .workspace-route-content > .workspace-module-tabs {
+  display: none !important;
+}
+
+body.calendar-fullscreen-active .workspace,
+body.calendar-fullscreen-active .workspace-route-shell,
+body.calendar-fullscreen-active .workspace-route-content {
+  display: block !important;
+  width: 100vw !important;
+  min-width: 0 !important;
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+body.calendar-fullscreen-active app-appointments-enterprise {
+  display: block !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important;
+}

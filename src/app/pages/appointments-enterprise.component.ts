@@ -276,7 +276,7 @@ const STATUS_TONES: Record<string, string> = {
           </footer>
         </section>
 
-        <section class="month-strip-band" [class.calendar-context-hidden]="calendarFullscreen()">
+        <section class="month-strip-band">
           <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month">&lt;&lt;</button>
           <strong class="month-range-label">{{ selectedDate() | date: 'MMM yyyy' }}</strong>
           <button type="button" (click)="shiftMonth(1)" aria-label="Next month">&gt;&gt;</button>
@@ -948,7 +948,26 @@ const STATUS_TONES: Record<string, string> = {
   styles: [`
     :host { display: block; }
     .enterprise-scheduler { position: relative; z-index: 40; display: grid; gap: 16px; }
-    .enterprise-scheduler--fullscreen { z-index: 3000; }
+    .enterprise-scheduler--fullscreen {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 10000 !important;
+      display: grid !important;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 0 !important;
+      padding: 0 !important;
+      background: #f4f8f7;
+      overflow: hidden !important;
+    }
+    .enterprise-scheduler--fullscreen > .deposit-followup-strip,
+    .enterprise-scheduler--fullscreen > .scheduled-staff-panel,
+    .enterprise-scheduler--fullscreen > .summary-strip,
+    .enterprise-scheduler--fullscreen > .toast { display: none !important; }
+    .enterprise-scheduler--fullscreen .month-strip-band {
+      margin: 0 !important;
+      border-radius: 0;
+      flex: 0 0 auto;
+    }
     .enterprise-scheduler > ng-container { display: contents; }
     .enterprise-scheduler .month-strip-band:first-of-type { margin-top: -16px; margin-bottom: -16px; }
     .month-strip-band, .scheduler-top-controls, .scheduler-view-toolbar, .summary-strip, .scheduler-grid-shell, .operations-grid, .scheduler-drawer {
@@ -996,7 +1015,7 @@ const STATUS_TONES: Record<string, string> = {
     .calendar-context-hidden { display: none !important; }
     .scheduler-grid-shell--fullscreen {
       position: relative !important;
-      height: calc(100dvh - 116px) !important;
+      height: 100% !important;
       min-height: 0 !important;
       padding: 0 !important;
       border: 0 !important;
@@ -1725,6 +1744,7 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     window.clearTimeout(this.noticeTimer);
     window.removeEventListener('pointermove', this.onResizeMove);
     window.removeEventListener('pointerup', this.onResizeEnd);
+    if (typeof document !== 'undefined') document.body.classList.remove('calendar-fullscreen-active');
   }
 
   private initialCalendarLayout(): CalendarLayout {
@@ -2078,7 +2098,9 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   }
 
   toggleCalendarFullscreen(): void {
-    this.calendarFullscreen.update((open) => !open);
+    const next = !this.calendarFullscreen();
+    this.calendarFullscreen.set(next);
+    if (typeof document !== 'undefined') document.body.classList.toggle('calendar-fullscreen-active', next);
   }
 
   setCalendarLayout(value: string): void {
