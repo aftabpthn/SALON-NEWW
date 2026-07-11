@@ -101,15 +101,15 @@ interface ConsultationChatMessage {
                 }
               </div>
               <div class="home-control-row" aria-label="Home search controls">
-                <button type="button" class="home-control-button" (click)="openDiscoverPanel('filter')">
+                <button type="button" class="home-control-button" aria-label="Filter salons and services" title="Filter" (click)="openDiscoverPanel('filter')">
                   <ion-icon name="options-outline"></ion-icon>
                   <span>Filter</span>
                 </button>
-                <button type="button" class="home-control-button" (click)="openDiscoverPanel('sort')">
+                <button type="button" class="home-control-button" aria-label="Sort search results" title="Sort" (click)="openDiscoverPanel('sort')">
                   <ion-icon name="swap-vertical-outline"></ion-icon>
                   <span>Sort</span>
                 </button>
-                <button type="button" class="home-control-button map" (click)="openMapSearch()">
+                <button type="button" class="home-control-button map" aria-label="Show salons on map" title="Show map" (click)="openMapSearch()">
                   <ion-icon name="map-outline"></ion-icon>
                   <span>Show map</span>
                 </button>
@@ -1343,45 +1343,7 @@ interface ConsultationChatMessage {
       }
 
 
-      .home-control-row {
-        position: static;
-        z-index: auto;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        width: 100%;
-        gap: 6px;
-        transform: none;
-      }
 
-      .home-control-button {
-        width: 100%;
-        height: 34px;
-        min-height: 34px;
-        min-width: 0;
-        padding: 0 8px;
-        border: 1px solid rgba(214, 169, 74, 0.22);
-        border-radius: 999px;
-        color: #2A1A08;
-        background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,249,236,0.96));
-        box-shadow: 0 5px 12px rgba(92, 65, 28, 0.06);
-        font-size: 0.7rem;
-        font-weight: 900;
-      }
-
-      .home-control-button span {
-        display: inline;
-        line-height: 1;
-      }
-
-      .home-control-button ion-icon {
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-        margin: 0;
-        color: #2A1A08;
-        font-size: 14px;
-        opacity: 1;
-      }
       .welcome-actions ion-button {
         width: 100%;
       }
@@ -1532,17 +1494,46 @@ interface ConsultationChatMessage {
         position: sticky !important;
         top: calc(54px + var(--safe-top)) !important;
         z-index: 30 !important;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto !important;
+        align-items: center;
+        gap: 8px !important;
         margin-inline: -2px;
-        padding: 10px !important;
-        border-radius: 20px !important;
+        padding: 8px !important;
+        border-radius: 18px !important;
         box-shadow: 0 12px 30px rgba(92, 65, 28, 0.14) !important;
       }
-      .home-page .home-search-wrap ion-searchbar {
-        min-height: 52px !important;
-        --border-radius: 16px !important;
+      .home-page .home-search-wrap {
+        grid-column: 1;
+        min-width: 0;
       }
-      .home-page .home-control-row { gap: 9px !important; padding-bottom: 0 !important; }
-      .home-page .home-control-button { min-height: 42px !important; padding-inline: 15px !important; }
+      .home-page .home-search-wrap ion-searchbar {
+        min-height: 48px !important;
+        --border-radius: 15px !important;
+      }
+      .home-page .home-control-row {
+        grid-column: 2;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 5px !important;
+        padding: 0 !important;
+      }
+      .home-page .home-control-button {
+        width: 36px !important;
+        min-width: 36px !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        box-shadow: 0 5px 12px rgba(92, 65, 28, 0.08) !important;
+      }
+      .home-page .home-control-button span { display: none !important; }
+      .home-page .home-control-button ion-icon {
+        width: 17px !important;
+        height: 17px !important;
+        margin: 0 !important;
+        font-size: 17px !important;
+      }
     }
     @media (min-width: 1024px) {
       ion-header {
