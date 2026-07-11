@@ -775,6 +775,7 @@ export class TabsPage {
     if (target?.closest("ion-tab-bar, button, a, input, textarea, select")) return;
     this.swipeStartX = event.touches[0].clientX;
     this.swipeStartY = event.touches[0].clientY;
+    this.swipeStartRoute = this.normalizeSwipeRoute(this.router.url);
     this.swipeOutlet = (event.currentTarget as HTMLElement | null)?.querySelector("ion-router-outlet") || null;
     this.swipeOutlet?.style.setProperty("transition", "none");
     this.swipeTracking = true;
@@ -803,15 +804,17 @@ export class TabsPage {
     const deltaX = event.changedTouches[0]?.clientX - this.swipeStartX;
     const deltaY = event.changedTouches[0]?.clientY - this.swipeStartY;
     const outlet = this.swipeOutlet;
+    const startRoute = this.swipeStartRoute;
     this.swipeTracking = false;
     this.swipeOutlet = null;
     this.swipeStartX = 0;
     this.swipeStartY = 0;
+    this.swipeStartRoute = "";
     if (!outlet || !deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) {
       this.resetSwipe(outlet);
       return;
     }
-    const currentIndex = this.mobileSwipeRoutes.findIndex((route) => this.swipeStartRoute === route);
+    const currentIndex = this.mobileSwipeRoutes.findIndex((route) => startRoute === route);
     const nextRoute = this.mobileSwipeRoutes[currentIndex + (deltaX < 0 ? 1 : -1)];
     if (!nextRoute) {
       this.resetSwipe(outlet);
@@ -827,7 +830,6 @@ export class TabsPage {
       () => this.resetSwipe(outlet)
     );
   }
-
   private normalizeSwipeRoute(url: string): string {
     return url.split(/[?#]/)[0].replace(/\/+$/, "");
   }
@@ -835,7 +837,8 @@ export class TabsPage {
   private previewComponent(route: string): Type<unknown> {
     if (route === "/tabs/home") return HomePage;
     if (route === "/tabs/search") return SearchPage;
-    return BookingsPage;
+    if (route === "/tabs/bookings") return BookingsPage;
+    return ProfilePage;
   }
 
   previewTransform(): string {
