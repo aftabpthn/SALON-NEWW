@@ -825,10 +825,19 @@ export class TabsPage {
     this.swipePreviewOffset.set(0);
     outlet.style.transition = "transform 220ms cubic-bezier(0.22, 0.8, 0.24, 1)";
     outlet.style.transform = `translate3d(${direction * 100}%, 0, 0)`;
-    void this.router.navigateByUrl(nextRoute).then(
-      () => window.setTimeout(() => { this.clearSwipePreview(); this.resetOutlet(outlet); }, 220),
-      () => this.resetSwipe(outlet)
-    );
+    window.setTimeout(() => {
+      void this.router.navigateByUrl(nextRoute).then(
+        () => this.finishRouteSwap(outlet),
+        () => this.resetSwipe(outlet)
+      );
+    }, 220);
+  }
+
+  private finishRouteSwap(outlet: HTMLElement) {
+    this.clearSwipePreview();
+    outlet.style.transition = "none";
+    outlet.style.transform = "translate3d(0, 0, 0)";
+    window.requestAnimationFrame(() => { outlet.style.transition = ""; });
   }
   private normalizeSwipeRoute(url: string): string {
     return url.split(/[?#]/)[0].replace(/\/+$/, "");
