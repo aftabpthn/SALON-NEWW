@@ -3,7 +3,7 @@ import { Router, RouterLink } from "@angular/router";
 import { AlertController, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { FormsModule } from "@angular/forms";
 import { addIcons } from "ionicons";
-import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, timeOutline } from "ionicons/icons";
+import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { AvailabilitySlot, Booking } from "../../core/api.types";
 
@@ -99,6 +99,10 @@ type WaitlistDialog = {
                     <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="directions($event, booking)">
                       <ion-icon name="navigate-outline" slot="start"></ion-icon>
                       Directions
+                    </ion-button>
+                    <ion-button size="small" fill="outline" class="secondary-button" (click)="$event.stopPropagation(); openBookingDetails(booking)">
+                      <ion-icon name="receipt-outline" slot="start"></ion-icon>
+                      View invoice
                     </ion-button>
                     @if (canManageUpcoming(booking)) {
                       <ion-button size="small" fill="clear" color="danger" (click)="cancel($event, booking.id)">Cancel</ion-button>
@@ -864,7 +868,7 @@ export class BookingsPage implements OnDestroy, OnInit {
   private dateSwipeStartY = 0;
 
   constructor(readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly router: Router, private readonly toasts: ToastController) {
-    addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, timeOutline });
+    addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline });
   }
 
   ngOnInit() {
@@ -887,6 +891,10 @@ export class BookingsPage implements OnDestroy, OnInit {
       this.expandedBookingId.update((id) => id === booking.id ? null : booking.id);
       return;
     }
+    void this.router.navigate(["/bookings", booking.id]);
+  }
+
+  openBookingDetails(booking: Booking) {
     void this.router.navigate(["/bookings", booking.id]);
   }
 

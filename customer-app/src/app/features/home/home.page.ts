@@ -47,7 +47,7 @@ interface ConsultationChatMessage {
     <ion-header class="ion-no-border">
       <ion-toolbar>
         <div class="home-toolbar app-container">
-          <span class="aura-shine-brand" aria-label="Aura Shine">AuraShine</span>
+          <span class="aura-shine-brand" aria-label="Aura Shine"><img src="assets/branding/aurashine-logo.png" alt="Aura Shine" /></span>
           <div class="location-copy">
             <span>Near you</span>
             <div class="location-row">
@@ -425,12 +425,21 @@ interface ConsultationChatMessage {
 
     .aura-shine-brand {
       display: none;
+      width: 54px;
+      height: 38px;
       align-items: center;
-      color: #6e4810;
-      font-size: 1.15rem;
-      font-weight: 950;
-      white-space: nowrap;
-      letter-spacing: -0.03em;
+      justify-content: center;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .aura-shine-brand img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
     }
 
     .location-copy span {
@@ -1504,7 +1513,7 @@ interface ConsultationChatMessage {
       ion-header { height: 44px !important; }
       ion-toolbar { height: 44px !important; --min-height: 44px !important; }
       .home-toolbar { grid-template-columns: auto 1fr !important; }
-      .aura-shine-brand { display: inline-flex !important; }
+      .aura-shine-brand { display: inline-flex !important; align-self: center; margin-top: 0; }
       .location-copy { justify-self: end; text-align: right; }
       .location-row { justify-content: flex-end; }
       .home-page .home-toolbar { min-height: 44px !important; padding-block: 2px !important; }

@@ -3,7 +3,7 @@ import { ActivatedRoute } from "@angular/router";
 import { RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon, IonSearchbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { arrowBackOutline, businessOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, sparklesOutline, swapVerticalOutline } from "ionicons/icons";
+import { arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Subscription } from "rxjs";
@@ -51,67 +51,54 @@ interface ProfessionalResult {
   template: `
     <ion-content>
       <main class="page search-page">
-        <section class="fresha-search-top">
-          <button class="back-button" type="button" routerLink="/tabs/home" aria-label="Back to home">
-            <ion-icon name="arrow-back-outline"></ion-icon>
-          </button>
-          <div>
-            <h1>{{ searchTitle() }}</h1>
-            <p>Any time · {{ locationDisplayLabel() }}</p>
-          </div>
-          <button class="header-change-button" type="button" (click)="clearSelectedArea()">Change</button>
-          <button class="map-toggle-button" type="button" (click)="toggleMapPanel()" aria-label="Toggle map">
-            <ion-icon name="map-outline"></ion-icon>
-          </button>
-        </section>
-
-        <section class="sticky-search fresha-search-card">
-          <div class="search-input-wrap">
-            <ion-searchbar [placeholder]="placeholder()" [value]="query()" (ionInput)="setQuery($any($event.target).value || '')"></ion-searchbar>
-            <div class="fresha-filter-row" aria-label="Search filters and sorting">
-              <div class="quick-filter-row" aria-label="Quick filters">
-                <button type="button" [class.active]="mode() === 'salons'" (click)="applyMode('salons')">Venues</button>
-                <button type="button" [class.active]="mode() === 'staff'" (click)="applyMode('staff')">Professionals</button>
-                <button type="button" [class.active]="!hasAvailabilityFilter()" (click)="applyAnyTime()">Any time</button>
-                @if (hasPriceFilter()) {
-                  <button type="button" class="active" (click)="toggleFilterPanel()">Price</button>
-                }
-              </div>
-              <div class="filter-sort-actions">
-                <button type="button" class="control-button" [class.active]="filterPanelOpen() || activeFilterCount()" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
-                  <ion-icon name="options-outline"></ion-icon>
-                  <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
-                  <small>{{ filterButtonLabel() }}</small>
-                </button>
-                <button type="button" class="control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
-                  <ion-icon name="swap-vertical-outline"></ion-icon>
-                  <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
-                  <small>{{ sortDescription(sort()) }}</small>
-                </button>
-              </div>
-            </div>
-            @if (suggestions().length) {
-              <div class="suggestion-panel" role="listbox" aria-label="Search suggestions">
-                @for (suggestion of suggestions(); track suggestion.key) {
-                  <button type="button" role="option" (click)="applySuggestion(suggestion)">
-                    <span>
-                      <strong>{{ suggestion.label }}</strong>
-                      <small>{{ suggestion.type }} · {{ suggestion.copy }}</small>
-                    </span>
-                    <em>{{ distanceLabel(suggestion.business) }}</em>
+        <section class="premium-discovery-top" aria-label="Salon discovery">
+          <section class="sticky-search fresha-search-card">
+            <div class="search-input-wrap">
+              <ion-searchbar [placeholder]="placeholder()" [value]="query()" (ionInput)="setQuery($any($event.target).value || '')"></ion-searchbar>
+              <div class="fresha-filter-row" aria-label="Search filters and sorting">
+                <div class="filter-sort-actions">
+                  <button type="button" class="control-button" [class.active]="filterPanelOpen() || activeFilterCount()" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
+                    <ion-icon name="options-outline"></ion-icon>
+                    <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
+                    <small>{{ filterButtonLabel() }}</small>
                   </button>
-                }
+                  <button type="button" class="control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
+                    <ion-icon name="swap-vertical-outline"></ion-icon>
+                    <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
+                    <small>{{ sortDescription(sort()) }}</small>
+                  </button>
+                </div>
               </div>
-            }
-          </div>
-          @if (activeFilterSummary().length) {
-            <div class="active-summary-row" aria-label="Active filters">
-              @for (item of activeFilterSummary(); track item) {
-                <span>{{ item }}</span>
+              @if (suggestions().length) {
+                <div class="suggestion-panel" role="listbox" aria-label="Search suggestions">
+                  @for (suggestion of suggestions(); track suggestion.key) {
+                    <button type="button" role="option" (click)="applySuggestion(suggestion)">
+                      <span><strong>{{ suggestion.label }}</strong><small>{{ suggestion.type }} · {{ suggestion.copy }}</small></span>
+                      <em>{{ distanceLabel(suggestion.business) }}</em>
+                    </button>
+                  }
+                </div>
               }
-              <button type="button" (click)="clearFilters()">Clear all</button>
             </div>
-          }
+          </section>
+
+          <nav class="premium-chip-row" aria-label="Quick filters">
+            @for (chip of ['Nearby', 'Open Now', 'Offers', 'Premium', 'Women', 'Men', 'Spa', 'Hair', 'Facial', 'Massage', 'Nails']; track chip) {
+              <button type="button" [class.selected]="chip === 'Nearby'" (click)="toggleFilterPanel()">{{ chip }}</button>
+            }
+          </nav>
+
+          <div class="premium-result-row">
+            <div>
+              <strong>✨ {{ resultCount() }} salons near you</strong>
+              <span>Sorted by <button type="button" (click)="toggleSortPanel()">Distance</button></span>
+            </div>
+            <button class="premium-map-switch" type="button" (click)="toggleMapPanel()">
+              <ion-icon name="map-outline"></ion-icon>
+              Map View
+            </button>
+          </div>
+
           <div #overlayHost class="search-overlay-host">
           @if (filterPanelOpen()) {
             <div class="sheet-backdrop" (click)="closeSheets()" aria-hidden="true"></div>
@@ -1030,6 +1017,119 @@ interface ProfessionalResult {
     }
 
     @media (max-width: 599px) {
+      .search-page {
+        width: min(calc(100% - 20px), var(--container-mobile));
+        padding-top: 0;
+      }
+
+      .fresha-search-top {
+        width: calc(100% + 20px);
+        margin-left: -10px;
+        grid-template-columns: 34px minmax(0, 1fr) auto 34px;
+        gap: 6px;
+        min-height: 48px;
+        margin-top: -4px;
+        margin-bottom: 7px;
+        padding: 3px 6px;
+        border-radius: 14px;
+        background: #fffdf8;
+        box-shadow: 0 8px 22px rgba(92, 65, 28, 0.1);
+      }
+
+      .fresha-search-top h1 {
+        font-size: 0.82rem;
+        line-height: 0.98;
+      }
+
+      .fresha-search-top p {
+        margin-top: 0;
+        font-size: 0.6rem;
+        line-height: 1.05;
+      }
+
+      .back-button,
+      .map-toggle-button {
+        width: 30px;
+        height: 30px;
+        font-size: 0.82rem;
+      }
+
+      .header-change-button {
+        min-height: 26px;
+        padding: 0 7px;
+        font-size: 0.6rem;
+      }
+
+      .fresha-search-card {
+        display: block;
+        margin-bottom: 14px;
+        padding: 0 8px;
+        border: 1px solid rgba(125, 89, 32, 0.12);
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 8px 22px rgba(92, 65, 28, 0.1);
+      }
+
+      .search-input-wrap {
+        display: flex;
+        align-items: center;
+        min-height: 42px;
+        gap: 2px;
+      }
+
+      .fresha-search-card ion-searchbar {
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        min-height: 42px;
+        --padding-start: 0;
+        --padding-end: 0;
+        --background: transparent;
+        --box-shadow: none;
+      }
+
+      .search-input-wrap .fresha-filter-row {
+        display: flex;
+        flex: 0 0 auto;
+        width: auto;
+        padding: 0;
+        gap: 6px;
+      }
+
+      .search-input-wrap .quick-filter-row {
+        display: none;
+      }
+
+      .search-input-wrap .filter-sort-actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .search-input-wrap .control-button {
+        display: grid;
+        place-items: center;
+        width: 26px;
+        min-width: 26px;
+        height: 32px;
+        min-height: 32px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        color: #8b7654;
+        background: transparent;
+      }
+
+      .search-input-wrap .control-button span,
+      .search-input-wrap .control-button small {
+        display: none;
+      }
+
+      .search-input-wrap .control-button ion-icon {
+        grid-row: auto;
+        margin: 0;
+        font-size: 0.9rem;
+      }
+
       .live-map {
         min-height: 300px;
       }
@@ -2418,7 +2518,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   readonly showMap = computed(() => this.mapPanelOpen() || this.mapPickMode() || this.mapFullscreen());
 
   constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute) {
-    addIcons({ arrowBackOutline, businessOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, sparklesOutline, swapVerticalOutline });
+    addIcons({ arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline });
   }
 
   ngOnInit() {
@@ -3302,9 +3402,3 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     return Math.round((6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 10) / 10;
   }
 }
-
-
-
-
-
-

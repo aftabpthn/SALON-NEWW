@@ -1,18 +1,13 @@
-import { Component, HostListener, Type, signal } from "@angular/core";
-import { NgComponentOutlet } from "@angular/common";
+import { Component, HostListener, signal } from "@angular/core";
 import { Router, RouterLink, RouterLinkActive } from "@angular/router";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, chevronForwardOutline, closeOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
-import { HomePage } from "../home/home.page";
-import { SearchPage } from "../search/search.page";
-import { BookingsPage } from "../bookings/bookings.page";
-import { ProfilePage } from "../profile/profile.page";
 
 @Component({
   standalone: true,
-  imports: [NgComponentOutlet, RouterLink, RouterLinkActive, IonButton, IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel],
+  imports: [RouterLink, RouterLinkActive, IonButton, IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel],
   template: `
     @if (auth.biometricLocked()) {
       <section class="biometric-gate" aria-label="Biometric verification required">
@@ -138,12 +133,7 @@ import { ProfilePage } from "../profile/profile.page";
         </a>
       </div>
     </nav>
-    @if (swipePreviewComponent(); as component) {
-      <div class="swipe-preview-layer" aria-hidden="true" [style.transform]="previewTransform()" [style.transition]="swipePreviewTransition()">
-        <ng-container *ngComponentOutlet="component"></ng-container>
-      </div>
-    }
-    <ion-tabs (touchstart)="startSwipe($event)" (touchmove)="moveSwipe($event)" (touchend)="finishSwipe($event)">
+    <ion-tabs>
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="home" href="/tabs/home">
           <ion-icon name="home-outline"></ion-icon>
@@ -207,24 +197,8 @@ import { ProfilePage } from "../profile/profile.page";
       flex: 1 1 auto;
     }
 
-    .swipe-preview-layer {
-      position: fixed;
-      inset: 0;
-      z-index: 1;
-      overflow: hidden;
-      pointer-events: none;
-      background: var(--background, #fff9ec);
-    }
-
-    .swipe-preview-layer > * {
-      width: 100%;
-      height: 100%;
-    }
-
     @media (max-width: 599px) {
       ion-tabs {
-        position: relative;
-        z-index: 2;
         touch-action: pan-y;
       }
     }
@@ -750,13 +724,8 @@ export class TabsPage {
   private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings", "/tabs/profile"];
   private swipeStartX = 0;
   private swipeStartY = 0;
-  private swipeOutlet: HTMLElement | null = null;
-  private swipeTracking = false;
-  readonly swipePreviewComponent = signal<Type<unknown> | null>(null);
-  readonly swipePreviewOffset = signal(0);
-  readonly swipePreviewTransition = signal("none");
-  private swipeDirection = 0;
   private swipeStartRoute = "";
+  private swipeTracking = false;
 
   constructor(readonly auth: AuthService, private readonly router: Router) {
     addIcons({ homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
@@ -769,6 +738,7 @@ export class TabsPage {
     this.locationLabel.set(this.readLocationLabel());
   }
 
+  @HostListener("window:touchstart", ["$event"])
   startSwipe(event: TouchEvent) {
     if (!window.matchMedia("(max-width: 599px)").matches || event.touches.length !== 1) return;
     const target = event.target as HTMLElement | null;
@@ -776,106 +746,41 @@ export class TabsPage {
     this.swipeStartX = event.touches[0].clientX;
     this.swipeStartY = event.touches[0].clientY;
     this.swipeStartRoute = this.normalizeSwipeRoute(this.router.url);
-    this.swipeOutlet = (event.currentTarget as HTMLElement | null)?.querySelector("ion-router-outlet") || null;
-    this.swipeOutlet?.style.setProperty("transition", "none");
     this.swipeTracking = true;
-    this.clearSwipePreview();
   }
 
+  @HostListener("window:touchmove", ["$event"])
   moveSwipe(event: TouchEvent) {
-    if (!this.swipeTracking || !this.swipeOutlet || event.touches.length !== 1) return;
+    if (!this.swipeTracking || event.touches.length !== 1) return;
     const deltaX = event.touches[0].clientX - this.swipeStartX;
     const deltaY = event.touches[0].clientY - this.swipeStartY;
     if (Math.abs(deltaX) <= Math.abs(deltaY) || Math.abs(deltaX) < 8) return;
-    const currentIndex = this.mobileSwipeRoutes.findIndex((route) => this.swipeStartRoute === route);
-    const nextRoute = this.mobileSwipeRoutes[currentIndex + (deltaX < 0 ? 1 : -1)];
-    if (!nextRoute) return;
+    const index = this.mobileSwipeRoutes.indexOf(this.swipeStartRoute);
+    if (index < 0 || !this.mobileSwipeRoutes[index + (deltaX < 0 ? 1 : -1)]) return;
     event.preventDefault();
-    this.swipeDirection = deltaX < 0 ? -1 : 1;
-    this.swipePreviewComponent.set(this.previewComponent(nextRoute));
-    this.swipePreviewTransition.set("none");
-    const boundedDelta = Math.max(-window.innerWidth, Math.min(window.innerWidth, deltaX));
-    this.swipeOutlet.style.transform = `translate3d(${boundedDelta}px, 0, 0)`;
-    this.swipePreviewOffset.set(this.swipeDirection < 0 ? window.innerWidth + boundedDelta : -window.innerWidth + boundedDelta);
   }
 
+  @HostListener("window:touchend", ["$event"])
+  @HostListener("window:touchcancel", ["$event"])
   finishSwipe(event: TouchEvent) {
     if (!this.swipeTracking) return;
     const deltaX = event.changedTouches[0]?.clientX - this.swipeStartX;
     const deltaY = event.changedTouches[0]?.clientY - this.swipeStartY;
-    const outlet = this.swipeOutlet;
     const startRoute = this.swipeStartRoute;
     this.swipeTracking = false;
-    this.swipeOutlet = null;
     this.swipeStartX = 0;
     this.swipeStartY = 0;
     this.swipeStartRoute = "";
-    if (!outlet || !deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) {
-      this.resetSwipe(outlet);
-      return;
-    }
-    const currentIndex = this.mobileSwipeRoutes.findIndex((route) => startRoute === route);
-    const nextRoute = this.mobileSwipeRoutes[currentIndex + (deltaX < 0 ? 1 : -1)];
-    if (!nextRoute) {
-      this.resetSwipe(outlet);
-      return;
-    }
-    const direction = deltaX < 0 ? -1 : 1;
-    this.swipePreviewTransition.set("transform 220ms cubic-bezier(0.22, 0.8, 0.24, 1)");
-    this.swipePreviewOffset.set(0);
-    outlet.style.transition = "transform 220ms cubic-bezier(0.22, 0.8, 0.24, 1)";
-    outlet.style.transform = `translate3d(${direction * 100}%, 0, 0)`;
-    window.setTimeout(() => {
-      void this.router.navigateByUrl(nextRoute).then(
-        () => this.finishRouteSwap(outlet),
-        () => this.resetSwipe(outlet)
-      );
-    }, 220);
+    if (!deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    const index = this.mobileSwipeRoutes.indexOf(startRoute);
+    const nextRoute = this.mobileSwipeRoutes[index + (deltaX < 0 ? 1 : -1)];
+    if (nextRoute) void this.router.navigateByUrl(nextRoute);
   }
 
-  private finishRouteSwap(outlet: HTMLElement) {
-    this.clearSwipePreview();
-    outlet.style.transition = "none";
-    outlet.style.transform = "translate3d(0, 0, 0)";
-    window.requestAnimationFrame(() => { outlet.style.transition = ""; });
-  }
   private normalizeSwipeRoute(url: string): string {
     return url.split(/[?#]/)[0].replace(/\/+$/, "");
   }
 
-  private previewComponent(route: string): Type<unknown> {
-    if (route === "/tabs/home") return HomePage;
-    if (route === "/tabs/search") return SearchPage;
-    if (route === "/tabs/bookings") return BookingsPage;
-    return ProfilePage;
-  }
-
-  previewTransform(): string {
-    return `translate3d(${this.swipePreviewOffset()}px, 0, 0)`;
-  }
-
-  private resetSwipe(outlet: HTMLElement | null) {
-    if (this.swipePreviewComponent()) {
-      this.swipePreviewTransition.set("transform 180ms cubic-bezier(0.22, 0.8, 0.24, 1)");
-      this.swipePreviewOffset.set(this.swipeDirection < 0 ? window.innerWidth : -window.innerWidth);
-      window.setTimeout(() => this.clearSwipePreview(), 190);
-    }
-    this.resetOutlet(outlet);
-  }
-
-  private resetOutlet(outlet: HTMLElement | null) {
-    if (!outlet) return;
-    outlet.style.transition = "transform 180ms cubic-bezier(0.22, 0.8, 0.24, 1)";
-    outlet.style.transform = "translate3d(0, 0, 0)";
-    window.setTimeout(() => { outlet.style.transition = ""; }, 190);
-  }
-
-  private clearSwipePreview() {
-    this.swipePreviewComponent.set(null);
-    this.swipePreviewOffset.set(0);
-    this.swipePreviewTransition.set("none");
-    this.swipeDirection = 0;
-  }
   unlock() {
     void this.auth.verifyBiometricUnlock().catch(() => undefined);
   }
@@ -924,5 +829,4 @@ export class TabsPage {
     }
   }
 }
-
 
