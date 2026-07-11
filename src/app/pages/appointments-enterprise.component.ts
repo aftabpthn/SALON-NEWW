@@ -991,24 +991,27 @@ const STATUS_TONES: Record<string, string> = {
     .calendar-fullscreen-toggle { width: 34px; height: 34px; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 19px; line-height: 1; cursor: pointer; }
     .calendar-fullscreen-toggle:hover { border-color: #0f8f7f; color: #0f8f7f; }
     .enterprise-scheduler--fullscreen {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100dvh;
-      min-width: 0;
-      min-height: 0;
-      max-width: none;
-      max-height: none;
-      margin: 0;
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100dvh !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: 0 !important;
+      padding: 16px !important;
       z-index: 1000;
+      display: block !important;
       overflow: auto;
       overscroll-behavior: contain;
-      display: grid;
-      align-content: start;
-      padding: 16px;
       background: #f4f8f7;
       isolation: isolate;
     }
+    .enterprise-scheduler--fullscreen > * { min-width: 0; }
     .enterprise-scheduler--fullscreen .scheduler-grid-shell { min-height: calc(100vh - 190px); }
     .enterprise-scheduler--fullscreen .scheduler-grid { min-height: calc(100vh - 250px); }
     .month-range-label { min-width: 84px; color: #172033; font-size: 14px; font-weight: 900; text-align: center; white-space: nowrap; }
