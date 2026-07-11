@@ -1,5 +1,5 @@
 import { Component, HostListener, signal } from "@angular/core";
-import { RouterLink, RouterLinkActive } from "@angular/router";
+import { Router, RouterLink, RouterLinkActive } from "@angular/router";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, chevronForwardOutline, closeOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
@@ -133,7 +133,7 @@ import { AuthService } from "../../core/auth.service";
         </a>
       </div>
     </nav>
-    <ion-tabs>
+    <ion-tabs (touchstart)="startSwipe($event)" (touchend)="finishSwipe($event)">
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="home" href="/tabs/home">
           <ion-icon name="home-outline"></ion-icon>
@@ -715,8 +715,11 @@ import { AuthService } from "../../core/auth.service";
 export class TabsPage {
   readonly locationLabel = signal(this.readLocationLabel());
   readonly menuOpen = signal(false);
+  private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings"];
+  private swipeStartX = 0;
+  private swipeStartY = 0;
 
-  constructor(readonly auth: AuthService) {
+  constructor(readonly auth: AuthService, private readonly router: Router) {
     addIcons({ homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
   }
 
@@ -727,6 +730,25 @@ export class TabsPage {
     this.locationLabel.set(this.readLocationLabel());
   }
 
+  startSwipe(event: TouchEvent) {
+    if (!window.matchMedia("(max-width: 599px)").matches || event.touches.length !== 1) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("ion-tab-bar, button, a, input, textarea, select")) return;
+    this.swipeStartX = event.touches[0].clientX;
+    this.swipeStartY = event.touches[0].clientY;
+  }
+
+  finishSwipe(event: TouchEvent) {
+    const deltaX = event.changedTouches[0]?.clientX - this.swipeStartX;
+    const deltaY = event.changedTouches[0]?.clientY - this.swipeStartY;
+    this.swipeStartX = 0;
+    this.swipeStartY = 0;
+    if (!deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    const currentIndex = this.mobileSwipeRoutes.findIndex((route) => this.router.url.split("?")[0] === route);
+    const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
+    const nextRoute = this.mobileSwipeRoutes[nextIndex];
+    if (nextRoute) void this.router.navigateByUrl(nextRoute);
+  }
   unlock() {
     void this.auth.verifyBiometricUnlock().catch(() => undefined);
   }
