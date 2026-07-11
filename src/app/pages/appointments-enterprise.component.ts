@@ -1010,7 +1010,7 @@ const STATUS_TONES: Record<string, string> = {
       border-radius: 0;
       background: #f4f8f7;
       isolation: isolate;
-      grid-template-rows: auto calc(var(--row-height) * var(--slot-count));
+      grid-template-rows: auto max-content;
     }
     .calendar-fullscreen-close { position: absolute; top: 16px; right: 16px; z-index: 100; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
     .month-range-label { min-width: 84px; color: #172033; font-size: 14px; font-weight: 900; text-align: center; white-space: nowrap; }
