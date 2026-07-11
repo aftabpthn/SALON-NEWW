@@ -293,7 +293,6 @@ const STATUS_TONES: Record<string, string> = {
               <small class="day-count">{{ day.date === selectedDate() ? (context()?.appointmentTotal || 0) : 0 }}/0</small>
             </button>
           </div>
-          <button type="button" class="calendar-fullscreen-toggle" (pointerdown)="$event.stopPropagation()" (click)="calendarFullscreen() ? exitCalendarFullscreen() : toggleCalendarFullscreen()" aria-label="Toggle fullscreen calendar" title="Toggle fullscreen calendar">{{ calendarFullscreen() ? "×" : "⛶" }}</button>
         </section>
 
         <section class="summary-strip" [class.calendar-context-hidden]="calendarFullscreen()">
@@ -310,6 +309,7 @@ const STATUS_TONES: Record<string, string> = {
         </section>
 
         <section class="scheduler-grid-shell" [class.scheduler-grid-shell--compact]="calendarLayout() === 'compact-grid'" [class.scheduler-grid-shell--fullscreen]="calendarFullscreen()" *ngIf="isGridCalendarLayout(); else alternateCalendarLayout">
+          <button type="button" class="calendar-fullscreen-toggle" (pointerdown)="$event.stopPropagation()" (click)="calendarFullscreen() ? exitCalendarFullscreen() : toggleCalendarFullscreen()" aria-label="Toggle fullscreen calendar" title="Toggle fullscreen calendar">{{ calendarFullscreen() ? "×" : "⛶" }}</button>
           <div
             class="scheduler-grid"
             [class.scheduler-grid--compact]="calendarLayout() === 'compact-grid'"
@@ -323,7 +323,6 @@ const STATUS_TONES: Record<string, string> = {
             (pointercancel)="cancelStaffGridSwipe()"
             (pointerleave)="endStaffGridSwipe($event)"
           >
-            <button *ngIf="calendarFullscreen()" type="button" class="calendar-fullscreen-close" (pointerdown)="$event.stopPropagation()" (click)="exitCalendarFullscreen(); $event.stopPropagation()" aria-label="Exit fullscreen calendar">×</button>
             <div class="time-head">Time</div>
             <div class="staff-head" *ngFor="let person of visibleStaff(); trackBy: trackStaff">
               <span class="avatar">{{ initials(person.name) }}</span>
@@ -1009,8 +1008,8 @@ const STATUS_TONES: Record<string, string> = {
     .primary-button { background: #0f8f7f; color: white; border-color: #0f8f7f; }
     .ghost-button.mini { padding: 8px 11px; font-size: 12px; }
     .danger { color: #b91c1c; }
-    .month-strip-band { display: grid; grid-template-columns: 42px 84px 42px minmax(0, 1fr) 36px; gap: 8px; align-items: center; min-height: 76px; padding: 10px 14px; border-radius: 14px; }
-    .calendar-fullscreen-toggle { width: 34px; height: 34px; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 19px; line-height: 1; cursor: pointer; }
+    .month-strip-band { display: grid; grid-template-columns: 42px 84px 42px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 76px; padding: 10px 14px; border-radius: 14px; }
+    .calendar-fullscreen-toggle { position: absolute; top: 12px; right: 12px; z-index: 200; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #cfe0dc; border-radius: 10px; background: #fff; color: #4b1238; font-size: 19px; line-height: 1; cursor: pointer; }
     .calendar-fullscreen-toggle:hover { border-color: #0f8f7f; color: #0f8f7f; }
     .calendar-context-hidden { display: none !important; }
     .scheduler-grid-shell--fullscreen {
@@ -1153,7 +1152,7 @@ const STATUS_TONES: Record<string, string> = {
     .summary-strip span, .pulse-grid span { color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; display: block; }
     .summary-strip strong { display: block; font-size: 20px; margin-top: 2px; line-height: 1.05; }
     .summary-strip small, .pulse-grid small { color: #64748b; }
-    .scheduler-grid-shell { padding: 16px; border-radius: 16px; overflow: hidden; }
+    .scheduler-grid-shell { position: relative; padding: 16px; border-radius: 16px; overflow: hidden; }
     .scheduler-grid {
       --time-width: 86px;
       --staff-width: minmax(184px, 1fr);
