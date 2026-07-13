@@ -489,6 +489,9 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     let frame: { type?: string } = {};
     try { frame = JSON.parse(String(raw)); } catch { return; }
     if (!frame.type || ["connection.ready", "pong", "subscription.updated"].includes(frame.type)) return;
+    if (["staff:clocked_in", "staff:clocked_out", "staff:break_started", "staff:break_ended"].includes(frame.type)) {
+      window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
+    }
     if (frame.type.startsWith("staff-self.") || ["dashboard.updated", "booking.updated", "queue.updated"].includes(frame.type)) {
       void this.loadShellData();
     }
@@ -500,6 +503,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     this.offlinePending.set(this.staff.offlineQueueSize());
     if (flushed) {
       this.showToast(`${flushed} queued staff action${flushed === 1 ? "" : "s"} synced.`);
+      window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
       void this.loadShellData();
     }
   }

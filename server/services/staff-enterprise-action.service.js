@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { badRequest, conflict, forbidden, notFound } from "../utils/app-error.js";
+import { staffOvertimeService } from "./staff-overtime.service.js";
 import { tenantService } from "./tenant.service.js";
 
 const managerRoles = new Set(["owner", "admin", "superAdmin", "manager"]);
@@ -384,6 +385,21 @@ export class StaffEnterpriseActionService {
     branchAccess(access, current.branchId || "");
     const update = allowedUpdate(after, ["date", "status", "clockIn", "clockOut", "minutesWorked", "overtimeMinutes", "notes"]);
     if (!Object.keys(update).length) throw badRequest("attendance_update afterJson has no allowed fields");
+    const snapshot = staffOvertimeService.snapshot(access.tenantId, "staff_attendance", current.id);
+    const clockInAt = update.clockIn ?? current.clockIn;
+    const clockOutAt = update.clockOut ?? current.clockOut;
+    if (snapshot && clockOutAt) {
+      const calculation = staffOvertimeService.completeSnapshot({
+        tenantId: access.tenantId,
+        attendanceSource: "staff_attendance",
+        attendanceId: current.id,
+        clockInAt,
+        clockOutAt,
+        completedBreakMinutes: snapshot.completedBreakMinutes
+      });
+      update.minutesWorked = calculation.workedMinutes;
+      update.overtimeMinutes = calculation.overtimeMinutes;
+    }
     update.updatedAt = now();
     db.prepare(`UPDATE staff_attendance SET ${setClause(update)} WHERE id = @id AND tenantId = @tenantId`)
       .run({ ...update, id: current.id, tenantId: access.tenantId });

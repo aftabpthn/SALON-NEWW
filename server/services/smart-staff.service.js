@@ -1,5 +1,7 @@
+import { db } from "../db.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { badRequest, notFound } from "../utils/app-error.js";
+import { calculateOvertime, matchSchedule, staffOvertimeService } from "./staff-overtime.service.js";
 import { tenantService } from "./tenant.service.js";
 
 const now = () => new Date().toISOString();
@@ -113,25 +115,64 @@ export class SmartStaffService {
     const branchId = payload.branchId || staff.branchId;
     tenantService.assertBranchAccess(access, branchId);
     const date = payload.date || now().slice(0, 10);
-    const minutesWorked = Number(payload.minutesWorked || minutesBetween(payload.clockIn, payload.clockOut));
-    const overtimeMinutes = Number(payload.overtimeMinutes ?? Math.max(0, minutesWorked - 540));
     const existing = repositories.staffAttendance
       .list({ branchId, limit: 10000 }, scope(access, branchId))
       .find((row) => row.staffId === staff.id && row.date === date);
+    const schedules = repositories.staffShifts
+      .list({ branchId, limit: 10000 }, scope(access, branchId))
+      .filter((row) => row.staffId === staff.id && row.date === date);
+    const clockIn = payload.clockIn || existing?.clockIn || "";
+    const clockOut = payload.clockOut || existing?.clockOut || "";
+    const completedBreakMinutes = Number(payload.completedBreakMinutes ?? payload.breakMinutes ?? 0);
+    const grossMinutes = Number(payload.minutesWorked ?? (clockIn && clockOut ? minutesBetween(clockIn, clockOut) : existing?.minutesWorked || 0));
+    const snapshot = existing ? staffOvertimeService.snapshot(access.tenantId, "staff_attendance", existing.id) : null;
+    const matched = existing ? null : matchSchedule(schedules, { businessDate: date, clockInAt: clockIn });
+    const hasSchedule = Boolean(snapshot?.scheduleId || matched?.schedule?.id);
+    const scheduledShiftMinutes = Number(snapshot?.scheduledMinutes ?? matched?.scheduledMinutes ?? 0);
+    const calculation = clockOut ? calculateOvertime({ grossMinutes, completedBreakMinutes, scheduledShiftMinutes, hasSchedule }) : null;
+    const minutesWorked = calculation?.workedMinutes ?? grossMinutes;
+    const overtimeMinutes = existing && !snapshot
+      ? Number(existing.overtimeMinutes || 0)
+      : Number(calculation?.overtimeMinutes || 0);
     const record = {
       branchId,
       staffId: staff.id,
       date,
-      status: payload.status || "present",
-      clockIn: payload.clockIn || "",
-      clockOut: payload.clockOut || "",
+      status: payload.status || existing?.status || "present",
+      clockIn,
+      clockOut,
       minutesWorked,
       overtimeMinutes,
-      notes: payload.notes || ""
+      notes: payload.notes ?? existing?.notes ?? ""
     };
-    const saved = existing
-      ? repositories.staffAttendance.update(existing.id, record, scope(access, branchId))
-      : repositories.staffAttendance.create({ id: makeId("att"), ...record }, scope(access, branchId));
+    const saved = db.transaction(() => {
+      const result = existing
+        ? repositories.staffAttendance.update(existing.id, record, scope(access, branchId))
+        : repositories.staffAttendance.create({ id: makeId("att"), ...record }, scope(access, branchId));
+      if (!existing) {
+        staffOvertimeService.registerAttendance({
+          tenantId: access.tenantId,
+          branchId,
+          staffId: staff.id,
+          attendanceId: result.id,
+          businessDate: date,
+          clockInAt: clockIn,
+          attendanceSource: "staff_attendance",
+          schedules
+        });
+      }
+      if (clockOut && (!existing || snapshot)) {
+        staffOvertimeService.completeSnapshot({
+          tenantId: access.tenantId,
+          attendanceSource: "staff_attendance",
+          attendanceId: result.id,
+          clockInAt: clockIn,
+          clockOutAt: clockOut,
+          completedBreakMinutes
+        });
+      }
+      return result;
+    })();
     this.syncStaffAttendance(staff, saved, access);
     tenantService.recordUsage({ tenantId: access.tenantId, metric: "staff:attendance", referenceType: "staff_attendance", referenceId: saved.id });
     return saved;

@@ -10,6 +10,16 @@ const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
 const STAFF_BIOMETRIC_ENABLED_KEY = "auraStaffBiometricEnabled";
 const STAFF_BIOMETRIC_CREDENTIAL_KEY = "auraStaffBiometricCredentialId";
 
+function staffBusinessDate(value = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(value).reduce<Record<string, string>>((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts["year"]}-${parts["month"]}-${parts["day"]}`;
+}
+
 export type StaffUser = {
   id: string;
   name: string;
@@ -305,6 +315,24 @@ export type StaffAttendance = {
   status: string;
   source: string;
   overtimeMinutes: number;
+  grossMinutes: number;
+  totalBreakMinutes: number;
+  totalWorkedMinutes: number;
+  scheduledShiftMinutes: number | null;
+  overtimeCalculationStatus: string;
+  overtimeReviewReason: string;
+  overtimePolicyVersion: string;
+};
+
+export type StaffOvertimeSummary = {
+  asOf: string;
+  weekStart: string;
+  weekEnd: string;
+  last30DaysStart: string;
+  todayMinutes: number;
+  weekMinutes: number;
+  last30DaysMinutes: number;
+  lifetimeMinutes: number;
 };
 
 export type StaffToday = {
@@ -555,8 +583,24 @@ export class StaffAppService {
     return this.patch<StaffLearning>(`/staff-self/learning/${encodeURIComponent(moduleId)}`, { status });
   }
 
-  async today(date = new Date().toISOString().slice(0, 10)): Promise<StaffToday> {
+  async today(date = staffBusinessDate()): Promise<StaffToday> {
     return this.get<StaffToday>("/staff-os/mobile/today", { date, staffId: this.staffId() });
+  }
+
+  async attendanceHistory(days = 30): Promise<StaffAttendance[]> {
+    const to = staffBusinessDate();
+    const start = new Date(`${to}T00:00:00.000Z`);
+    start.setUTCDate(start.getUTCDate() - Math.max(0, days - 1));
+    return this.get<StaffAttendance[]>("/staff-os/attendance", {
+      staffId: this.staffId(),
+      from: start.toISOString().slice(0, 10),
+      to,
+      limit: "100"
+    });
+  }
+
+  async overtimeSummary(): Promise<StaffOvertimeSummary> {
+    return this.get<StaffOvertimeSummary>("/staff-os/attendance/overtime-summary", { staffId: this.staffId(), asOf: staffBusinessDate() });
   }
 
   async payroll(): Promise<StaffPayrollItem[]> {

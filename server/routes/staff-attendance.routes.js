@@ -19,5 +19,6 @@ staffAttendanceRouter.post("/staff-os/attendance/clock-in", canUseAttendance, ro
 staffAttendanceRouter.post("/staff-os/attendance/clock-out", canUseAttendance, route((req, res) => res.json(staffAttendanceService.clockOut(req.body, req.access))));
 staffAttendanceRouter.post("/staff-os/attendance/break-start", canUseAttendance, route((req, res) => res.status(201).json(staffAttendanceService.startBreak(req.body, req.access))));
 staffAttendanceRouter.post("/staff-os/attendance/break-end", canUseAttendance, route((req, res) => res.json(staffAttendanceService.endBreak(req.body, req.access))));
+staffAttendanceRouter.get("/staff-os/attendance/overtime-summary", canReadAttendance, route((req, res) => res.json(staffAttendanceService.overtimeSummary(req.query, req.access))));
 staffAttendanceRouter.get("/staff-os/attendance", canReadAttendance, route((req, res) => res.json(staffAttendanceService.listAttendance(req.query, req.access))));
 staffAttendanceRouter.post("/staff-os/attendance/correction", canUseAttendance, route((req, res) => res.status(201).json(staffAttendanceService.correctAttendance(req.body, req.access))));

@@ -21,7 +21,8 @@ const migrationPaths = [
   join(__dirname, "..", "db", "migrations", "20260530_staff_attendance_targets.sql"),
   join(__dirname, "..", "db", "migrations", "20260531_staff_master_payroll_services.sql"),
   join(__dirname, "..", "db", "migrations", "20260602_staff_attendance_biometric_camera.sql"),
-  join(__dirname, "..", "db", "migrations", "20260602_staff_attendance_future_intelligence.sql")
+  join(__dirname, "..", "db", "migrations", "20260602_staff_attendance_future_intelligence.sql"),
+  join(__dirname, "..", "db", "migrations", "20260713_staff_overtime.sql")
 ];
 
 let ensured = false;

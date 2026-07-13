@@ -1,6 +1,7 @@
 import { db } from "../db.js";
 import { badRequest, conflict, notFound } from "../utils/app-error.js";
 import { staffOsService } from "./staff-os.service.js";
+import { staffOvertimeService } from "./staff-overtime.service.js";
 import {
   assertBranch,
   branchIdFrom,
@@ -632,14 +633,20 @@ export class StaffBiometricService {
     const periodDays = businessDaysBetween(periodStart, periodEnd);
     const threshold = hhmmToMinutes(rules.defaultShiftStart) + rules.lateGraceMinutes;
     const previews = [];
+    const periodOvertimeByStaff = staffOvertimeService.periodTotalsByStaff({
+      tenantId: access.tenantId,
+      branchId,
+      periodStart,
+      periodEnd
+    });
     db.transaction(() => {
       for (const staff of staffRows) {
         const attendance = db.prepare(`SELECT * FROM staff_attendance_logs
-          WHERE tenant_id = ? AND branch_id = ? AND staff_id = ? AND business_date >= ? AND business_date <= ?
-          ORDER BY business_date ASC`).all(access.tenantId, branchId, staff.id, periodStart, periodEnd);
+          WHERE tenant_id = @tenantId AND branch_id = @branchId AND staff_id = @staffId AND business_date >= @periodStart AND business_date <= @periodEnd
+          ORDER BY business_date ASC`).all({ tenantId: access.tenantId, branchId, staffId: staff.id, periodStart, periodEnd });
         const presentDays = uniqueRows(attendance.filter((row) => row.clock_in_at), (row) => row.business_date).length;
         const lateCount = attendance.filter((row) => row.clock_in_at && minutesFromTimestamp(row.clock_in_at) > threshold).length;
-        const overtimeMinutes = attendance.reduce((sum, row) => sum + Number(row.overtime_minutes || 0), 0);
+        const overtimeMinutes = Number(periodOvertimeByStaff.get(String(staff.id)) || 0);
         const salary = staff.employeeDetails?.attendanceSalary || {};
         const gross = Number(salary.basicSalary || rules.defaultGrossAmount || 0);
         const absentDays = Math.max(periodDays - presentDays, 0);

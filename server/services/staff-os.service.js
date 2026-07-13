@@ -6,10 +6,11 @@ import { realtimeService } from "./realtime.service.js";
 import { securityService } from "./security.service.js";
 import { staffLoginService } from "./staff-login.service.js";
 import { appointmentLifecycleService } from "./appointment-lifecycle.service.js";
+import { istBusinessDate, staffOvertimeService } from "./staff-overtime.service.js";
 import { tenantService } from "./tenant.service.js";
 
 const now = () => new Date().toISOString();
-const businessDate = () => now().slice(0, 10);
+const businessDate = () => istBusinessDate();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
 
 const managerRoles = new Set(["owner", "admin", "superAdmin", "manager"]);
@@ -2840,6 +2841,14 @@ export class StaffOsService {
     db.transaction(() => {
       db.prepare(`INSERT INTO staff_attendance_logs (id, tenant_id, branch_id, staff_id, business_date, clock_in_at, source, gps_lat, gps_lng, device_id, selfie_url)
         VALUES (@id, @tenant_id, @branch_id, @staff_id, @business_date, @clock_in_at, @source, @gps_lat, @gps_lng, @device_id, @selfie_url)`).run(row);
+      staffOvertimeService.registerAttendance({
+        tenantId: row.tenant_id,
+        branchId: row.branch_id,
+        staffId: row.staff_id,
+        attendanceId: row.id,
+        businessDate: row.business_date,
+        clockInAt: row.clock_in_at
+      });
       this.writeAudit("staff.clocked_in", "staff_attendance_logs", row.id, access, { after: row, branchId });
     })();
     this.emit("staff:clocked_in", access, branchId, row.id);
@@ -2857,12 +2866,25 @@ export class StaffOsService {
     assertBranch(access, attendance.branch_id);
     const stamp = payload.clockOutAt || payload.clock_out_at || now();
     db.transaction(() => {
-      db.prepare(`UPDATE staff_attendance_logs SET clock_out_at = ?, status = 'clocked_out', overtime_minutes = ?, version = version + 1, updated_at = ?
-        WHERE id = ? AND tenant_id = ?`).run(stamp, parseNumber(payload.overtimeMinutes ?? payload.overtime_minutes, 0), stamp, attendance.id, access.tenantId);
-      this.writeAudit("staff.clocked_out", "staff_attendance_logs", attendance.id, access, { before: attendance, after: { clock_out_at: stamp }, branchId: attendance.branch_id });
+      const calculation = staffOvertimeService.completeStaffOsAttendance(attendance, stamp);
+      const overtimeMinutes = calculation?.overtimeMinutes ?? Number(attendance.overtime_minutes || 0);
+      db.prepare(`UPDATE staff_attendance_logs SET clock_out_at = @clockOutAt, status = 'clocked_out', overtime_minutes = @overtimeMinutes, version = version + 1, updated_at = @updatedAt
+        WHERE id = @id AND tenant_id = @tenantId`).run({
+          clockOutAt: stamp,
+          overtimeMinutes,
+          updatedAt: stamp,
+          id: attendance.id,
+          tenantId: access.tenantId
+        });
+      this.writeAudit("staff.clocked_out", "staff_attendance_logs", attendance.id, access, {
+        before: attendance,
+        after: { clock_out_at: stamp, overtime_minutes: overtimeMinutes, calculation },
+        branchId: attendance.branch_id
+      });
     })();
     this.emit("staff:clocked_out", access, attendance.branch_id, attendance.id);
-    return rowToCamel(db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(attendance.id, access.tenantId));
+    const saved = rowToCamel(db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(attendance.id, access.tenantId));
+    return staffOvertimeService.decorateAttendanceRows([saved], access.tenantId)[0];
   }
 
   startBreak(payload = {}, access) {
@@ -2921,7 +2943,21 @@ export class StaffOsService {
     if (params.staff_id) filters.push("staff_id = @staff_id");
     if (params.from) filters.push("business_date >= @from");
     if (params.to) filters.push("business_date <= @to");
-    return db.prepare(`SELECT * FROM staff_attendance_logs WHERE ${filters.join(" AND ")} ORDER BY business_date DESC, created_at DESC LIMIT @limit`).all(params).map(rowToCamel);
+    const rows = db.prepare(`SELECT * FROM staff_attendance_logs WHERE ${filters.join(" AND ")} ORDER BY business_date DESC, created_at DESC LIMIT @limit`).all(params).map(rowToCamel);
+    return staffOvertimeService.decorateAttendanceRows(rows, access.tenantId);
+  }
+
+  overtimeSummary(query = {}, access) {
+    access = normalizeAccess(access);
+    const staff = this.resolveMobileStaff(query, access);
+    const branchId = pickBranch(query, access) || staff.branchId;
+    assertBranch(access, branchId);
+    return staffOvertimeService.summary({
+      tenantId: access.tenantId,
+      branchId,
+      staffId: staff.id,
+      asOf: query.asOf || query.as_of || istBusinessDate()
+    });
   }
 
   correctAttendance(payload = {}, access) {
@@ -3061,6 +3097,12 @@ export class StaffOsService {
     const payloadRowsByStaff = new Map(payloadRows.map((row) => [String(row.staffId || row.staff_id || ""), row]));
     if (payloadRows.length) staffRows = staffRows.filter((staff) => payloadRowsByStaff.has(String(staff.id)));
     if (payloadRows.length && !staffRows.length) throw badRequest("No matching active staff found for payrollRows");
+    const periodOvertimeByStaff = staffOvertimeService.periodTotalsByStaff({
+      tenantId: access.tenantId,
+      branchId,
+      periodStart,
+      periodEnd
+    });
     const grossBase = parseNumber(payload.defaultGrossAmount ?? payload.default_gross_amount, 30000);
     const trx = db.transaction(() => {
       const run = {
@@ -3088,7 +3130,16 @@ export class StaffOsService {
         const salaryProfile = staff.employeeDetails?.attendanceSalary || {};
         const profileGross = parseNumber(salaryProfile.basicSalary, 0);
         const effectiveGross = salaryRow?.new_ctc ? Number(salaryRow.new_ctc) / 12 : (profileGross || grossBase);
-        const itemGross = generatedRow ? parseNumber(generatedRow.grossEarning ?? generatedRow.gross_amount, 0) : parseNumber(payload.grossAmountByStaff?.[staff.id], effectiveGross);
+        const periodOvertimeMinutes = Number(periodOvertimeByStaff.get(String(staff.id)) || 0);
+        const submittedOtHours = generatedRow ? parseNumber(generatedRow.otHours, 0) : 0;
+        const submittedOtAmount = generatedRow ? parseNumber(generatedRow.otAmount, 0) : 0;
+        const configuredOtRate = parseNumber(salaryProfile.otExtraRate, 0);
+        const overtimeRate = configuredOtRate || (submittedOtHours > 0 ? submittedOtAmount / submittedOtHours : 0);
+        const overtimeAmount = Math.round((periodOvertimeMinutes / 60) * overtimeRate * 100) / 100;
+        const submittedGross = generatedRow
+          ? parseNumber(generatedRow.grossEarning ?? generatedRow.gross_amount, 0)
+          : parseNumber(payload.grossAmountByStaff?.[staff.id], effectiveGross);
+        const itemGross = Math.max(0, submittedGross - submittedOtAmount + overtimeAmount);
         const pf = salaryProfile.pfApplicable === false ? 0 : Math.min(itemGross * 0.12, 1800);
         const tds = salaryProfile.tdsApplicable === false ? 0 : (itemGross > 50000 ? itemGross * 0.05 : 0);
         const pt = salaryProfile.ptApplicable === false ? 0 : (itemGross > 15000 ? 200 : 0);
@@ -3098,8 +3149,10 @@ export class StaffOsService {
           ? parseNumber(generatedRow.deductions, 0) + parseNumber(generatedRow.advanceDeducted, 0)
           : 0;
         const deduction = generatedRow ? previewDeduction + statutoryDeduction : statutoryDeduction;
-        const netAmount = generatedRow ? Math.max(0, parseNumber(generatedRow.netSalary ?? generatedRow.net_amount, itemGross - deduction) - statutoryDeduction) : itemGross - deduction;
-        const overtimeAmount = generatedRow ? parseNumber(generatedRow.otAmount, 0) : 0;
+        const submittedNet = generatedRow ? parseNumber(generatedRow.netSalary ?? generatedRow.net_amount, itemGross - deduction) : itemGross;
+        const netAmount = generatedRow
+          ? Math.max(0, submittedNet - submittedOtAmount + overtimeAmount - statutoryDeduction)
+          : itemGross - deduction;
         const bonusAmount = generatedRow
           ? parseNumber(generatedRow.totalCommission, 0) + parseNumber(generatedRow.weekOffPayout, 0) + parseNumber(generatedRow.tips, 0) + parseNumber(generatedRow.allowances, 0)
           : 0;
@@ -3114,6 +3167,7 @@ export class StaffOsService {
             esic,
             tds,
             professionalTax: pt,
+            overtimeMinutes: periodOvertimeMinutes,
             overtimeAmount,
             bonusAmount,
             generatedFromPreview: Boolean(generatedRow),

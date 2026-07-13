@@ -1,8 +1,8 @@
 import { CurrencyPipe, DatePipe } from "@angular/common";
-import { Component, OnInit, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { IonSpinner } from "@ionic/angular/standalone";
-import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffToday } from "../../core/staff-app.service";
+import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday } from "../../core/staff-app.service";
 
 @Component({
   standalone: true,
@@ -53,6 +53,13 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
           </div>
         </div>
       </section>
+
+      @if (overtime(); as ot) { <section class="grid four">
+        <article class="kpi"><span>Today's OT</span><strong>{{ durationLabel(ot.todayMinutes) }}</strong><small>completed attendance</small></article>
+        <article class="kpi"><span>This Week's OT</span><strong>{{ durationLabel(ot.weekMinutes) }}</strong><small>{{ ot.weekStart }} – {{ ot.weekEnd }}</small></article>
+        <article class="kpi"><span>Last 30 Days OT</span><strong>{{ durationLabel(ot.last30DaysMinutes) }}</strong><small>rolling persisted total</small></article>
+        <article class="kpi"><span>Lifetime Total OT</span><strong>{{ durationLabel(ot.lifetimeMinutes) }}</strong><small>analytics only</small></article>
+      </section> }
 
       <section class="basic-home-grid">
         <a class="basic-home-card" routerLink="/staff/attendance"><span>Attendance</span><strong>{{ attendanceLabel() }}</strong><small>{{ attendanceHint() }}</small></a>
@@ -322,10 +329,11 @@ import { StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, St
   `,
   styleUrls: ["./staff-app.styles.css"]
 })
-export class StaffDashboardPage implements OnInit {
+export class StaffDashboardPage implements OnInit, OnDestroy {
   readonly data = signal<StaffDashboard | null>(null);
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly today = signal<StaffToday | null>(null);
+  readonly overtime = signal<StaffOvertimeSummary | null>(null);
   readonly leaveBalances = signal<StaffLeaveBalance[]>([]);
   readonly loading = signal(false);
   readonly sessionExpired = signal(false);
@@ -353,18 +361,21 @@ export class StaffDashboardPage implements OnInit {
   readonly widgetOrderKeys = signal<string[]>(this.readWidgetOrder());
 
   constructor(readonly staff: StaffAppService) {}
+  private readonly attendanceUpdated = () => void this.load();
 
-  ngOnInit() { void this.load(); }
+  ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); void this.load(); }
+  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); }
 
   async load() {
     this.loading.set(true);
     this.sessionExpired.set(false);
     try {
-      const [dashboard, enterprise, today, leaveBalances] = await Promise.all([this.staff.dashboard(), this.staff.enterpriseOs(), this.staff.today(), this.staff.leaveBalances().catch(() => [])]);
+      const [dashboard, enterprise, today, leaveBalances, overtime] = await Promise.all([this.staff.dashboard(), this.staff.enterpriseOs(), this.staff.today(), this.staff.leaveBalances().catch(() => []), this.staff.overtimeSummary()]);
       this.data.set(dashboard);
       this.os.set(enterprise);
       this.today.set(today);
       this.leaveBalances.set(leaveBalances);
+      this.overtime.set(overtime);
     } catch (error) {
       const message = this.staff.error() || (error instanceof Error ? error.message : "");
       this.sessionExpired.set(/jwt|expired|session|401/i.test(message));
@@ -418,6 +429,8 @@ export class StaffDashboardPage implements OnInit {
   shiftStartLabel(): string {
     return this.today()?.schedules?.[0]?.startTime || "--";
   }
+
+  durationLabel(value: number): string { const minutes = Math.max(0, Number(value || 0)); return `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
 
   openTaskCount(): number {
     const tasks = this.today()?.tasks || this.os()?.tasks || [];
