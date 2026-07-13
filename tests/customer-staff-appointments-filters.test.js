@@ -6,7 +6,7 @@ const page = readFileSync("customer-app/src/app/features/staff/staff-appointment
 const styles = readFileSync("customer-app/src/app/features/staff/staff-app.styles.css", "utf8");
 
 test("staff appointments expose accessible KPI and smart queue filters", () => {
-  for (const view of ["today", "upcoming", "past", "live", "completed", "cancelled"]) {
+  for (const view of ["today", "upcoming", "live", "completed", "cancelled"]) {
     assert.match(page, new RegExp("setView\\('" + view + "'\\)"), view + " should be clickable");
     assert.ok(page.includes('case "' + view + '"') || page.includes(view + ":"), view + " should have filtering or copy");
   }
@@ -16,6 +16,9 @@ test("staff appointments expose accessible KPI and smart queue filters", () => {
   assert.match(page, /aria-pressed/);
   assert.match(page, /timeZone: "Asia\/Kolkata"/);
   assert.match(page, /routerLink="\/staff\/queue"/);
+  assert.doesNotMatch(page, /setView\('past'\)/);
+  assert.match(page, />Completed<\/button>/);
+  assert.match(page, /!CANCELLED_STATUSES\.has\(status\).*COMPLETED_STATUSES\.has\(status\).*!date.*date < today/);
   assert.match(styles, /\.kpi-button:focus-visible/);
   assert.match(styles, /\.queue-tabs/);
 });
