@@ -111,32 +111,51 @@ export type StaffBusinessBilling = {
   duePaise: number;
 };
 
+export type StaffBusinessQuery = {
+  date?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  status?: string;
+  sort?: "asc" | "desc";
+};
+
+export type StaffBusinessSummary = {
+  appointments: number;
+  completedServices: number;
+  scheduledMinutes: number;
+  completedMinutes: number;
+  workedMinutes: number;
+  bills: number;
+  subtotalPaise: number;
+  discountPaise: number;
+  couponDiscountPaise: number;
+  afterDiscountPaise: number;
+  gstPaise: number;
+  totalPaise: number;
+  paidPaise: number;
+  duePaise: number;
+};
+
+export type StaffBusinessAppointment = StaffAppointment & {
+  businessDate: string;
+  state: string;
+  workedMinutes: number;
+  timer: { appointmentId: string; clientName: string; status: string; live: boolean; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number };
+  billing: StaffBusinessBilling | null;
+};
+
 export type StaffBusiness = {
   date: string;
+  range: { from: string; to: string; timeZone: "Asia/Kolkata" };
   staff: StaffDashboard["staff"];
   billingVisible: boolean;
-  summary: {
-    appointments: number;
-    completedServices: number;
-    scheduledMinutes: number;
-    completedMinutes: number;
-    workedMinutes: number;
-    bills: number;
-    subtotalPaise: number;
-    discountPaise: number;
-    couponDiscountPaise: number;
-    afterDiscountPaise: number;
-    gstPaise: number;
-    totalPaise: number;
-    paidPaise: number;
-    duePaise: number;
-  };
-  appointments: Array<StaffAppointment & {
-    state: string;
-    workedMinutes: number;
-    timer: { appointmentId: string; clientName: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number };
-    billing: StaffBusinessBilling | null;
-  }>;
+  summary: StaffBusinessSummary;
+  dailyBreakdown: Array<{ date: string } & StaffBusinessSummary>;
+  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; hasMore: boolean };
+  appointments: StaffBusinessAppointment[];
 };
 
 export type StaffClient360 = {
@@ -349,8 +368,25 @@ export class StaffAppService {
     return this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query);
   }
 
-  async business(date: string): Promise<StaffBusiness> {
-    return this.get<StaffBusiness>("/staff-self/business", { date });
+  async business(input: string | StaffBusinessQuery): Promise<StaffBusiness> {
+    const query = typeof input === "string" ? { date: input } : input;
+    return this.get<StaffBusiness>("/staff-self/business", this.stringQuery(query));
+  }
+
+  async businessCsv(query: StaffBusinessQuery): Promise<Blob> {
+    this.loading.set(true);
+    this.error.set("");
+    try {
+      return await this.withRefreshRetry(() => firstValueFrom(this.http.get(
+        `${this.baseUrl}/staff-self/business/export.csv`,
+        { headers: this.authHeaders(), params: this.stringQuery(query), responseType: "blob" }
+      )));
+    } catch (error) {
+      this.error.set(this.errorMessage(error, "Unable to export staff business report."));
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   async client360(clientId: string): Promise<StaffClient360> {
@@ -580,6 +616,14 @@ export class StaffAppService {
     const token = this.accessToken();
     if (!token) throw new Error("Staff login required.");
     return new HttpHeaders({ Authorization: `Bearer ${token}` });
+  }
+
+  private stringQuery(query: StaffBusinessQuery): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(query)
+        .filter(([, value]) => value !== undefined && value !== null && value !== "")
+        .map(([key, value]) => [key, String(value)])
+    );
   }
 
   private async get<T>(path: string, params: Record<string, string> = {}): Promise<T> {

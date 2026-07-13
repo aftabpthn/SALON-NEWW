@@ -3,8 +3,15 @@ import { can } from "../middleware/rbac.js";
 import { badRequest } from "../utils/app-error.js";
 import { staffLoginService } from "./staff-login.service.js";
 
-const completedStatuses = new Set(["completed", "checked-out"]);
-const activeStatuses = new Set(["in-service", "in service", "started", "active", "running"]);
+const completedStatuses = new Set(["completed", "checked-out", "checked_out", "checkout", "done"]);
+const activeStatuses = new Set(["in-service", "in service", "inprogress", "in progress", "started", "active", "running"]);
+const terminalStatuses = new Set([...completedStatuses, "cancelled", "canceled", "no-show", "voided"]);
+const istFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
 
 function istDate() {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
@@ -25,6 +32,45 @@ function businessDate(value) {
   return date;
 }
 
+function addDays(date, days) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function businessRange(query = {}) {
+  const legacyDate = String(query.date || "").trim();
+  const from = businessDate(query.from || legacyDate || istDate());
+  const to = businessDate(query.to || legacyDate || from);
+  if (from > to) throw badRequest("from date must be on or before to date");
+  return {
+    from,
+    to,
+    fromUtc: new Date(`${from}T00:00:00.000+05:30`).toISOString(),
+    toUtc: new Date(`${addDays(to, 1)}T00:00:00.000+05:30`).toISOString()
+  };
+}
+
+function istDateFor(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = Object.fromEntries(istFormatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function positiveInteger(value, fallback, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, max) : fallback;
+}
+
+function statusGroup(value) {
+  const status = String(value || "").trim().toLowerCase();
+  if (completedStatuses.has(status)) return "completed";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  if (activeStatuses.has(status)) return "in-service";
+  return status;
+}
+
 function moneyPaise(row, keys) {
   for (const key of keys) {
     if (row?.[key] === undefined || row?.[key] === null || row?.[key] === "") continue;
@@ -36,10 +82,16 @@ function moneyPaise(row, keys) {
 }
 
 function rowsByIds(table, column, ids, access, branchId) {
-  if (!ids.length) return [];
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (!uniqueIds.length) return [];
+  if (uniqueIds.length > 400) {
+    return Array.from({ length: Math.ceil(uniqueIds.length / 400) }, (_, index) =>
+      rowsByIds(table, column, uniqueIds.slice(index * 400, index * 400 + 400), access, branchId)
+    ).flat();
+  }
   const columns = columnsFor(table);
-  const params = Object.fromEntries(ids.map((id, index) => [`id${index}`, id]));
-  const filters = [`${column} IN (${ids.map((_, index) => `@id${index}`).join(", ")})`];
+  const params = Object.fromEntries(uniqueIds.map((id, index) => [`id${index}`, id]));
+  const filters = [`${column} IN (${uniqueIds.map((_, index) => `@id${index}`).join(", ")})`];
   const tenantColumn = columns.includes("tenantId") ? "tenantId" : columns.includes("tenant_id") ? "tenant_id" : "";
   const branchColumn = columns.includes("branchId") ? "branchId" : columns.includes("branch_id") ? "branch_id" : "";
   if (tenantColumn) {
@@ -83,77 +135,219 @@ function billingDetails(sale, invoice) {
   };
 }
 
+function durationMinutes(row) {
+  const start = new Date(row.startAt || "").getTime();
+  const end = new Date(row.endAt || "").getTime();
+  if (Number.isFinite(start) && Number.isFinite(end) && end > start) return Math.round((end - start) / 60000);
+  return Math.max(0, Number(row.durationMinutes || 0));
+}
+
+function timerDetails(row, date, today) {
+  const duration = durationMinutes(row);
+  const status = String(row.status || "booked").toLowerCase();
+  const live = date === today && activeStatuses.has(status);
+  const start = new Date(row.startAt || "").getTime();
+  const elapsed = live && Number.isFinite(start) ? Math.max(0, Math.round((Date.now() - start) / 60000)) : completedStatuses.has(status) ? duration : 0;
+  return {
+    appointmentId: row.id,
+    clientName: row.clientName,
+    status,
+    live,
+    elapsedMinutes: Math.min(duration, elapsed),
+    totalMinutes: duration,
+    remainingMinutes: Math.max(0, duration - elapsed),
+    progress: duration ? Math.min(100, Math.round((elapsed / duration) * 100)) : 0
+  };
+}
+
+function summaryFor(rows) {
+  const summary = {
+    appointments: rows.length,
+    completedServices: 0,
+    scheduledMinutes: 0,
+    completedMinutes: 0,
+    workedMinutes: 0,
+    bills: 0,
+    subtotalPaise: 0,
+    discountPaise: 0,
+    couponDiscountPaise: 0,
+    afterDiscountPaise: 0,
+    gstPaise: 0,
+    totalPaise: 0,
+    paidPaise: 0,
+    duePaise: 0
+  };
+  for (const row of rows) {
+    const completed = completedStatuses.has(String(row.status || "").toLowerCase());
+    summary.scheduledMinutes += row.durationMinutes;
+    summary.workedMinutes += row.workedMinutes;
+    if (completed) {
+      summary.completedMinutes += row.durationMinutes;
+      summary.completedServices += Math.max(1, row.serviceNames?.length || 0);
+    }
+    if (!row.billing) continue;
+    summary.bills += 1;
+    for (const key of ["subtotalPaise", "discountPaise", "couponDiscountPaise", "afterDiscountPaise", "gstPaise", "totalPaise", "paidPaise", "duePaise"]) {
+      summary[key] += Number(row.billing[key] || 0);
+    }
+  }
+  return summary;
+}
+
+function buildBusinessData(query, access) {
+  const range = businessRange(query);
+  const staffId = staffLoginService.resolveStaffId(query, access);
+  const staff = staffLoginService.getStaff(staffId, access);
+  const identityIds = staffLoginService.staffIdentityIds(staff, access.tenantId);
+  const branchId = staff.branchId || access.branchId || "";
+  const params = {
+    tenantId: access.tenantId,
+    branchId,
+    fromUtc: range.fromUtc,
+    toUtc: range.toUtc,
+    ...Object.fromEntries(identityIds.map((id, index) => [`staffId${index}`, id]))
+  };
+  const filters = [
+    "tenantId = @tenantId",
+    `staffId IN (${identityIds.map((_, index) => `@staffId${index}`).join(", ")})`,
+    "startAt >= @fromUtc",
+    "startAt < @toUtc"
+  ];
+  if (branchId) filters.push("branchId = @branchId");
+
+  // ponytail: aggregate the staff-scoped range in memory; move aggregation to SQL only if multi-year profiles become a measured bottleneck.
+  const rawAppointments = db.prepare(`SELECT * FROM appointments WHERE ${filters.join(" AND ")} ORDER BY startAt ASC`).all(params);
+  const appointments = staffLoginService.enrichAppointments(rawAppointments, access.tenantId);
+  const billingVisible = ["finance", "sales", "payments", "invoices"].some((resource) =>
+    can(access.role || "staff", "read", resource, access)
+  );
+  const sales = billingVisible ? rowsByIds("sales", "appointmentId", appointments.map((row) => row.id), access, branchId) : [];
+  const saleByAppointment = new Map();
+  for (const sale of sales) {
+    if (["deleted", "voided"].includes(String(sale.status || "").toLowerCase())) continue;
+    if (!saleByAppointment.has(sale.appointmentId)) saleByAppointment.set(sale.appointmentId, sale);
+  }
+  const invoices = billingVisible ? rowsByIds("invoices", "saleId", [...saleByAppointment.values()].map((sale) => sale.id), access, branchId) : [];
+  const invoiceBySale = new Map();
+  for (const invoice of invoices) {
+    if (["deleted", "voided"].includes(String(invoice.status || "").toLowerCase())) continue;
+    if (!invoiceBySale.has(invoice.saleId)) invoiceBySale.set(invoice.saleId, invoice);
+  }
+
+  const today = istDate();
+  let rows = appointments.map((appointment) => {
+    const businessDate = istDateFor(appointment.startAt);
+    const timer = timerDetails(appointment, businessDate, today);
+    const status = String(appointment.status || "booked").toLowerCase();
+    const duration = timer.totalMinutes;
+    const sale = saleByAppointment.get(appointment.id);
+    const billing = billingVisible && sale ? billingDetails(sale, invoiceBySale.get(sale.id)) : null;
+    const start = new Date(appointment.startAt || "").getTime();
+    return {
+      ...appointment,
+      businessDate,
+      state: timer.live ? "active" : !terminalStatuses.has(status) && Number.isFinite(start) && start < Date.now() ? "late" : "planned",
+      durationMinutes: duration,
+      workedMinutes: completedStatuses.has(status) ? duration : timer.live ? timer.elapsedMinutes : 0,
+      timer,
+      billing
+    };
+  });
+
+  const status = String(query.status || "").trim().toLowerCase();
+  const search = String(query.q || "").trim().toLowerCase();
+  if (status && status !== "all") rows = rows.filter((row) => statusGroup(row.status) === statusGroup(status));
+  if (search) {
+    rows = rows.filter((row) => [
+      row.clientName,
+      ...(row.serviceNames || []),
+      row.billing?.invoiceNumber,
+      row.billing?.saleId
+    ].join(" ").toLowerCase().includes(search));
+  }
+
+  const sort = String(query.sort || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+  rows.sort((left, right) => {
+    const dateOrder = left.businessDate.localeCompare(right.businessDate);
+    if (dateOrder) return sort === "asc" ? dateOrder : -dateOrder;
+    return String(left.startAt || "").localeCompare(String(right.startAt || "")) || String(left.id).localeCompare(String(right.id));
+  });
+
+  const daily = new Map();
+  for (const row of rows) {
+    if (!daily.has(row.businessDate)) daily.set(row.businessDate, []);
+    daily.get(row.businessDate).push(row);
+  }
+  const dailyBreakdown = [...daily.entries()]
+    .sort(([left], [right]) => sort === "asc" ? left.localeCompare(right) : right.localeCompare(left))
+    .map(([date, dayRows]) => ({ date, ...summaryFor(dayRows) }));
+
+  return {
+    date: String(query.date || range.to),
+    range: { from: range.from, to: range.to, timeZone: "Asia/Kolkata" },
+    staff,
+    billingVisible,
+    summary: summaryFor(rows),
+    dailyBreakdown,
+    rows
+  };
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+function moneyInr(paise) {
+  return (Number(paise || 0) / 100).toFixed(2);
+}
+
 export const staffBusinessService = {
   daily(query = {}, access = {}) {
-    const date = businessDate(query.date);
-    const dashboard = staffLoginService.staffDashboard({ ...query, date }, access);
-    const enterprise = staffLoginService.enterpriseOs({ ...query, date }, access);
-    const appointments = dashboard.todayAppointments || [];
-    const appointmentIds = appointments.map((item) => item.id).filter(Boolean);
-    const branchId = dashboard.staff.branchId || access.branchId || "";
-    const billingVisible = ["finance", "sales", "payments", "invoices"].some((resource) => can(access.role || "staff", "read", resource, access));
-    const sales = billingVisible ? rowsByIds("sales", "appointmentId", appointmentIds, access, branchId) : [];
-    const saleByAppointment = new Map();
-    sales.forEach((sale) => { if (!saleByAppointment.has(sale.appointmentId)) saleByAppointment.set(sale.appointmentId, sale); });
-    const invoices = billingVisible ? rowsByIds("invoices", "saleId", sales.map((sale) => sale.id).filter(Boolean), access, branchId) : [];
-    const invoiceBySale = new Map();
-    invoices.forEach((invoice) => { if (!invoiceBySale.has(invoice.saleId)) invoiceBySale.set(invoice.saleId, invoice); });
-    const timerByAppointment = new Map((enterprise.serviceTimers || []).map((timer) => [timer.appointmentId, timer]));
-    const timelineByAppointment = new Map((enterprise.timeline || []).map((item) => [item.id, item]));
-
-    const rows = appointments.map((appointment) => {
-      const status = String(appointment.status || "booked").toLowerCase();
-      const timer = timerByAppointment.get(appointment.id) || {
-        appointmentId: appointment.id,
-        clientName: appointment.clientName,
-        status,
-        elapsedMinutes: 0,
-        totalMinutes: Number(appointment.durationMinutes || 0),
-        remainingMinutes: Number(appointment.durationMinutes || 0),
-        progress: 0
-      };
-      const sale = saleByAppointment.get(appointment.id);
-      const billing = billingVisible && sale ? billingDetails(sale, invoiceBySale.get(sale.id)) : null;
-      const durationMinutes = Number(appointment.durationMinutes || timer.totalMinutes || 0);
-      const workedMinutes = completedStatuses.has(status)
-        ? durationMinutes
-        : activeStatuses.has(status) ? Math.min(durationMinutes, Number(timer.elapsedMinutes || 0)) : 0;
-      return {
-        ...appointment,
-        state: timelineByAppointment.get(appointment.id)?.state || "planned",
-        durationMinutes,
-        workedMinutes,
-        timer,
-        billing
-      };
-    });
-
-    const billingRows = rows.map((row) => row.billing).filter(Boolean);
+    const report = buildBusinessData(query, access);
+    const page = positiveInteger(query.page, 1);
+    const pageSize = positiveInteger(query.pageSize, 50, 100);
+    const totalItems = report.rows.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const appointments = report.rows.slice((page - 1) * pageSize, page * pageSize);
     return {
-      date,
-      staff: dashboard.staff,
-      billingVisible,
-      summary: {
-        appointments: rows.length,
-        completedServices: rows
-          .filter((row) => completedStatuses.has(String(row.status || "").toLowerCase()))
-          .reduce((sum, row) => sum + Math.max(1, row.serviceNames?.length || 0), 0),
-        scheduledMinutes: rows.reduce((sum, row) => sum + row.durationMinutes, 0),
-        completedMinutes: rows
-          .filter((row) => completedStatuses.has(String(row.status || "").toLowerCase()))
-          .reduce((sum, row) => sum + row.durationMinutes, 0),
-        workedMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0),
-        bills: billingRows.length,
-        subtotalPaise: billingRows.reduce((sum, bill) => sum + bill.subtotalPaise, 0),
-        discountPaise: billingRows.reduce((sum, bill) => sum + bill.discountPaise, 0),
-        couponDiscountPaise: billingRows.reduce((sum, bill) => sum + bill.couponDiscountPaise, 0),
-        afterDiscountPaise: billingRows.reduce((sum, bill) => sum + bill.afterDiscountPaise, 0),
-        gstPaise: billingRows.reduce((sum, bill) => sum + bill.gstPaise, 0),
-        totalPaise: billingRows.reduce((sum, bill) => sum + bill.totalPaise, 0),
-        paidPaise: billingRows.reduce((sum, bill) => sum + bill.paidPaise, 0),
-        duePaise: billingRows.reduce((sum, bill) => sum + bill.duePaise, 0)
-      },
-      appointments: rows
+      date: report.date,
+      range: report.range,
+      staff: report.staff,
+      billingVisible: report.billingVisible,
+      summary: report.summary,
+      dailyBreakdown: report.dailyBreakdown,
+      pagination: { page, pageSize, totalItems, totalPages, hasMore: page < totalPages },
+      appointments
+    };
+  },
+
+  csv(query = {}, access = {}) {
+    const report = buildBusinessData(query, access);
+    const workHeaders = ["Date", "Start", "End", "Client", "Services", "Chair", "Status", "Scheduled Minutes", "Worked Minutes"];
+    const billingHeaders = ["Invoice", "Invoice Status", "Bill Amount INR", "Discount INR", "Coupon Discount INR", "After Discount INR", "GST INR", "Total INR", "Paid INR", "Due INR"];
+    const headers = report.billingVisible ? [...workHeaders, ...billingHeaders] : [...workHeaders, "Billing"];
+    const rows = report.rows.map((row) => {
+      const work = [row.businessDate, row.startAt, row.endAt, row.clientName, row.serviceNames.join(", "), row.chair, row.status, row.durationMinutes, row.workedMinutes];
+      if (!report.billingVisible) return [...work, "Restricted"];
+      const bill = row.billing;
+      return [...work,
+        bill?.invoiceNumber || "",
+        bill?.invoiceStatus || "",
+        moneyInr(bill?.subtotalPaise),
+        moneyInr(bill?.discountPaise),
+        moneyInr(bill?.couponDiscountPaise),
+        moneyInr(bill?.afterDiscountPaise),
+        moneyInr(bill?.gstPaise),
+        moneyInr(bill?.totalPaise),
+        moneyInr(bill?.paidPaise),
+        moneyInr(bill?.duePaise)
+      ];
+    });
+    return {
+      filename: `staff-business-${report.range.from}-to-${report.range.to}.csv`,
+      content: [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")
     };
   }
 };
