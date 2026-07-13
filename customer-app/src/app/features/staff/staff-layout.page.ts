@@ -1,7 +1,7 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
-import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
+import { StaffAppService, StaffEnterpriseOs, StaffWorkspacePreferences } from "../../core/staff-app.service";
 
 type StaffNavItem = { label: string; path: string; iconPath: string; group: string; permission?: string };
 type StaffRecentItem = { label: string; path: string };
@@ -10,13 +10,13 @@ type StaffRecentItem = { label: string; path: string };
   standalone: true,
   imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
-    <section class="staff-app-shell">
+    <section class="staff-app-shell" [class.staff-compact]="preferences().interface.compactMode">
       <button type="button" class="drawer-backdrop" [class.open]="menuOpen()" (click)="closeMenu()" aria-label="Close menu"></button>
       <aside class="staff-sidebar" [class.open]="menuOpen()">
         <button type="button" class="drawer-close" (click)="closeMenu()" aria-label="Close menu">Close</button>
         <div class="brand-card">
           <span class="brand-kicker">Aura Shine</span>
-          <strong>Staff Portal</strong>
+          <strong>{{ preferences().workspace.workspaceName }}</strong>
           <small>{{ staff.user()?.role || 'staff' }} workspace</small>
         </div>
         <div class="user-card">
@@ -43,7 +43,7 @@ type StaffRecentItem = { label: string; path: string };
       <div class="staff-main-shell" #mainShell (scroll)="onMainScroll()">
         <header class="staff-topbar">
           <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu"><span></span><span></span><span></span></button>
-          <div class="staff-identity"><span>Staff portal</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong></div>
+          <div class="staff-identity"><span>{{ preferences().workspace.workspaceName }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong></div>
           <div class="topbar-actions">
             <button type="button" class="search-button" (click)="openCommand()" aria-label="Search staff workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg></button>
             <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications">
@@ -57,7 +57,10 @@ type StaffRecentItem = { label: string; path: string };
             <span>{{ staff.user()?.branchId || 'branch scoped' }}</span>
           </div>
         </header>
-        <main class="staff-content"><router-outlet /></main>
+        <main class="staff-content">
+          @if (preferences().defaults.staffHints) { <p class="staff-policy-hint">Tip: use search to quickly open permitted staff tools, clients and appointments.</p> }
+          <router-outlet />
+        </main>
       </div>
 
       <nav class="mobile-bottom-nav" aria-label="Primary staff navigation">
@@ -146,6 +149,10 @@ type StaffRecentItem = { label: string; path: string };
     .net-status.offline { background: #fff1ec; color: #9c2f21 !important; }
     .queue-status { background: #fff1cc; color: #7b4d0d !important; }
     .staff-content { min-width: 0; overflow: auto; padding: 20px; background: linear-gradient(160deg, rgba(255,255,255,.46), rgba(255,244,221,.72)); }
+    .staff-policy-hint { margin: 0 0 12px; padding: 9px 12px; border: 1px solid #ead5aa; border-radius: 12px; background: #fff8e8; color: #6e4810; font-size: .8rem; font-weight: 850; }
+    .staff-app-shell.staff-compact .staff-content { padding: 12px; }
+    .staff-app-shell.staff-compact :is(article, .settings-card, .metric-card) { padding: 10px; }
+    .staff-app-shell.staff-compact :is(button, input, select, textarea) { min-height: 34px; }
     .command-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: start center; padding-top: 8vh; background: rgba(20,12,5,.5); backdrop-filter: blur(3px); }
     .command-palette { width: min(720px, calc(100vw - 24px)); max-height: 78vh; overflow: auto; border: 1px solid rgba(234,210,162,.9); border-radius: 24px; background: #fff8ea; box-shadow: 0 30px 90px rgba(34,19,5,.35); }
     .command-head, .drawer-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid #ead5aa; }
@@ -225,6 +232,13 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   readonly offlinePending = signal(0);
   readonly toastMessage = signal("");
   readonly os = signal<StaffEnterpriseOs | null>(null);
+  readonly preferences = signal<StaffWorkspacePreferences>({
+    workspace: { workspaceName: "Aura Shine Staff Portal" },
+    localization: { timezone: "Asia/Kolkata", locale: "en-IN" },
+    dateTime: { dateFormat: "DD/MM/YYYY", timeFormat: "12h", businessDayStartHour: 0, weekStartsOn: "Monday" },
+    interface: { compactMode: false },
+    defaults: { staffHints: true }
+  });
   readonly recent = signal<StaffRecentItem[]>(this.readRecent());
   readonly query = signal("");
   private pollTimer = 0;
@@ -450,7 +464,15 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   private async loadShellData() {
     try {
-      this.os.set(await this.staff.enterpriseOs());
+      const [os, preferences] = await Promise.all([
+        this.staff.enterpriseOs(),
+        this.staff.workspacePreferences().catch(() => this.preferences())
+      ]);
+      this.os.set(os);
+      this.preferences.set(preferences);
+      document.documentElement.dataset["staffCompactMode"] = preferences.interface.compactMode ? "true" : "false";
+      document.documentElement.lang = preferences.localization.locale.split("-")[0] || "en";
+      document.title = `${preferences.workspace.workspaceName} | Staff`;
       this.offlinePending.set(this.staff.offlineQueueSize());
     } catch {
       this.os.set(null);

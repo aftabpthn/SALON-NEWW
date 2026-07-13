@@ -84,38 +84,83 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
             <button class="button" type="button" [disabled]="!activeFilterCount()" (click)="clearFilters()">Clear filters</button>
             @if (activeFilterCount()) { <span class="badge">{{ activeFilterCount() }} active {{ activeFilterCount() === 1 ? 'filter' : 'filters' }}</span> }
             <button class="button" type="button" [disabled]="exporting() || !business()?.pagination?.totalItems" (click)="exportCsv()">{{ exporting() ? 'Exporting…' : 'Export CSV' }}</button>
+            <button class="button" type="button" [disabled]="!business()?.pagination?.totalItems" (click)="printReport()">Print / PDF</button>
           </div>
         </section>
       }
 
       @if (canReadBusiness() && business(); as data) {
         <section class="grid four business-kpi-grid">
-          <article class="kpi"><span>Appointments</span><strong>{{ data.summary.appointments }}</strong><small>{{ data.summary.completedServices }} completed services</small></article>
-          <article class="kpi"><span>Unique clients</span><strong>{{ data.performance.uniqueClients }}</strong><small>{{ data.performance.invoiceCount }} attributed invoices</small></article>
+          <article class="kpi"><span>Appointments</span><strong>{{ data.summary.appointments }}</strong></article>
+          <article class="kpi"><span>Clients</span><strong>{{ data.performance.uniqueClients }}</strong></article>
           @if (data.billingVisible) {
-            <article class="kpi"><span>My attributed revenue</span><strong>{{ formatMoney(data.performance.attributedAfterDiscountPaise) }}</strong><small>{{ formatMoney(data.performance.attributedGrossPaise) }} gross share</small></article>
-            <article class="kpi"><span>Average bill</span><strong>{{ formatMoney(data.performance.averageBillPaise) }}</strong><small>{{ formatMoney(data.performance.revenuePerWorkedHourPaise) }} per service hour</small></article>
+            <article class="kpi"><span>My revenue</span><strong>{{ formatMoney(data.performance.attributedAfterDiscountPaise) }}</strong></article>
+            <article class="kpi"><span>Avg bill</span><strong>{{ formatMoney(data.performance.averageBillPaise) }}</strong></article>
           } @else {
-            <article class="kpi"><span>Billing</span><strong>Restricted</strong><small>Finance permission required</small></article>
-            <article class="kpi"><span>Services</span><strong>{{ data.summary.completedServices }}</strong><small>completed in selected range</small></article>
+            <article class="kpi"><span>Billing</span><strong>Restricted</strong></article>
+            <article class="kpi"><span>Services</span><strong>{{ data.summary.completedServices }}</strong></article>
           }
         </section>
 
         <section class="grid four business-kpi-grid">
-          <article class="kpi"><span>Worked time</span><strong>{{ formatMinutes(data.summary.workedMinutes) }}</strong><small>{{ formatMinutes(data.performance.actualWorkedMinutes) }} actual · {{ formatMinutes(data.performance.estimatedWorkedMinutes) }} estimated</small></article>
-          <article class="kpi"><span>Scheduled</span><strong>{{ formatMinutes(data.summary.scheduledMinutes) }}</strong><small>{{ formatMinutes(data.summary.completedMinutes) }} completed work</small></article>
-          <article class="kpi"><span>Duty time</span><strong>{{ formatMinutes(data.performance.dutyMinutes) }}</strong><small>{{ formatMinutes(data.performance.attendanceMinutes) }} attendance · {{ formatMinutes(data.performance.breakMinutes) }} breaks</small></article>
-          <article class="kpi"><span>Utilization</span><strong>{{ formatPercent(data.performance.utilizationPercent) }}</strong><small>worked time ÷ duty time</small></article>
+          <article class="kpi"><span>Worked</span><strong>{{ formatMinutes(data.summary.workedMinutes) }}</strong></article>
+          <article class="kpi"><span>Scheduled</span><strong>{{ formatMinutes(data.summary.scheduledMinutes) }}</strong></article>
+          <article class="kpi"><span>Duty</span><strong>{{ formatMinutes(data.performance.dutyMinutes) }}</strong></article>
+          <article class="kpi"><span>Utilization</span><strong>{{ formatPercent(data.performance.utilizationPercent) }}</strong></article>
         </section>
 
-        <section class="panel">
-          <div class="panel-title"><h2>Status mix</h2><span>Filtered work</span></div>
+        <details class="panel performance-chart-panel">
+          <summary>Performance charts</summary>
+          <div class="performance-chart-grid">
+            <article class="chart-card">
+              <h3>Status distribution</h3>
+              @for (statusItem of statusMetrics(data); track statusItem.label) {
+                <div class="chart-row">
+                  <span>{{ statusItem.label }}</span>
+                  <div class="chart-track"><i [style.width.%]="statusChartPercent(statusItem.value, data)"></i></div>
+                  <strong>{{ statusItem.value }}</strong>
+                </div>
+              }
+            </article>
+            <article class="chart-card">
+              <h3>Time comparison</h3>
+              @for (timeItem of timeChart(data); track timeItem.label) {
+                <div class="chart-row">
+                  <span>{{ timeItem.label }}</span>
+                  <div class="chart-track"><i [style.width.%]="timeItem.percent"></i></div>
+                  <strong>{{ formatMinutes(timeItem.value) }}</strong>
+                </div>
+              }
+            </article>
+            <article class="chart-card utilization-chart">
+              <h3>Utilization</h3>
+              <strong>{{ formatPercent(data.performance.utilizationPercent) }}</strong>
+              <div class="chart-track"><i [style.width.%]="capProgress(data.performance.utilizationPercent || 0)"></i></div>
+              <small>Worked time compared with duty time</small>
+            </article>
+            @if (data.billingVisible) {
+              <article class="chart-card">
+                <h3>Revenue comparison</h3>
+                @for (revenueItem of revenueChart(data); track revenueItem.label) {
+                  <div class="chart-row">
+                    <span>{{ revenueItem.label }}</span>
+                    <div class="chart-track"><i [style.width.%]="revenueItem.percent"></i></div>
+                    <strong>{{ formatMoney(revenueItem.value) }}</strong>
+                  </div>
+                }
+              </article>
+            }
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Status mix · Filtered work</summary>
           <div class="grid four">
             @for (statusItem of statusMetrics(data); track statusItem.label) {
               <article class="kpi"><span>{{ statusItem.label }}</span><strong>{{ statusItem.value }}</strong></article>
             }
           </div>
-        </section>
+        </details>
 
         @if (data.billingVisible) {
           <details class="panel">
@@ -307,10 +352,9 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
     .search-suggestions small { flex: 0 0 auto; color: #9a6372; font-size: .62rem; font-weight: 900; text-transform: uppercase; }
     @media (max-width: 700px) {
       .grid.four.business-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .business-kpi-grid .kpi { min-height: 108px; padding: 12px 10px; }
-      .business-kpi-grid .kpi span { font-size: .66rem; line-height: 1.25; }
-      .business-kpi-grid .kpi strong { margin-top: 7px; font-size: 1.25rem; line-height: 1.1; }
-      .business-kpi-grid .kpi small { font-size: .72rem; line-height: 1.3; }
+      .business-kpi-grid .kpi { min-height: 68px; padding: 9px 10px; }
+      .business-kpi-grid .kpi span { font-size: .62rem; line-height: 1.2; }
+      .business-kpi-grid .kpi strong { margin-top: 4px; font-size: 1.18rem; line-height: 1; }
     }
   `]
 })
@@ -462,6 +506,27 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
       { label: "Other", value: counts.other }
     ];
   }
+  statusChartPercent(value: number, data: StaffBusiness): number {
+    return data.summary.appointments ? this.capProgress((value / data.summary.appointments) * 100) : 0;
+  }
+  timeChart(data: StaffBusiness) {
+    const rows = [
+      { label: "Worked", value: data.summary.workedMinutes },
+      { label: "Scheduled", value: data.summary.scheduledMinutes },
+      { label: "Duty", value: data.performance.dutyMinutes }
+    ];
+    const maximum = Math.max(1, ...rows.map((row) => row.value));
+    return rows.map((row) => ({ ...row, percent: this.capProgress((row.value / maximum) * 100) }));
+  }
+  revenueChart(data: StaffBusiness) {
+    const rows = [
+      { label: "My revenue", value: Number(data.performance.attributedAfterDiscountPaise || 0) },
+      { label: "Avg bill", value: Number(data.performance.averageBillPaise || 0) },
+      { label: "Per hour", value: Number(data.performance.revenuePerWorkedHourPaise || 0) }
+    ];
+    const maximum = Math.max(1, ...rows.map((row) => row.value));
+    return rows.map((row) => ({ ...row, percent: this.capProgress((row.value / maximum) * 100) }));
+  }
   dateLabel(date: string): string { return new Date(`${date}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }); }
   rangeLabel(): string { return `${this.dateLabel(this.fromDate())} – ${this.dateLabel(this.toDate())}`; }
   isToday(item: StaffBusinessAppointment): boolean { return item.businessDate === this.todayDate; }
@@ -549,6 +614,10 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     } finally {
       this.exporting.set(false);
     }
+  }
+
+  printReport() {
+    window.print();
   }
 
   async startService(appointmentId: string) {
