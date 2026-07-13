@@ -18,13 +18,13 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
               <span>Premium customer app</span>
             </div>
           </div>
-          <p class="eyebrow">Salon discovery · AI consult · instant booking</p>
-          <h1>Your beauty day, planned like a private concierge.</h1>
-          <p class="hero-copy">Discover nearby salons, compare services, save favorites, and move from consultation to booking without front-desk back-and-forth.</p>
+          <p class="eyebrow">Salon discovery · AI consult · booking</p>
+          <h1>Your beauty day, made simple.</h1>
+          <p class="hero-copy">Find salons, compare services, and book in one place.</p>
           <div class="feature-grid" aria-label="Customer app highlights">
-            <span><strong>Live slots</strong><small>Branch availability</small></span>
-            <span><strong>AI guide</strong><small>Photo consultation</small></span>
-            <span><strong>Rewards</strong><small>Wallet and offers</small></span>
+            <span><strong>Slots</strong><small>Live availability</small></span>
+            <span><strong>AI guide</strong><small>Photo consult</small></span>
+            <span><strong>Rewards</strong><small>Offers</small></span>
           </div>
           <ion-button expand="block" size="large" class="primary-gradient" routerLink="/login">Get started</ion-button>
           <ion-button expand="block" fill="clear" routerLink="/tabs/home">Explore as guest</ion-button>
@@ -110,7 +110,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
     .brand-lockup img {
       width: 64px;
       height: 64px;
-      border-radius: 22px;
+      border-radius: 16px;
       box-shadow: 0 16px 34px rgba(139, 92, 246, 0.16);
     }
 
@@ -160,13 +160,13 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
     }
 
     .feature-grid span {
-      min-height: 84px;
+      min-height: 64px;
       display: grid;
       align-content: center;
       gap: 4px;
-      padding: 14px;
+      padding: 9px 6px;
       border: 1px solid rgba(125, 89, 32, 0.14);
-      border-radius: 22px;
+      border-radius: 16px;
       background: rgba(255, 255, 255, 0.58);
     }
 
@@ -214,7 +214,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       }
 
       .feature-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, 1fr);
       }
     }
   `]
