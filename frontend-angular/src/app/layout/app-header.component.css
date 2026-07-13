@@ -1,0 +1,87 @@
+:host {
+  display: block;
+}
+
+.topbar {
+  height: 58px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar strong,
+.topbar small {
+  display: block;
+}
+
+.topbar strong {
+  font-size: 18px;
+}
+
+.topbar small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar .branch-pill,
+.topbar button {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+}
+
+.branch-pill {
+  min-width: 150px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.topbar button {
+  width: 34px;
+  color: #ef4444;
+}
+
+.user-pill {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e5f2ff;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 12px;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .branch-pill {
+    min-width: 0;
+    flex: 1;
+  }
+}

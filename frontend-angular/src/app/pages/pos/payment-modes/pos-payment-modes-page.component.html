@@ -1,0 +1,37 @@
+<section class="payment-modes-page">
+  <header class="page-head">
+    <div><p class="eyebrow">POS settings</p><h1>Payment modes</h1></div>
+    <a routerLink="/pos">Back to checkout</a>
+  </header>
+
+  <p class="status success" *ngIf="message">{{ message }}</p>
+  <p class="status error" *ngIf="error">{{ error }}</p>
+
+  <section class="editor-card">
+    <div class="section-head"><h2>{{ editingId ? 'Edit payment mode' : 'Add custom payment mode' }}</h2><button type="button" *ngIf="editingId" (click)="reset()">Cancel</button></div>
+    <div class="form-grid">
+      <label><span>Mode name</span><input [(ngModel)]="draft.name" name="name" placeholder="Mode name" /></label>
+      <label><span>Settlement type</span><select [(ngModel)]="draft.settlementType" name="settlementType"><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="wallet">Wallet</option><option value="bank_transfer">Online / Bank Transfer</option><option value="gift_card">Gift Card</option><option value="store_credit">Store Credit</option><option value="custom">Custom</option></select></label>
+      <label><span>Shortcut</span><input [(ngModel)]="draft.shortcut" name="shortcut" maxlength="12" placeholder="Optional" /></label>
+      <label><span>Sort order</span><input [(ngModel)]="draft.sortOrder" name="sortOrder" type="number" min="0" placeholder="Optional" /></label>
+    </div>
+    <div class="flags">
+      <label><input [(ngModel)]="draft.active" name="active" type="checkbox" /><span>Active</span></label>
+      <label><input [(ngModel)]="draft.showOnInvoice" name="showOnInvoice" type="checkbox" /><span>Show on invoice</span></label>
+      <label><input [(ngModel)]="draft.referenceRequired" name="referenceRequired" type="checkbox" /><span>Reference required</span></label>
+      <button type="button" class="save-button" [disabled]="saving" (click)="save()">{{ saving ? 'Saving...' : editingId ? 'Save changes' : 'Add mode' }}</button>
+    </div>
+  </section>
+
+  <section class="list-card">
+    <div class="list-head"><h2>Configured payment modes</h2><span>{{ modes.length }} modes</span></div>
+    <div class="mode-table" *ngIf="modes.length; else empty">
+      <div class="table-head"><span>Mode</span><span>Settlement</span><span>Shortcut</span><span>Invoice</span><span>Reference</span><span>Sort</span><span>Status</span><span></span></div>
+      <div class="table-row" *ngFor="let mode of modes">
+        <strong>{{ mode.name }}</strong><span>{{ mode.settlementType.replace('_', ' ') }}</span><span>{{ mode.shortcut || '-' }}</span><span>{{ mode.showOnInvoice ? 'Shown' : 'Hidden' }}</span><span>{{ mode.referenceRequired ? 'Required' : 'Optional' }}</span><span>{{ mode.sortOrder }}</span><span [class.inactive]="!mode.active">{{ mode.active ? 'Active' : 'Inactive' }}</span>
+        <div class="row-actions"><button type="button" (click)="edit(mode)">Edit</button><button type="button" *ngIf="mode.active; else activateButton" class="deactivate" (click)="deactivate(mode)">Deactivate</button><ng-template #activateButton><button type="button" (click)="activate(mode)">Activate</button></ng-template></div>
+      </div>
+    </div>
+    <ng-template #empty><p class="empty">No payment modes yet.</p></ng-template>
+  </section>
+</section>

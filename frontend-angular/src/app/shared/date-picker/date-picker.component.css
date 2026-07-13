@@ -1,0 +1,206 @@
+:host {
+  display: inline-block;
+  width: 150px;
+  font-family: var(--font-sans);
+  color: #071832;
+}
+
+.date-picker {
+  position: relative;
+}
+
+.date-input-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  min-height: 38px;
+  overflow: hidden;
+  border: 1px solid #c9d5e5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.date-input-shell:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
+}
+
+input,
+button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  font-weight: 700;
+}
+
+input:focus,
+button:focus {
+  outline: none;
+}
+
+.date-input-shell button {
+  display: grid;
+  place-items: center;
+  border-left: 1px solid #d8e0ea;
+  color: #10223f;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.calendar-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 120;
+  display: grid;
+  grid-template-columns: 92px 286px;
+  overflow: hidden;
+  border: 1px solid #d8e0ea;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 22px 55px rgba(15, 23, 42, .2);
+}
+
+.shortcut-rail {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px 10px;
+  border-right: 1px solid #e8edf4;
+  background: #f7fbff;
+}
+
+.shortcut-rail button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid #d8e0ea;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.shortcut-rail button:hover {
+  border-color: #0f7a4f;
+  color: #0f7a4f;
+}
+
+.calendar-main {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+header,
+footer {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+
+header {
+  grid-template-columns: 34px 1fr 34px;
+}
+
+header strong {
+  text-align: center;
+  font-size: 15px;
+}
+
+header button {
+  min-height: 32px;
+  border: 1px solid #d8e0ea;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.weekday-row,
+.day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.weekday-row span {
+  color: #5d6b82;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.day-grid button {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.day-grid button:hover {
+  border-color: #bfd4ff;
+  background: #f3f8ff;
+}
+
+.day-grid .muted {
+  color: #94a3b8;
+}
+
+.day-grid .today {
+  border-color: #0f7a4f;
+  color: #0f7a4f;
+}
+
+.day-grid .selected {
+  border-color: #10223f;
+  background: #10223f;
+  color: #fff;
+  box-shadow: 0 10px 18px rgba(16, 34, 63, .22);
+}
+
+.day-grid .in-range { background:#e6f0ff; color:#0b4f8a; }
+
+footer {
+  grid-template-columns: auto 1fr auto auto;
+  padding-top: 4px;
+}
+
+footer button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d8e0ea;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+footer .apply {
+  border-color: #0f7a4f;
+  background: #0f7a4f;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .calendar-popover {
+    grid-template-columns: 1fr;
+    width: min(330px, calc(100vw - 24px));
+  }
+
+  .shortcut-rail {
+    grid-template-columns: repeat(3, 1fr);
+    border-right: 0;
+    border-bottom: 1px solid #e8edf4;
+  }
+}

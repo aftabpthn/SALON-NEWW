@@ -1,0 +1,184 @@
+<section class="guest-workspace">
+  <header class="workspace-bar">
+    <div>
+      <span class="eyebrow">Guest Command</span>
+      <h2>{{ mode === 'list' ? 'Manage guests' : mode === 'create' ? 'Add Guest' : 'Edit Guest' }}</h2>
+    </div>
+
+    <div class="bar-actions" *ngIf="mode === 'list'">
+      <input type="search" placeholder="Search guests" aria-label="Search guests" />
+      <button class="primary" type="button" (click)="showCreate()">Add new</button>
+    </div>
+
+    <div class="bar-actions" *ngIf="mode !== 'list'">
+      <button class="primary" type="button" (click)="mode === 'create' ? saveClient() : showCreate()" [disabled]="savingClient">
+        {{ mode === 'create' ? (savingClient ? 'Saving...' : 'Save') : 'New' }}
+      </button>
+      <button type="button">More</button>
+    </div>
+  </header>
+
+  <section class="guest-list" *ngIf="mode === 'list'">
+    <div class="guest-table-head">
+      <span>Code</span>
+      <span>First name</span>
+      <span>Last name</span>
+      <span>Phone no.</span>
+      <span>Last visit</span>
+      <span>Membership</span>
+      <span>Categories</span>
+      <span>Center</span>
+    </div>
+
+    <div class="guest-table-row" *ngFor="let client of clientRows; trackBy: trackByIndex">
+      <span>{{ client.code }}</span>
+      <button class="name-link" type="button" (click)="openGuest(client)">{{ client.firstName }}</button>
+      <span>{{ client.lastName }}</span>
+      <span>{{ client.phone }}</span>
+      <span>{{ client.lastVisit }}</span>
+      <span>{{ client.membership }}</span>
+      <span>{{ client.categories }}</span>
+      <span>{{ client.center }}</span>
+    </div>
+
+    <div class="empty-block" *ngIf="clientRows.length === 0">
+      No records yet
+    </div>
+  </section>
+
+  <section class="create-panel" *ngIf="mode === 'create'">
+    <div class="panel-toolbar">
+      <strong>Add guest information</strong>
+      <button type="button" (click)="showList()">Back to search</button>
+    </div>
+
+    <form class="create-form" (ngSubmit)="saveClient()">
+      <label>Code<input type="text" [(ngModel)]="createGuest.code" name="code" /></label>
+      <label>First name<input type="text" [ngModel]="createGuest.firstName" name="firstName" (ngModelChange)="createGuest.firstName = titleCase($event)" /></label>
+      <label>Last name<input type="text" [ngModel]="createGuest.lastName" name="lastName" (ngModelChange)="createGuest.lastName = titleCase($event)" /></label>
+      <label>Phone no.<input type="tel" [(ngModel)]="createGuest.phone" name="phone" /></label>
+      <label>Last visit<input type="date" [(ngModel)]="createGuest.lastVisit" name="lastVisit" /></label>
+      <label>Categories<input type="text" [ngModel]="createGuest.categories" name="categories" (ngModelChange)="createGuest.categories = titleCase($event)" /></label>
+      <label>Center<input type="text" [(ngModel)]="createGuest.center" name="center" /></label>
+      <p class="form-error" *ngIf="clientError">{{ clientError }}</p>
+    </form>
+  </section>
+
+  <nav class="guest-tabs" aria-label="Guest tabs" *ngIf="mode === 'detail'">
+    <button
+      *ngFor="let tab of tabs; trackBy: trackByIndex"
+      [class.active]="activeTab === tab"
+      (click)="activeTab = tab"
+      type="button"
+    >
+      {{ tab }}
+    </button>
+
+    <details class="more-menu">
+      <summary [class.active]="moreItems.includes(activeTab)">More</summary>
+      <div class="more-list">
+        <button
+          *ngFor="let item of moreItems; trackBy: trackByIndex"
+          [class.active]="activeTab === item"
+          (click)="activeTab = item"
+          type="button"
+        >
+          {{ item }}
+        </button>
+      </div>
+    </details>
+  </nav>
+
+  <section class="overview-grid" *ngIf="mode === 'detail' && activeTab === 'Overview'">
+    <aside class="guest-card">
+      <div class="avatar">{{ guest?.name ? guest?.name?.slice(0, 2) : '--' }}</div>
+      <strong>{{ guest?.name || 'No guest selected' }}</strong>
+      <span>{{ guest?.contact || '-' }}</span>
+
+      <div class="stat-grid">
+        <span>Points <b>{{ guest?.points ?? '-' }}</b></span>
+        <span>Total visits <b>{{ guest?.totalVisits ?? '-' }}</b></span>
+        <span>Open appointments <b>{{ guest?.openAppointments ?? '-' }}</b></span>
+        <span>Amount due <b>{{ money(guest?.unpaidPaise || 0) }}</b></span>
+        <span>Wallet <b>{{ money(guest?.walletPaise || 0) }}</b></span>
+        <span>Membership <b>{{ guest?.membershipName || '-' }}</b></span>
+        <span>Expiry <b>{{ formatDate(guest?.membershipExpiresAt) }}</b></span>
+      </div>
+    </aside>
+
+    <main class="overview-main">
+      <section class="entitlement-panel">
+        <header>
+          <strong>Packages</strong>
+        </header>
+        <div class="entitlement-list" *ngIf="packages.length"><div *ngFor="let credit of packages"><strong>{{ credit.packageName }}</strong><span>{{ credit.serviceName }}</span><span>{{ credit.pendingQty }} / {{ credit.totalQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div></div>
+        <div class="empty-block" *ngIf="!entitlementLoading && packages.length === 0">No active packages</div>
+      </section>
+
+      <section class="entitlement-panel">
+        <header>
+          <strong>Services available</strong>
+        </header>
+        <div class="entitlement-list" *ngIf="membershipCredits.length || packages.length"><div *ngFor="let credit of membershipCredits"><strong>{{ credit.serviceName }}</strong><span>{{ credit.membershipName }}</span><span>{{ credit.pendingQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div><div *ngFor="let credit of packages"><strong>{{ credit.serviceName }}</strong><span>{{ credit.packageName }}</span><span>{{ credit.pendingQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div></div>
+        <div class="empty-block" *ngIf="!entitlementLoading && membershipCredits.length === 0 && packages.length === 0">No services available</div>
+      </section>
+
+      <section class="entitlement-panel">
+        <header>
+          <strong>Memberships</strong>
+        </header>
+        <div class="entitlement-list" *ngIf="memberships.length"><div *ngFor="let membership of memberships"><strong>{{ membership.membershipName }}</strong><span>{{ formatDate(membership.assignedAt) }}</span><span>{{ membership.remainingCredits }} credits</span><span class="benefit-status">{{ membership.status }}</span></div></div>
+        <div class="empty-block" *ngIf="!entitlementLoading && memberships.length === 0">No memberships</div>
+      </section>
+      <p class="form-error" *ngIf="entitlementError">{{ entitlementError }}</p>
+    </main>
+  </section>
+
+  <section class="notes-panel" *ngIf="mode === 'detail' && activeTab === 'Notes'">
+    <div class="panel-toolbar">
+      <strong>Notes</strong>
+      <select aria-label="Note type">
+        <option>All</option>
+      </select>
+      <button type="button">+ Note</button>
+    </div>
+
+    <div class="notes-head">
+      <span>Note</span>
+      <span>Note type</span>
+      <span>Created by</span>
+      <span>Center</span>
+      <span>Actions</span>
+    </div>
+    <div class="empty-block">No records yet</div>
+  </section>
+
+  <section class="appointments-panel" *ngIf="mode === 'detail' && activeTab === 'Appointment'">
+    <div class="panel-toolbar">
+      <strong>Appointments</strong>
+      <button type="button">Upcoming</button>
+      <button type="button">Past</button>
+    </div>
+
+    <div class="appointment-head">
+      <span>Date</span>
+      <span>Service</span>
+      <span>Payment</span>
+      <span>Status</span>
+    </div>
+    <div class="empty-block">No records yet</div>
+  </section>
+
+  <section class="detail-entitlements" *ngIf="mode === 'detail' && activeTab === 'Packages'">
+    <div class="entitlement-panel"><header><strong>Packages</strong></header><div class="entitlement-list" *ngIf="packages.length"><div *ngFor="let credit of packages"><strong>{{ credit.packageName }}</strong><span>{{ credit.serviceName }}</span><span>{{ credit.pendingQty }} / {{ credit.totalQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div></div><div class="empty-block" *ngIf="packages.length === 0">No active packages</div></div>
+  </section>
+
+  <section class="detail-entitlements" *ngIf="mode === 'detail' && activeTab === 'Memberships'">
+    <div class="entitlement-panel"><header><strong>Memberships</strong></header><div class="entitlement-list" *ngIf="memberships.length"><div *ngFor="let membership of memberships"><strong>{{ membership.membershipName }}</strong><span>{{ formatDate(membership.assignedAt) }}</span><span>{{ membership.remainingCredits }} credits</span><span class="benefit-status">{{ membership.status }}</span></div></div><div class="empty-block" *ngIf="memberships.length === 0">No memberships</div></div>
+  </section>
+
+  <section class="empty-tab" *ngIf="mode === 'detail' && activeTab !== 'Overview' && activeTab !== 'Notes' && activeTab !== 'Appointment' && activeTab !== 'Packages' && activeTab !== 'Memberships'">
+    <strong>{{ activeTab }}</strong>
+    <span>No records yet</span>
+  </section>
+</section>

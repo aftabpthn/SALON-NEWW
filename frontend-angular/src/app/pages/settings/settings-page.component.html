@@ -1,0 +1,199 @@
+<section class="settings-page">
+  <header class="settings-toolbar">
+    <h1>Settings</h1>
+    <input type="search" placeholder="Search settings" aria-label="Search settings" [(ngModel)]="search" />
+  </header>
+
+  <section class="settings-grid" aria-label="Settings sections">
+    <article *ngFor="let item of filteredSections; trackBy: trackByCode">
+      <span>{{ item.code }}</span>
+      <strong>{{ item.title }}</strong>
+      <a *ngIf="item.route; else settingAction" [routerLink]="item.route">Open</a>
+      <ng-template #settingAction>
+        <button *ngIf="item.panel; else locked" type="button" (click)="openPanel('appointments')">Configure</button>
+      </ng-template>
+      <ng-template #locked>
+        <button type="button" disabled>Open</button>
+      </ng-template>
+    </article>
+  </section>
+
+  <section class="settings-panel appointment-settings-panel" *ngIf="activePanel === 'appointments'" aria-label="Appointment settings">
+    <header>
+      <h2>Appointment settings</h2>
+      <div class="panel-actions">
+        <a routerLink="/appointments">Open calendar</a>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+
+    <section class="setting-block">
+      <h3>Calendar Time settings</h3>
+      <div class="toggle-grid">
+        <label class="toggle-card">
+          <span>
+            <b>Overlap Time Slot</b>
+            <small>Allow appointments to overlap in the same time slot</small>
+          </span>
+          <button
+            type="button"
+            class="status-toggle"
+            [class.is-on]="appointmentSettings.overlapTimeSlot"
+            [attr.aria-pressed]="appointmentSettings.overlapTimeSlot"
+            (click)="appointmentSettings.overlapTimeSlot = !appointmentSettings.overlapTimeSlot"
+          >
+            <span></span>
+          </button>
+        </label>
+        <label class="toggle-card">
+          <span>
+            <b>Previous Time Slot</b>
+            <small>Show past time slots on the calendar view</small>
+          </span>
+          <button
+            type="button"
+            class="status-toggle"
+            [class.is-on]="appointmentSettings.previousTimeSlot"
+            [attr.aria-pressed]="appointmentSettings.previousTimeSlot"
+            (click)="appointmentSettings.previousTimeSlot = !appointmentSettings.previousTimeSlot"
+          >
+            <span></span>
+          </button>
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          Start time
+          <input type="time" [(ngModel)]="appointmentSettings.startTime" />
+        </label>
+        <label>
+          End time
+          <input type="time" [(ngModel)]="appointmentSettings.endTime" />
+        </label>
+        <label>
+          Week Start From
+          <select [(ngModel)]="appointmentSettings.weekStartFrom">
+            <option *ngFor="let option of weekStartOptions" [ngValue]="option">{{ option }}</option>
+          </select>
+        </label>
+        <label>
+          Time Slot
+          <select [(ngModel)]="appointmentSettings.slotMinutes">
+            <option *ngFor="let option of slotOptions" [ngValue]="option">{{ option }} Mins</option>
+          </select>
+        </label>
+        <label>
+          Time Format
+          <select [(ngModel)]="appointmentSettings.timeFormat">
+            <option *ngFor="let option of timeFormatOptions" [ngValue]="option">{{ option }}</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="setting-block">
+      <h3>Calendar Color settings</h3>
+      <div class="color-table">
+        <div class="color-head">
+          <span>Enable/Disable</span>
+          <span>Select color</span>
+          <span>Button text</span>
+        </div>
+        <div class="color-row" *ngFor="let item of appointmentSettings.colors; trackBy: trackByStatus">
+          <div class="switch-line">
+            <button
+              class="status-toggle"
+              type="button"
+              [class.is-on]="item.enabled"
+              [attr.aria-pressed]="item.enabled"
+              (click)="toggleAppointmentButton(item)"
+            >
+              <span></span>
+            </button>
+            <b>{{ item.label }}</b>
+          </div>
+          <label class="color-input">
+            <input type="text" [(ngModel)]="item.color" />
+            <input type="color" [(ngModel)]="item.color" />
+          </label>
+          <input type="text" [(ngModel)]="item.label" />
+        </div>
+      </div>
+    </section>
+
+    <section class="setting-block resource-settings">
+      <h3>Chair / room</h3>
+      <div class="resource-form">
+        <label>
+          Name
+          <input [(ngModel)]="chairRoomName" placeholder="Chair or room name" />
+        </label>
+        <label>
+          Type
+          <select [(ngModel)]="chairRoomKind">
+            <option value="chair">Chair</option>
+            <option value="room">Room</option>
+          </select>
+        </label>
+        <button class="primary" type="button" [disabled]="chairRoomSaving || !chairRoomName.trim()" (click)="addChairRoom()">Add</button>
+      </div>
+      <span class="status error" *ngIf="chairRoomError">{{ chairRoomError }}</span>
+      <div class="resource-list" *ngIf="chairRooms.length; else noChairRooms">
+          <article *ngFor="let resource of chairRooms; trackBy: trackByChairRoom">
+          <b>{{ resource.name }}</b>
+          <small>{{ resource.kind }}</small>
+        </article>
+      </div>
+      <ng-template #noChairRooms><span class="resource-empty">No chair / room yet</span></ng-template>
+    </section>
+
+    <section class="setting-block">
+      <h3>Appointment settings</h3>
+      <div class="toggle-grid">
+        <label class="toggle-card">
+          <span>
+            <b>Room Number Option</b>
+            <small>Show room numbers on appointments</small>
+          </span>
+          <button
+            type="button"
+            class="status-toggle"
+            [class.is-on]="appointmentSettings.roomNumberOption"
+            [attr.aria-pressed]="appointmentSettings.roomNumberOption"
+            (click)="appointmentSettings.roomNumberOption = !appointmentSettings.roomNumberOption"
+          >
+            <span></span>
+          </button>
+        </label>
+        <label class="toggle-card">
+          <span>
+            <b>Staff Calendar</b>
+            <small>Show the staff calendar view</small>
+          </span>
+          <button
+            type="button"
+            class="status-toggle"
+            [class.is-on]="appointmentSettings.staffCalendar"
+            [attr.aria-pressed]="appointmentSettings.staffCalendar"
+            (click)="appointmentSettings.staffCalendar = !appointmentSettings.staffCalendar"
+          >
+            <span></span>
+          </button>
+        </label>
+        <label>
+          Appointment status
+          <select [(ngModel)]="appointmentSettings.defaultStatus">
+            <option *ngFor="let option of appointmentStatusOptions" [ngValue]="option">{{ option }}</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <footer>
+      <button type="button" [disabled]="saving" (click)="resetAppointmentSettings()">Reset</button>
+      <button class="primary" type="button" [disabled]="saving" (click)="saveAppointmentSettings()">Save</button>
+      <span class="status" [class.error]="!!saveError">{{ saveStatus || saveError }}</span>
+    </footer>
+  </section>
+</section>

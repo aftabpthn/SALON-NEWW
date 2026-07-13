@@ -1,0 +1,97 @@
+<section class="staff-page" [class.detail-page]="detailPage">
+  <div class="staff-list-view" *ngIf="!detailPage">
+  <header class="page-header">
+    <div><span class="section-label">Team</span><h1>Manage employees</h1></div>
+    <div class="header-actions">
+      <label class="search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input type="search" [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search employees" aria-label="Search employees" /></label>
+      <button class="primary" type="button" (click)="openCreate()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add</button>
+    </div>
+  </header>
+
+  <section class="staff-toolbar" aria-label="Staff filters">
+    <label>Jobs<select [(ngModel)]="jobFilter" (ngModelChange)="applyFilters()"><option value="">All jobs</option><option *ngFor="let job of jobTitles" [value]="job">{{ job }}</option></select></label>
+    <label>Status<select [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()"><option value="">All statuses</option><option value="true">Active</option><option value="false">Inactive</option></select></label>
+    <button class="filter-button" type="button" (click)="clearFilters()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z"></path></svg>Clear filters</button>
+    <div class="utility-actions">
+      <button type="button" aria-label="Refresh staff" title="Refresh" (click)="applyFilters()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.2M20 4v7h-7"></path></svg></button>
+      <button type="button" aria-label="Export visible staff" title="Export visible staff" [disabled]="employees.length === 0" (click)="exportVisible()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg></button>
+      <button type="button" aria-label="Choose columns" title="Choose columns" (click)="columnMenuOpen = !columnMenuOpen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M12 4v16M4 12h16"></path></svg></button>
+      <div class="column-menu" *ngIf="columnMenuOpen"><label *ngFor="let column of columns"><input type="checkbox" [checked]="isColumnVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label></div>
+    </div>
+  </section>
+
+  <div class="result-info"><span>{{ total }} Result{{ total === 1 ? '' : 's' }}</span><span class="selected-filter" *ngIf="statusFilter">Status: <b>{{ statusFilter === 'true' ? 'Active' : 'Inactive' }}</b></span></div>
+
+  <section class="staff-table-card" aria-label="Staff list">
+    <div class="staff-table-head">
+      <button *ngIf="isColumnVisible('employeeCode')" type="button" (click)="toggleSort('employeeCode')">Code {{ sortIndicator('employeeCode') }}</button><button *ngIf="isColumnVisible('firstName')" type="button" (click)="toggleSort('firstName')">First name {{ sortIndicator('firstName') }}</button><button *ngIf="isColumnVisible('lastName')" type="button" (click)="toggleSort('lastName')">Last name {{ sortIndicator('lastName') }}</button><button *ngIf="isColumnVisible('mobilePhone')" type="button" (click)="toggleSort('mobilePhone')">Phone number {{ sortIndicator('mobilePhone') }}</button><button *ngIf="isColumnVisible('jobTitle')" type="button" (click)="toggleSort('jobTitle')">Job {{ sortIndicator('jobTitle') }}</button><button *ngIf="isColumnVisible('active')" type="button" (click)="toggleSort('active')">Active {{ sortIndicator('active') }}</button><button *ngIf="isColumnVisible('branchId')" type="button" (click)="toggleSort('branchId')">Center {{ sortIndicator('branchId') }}</button>
+    </div>
+    <div class="staff-row" *ngFor="let employee of employees; trackBy: trackById">
+      <span *ngIf="isColumnVisible('employeeCode')">{{ employee.employeeCode || '—' }}</span><button *ngIf="isColumnVisible('firstName')" class="employee-name" type="button" (click)="openEmployee(employee)">{{ employee.firstName || employee.appointmentDisplayName }}</button><span *ngIf="isColumnVisible('lastName')">{{ employee.lastName || '—' }}</span><span *ngIf="isColumnVisible('mobilePhone')">{{ employee.mobilePhone || '—' }}</span><span *ngIf="isColumnVisible('jobTitle')">{{ employee.jobTitle || '—' }}</span><span *ngIf="isColumnVisible('active')" class="status" [class.inactive]="!employee.active">{{ employee.active ? 'Yes' : 'No' }}</span><span *ngIf="isColumnVisible('branchId')">{{ employee.branchId || '—' }}</span>
+    </div>
+    <div class="empty-state" *ngIf="!loadError && employees.length === 0">No records yet</div><div class="empty-state error" *ngIf="loadError">{{ loadError }}</div>
+    <footer class="pagination" *ngIf="total > 0"><span>{{ pageStart }}–{{ pageEnd }} of {{ total }}</span><button type="button" [disabled]="page === 1" (click)="changePage(page - 1)">Previous</button><button type="button" [disabled]="pageEnd === total" (click)="changePage(page + 1)">Next</button></footer>
+  </section>
+  </div>
+
+  <div class="drawer-backdrop" *ngIf="drawerOpen && !detailPage" (click)="closeDrawer()"></div>
+  <aside class="staff-drawer" [class.page-mode]="detailPage" *ngIf="drawerOpen" aria-label="Employee profile">
+    <header><div><span class="section-label">Employee</span><h2>{{ cloneMode ? 'Clone employee' : editingId ? 'Edit employee' : 'Add employee' }}</h2><span class="active-badge" *ngIf="editingId" [class.inactive]="!form.active">{{ form.active ? 'Active' : 'Inactive' }}</span></div><button class="icon-button" [class.back-button]="detailPage" type="button" [attr.aria-label]="detailPage ? 'Back to employees' : 'Close'" (click)="closeDrawer()">{{ detailPage ? 'Back' : '×' }}</button></header>
+    <div class="drawer-body">
+      <div class="profile-actions" *ngIf="editingId"><button type="button" (click)="cloneEmployee()">Clone</button><button type="button" [disabled]="!profileForm.linkedLogin" (click)="openPassword('update')">Update password</button><button type="button" [disabled]="!profileForm.linkedLogin" (click)="openPassword('reset')">Reset password</button><button class="danger" type="button" (click)="terminateEmployee()">Terminate</button></div>
+      <nav class="employee-tabs" *ngIf="editingId" aria-label="Employee configuration"><button *ngFor="let tab of staffTabs" type="button" [class.active]="activeTab === tab" (click)="setTab(tab)">{{ tab }}</button></nav>
+      <form *ngIf="activeTab === 'General'" (ngSubmit)="save()">
+        <section class="form-section"><h3>General</h3><div class="form-grid"><label>Current center<input [value]="selectedBranchId || 'Current center'" readonly /></label><label>Employee code<input name="employeeCode" [(ngModel)]="form.employeeCode" /></label><label>First name<input name="firstName" [(ngModel)]="form.firstName" (ngModelChange)="form.firstName = titleCase($event)" /></label><label>Middle name<input name="middleName" [(ngModel)]="form.middleName" (ngModelChange)="form.middleName = titleCase($event)" /></label><label>Last name<input name="lastName" [(ngModel)]="form.lastName" (ngModelChange)="form.lastName = titleCase($event)" /></label><label>Display name<input name="displayName" [(ngModel)]="form.appointmentDisplayName" (ngModelChange)="form.appointmentDisplayName = titleCase($event)" /></label><label>Email<input type="email" name="email" [(ngModel)]="form.email" /></label><label>Mobile phone<input type="tel" name="mobilePhone" [(ngModel)]="form.mobilePhone" /></label><label>Work phone<input type="tel" name="workPhone" [(ngModel)]="form.workPhone" /></label><label>Home phone<input type="tel" name="homePhone" [(ngModel)]="form.homePhone" /></label><label>Job<input name="jobTitle" [(ngModel)]="form.jobTitle" (ngModelChange)="form.jobTitle = titleCase($event)" /></label><label class="checkbox-row" *ngIf="editingId"><input type="checkbox" name="active" [(ngModel)]="form.active" />Active employee</label></div></section>
+        <section class="form-section"><h3>Job & booking</h3><div class="form-grid"><label>Designation<input name="designation" [(ngModel)]="profileForm.designation" (ngModelChange)="profileForm.designation = titleCase($event)" /></label><label>Company<input name="companyName" [(ngModel)]="profileForm.companyName" (ngModelChange)="profileForm.companyName = titleCase($event)" /></label><label>Mandatory break (minutes)<input type="number" min="0" name="mandatoryBreakMinutes" [(ngModel)]="profileForm.mandatoryBreakMinutes" /></label><label>Work tasks<input name="workTasks" [(ngModel)]="profileForm.workTasks" /></label><label>Max work hours<input type="number" min="0" name="maxWorkHours" [(ngModel)]="profileForm.maxWorkHours" /></label><label>Target revenue (₹)<input type="number" min="0" step="0.01" name="targetRevenue" [(ngModel)]="profileForm.targetRevenue" /></label><label>Tenure start date<as-date-picker ariaLabel="Tenure start date" [(value)]="profileForm.tenureStartDate"></as-date-picker></label><label>Booking interval (minutes)<input type="number" min="0" name="bookingIntervalMinutes" [(ngModel)]="profileForm.bookingIntervalMinutes" /></label><label class="checkbox-row wide"><input type="checkbox" name="restrictBooking" [(ngModel)]="profileForm.restrictBookingToReturningGuests" />Allow booking only with returning guests</label></div></section>
+        <section class="form-section"><h3>Leave</h3><div class="form-grid"><label>Vacation days<input type="number" min="0" name="vacationDays" [(ngModel)]="profileForm.vacationDays" /></label><label>Special leave days<input type="number" min="0" name="specialLeaveDays" [(ngModel)]="profileForm.specialLeaveDays" /></label></div></section>
+        <p class="form-error" *ngIf="saveError">{{ saveError }}</p><p class="form-error" *ngIf="profileError">{{ profileError }}</p><p class="form-error" *ngIf="actionError">{{ actionError }}</p>
+      </form>
+
+      <section class="configuration-panel" *ngIf="activeTab === 'Employee Roles'">
+        <div class="assignment-row" *ngFor="let role of configuration.roles"><label><input type="checkbox" [(ngModel)]="role.assigned" />{{ role.name }}</label></div>
+        <div class="config-empty" *ngIf="!configurationLoading && configuration.roles.length === 0">No roles yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="activeTab === 'Services' || activeTab === 'Products' || activeTab === 'Memberships' || activeTab === 'Packages'">
+        <ng-container *ngFor="let item of catalogFor(activeTab === 'Services' ? 'service' : activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package')">
+          <div class="assignment-row catalog-row"><label><input type="checkbox" [(ngModel)]="item.assigned" /> <span>{{ item.name }}<small *ngIf="item.category">{{ item.category }}</small></span></label><label class="mini-field">Commission %<input type="number" min="0" max="100" [(ngModel)]="item.commissionPercent" [disabled]="!item.assigned" /></label></div>
+        </ng-container>
+        <div class="config-empty" *ngIf="!configurationLoading && catalogFor(activeTab === 'Services' ? 'service' : activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package').length === 0">No records yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="activeTab === 'Commissions'">
+        <div class="panel-heading"><h3>Commission rules</h3><button type="button" (click)="addCommissionRule()">Add rule</button></div>
+        <div class="config-grid commission-grid" *ngFor="let rule of configuration.commissionRules; let index = index">
+          <label>Name<input [(ngModel)]="rule.name" (ngModelChange)="rule.name = titleCase($event)" /></label><label>Applies to<select [(ngModel)]="rule.appliesTo"><option value="all">All</option><option value="service">Services</option><option value="product">Products</option><option value="membership">Memberships</option><option value="package">Packages</option></select></label><label>Rate %<input type="number" min="0" max="100" [(ngModel)]="rule.ratePercent" /></label><label>Effective from<as-date-picker ariaLabel="Commission effective date" [(value)]="rule.effectiveFrom"></as-date-picker></label><label class="inline-check"><input type="checkbox" [(ngModel)]="rule.active" />Active</label><button class="remove-button" type="button" (click)="removeCommissionRule(index)">Remove</button>
+        </div>
+        <div class="config-empty" *ngIf="configuration.commissionRules.length === 0">No commission rules yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="activeTab === 'Payrates'">
+        <div class="panel-heading"><h3>Pay rates</h3><button type="button" (click)="addPayRate()">Add rate</button></div>
+        <div class="config-grid pay-grid" *ngFor="let rate of configuration.payRates; let index = index">
+          <label>Rate type<select [(ngModel)]="rate.rateType"><option value="hourly">Hourly</option><option value="daily">Daily</option><option value="monthly">Monthly</option></select></label><label>Amount (₹)<input type="number" min="0" step="0.01" [(ngModel)]="rate.amount" /></label><label>Effective from<as-date-picker ariaLabel="Pay rate effective date" [(value)]="rate.effectiveFrom"></as-date-picker></label><label class="inline-check"><input type="checkbox" [(ngModel)]="rate.active" />Active</label><button class="remove-button" type="button" (click)="removePayRate(index)">Remove</button>
+        </div>
+        <div class="config-empty" *ngIf="configuration.payRates.length === 0">No pay rates yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="activeTab === 'Catalog'">
+        <div class="catalog-summary" *ngFor="let item of assignedCatalog"><span class="type-badge">{{ item.itemType }}</span><strong>{{ item.name }}</strong><span>{{ item.category || '—' }}</span><span>{{ item.commissionPercent === null ? 'No commission' : item.commissionPercent + '%' }}</span></div>
+        <div class="config-empty" *ngIf="assignedCatalog.length === 0">No catalog assignments yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="activeTab === 'Leave Policies'">
+        <div class="panel-heading"><h3>Leave policies</h3><button type="button" (click)="addLeavePolicy()">Add policy</button></div>
+        <div class="config-grid leave-grid" *ngFor="let policy of configuration.leavePolicies; let index = index">
+          <label>Name<input [(ngModel)]="policy.name" (ngModelChange)="policy.name = titleCase($event)" /></label><label>Leave type<select [(ngModel)]="policy.leaveType"><option value="annual">Annual</option><option value="sick">Sick</option><option value="casual">Casual</option><option value="special">Special</option><option value="unpaid">Unpaid</option></select></label><label>Annual days<input type="number" min="0" [(ngModel)]="policy.annualDays" /></label><label class="inline-check"><input type="checkbox" [(ngModel)]="policy.active" />Active</label><button class="remove-button" type="button" (click)="removeLeavePolicy(index)">Remove</button>
+        </div>
+        <div class="config-empty" *ngIf="configuration.leavePolicies.length === 0">No leave policies yet</div>
+      </section>
+      <p class="form-error" *ngIf="activeTab !== 'General' && configurationError">{{ configurationError }}</p>
+    </div>
+    <footer><button type="button" (click)="closeDrawer()">{{ detailPage ? 'Back to employees' : 'Cancel' }}</button><button class="primary" type="button" [disabled]="saving || profileLoading || configurationLoading || configurationSaving" (click)="activeTab === 'General' ? save() : saveConfiguration()">{{ saving || configurationSaving ? 'Saving…' : activeTab === 'General' ? 'Save employee' : 'Save configuration' }}</button></footer>
+  </aside>
+
+  <div class="password-backdrop" *ngIf="passwordModalOpen"></div>
+  <section class="password-dialog" *ngIf="passwordModalOpen" role="dialog" aria-modal="true" [attr.aria-label]="passwordAction + ' password'"><header><h2>{{ passwordAction === 'reset' ? 'Reset password' : 'Update password' }}</h2><button class="icon-button" type="button" aria-label="Close password dialog" (click)="passwordModalOpen = false">×</button></header><label>New password<input type="password" name="newPassword" [(ngModel)]="newPassword" autocomplete="new-password" /></label><p class="form-error" *ngIf="actionError">{{ actionError }}</p><footer><button type="button" (click)="passwordModalOpen = false">Cancel</button><button class="primary" type="button" [disabled]="actionSaving" (click)="savePassword()">{{ actionSaving ? 'Saving…' : 'Save password' }}</button></footer></section>
+</section>

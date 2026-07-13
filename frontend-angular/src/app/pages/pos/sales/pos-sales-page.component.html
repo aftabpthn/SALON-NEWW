@@ -1,0 +1,82 @@
+<section class="sales-page">
+  <header class="sales-hero">
+    <div>
+      <p class="eyebrow">Sales register</p>
+      <h1>Invoices</h1>
+    </div>
+    <div class="hero-actions">
+      <a routerLink="/pos">New sale</a>
+      <a routerLink="/pos/invoices">Invoice actions</a>
+      <a routerLink="/reports/invoices">Invoice report</a>
+      <button type="button" (click)="loadSales()">Refresh</button>
+    </div>
+  </header>
+
+  <section class="kpi-grid">
+    <article><span>Total sales</span><strong>{{ totals.totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></article>
+    <article><span>Paid</span><strong>{{ totals.paidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></article>
+    <article><span>Balance</span><strong>{{ totals.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></article>
+    <article><span>Invoices</span><strong>{{ totals.totalRows }}</strong></article>
+    <article><span>Cash / UPI / Card</span><strong>{{ (totals.cashPaise + totals.upiPaise + totals.cardPaise) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></article>
+  </section>
+
+  <main class="register-layout">
+    <section class="register-panel">
+      <div class="filters-card">
+        <label class="search-field"><span>Search</span><input type="text" [(ngModel)]="filters.q" placeholder="Invoice, client, phone" (keyup.enter)="applyFilters()" /></label>
+        <label><span>Status</span><select [(ngModel)]="filters.status" (ngModelChange)="applyFilters()"><option value="">All</option><option value="draft">Draft</option><option value="finalized">Finalized</option><option value="paid">Paid</option><option value="void">Void</option></select></label>
+        <label><span>Payment</span><select [(ngModel)]="filters.paymentMethod" (ngModelChange)="applyFilters()"><option value="">All</option><option *ngFor="let method of paymentMethods; trackBy: trackByPayment" [value]="method.code">{{ method.label }}</option></select></label>
+        <label><span>From</span><input type="text" [(ngModel)]="filters.dateFrom" placeholder="DD/MM/YYYY" /></label>
+        <label><span>To</span><input type="text" [(ngModel)]="filters.dateTo" placeholder="DD/MM/YYYY" /></label>
+        <div class="filter-actions"><button type="button" (click)="applyFilters()">Apply</button><button type="button" (click)="clearFilters()">Clear</button></div>
+      </div>
+
+      <p class="error" *ngIf="error">{{ error }}</p>
+
+      <div class="sales-table">
+        <div class="table-head"><span>Invoice</span><span>Client</span><span>Date</span><span>Status</span><span>Total</span><span>Paid</span><span>Due</span><span></span></div>
+        <button class="table-row" type="button" *ngFor="let sale of sales; trackBy: trackBySale" (click)="openSale(sale)">
+          <span><strong>{{ sale.invoiceNumber || sale.id }}</strong><small>{{ sale.lineCount }} item</small></span>
+          <span><strong>{{ sale.clientName }}</strong><small>{{ sale.clientPhone || '-' }}</small></span>
+          <span>{{ formatDate(sale.businessDate) }}</span>
+          <span><mark>{{ sale.status }}</mark></span>
+          <span>{{ sale.totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span>
+          <span>{{ sale.paidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span>
+          <span>{{ sale.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span>
+          <span class="row-actions"><button type="button" *ngIf="sale.status === 'draft'" (click)="$event.stopPropagation(); resumeDraft(sale)">Resume</button><button type="button" (click)="$event.stopPropagation(); printSale(sale)">Print</button></span>
+        </button>
+        <div class="empty-state" *ngIf="!loading && !sales.length">No records yet</div>
+        <div class="empty-state" *ngIf="loading">Loading...</div>
+      </div>
+
+      <div class="pager">
+        <button type="button" (click)="prevPage()" [disabled]="!canPrev">Previous</button>
+        <span>Page {{ page }} / {{ totalPages }}</span>
+        <button type="button" (click)="nextPage()" [disabled]="!canNext">Next</button>
+      </div>
+    </section>
+
+    <aside class="detail-panel">
+      <ng-container *ngIf="selectedSale; else noSale">
+        <div class="detail-head">
+          <div><p class="eyebrow">Invoice</p><h2>{{ selectedSale.invoiceNumber || selectedSale.invoice_number || selectedSale.id }}</h2></div>
+          <button type="button" (click)="printSelectedSale()">Print</button>
+        </div>
+        <div class="detail-total"><span>Total</span><strong>{{ (selectedSale.totalPaise || selectedSale.total_paise || 0) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div class="detail-lines">
+          <div><span>Client</span><strong>{{ selectedSale.clientName || selectedSale.client_name || 'Walk-in client' }}</strong></div>
+          <div><span>Status</span><strong>{{ selectedSale.status || '-' }}</strong></div>
+          <div><span>Paid</span><strong>{{ (selectedSale.paidPaise || selectedSale.paid_paise || 0) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+          <div><span>Balance</span><strong>{{ (selectedSale.balancePaise || selectedSale.balance_paise || 0) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        </div>
+        <div class="collect-card">
+          <h3>Collect payment</h3>
+          <label><span>Mode</span><select [(ngModel)]="paymentMethod"><option value="" *ngIf="!paymentMethods.length">No payment modes yet</option><option *ngFor="let method of paymentMethods; trackBy: trackByPayment" [value]="method.code">{{ method.label }}</option></select></label>
+          <label><span>Amount</span><input type="number" min="0" step="0.01" [(ngModel)]="paymentAmount" placeholder="0" /></label>
+          <button type="button" (click)="collectPayment()" [disabled]="!paymentMethod">Save payment</button>
+        </div>
+      </ng-container>
+      <ng-template #noSale><div class="empty-detail">Select invoice</div></ng-template>
+    </aside>
+  </main>
+</section>

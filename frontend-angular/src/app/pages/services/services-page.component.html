@@ -1,0 +1,183 @@
+<section class="services-page" [class.flyout-open]="addServiceOpen">
+  <header class="services-toolbar">
+    <h1>Services</h1>
+
+    <div class="toolbar-actions">
+      <input type="search" placeholder="Search records" aria-label="Search services" [(ngModel)]="serviceSearch" />
+      <select aria-label="Category" [(ngModel)]="categoryFilter">
+        <option value="">All categories</option>
+        <option *ngFor="let category of categories; trackBy: trackByIndex" [value]="category">{{ category }}</option>
+      </select>
+      <select aria-label="GST group" [(ngModel)]="gstFilter">
+        <option value="">All GST rates</option>
+        <option *ngFor="let gst of gstRates; trackBy: trackByIndex" [value]="gst">{{ gst }}%</option>
+      </select>
+      <input class="gst-input" type="number" min="0" step="0.01" placeholder="GST %" aria-label="GST percentage" [(ngModel)]="gstInput" />
+      <button type="button" (click)="loadServices()">Refresh</button>
+      <div class="actions-menu">
+        <button type="button" (click)="toggleActions()">Actions</button>
+        <div class="actions-dropdown" *ngIf="actionsOpen">
+          <button type="button">Export</button>
+          <button type="button">Import</button>
+        </div>
+      </div>
+      <button class="primary" type="button" (click)="openAddService()">Add service</button>
+    </div>
+  </header>
+
+  <section class="service-kpis" aria-label="Service summary">
+    <article>
+      <span>All services</span>
+      <strong>{{ services.length }}</strong>
+    </article>
+    <article>
+      <span>All categories</span>
+      <strong>{{ categoryCount }}</strong>
+    </article>
+  </section>
+
+  <section class="service-table-card" aria-label="Services table">
+    <div class="table-meta">
+      <strong>All services</strong>
+      <span>{{ filteredServices.length }}</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Duration</th>
+            <th>Wait time</th>
+            <th>Cleanup time</th>
+            <th>Buffer time</th>
+            <th>GST %</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let service of filteredServices; trackBy: trackByIndex">
+            <td>{{ service.name }}</td>
+            <td>{{ service.category }}</td>
+            <td>{{ rupees(service.pricePaise) }}</td>
+            <td>{{ service.durationMinutes }}</td>
+            <td>{{ service.waitTimeMinutes }}</td>
+            <td>{{ service.cleanupTimeMinutes }}</td>
+            <td>{{ service.bufferTimeMinutes }}</td>
+            <td>{{ service.gstPercent }}</td>
+            <td><span class="status-pill">{{ service.status }}</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="empty-state" *ngIf="filteredServices.length === 0">No services yet</div>
+    </div>
+  </section>
+
+  <aside class="service-flyout" *ngIf="addServiceOpen" aria-label="Add service">
+    <header>
+      <h2>Add service</h2>
+      <button class="icon-button" type="button" aria-label="Close add service" (click)="closeAddService()">×</button>
+    </header>
+
+    <form class="service-form" (ngSubmit)="saveService()">
+      <label>
+        Service name
+        <input type="text" [ngModel]="serviceForm.name" name="name" (ngModelChange)="serviceForm.name = titleCase($event)" />
+      </label>
+
+      <label>
+        Category
+        <input type="text" [ngModel]="serviceForm.category" name="category" (ngModelChange)="serviceForm.category = titleCase($event)" />
+      </label>
+
+      <div class="field-row">
+        <label>
+          Price
+          <input type="number" min="0" step="0.01" [(ngModel)]="serviceForm.price" name="price" />
+        </label>
+        <label>
+          GST %
+          <input type="number" min="0" step="0.01" [(ngModel)]="serviceForm.gstPercent" name="gstPercent" />
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label>
+          Duration
+          <input type="number" min="0" [(ngModel)]="serviceForm.durationMinutes" name="durationMinutes" />
+        </label>
+        <label>
+          Buffer time
+          <input type="number" min="0" [(ngModel)]="serviceForm.bufferTimeMinutes" name="bufferTimeMinutes" />
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label>
+          Wait time
+          <input type="number" min="0" [(ngModel)]="serviceForm.waitTimeMinutes" name="waitTimeMinutes" />
+        </label>
+        <label>
+          Cleanup time
+          <input type="number" min="0" [(ngModel)]="serviceForm.cleanupTimeMinutes" name="cleanupTimeMinutes" />
+        </label>
+      </div>
+
+      <label>
+        Status
+        <select [(ngModel)]="serviceForm.status" name="status">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </label>
+
+      <button class="consumption-toggle" type="button" (click)="openProductConsumption()">Product consumption (optional)</button>
+
+      <section class="consumption-card" *ngIf="productConsumptionOpen">
+        <div class="consumption-card-head">
+          <strong>Product consumption wastage lock for this service</strong>
+          <button type="button" (click)="addProductLine()">Add product line</button>
+        </div>
+
+        <div class="consumption-scroll">
+          <div class="consumption-table">
+            <div class="consumption-head">Product</div>
+            <div class="consumption-head">Unit</div>
+            <div class="consumption-head">Min qty</div>
+            <div class="consumption-head">Standard qty</div>
+            <div class="consumption-head">Max qty</div>
+            <div class="consumption-head">Waste %</div>
+            <div class="consumption-head">Owner approval %</div>
+            <div class="consumption-head">Hit limit</div>
+            <div class="consumption-head"></div>
+
+            <ng-container *ngFor="let line of consumptionLines; let lineIndex = index; trackBy: trackByIndex">
+              <input type="text" aria-label="Product" placeholder="Product" [(ngModel)]="line.productName" [name]="'productName' + line.id" />
+              <select aria-label="Unit" [(ngModel)]="line.unit" [name]="'unit' + line.id">
+                <option *ngFor="let unit of units; trackBy: trackByIndex" [value]="unit">{{ unit }}</option>
+              </select>
+              <input type="number" min="0" aria-label="Min quantity" [(ngModel)]="line.minQty" [name]="'minQty' + line.id" />
+              <input type="number" min="0" aria-label="Standard quantity" [(ngModel)]="line.standardQty" [name]="'standardQty' + line.id" />
+              <input type="number" min="0" aria-label="Max quantity" [(ngModel)]="line.maxQty" [name]="'maxQty' + line.id" />
+              <input type="number" min="0" aria-label="Waste percentage" [(ngModel)]="line.wastePercent" [name]="'wastePercent' + line.id" />
+              <input type="number" min="0" aria-label="Owner approval percentage" [(ngModel)]="line.ownerApprovalPercent" [name]="'ownerApprovalPercent' + line.id" />
+              <input type="number" min="0" aria-label="Hit limit" [(ngModel)]="line.hitLimit" [name]="'hitLimit' + line.id" />
+              <button type="button" (click)="removeProductLine(lineIndex)">Remove</button>
+            </ng-container>
+          </div>
+        </div>
+      </section>
+      <p class="form-error" *ngIf="serviceError">{{ serviceError }}</p>
+    </form>
+
+    <footer>
+      <button type="button" (click)="closeAddService()">Cancel</button>
+      <button class="primary" type="button" [disabled]="savingService" (click)="saveService()">
+        {{ savingService ? 'Saving...' : 'Save service' }}
+      </button>
+    </footer>
+  </aside>
+</section>

@@ -1,0 +1,47 @@
+<section class="pos-ledger-page">
+  <header class="ledger-hero">
+    <h1>Held invoices</h1>
+    <nav><a routerLink="/pos">Checkout</a><button type="button" (click)="load()">Refresh</button></nav>
+  </header>
+
+  <section class="ledger-filter-bar">
+    <input type="search" [(ngModel)]="search" placeholder="Search client or hold ID" />
+    <span class="record-count">{{ filtered.length }} held</span>
+    <button type="button" (click)="load()">Refresh</button>
+  </section>
+
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <section class="ledger-kpis" aria-label="Held invoice summary">
+    <article class="ledger-kpi"><span>Held invoices</span><strong>{{ holds.length }}</strong></article>
+    <article class="ledger-kpi"><span>Held value</span><strong>{{ money(heldValuePaise) }}</strong></article>
+    <article class="ledger-kpi"><span>Oldest hold</span><strong>{{ oldestHold ? age(oldestHold.heldAt) : '-' }}</strong></article>
+    <article class="ledger-kpi"><span>Selected total</span><strong>{{ money(selected?.totalPaise || 0) }}</strong></article>
+  </section>
+
+  <main class="ledger-workspace">
+    <section class="ledger-table">
+      <div class="table-head held-grid"><span>Hold ID</span><span>Client</span><span>Items</span><span>Total</span><span>Held at</span><span>Staff</span><span>Action</span></div>
+      <button type="button" class="ledger-row held-grid" *ngFor="let hold of filtered; trackBy: trackById" [class.selected]="selected?.id === hold.id" (click)="select(hold)">
+        <span><strong>{{ hold.holdId }}</strong></span>
+        <span><strong>{{ hold.clientName }}</strong><small *ngIf="hold.clientPhone">{{ hold.clientPhone }}</small></span>
+        <span><strong>{{ hold.itemCount }}</strong><small *ngIf="hold.itemNames">{{ hold.itemNames }}</small></span>
+        <span class="amount">{{ money(hold.totalPaise) }}</span>
+        <span>{{ dateTime(hold.heldAt) }}</span>
+        <span>{{ hold.staffName || '-' }}</span>
+        <span><button type="button" class="resume-button" (click)="resume(hold, $event)">Resume</button></span>
+      </button>
+      <p class="empty" *ngIf="!filtered.length">No held invoices</p>
+    </section>
+
+    <aside class="ledger-detail" *ngIf="selected">
+      <h2>Hold details</h2>
+      <div class="detail-section"><span class="detail-label">Hold ID</span><strong>{{ selected.holdId }}</strong></div>
+      <div class="detail-section"><span class="detail-label">Client</span><strong>{{ selected.clientName }}</strong><span *ngIf="selected.clientPhone">{{ selected.clientPhone }}</span></div>
+      <div class="detail-section"><span class="detail-label">Items</span><strong>{{ selected.itemCount }}</strong><span *ngIf="selected.itemNames">{{ selected.itemNames }}</span></div>
+      <div class="detail-section"><span class="detail-label">Total</span><strong>{{ money(selected.totalPaise) }}</strong></div>
+      <div class="detail-section"><span class="detail-label">Held at</span><strong>{{ dateTime(selected.heldAt) }}</strong><span>{{ selected.staffName || 'Unassigned' }}</span></div>
+      <button type="button" class="detail-resume" (click)="resume(selected)">Resume invoice</button>
+    </aside>
+  </main>
+</section>

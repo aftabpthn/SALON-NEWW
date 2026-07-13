@@ -1,0 +1,30 @@
+<section class="reports-page">
+  <aside class="reports-nav" aria-label="Report views">
+    <h1>Reports</h1>
+    <button type="button" [class.active]="activeView === 'all' && !activeCategory" (click)="activeView = 'all'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5" /></svg>All Reports</button>
+    <button type="button" [class.active]="activeView === 'favourites'" (click)="activeView = 'favourites'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg>Favourite Reports</button>
+    <div class="nav-divider"></div>
+    <h2>Categories</h2>
+    <button type="button" *ngFor="let category of categoryNames" [class.active]="activeCategory === category" (click)="selectCategory(category)"><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category)" /></svg>{{ category }}</button>
+  </aside>
+
+  <main class="reports-catalog">
+    <header><h2>{{ activeCategory || (activeView === 'all' ? 'All Reports' : 'Favourite Reports') }}</h2><span>{{ reports.length }} reports</span></header>
+    <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg><input type="search" [(ngModel)]="search" placeholder="Search reports" aria-label="Search reports" /></label>
+    <p class="state" *ngIf="loading">Loading reports...</p>
+    <p class="state error" *ngIf="error">{{ error }}</p>
+    <p class="state" *ngIf="!loading && !error && !categories.length">No reports yet</p>
+
+    <section class="report-category" *ngFor="let category of categories">
+      <button class="category-header" type="button" (click)="toggleCategory(category.name)" [attr.aria-expanded]="!isCollapsed(category.name)">
+        <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true" [class.collapsed]="isCollapsed(category.name)"><path d="m7 9 5 5 5-5" /></svg><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category.name)" /></svg>{{ category.name }}<small>{{ category.reports.length }}</small>
+      </button>
+      <div class="report-grid" *ngIf="!isCollapsed(category.name)">
+        <article class="report-card" *ngFor="let report of category.reports" [class.openable]="report.id === 'appointments'" (click)="openReport(report)">
+          <div><div class="report-heading"><span class="report-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="reportIcon(report.icon)" /></svg></span><h3>{{ report.title }}</h3></div><p>{{ report.description }}</p></div>
+          <button class="favourite" type="button" (click)="$event.stopPropagation(); toggleFavourite(report.id)" [attr.aria-label]="isFavourite(report.id) ? 'Remove from favourites' : 'Add to favourites'" [class.saved]="isFavourite(report.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg></button>
+        </article>
+      </div>
+    </section>
+  </main>
+</section>

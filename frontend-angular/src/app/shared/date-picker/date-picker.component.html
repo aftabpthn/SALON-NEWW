@@ -1,0 +1,58 @@
+<div class="date-picker" [class.open]="open">
+  <div class="date-input-shell">
+    <input
+      type="text"
+      inputmode="numeric"
+      placeholder="DD/MM/YYYY"
+      #dateInput
+      [attr.aria-label]="ariaLabel"
+      [disabled]="disabled"
+      [value]="draft"
+      [readOnly]="rangeMode"
+      (input)="!rangeMode && setDraft($any($event.target).value)"
+      (blur)="normalizeDraft()"
+    />
+    <button type="button" aria-label="Open calendar" [disabled]="disabled" (click)="toggle()">▦</button>
+  </div>
+
+  <section class="calendar-popover" *ngIf="open" aria-label="Calendar">
+    <div class="shortcut-rail">
+      <button type="button" (click)="today()">Today</button>
+      <button type="button" (click)="tomorrow()">Tomorrow</button>
+      <button type="button" (click)="thisWeek()">This week</button>
+    </div>
+
+    <div class="calendar-main">
+      <header>
+        <button type="button" aria-label="Previous month" (click)="shiftMonth(-1)">‹</button>
+        <strong>{{ monthLabel }}</strong>
+        <button type="button" aria-label="Next month" (click)="shiftMonth(1)">›</button>
+      </header>
+
+      <div class="weekday-row">
+        <span *ngFor="let day of weekDays">{{ day }}</span>
+      </div>
+
+      <div class="day-grid">
+        <button
+          type="button"
+          *ngFor="let day of days()"
+          [class.muted]="!day.inMonth"
+          [class.selected]="day.selected"
+          [class.today]="day.today"
+          [class.in-range]="day.inRange"
+          (click)="selectDate(day.iso)"
+        >
+          {{ day.label }}
+        </button>
+      </div>
+
+      <footer>
+        <button type="button" (click)="clear()">Clear</button>
+        <span></span>
+        <button type="button" (click)="today()">Today</button>
+        <button class="apply" type="button" (click)="apply()">Apply</button>
+      </footer>
+    </div>
+  </section>
+</div>

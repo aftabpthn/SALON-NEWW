@@ -1,0 +1,31 @@
+<aside class="sidebar">
+  <a class="brand-mark" routerLink="/dashboard" aria-label="AuraShine dashboard">AS</a>
+
+  <nav class="nav-groups" aria-label="Primary navigation">
+    <div
+      class="nav-group"
+      *ngFor="let group of groups"
+      routerLinkActive="is-active"
+      [routerLinkActiveOptions]="{ exact: group.exact }"
+    >
+      <a class="rail-link" [routerLink]="group.route" [attr.aria-label]="group.label">
+        <i class="bi" [class]="'bi ' + group.icon" aria-hidden="true"></i>
+      </a>
+
+      <section class="flyout" [attr.aria-label]="group.label + ' menu'">
+        <header><h2>{{ group.label }}</h2></header>
+        <a
+          class="flyout-link"
+          *ngFor="let link of group.links"
+          [routerLink]="link.route"
+          routerLinkActive="active-link"
+          [routerLinkActiveOptions]="{ exact: link.exact }"
+          ariaCurrentWhenActive="page"
+        >
+          <i class="bi" [class]="'bi ' + link.icon" aria-hidden="true"></i>
+          <span>{{ link.label }}</span>
+        </a>
+      </section>
+    </div>
+  </nav>
+</aside>

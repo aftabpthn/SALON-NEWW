@@ -1,0 +1,82 @@
+<section class="activity-page">
+  <header class="command-strip">
+    <div>
+      <span class="section-label">Appointments</span>
+      <h1>Appointment activities</h1>
+    </div>
+    <div class="command-actions">
+      <a routerLink="/appointments">Calendar</a>
+      <button type="button" (click)="reload()" [disabled]="loading">{{ loading ? 'Loading' : 'Refresh' }}</button>
+    </div>
+  </header>
+
+  <section class="activity-workspace">
+    <div class="filters">
+      <input type="search" [(ngModel)]="search" placeholder="Search appointment, client, staff or service" />
+      <select [(ngModel)]="status">
+        <option value="">All statuses</option>
+        <option value="booked">Booked</option>
+        <option value="arrived">Arrived</option>
+        <option value="in-service">In service</option>
+        <option value="completed">Completed</option>
+        <option value="billed">Billed</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="no-show">No-show</option>
+      </select>
+      <span>{{ filteredRows.length }} records</span>
+    </div>
+
+    <p class="inline-error" *ngIf="error">{{ error }}</p>
+
+    <div class="table-wrap" *ngIf="filteredRows.length; else emptyState">
+      <table>
+        <thead>
+          <tr><th>Appointment</th><th>Client</th><th>Staff</th><th>Service</th><th>Time</th><th>Status</th><th>Invoice</th><th>Activity</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of filteredRows" (click)="open(row)" [class.selected]="selected?.appointmentId === row.appointmentId">
+            <td [attr.title]="row.appointmentId"><strong>{{ bookingId(row.appointmentId) }}</strong><small>{{ row.timelineCount || 0 }} events</small></td>
+            <td><strong>{{ clientLabel(row) }}</strong><small>{{ row.clientPhone || '-' }}</small></td>
+            <td>{{ staffLabel(row) }}</td>
+            <td>{{ serviceLabel(row) }}</td>
+            <td>{{ formatDateTime(row.appointmentStartAt) }}</td>
+            <td><span class="status-pill">{{ statusText(row.status) }}</span></td>
+            <td>{{ row.invoiceNumber || '-' }}</td>
+            <td><button type="button" (click)="open(row); $event.stopPropagation()">View</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ng-template #emptyState><div class="empty-state"><strong>No records yet</strong></div></ng-template>
+  </section>
+
+  <aside class="detail-drawer" *ngIf="selected as row">
+    <header>
+      <div>
+        <span class="section-label">Appointment</span>
+        <h2>{{ clientLabel(row) }}</h2>
+        <small>{{ serviceLabel(row) }} · {{ formatDateTime(row.appointmentStartAt) }}</small>
+      </div>
+      <button type="button" aria-label="Close activity details" (click)="close()">×</button>
+    </header>
+
+    <div class="detail-grid">
+      <article><span>Staff</span><strong>{{ staffLabel(row) }}</strong></article>
+      <article><span>Status</span><strong>{{ statusText(row.status) }}</strong></article>
+      <article><span>Invoice</span><strong>{{ row.invoiceNumber || 'Not billed' }}</strong></article>
+      <article><span>Payment</span><strong>{{ statusText(row.paymentStatus || 'unpaid') }}</strong></article>
+    </div>
+
+    <section class="timeline-section">
+      <div class="section-title"><h3>Activity timeline</h3><span>{{ row.timeline?.length || 0 }} events</span></div>
+      <div class="timeline" *ngIf="row.timeline?.length; else noTimeline">
+        <article *ngFor="let event of row.timeline">
+          <span class="timeline-dot"></span>
+          <div><strong>{{ statusText(event.action) }}</strong><small>{{ eventTime(event) }}</small><p>{{ event.reason || 'Appointment updated' }}</p></div>
+        </article>
+      </div>
+      <ng-template #noTimeline><div class="empty-state"><strong>No activity yet</strong></div></ng-template>
+    </section>
+  </aside>
+</section>

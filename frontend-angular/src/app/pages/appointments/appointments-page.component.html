@@ -1,0 +1,753 @@
+<section class="appointment-board" [class.flyout-open]="newBookingOpen">
+  <section class="command-strip" aria-label="Appointment command center">
+    <div class="command-copy">
+      <div class="title-row">
+        <h1>Appointments</h1>
+        <span class="data-pill" [class.online]="dataSourceStatus.online">{{ dataSourceStatus.label }}</span>
+      </div>
+    </div>
+
+    <div class="command-actions">
+      <as-date-picker ariaLabel="Appointment date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
+
+      <div class="view-switch" aria-label="Calendar view">
+        <button
+          *ngFor="let mode of viewModes; trackBy: trackByIndex"
+          type="button"
+          [class.active]="activeView === mode"
+          (click)="setView(mode)"
+        >
+          {{ mode }}
+        </button>
+      </div>
+
+      <select
+        class="staff-grid-select"
+        aria-label="Staff grid mode"
+        [ngModel]="activeStaffGridMode"
+        name="staffGridMode"
+        (ngModelChange)="setStaffGridMode($event)"
+      >
+        <option *ngFor="let mode of staffGridModes; trackBy: trackByIndex" [ngValue]="mode">{{ mode }}</option>
+      </select>
+
+      <button class="scheduled-staff-trigger" type="button" aria-label="Scheduled staff" (click)="openScheduledStaff()">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <a class="report-link" routerLink="/appointments/activities">Report</a>
+      <button type="button" [class.active]="activeCommand === 'block'" (click)="openCommand('block')">Block time</button>
+      <button type="button" [class.active]="activeCommand === 'waitlist'" (click)="openCommand('waitlist')">Waitlist</button>
+      <button type="button" [class.active]="activeCommand === 'move'" (click)="openCommand('move')">Move</button>
+      <button class="primary" type="button" [class.active]="newBookingOpen" (click)="openNewBooking()">New booking</button>
+    </div>
+  </section>
+
+  <section class="metrics" aria-label="Appointment summary">
+    <article *ngFor="let item of summary; trackBy: trackByIndex" [class]="item.tone">
+      <span class="metric-icon" aria-hidden="true" [ngSwitch]="item.icon">
+        <svg *ngSwitchCase="'booked'" viewBox="0 0 24 24">
+          <rect x="4" y="5" width="16" height="15" rx="3"></rect>
+          <path d="M8 3v4M16 3v4M4 10h16"></path>
+        </svg>
+        <svg *ngSwitchCase="'pending'" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8"></circle>
+          <path d="M12 7v6l4 2"></path>
+        </svg>
+        <svg *ngSwitchCase="'arrived'" viewBox="0 0 24 24">
+          <path d="M4 12h11"></path>
+          <path d="M11 8l4 4-4 4"></path>
+          <path d="M18 5h2v14h-2"></path>
+        </svg>
+        <svg *ngSwitchCase="'service'" viewBox="0 0 24 24">
+          <rect x="6" y="10" width="12" height="10" rx="3"></rect>
+          <path d="M8 10V8a4 4 0 0 1 8 0v2"></path>
+        </svg>
+        <svg *ngSwitchCase="'completed'" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8"></circle>
+          <path d="M8.5 12.5l2.2 2.2 4.8-5"></path>
+        </svg>
+        <svg *ngSwitchCase="'waitlist'" viewBox="0 0 24 24">
+          <circle cx="9" cy="9" r="3"></circle>
+          <circle cx="16" cy="10" r="2.5"></circle>
+          <path d="M4 19c.8-3 2.6-5 5-5s4.2 2 5 5"></path>
+          <path d="M13.5 15.5c1.8.2 3.2 1.5 3.9 3.5"></path>
+        </svg>
+        <svg *ngSwitchCase="'revenue'" viewBox="0 0 24 24">
+          <rect x="4" y="6" width="16" height="13" rx="3"></rect>
+          <path d="M16 10h4v5h-4a2.5 2.5 0 0 1 0-5Z"></path>
+          <text x="10" y="15" text-anchor="middle">₹</text>
+        </svg>
+      </span>
+      <span class="metric-copy">
+        <span class="metric-label">{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </span>
+    </article>
+  </section>
+
+  <section class="work-area">
+    <section class="calendar-panel" aria-label="Staff appointment calendar">
+      <section class="appointment-list-mode" *ngIf="activeStaffGridMode === 'List'; else operationalModes">
+        <article
+          class="list-appointment"
+          *ngFor="let item of todaysAppointments; trackBy: trackByIndex"
+          (click)="openAppointment(item)"
+          (mouseenter)="showAppointmentDetails(item, $event)"
+          (mousemove)="moveAppointmentDetails($event)"
+          (mouseleave)="hideAppointmentDetails()"
+        >
+          <span>
+            <b>{{ item.client }}</b>
+            <small>{{ item.service }}</small>
+          </span>
+          <strong>{{ item.time }}</strong>
+          <em>{{ item.status }}</em>
+        </article>
+
+        <div class="empty-state list-empty" *ngIf="todaysAppointments.length === 0">
+          <strong>No records yet</strong>
+        </div>
+      </section>
+
+      <ng-template #operationalModes>
+        <section class="operational-view resource-grid-mode" *ngIf="activeStaffGridMode === 'Chair / Room Grid'; else statusBoardMode">
+          <article class="resource-grid-card" *ngFor="let resource of chairRoomGridRows; trackBy: trackByIndex">
+            <header><span>{{ resource.kind }}</span><b>{{ resource.name }}</b></header>
+            <div class="resource-grid-booking" *ngFor="let appointment of resource.appointments; trackBy: trackByIndex">
+              <strong>{{ appointment.time }}</strong>
+              <b>{{ appointment.client }}</b>
+              <span>{{ appointment.service }}</span>
+              <small>{{ appointment.status }}</small>
+            </div>
+            <p class="view-empty" *ngIf="!resource.appointments.length">Free</p>
+          </article>
+          <p class="view-empty" *ngIf="!chairRoomGridRows.length">No chair or room configured</p>
+        </section>
+      </ng-template>
+
+      <ng-template #statusBoardMode>
+        <section class="operational-view status-board-mode" *ngIf="activeStaffGridMode === 'Status Board'; else capacityMode">
+          <article class="status-column" *ngFor="let column of statusBoardColumns; trackBy: trackByIndex">
+            <header><b>{{ column.label }}</b><span>{{ column.appointments.length }}</span></header>
+            <button type="button" class="status-card" *ngFor="let appointment of column.appointments; trackBy: trackByIndex" (click)="openAppointment(appointment)">
+              <strong>{{ appointment.time }}</strong>
+              <b>{{ appointment.client }}</b>
+              <span>{{ appointment.service }}</span>
+            </button>
+            <p class="view-empty" *ngIf="!column.appointments.length">No bookings</p>
+          </article>
+        </section>
+      </ng-template>
+
+      <ng-template #capacityMode>
+        <section class="operational-view capacity-view-mode" *ngIf="activeStaffGridMode === 'Capacity View'; else conflictMode">
+          <article class="capacity-card" *ngFor="let staff of capacityRows; trackBy: trackByIndex">
+            <header><span class="avatar">{{ staff.initials }}</span><b>{{ staff.name }}</b></header>
+            <div><strong>{{ staff.utilization }}%</strong><span>{{ staff.occupiedMinutes }} min occupied</span></div>
+            <progress [value]="staff.utilization" max="100"></progress>
+            <small>{{ staff.openSlots }} free slots</small>
+          </article>
+          <p class="view-empty" *ngIf="!capacityRows.length">No staff scheduled</p>
+        </section>
+      </ng-template>
+
+      <ng-template #conflictMode>
+        <section class="operational-view conflict-view-mode" *ngIf="activeStaffGridMode === 'Conflict View'; else calendarModes">
+          <table *ngIf="conflictRows.length; else noConflicts">
+            <thead><tr><th>Type</th><th>Resource</th><th>Booking one</th><th>Booking two</th></tr></thead>
+            <tbody><tr *ngFor="let conflict of conflictRows; trackBy: trackByIndex"><td>{{ conflict.type }}</td><td>{{ conflict.target }}</td><td>{{ conflict.first }}</td><td>{{ conflict.second }}</td></tr></tbody>
+          </table>
+          <ng-template #noConflicts><p class="view-empty">No schedule conflicts</p></ng-template>
+        </section>
+      </ng-template>
+
+      <ng-template #calendarModes>
+      <div
+        class="calendar-grid"
+        [ngClass]="calendarModeClass"
+        [style.grid-template-columns]="calendarColumns"
+        *ngIf="calendarColumnsData.length > 0; else emptyCalendar"
+      >
+        <div class="time-head">Time</div>
+        <div class="staff-head" *ngFor="let column of calendarColumnsData; trackBy: trackByIndex">
+          <span class="avatar">{{ column.initials }}</span>
+          <span>
+            <b>{{ column.title }}</b>
+            <small>{{ column.subtitle }}</small>
+          </span>
+        </div>
+
+        <div class="time-col">
+          <div class="time-row" *ngFor="let time of times; trackBy: trackByIndex">{{ time }}</div>
+          <div
+            class="current-time-label"
+            *ngIf="currentTimeTop !== null && activeView === 'Day'"
+            [style.top.px]="currentTimeTop"
+            aria-hidden="true"
+          >{{ currentTimeLabel }}</div>
+        </div>
+
+        <div class="lane" *ngFor="let column of calendarColumnsData; let columnIndex = index; trackBy: trackByIndex">
+          <button
+            class="slot"
+            *ngFor="let time of times; trackBy: trackByIndex"
+            type="button"
+            [attr.aria-label]="'Open slot ' + time + ' for ' + column.title"
+            (click)="openColumnSlot(columnIndex, time, $event)"
+            (mouseenter)="showSlotTime(column, time, $event)"
+            (mousemove)="moveSlotTime($event)"
+            (mouseleave)="hideSlotTime()"
+            (focus)="showSlotTime(column, time, $event)"
+            (blur)="hideSlotTime()"
+            (dragover)="$event.preventDefault()"
+            (drop)="dropAppointment(column, time, $event)"
+          ></button>
+
+          <div
+            class="current-time-line"
+            *ngIf="currentTimeTop !== null && activeView === 'Day'"
+            [style.top.px]="currentTimeTop"
+            aria-hidden="true"
+          ></div>
+
+          <ng-container *ngFor="let entry of blackouts; trackBy: trackByIndex">
+            <div
+              class="blocked-time-card"
+              *ngIf="isBlackoutForColumn(entry, column)"
+              [style.top.px]="blackoutTop(entry)"
+              [style.height.px]="blackoutHeight(entry)"
+            >
+              <strong>Blocked</strong>
+              <span>{{ blackoutLabel(entry) }}</span>
+              <small>{{ entry.reason || 'Unavailable' }}</small>
+            </div>
+          </ng-container>
+
+          <ng-container *ngFor="let item of appointments; trackBy: trackByIndex">
+            <button
+              *ngIf="item.staff === columnIndex"
+              class="booking"
+              [class.pending]="item.status === 'pending' || item.status === 'waiting'"
+              [class.arrived]="item.status === 'arrived'"
+              [class.service]="item.status === 'in-service'"
+              [class.completed]="item.status === 'completed' || item.status === 'paid'"
+              [class.cancelled]="item.status === 'cancelled'"
+              [class.no-show]="item.status === 'no-show'"
+              [class.not-confirmed]="item.status === 'not-confirmed'"
+              [style.border-left-color]="statusColor(item.status)"
+              [style.background-color]="statusColor(item.status) ? statusColor(item.status) + '22' : ''"
+              [style.top.px]="item.top"
+              [style.height.px]="item.height"
+              [style.--lane-left]="(item.lane * 100 / item.laneCount) + '%'"
+              [style.--lane-width]="(100 / item.laneCount) + '%'"
+              draggable="true"
+              (dragstart)="startDrag(item)"
+              type="button"
+              (click)="openAppointment(item); $event.stopPropagation()"
+              (mouseenter)="showAppointmentDetails(item, $event)"
+              (mousemove)="moveAppointmentDetails($event)"
+              (mouseleave)="hideAppointmentDetails()"
+              (focus)="showAppointmentDetails(item, $event)"
+              (blur)="hideAppointmentDetails()"
+            >
+              <strong>{{ item.time }}</strong>
+              <b>{{ item.client }}</b>
+              <span>{{ item.service }}</span>
+              <small>{{ statusLabel(item.status) }}</small>
+            </button>
+          </ng-container>
+        </div>
+      </div>
+      </ng-template>
+
+      <ng-template #emptyCalendar>
+        <div class="calendar-grid empty-calendar">
+          <div class="time-head">Time</div>
+          <div class="staff-head muted-head">Staff lanes</div>
+
+          <div class="time-col">
+            <div class="time-row" *ngFor="let time of times; trackBy: trackByIndex">{{ time }}</div>
+          </div>
+
+          <div class="empty-lane">
+            <div class="slot" *ngFor="let time of times; trackBy: trackByIndex"></div>
+            <div class="empty-state">
+              <strong>No records yet</strong>
+            </div>
+          </div>
+        </div>
+      </ng-template>
+    </section>
+  </section>
+
+  <div
+    class="slot-action-popover"
+    *ngIf="slotAction"
+    [style.left.px]="slotAction.left"
+  [style.top.px]="slotAction.top"
+  role="dialog"
+  aria-label="Slot actions"
+  >
+    <div class="slot-action-title">
+      <strong>{{ slotAction.time }}</strong>
+      <button class="slot-action-close" type="button" aria-label="Close slot actions" (click)="slotAction = null">&times;</button>
+    </div>
+    <button type="button" (click)="openSlotAction('booking')">New booking</button>
+    <button type="button" (click)="openSlotAction('block')">Block time</button>
+    <button type="button" (click)="openSlotAction('waitlist')">Add to waitlist</button>
+  </div>
+
+  <section class="scheduled-staff-popover" *ngIf="scheduledStaffOpen" aria-label="Scheduled staff">
+    <header>
+      <div>
+        <h2>Scheduled Staff</h2>
+        <span>{{ visibleStaffLabel }}</span>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close scheduled staff" (click)="closeScheduledStaff()">×</button>
+    </header>
+
+    <div class="scheduled-staff-list">
+      <article *ngFor="let person of staff; trackBy: trackByIndex">
+        <span class="drag-dot">::</span>
+        <label
+          class="staff-toggle"
+          [class.is-on]="scheduledStaffSelection[person.id] !== false"
+          [attr.aria-label]="'Toggle ' + person.name + ' visibility'"
+        >
+          <input
+            type="checkbox"
+            [checked]="scheduledStaffSelection[person.id] !== false"
+            (change)="toggleScheduledStaff(person.id, $any($event.target).checked)"
+            aria-hidden="true"
+          />
+          <span aria-hidden="true" class="check-mark"></span>
+        </label>
+        <span class="initials">{{ person.initials }}</span>
+        <span class="staff-copy">
+          <b>{{ person.name }}</b>
+          <small>{{ person.role }}</small>
+        </span>
+        <button class="mini round" type="button" aria-label="Move staff up" (click)="moveScheduledStaff(person.id, -1)">↑</button>
+        <button class="mini round" type="button" aria-label="Move staff down" (click)="moveScheduledStaff(person.id, 1)">↓</button>
+      </article>
+    </div>
+
+    <footer>
+      <button type="button" (click)="resetScheduledStaff()">Reset</button>
+      <button type="button" (click)="closeScheduledStaff()">Cancel</button>
+      <button class="primary accent" type="button" (click)="closeScheduledStaff()">Save</button>
+    </footer>
+  </section>
+
+  <aside class="appointment-detail-drawer" *ngIf="selectedAppointment as appointment" aria-label="Appointment details">
+    <header>
+      <div>
+        <span class="section-label">Appointment</span>
+        <h2>{{ appointment.client }}</h2>
+        <small>{{ appointment.time }}</small>
+      </div>
+      <div class="status-actions" aria-label="Appointment status actions">
+        <button
+          *ngFor="let action of statusActions; trackBy: trackByIndex"
+          type="button"
+          [class.active]="appointment.status === action.status"
+          [style.border-color]="appointment.status === action.status ? action.color : ''"
+          [style.color]="appointment.status === action.status ? action.color : ''"
+          [disabled]="!!statusSaving"
+          (click)="setAppointmentStatus(action.status)"
+        >
+          <span *ngIf="statusSaving === action.status">Saving...</span>
+          <span *ngIf="statusSaving !== action.status">{{ action.label }}</span>
+        </button>
+        <small *ngIf="appointmentActionError" class="status-action-error">
+          {{ appointmentActionError }}
+        </small>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close appointment" (click)="closeAppointmentDetail()">×</button>
+    </header>
+
+    <nav class="detail-tabs" aria-label="Appointment detail tabs">
+      <button type="button" [class.active]="appointmentDetailTab === 'booking'" (click)="setAppointmentDetailTab('booking')">Booking</button>
+      <button type="button" [class.active]="appointmentDetailTab === 'activity'" (click)="setAppointmentDetailTab('activity')">Activities</button>
+    </nav>
+
+    <section class="detail-body" *ngIf="appointmentDetailTab === 'booking'">
+      <div class="detail-grid">
+        <article *ngFor="let row of appointment.detailRows; trackBy: trackByIndex">
+          <span>{{ row.label }}</span>
+          <b>{{ row.value }}</b>
+        </article>
+      </div>
+
+      <label class="notes-box">
+        Notes
+        <textarea rows="3" [(ngModel)]="appointmentNoteDraft" name="appointmentNoteDraft"></textarea>
+      </label>
+
+      <section class="bill-lines">
+        <h3>Service bill lines</h3>
+        <div class="bill-table">
+          <div class="bill-head">
+            <span>Service</span>
+            <span>Start time</span>
+            <span>Staff</span>
+            <span>Qty</span>
+            <span>Price</span>
+            <span>Discount</span>
+            <span>Total</span>
+          </div>
+          <div class="bill-row" *ngFor="let line of selectedAppointmentRows; trackBy: trackByIndex">
+            <span>{{ line.serviceName }}</span>
+            <span>{{ line.startTime }}</span>
+            <span>{{ line.staffName }}</span>
+            <span>{{ line.quantity }}</span>
+            <span>{{ line.price }}</span>
+            <span>{{ line.discount }}</span>
+            <span>{{ line.total }}</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="drawer-actions">
+        <button type="button" (click)="openEditAppointment(appointment)">Edit Booking</button>
+        <button type="button" [disabled]="!clientPhone(appointment.clientId)" (click)="sendClientSms(appointment)">SMS client</button>
+      </div>
+    </section>
+
+    <section class="detail-body" *ngIf="appointmentDetailTab === 'activity'">
+      <small *ngIf="activityRefreshError" class="status-action-error">{{ activityRefreshError }}</small>
+      <div class="activity-log" *ngIf="appointment.activityLines.length > 0; else noActivity">
+        <article *ngFor="let event of appointment.activityLines; trackBy: trackByIndex">
+          <strong>{{ event.title }}</strong>
+          <span>{{ formatActivityTime(event.time) }}</span>
+          <p>{{ event.body }}</p>
+        </article>
+      </div>
+      <ng-template #noActivity>
+        <div class="compact-empty">No activity</div>
+      </ng-template>
+    </section>
+  </aside>
+
+  <div
+    class="appointment-detail-popover"
+    *ngIf="hoveredAppointment as hover"
+    role="tooltip"
+    [style.left.px]="hover.x"
+    [style.top.px]="hover.y"
+  >
+    <div class="hover-title">
+      <strong>{{ hover.card.client }}</strong>
+      <small>{{ hover.card.time }}</small>
+    </div>
+    <div class="hover-row" *ngFor="let row of hover.card.detailRows; trackBy: trackByIndex">
+      <em>{{ row.label }}</em>
+      <b>{{ row.value }}</b>
+    </div>
+  </div>
+
+  <div
+    class="slot-time-popover"
+    *ngIf="hoveredSlot as slot"
+    role="tooltip"
+    [style.left.px]="slot.x"
+    [style.top.px]="slot.y"
+  >
+    <strong>{{ slot.time }}</strong>
+    <span>{{ slot.staff }}</span>
+  </div>
+
+  <aside class="command-flyout" *ngIf="activeCommand" aria-label="Appointment action">
+    <header>
+      <h2 *ngIf="activeCommand === 'block'">Block time</h2>
+      <h2 *ngIf="activeCommand === 'waitlist'">Waitlist</h2>
+      <h2 *ngIf="activeCommand === 'move'">Move appointment</h2>
+      <button class="icon-button" type="button" aria-label="Close action" (click)="closeCommand()">×</button>
+    </header>
+
+    <form class="command-form" (ngSubmit)="saveCommand()">
+      <label *ngIf="activeCommand === 'move'">
+        Appointment
+        <select [(ngModel)]="commandAppointmentId" name="commandAppointmentId">
+          <option value="">Select appointment</option>
+          <option *ngFor="let appointment of appointmentRows; trackBy: trackByIndex" [value]="appointment.id">
+            {{ timeText(appointment.startAt) }} · {{ clientName(appointment.clientId) }}
+          </option>
+        </select>
+      </label>
+
+      <label *ngIf="activeCommand === 'waitlist'">
+        Client
+        <select [(ngModel)]="commandClientId" name="commandClientId">
+          <option value="">Select client</option>
+          <option *ngFor="let client of clients; trackBy: trackByIndex" [value]="client.id">{{ client.name || client.phone }}</option>
+        </select>
+      </label>
+
+      <label *ngIf="activeCommand === 'waitlist'">
+        Service
+        <select [(ngModel)]="commandServiceId" name="commandServiceId">
+          <option value="">Select service</option>
+          <option *ngFor="let service of services; trackBy: trackByIndex" [value]="service.id">{{ service.name }}</option>
+        </select>
+      </label>
+
+      <fieldset class="block-staff-picker" *ngIf="activeCommand === 'block'">
+        <legend>Staff</legend>
+        <div class="block-staff-actions">
+          <button type="button" (click)="selectAllBlockStaff()">Select all</button>
+          <button type="button" (click)="setBlockStaffIds([])">Clear</button>
+        </div>
+        <div class="block-staff-options">
+          <label *ngFor="let person of scheduledStaff; trackBy: trackByIndex">
+            <input type="checkbox" [checked]="commandStaffIds.includes(person.id)" (change)="toggleBlockStaff(person.id, $any($event.target).checked)" />
+            <span>{{ person.name }}</span>
+          </label>
+        </div>
+      </fieldset>
+
+      <label *ngIf="activeCommand === 'move'">
+        Staff
+        <select [(ngModel)]="commandStaffId" name="commandStaffId">
+          <option value="">Select staff</option>
+          <option *ngFor="let person of staff; trackBy: trackByIndex" [value]="person.id">{{ person.name }}</option>
+        </select>
+      </label>
+
+      <div class="field-row">
+        <label>
+        Date
+          <as-date-picker ariaLabel="Action date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
+        </label>
+        <div class="command-time-picker">
+          <span>Start</span>
+          <div class="time-slot-grid command-time-slots" role="listbox" aria-label="Choose command start time">
+            <button
+              *ngFor="let slot of commandSlots(); trackBy: trackByIndex"
+              type="button"
+              class="time-slot"
+              [class.is-selected]="commandStartTime === slot.value"
+              [class.is-blocked]="slot.blocked"
+              [disabled]="slot.blocked"
+              [attr.aria-pressed]="commandStartTime === slot.value"
+              [title]="slot.blocked ? 'Unavailable for this staff and duration' : slot.label"
+              (click)="selectCommandSlot(slot)"
+            >{{ slot.label }}</button>
+          </div>
+        </div>
+      </div>
+
+      <label *ngIf="activeCommand === 'block'">
+        Duration
+        <input type="number" min="15" step="15" [(ngModel)]="commandDurationMinutes" name="commandDurationMinutes" />
+      </label>
+
+      <label>
+        Reason
+        <textarea rows="3" [(ngModel)]="commandReason" name="commandReason"></textarea>
+      </label>
+
+      <p class="inline-error" *ngIf="commandError">{{ commandError }}</p>
+
+      <section class="command-records" *ngIf="activeCommand === 'waitlist' || activeCommand === 'block'">
+        <h3>{{ activeCommand === 'waitlist' ? 'Pending waitlist' : 'Blocked times' }}</h3>
+        <article *ngFor="let entry of commandRecords; trackBy: trackByIndex">
+          <div>
+            <strong>{{ activeCommand === 'waitlist' ? waitlistLabel($any(entry)) : blackoutLabel($any(entry)) }}</strong>
+            <small>{{ $any(entry).reason || $any(entry).notes || 'No reason' }}</small>
+          </div>
+          <button type="button" (click)="activeCommand === 'waitlist' ? removeWaitlist(entry.id) : removeBlackout(entry.id)">Remove</button>
+        </article>
+        <p *ngIf="activeCommand === 'waitlist' && waitlistEntries.length === 0">No records yet</p>
+        <p *ngIf="activeCommand === 'block' && blackouts.length === 0">No records yet</p>
+      </section>
+    </form>
+
+    <footer>
+      <button type="button" (click)="closeCommand()">Cancel</button>
+      <button class="primary" type="button" [disabled]="commandSaving" (click)="saveCommand()">
+        {{ commandSaving ? 'Saving...' : 'Save' }}
+      </button>
+    </footer>
+  </aside>
+
+  <aside class="booking-flyout" *ngIf="newBookingOpen" aria-label="New booking flyout">
+    <header>
+      <div>
+        <span class="section-label">Booking</span>
+        <h2>New booking</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close new booking" (click)="closeNewBooking()">×</button>
+    </header>
+
+    <form class="booking-form" (ngSubmit)="createBooking()">
+      <div class="linked-field">
+        <label class="smart-picker">
+          Client
+          <input
+            type="search"
+            placeholder="Search client"
+            [ngModel]="bookingClientSearch"
+            name="bookingClientSearch"
+            (ngModelChange)="setClientSearch($event)"
+          />
+          <div class="picker-results" *ngIf="bookingClientSearch && !selectedClientId">
+            <button
+              *ngFor="let client of filteredClients(); trackBy: trackByIndex"
+              type="button"
+              (mousedown)="$event.preventDefault(); selectClient(client)"
+            >
+              <b>{{ client.name || client.phone || client.email }}</b>
+              <span>{{ client.phone || client.email }}</span>
+            </button>
+            <small *ngIf="filteredClients().length === 0">No clients</small>
+          </div>
+        </label>
+        <a routerLink="/clients">Clients</a>
+      </div>
+
+      <label>
+        Notes
+        <textarea rows="3" [(ngModel)]="bookingNotes" name="bookingNotes"></textarea>
+      </label>
+
+      <section class="previous-service-panel" *ngIf="selectedClientId">
+        <div class="service-line-head">
+          <strong>Previous services</strong>
+          <button class="mini" type="button" (click)="refreshPreviousServices()">Refresh</button>
+        </div>
+        <div class="previous-service-list" *ngIf="previousServices().length > 0; else noPreviousServices">
+          <article *ngFor="let item of previousServices(); trackBy: trackByIndex">
+            <span>
+              <b>{{ item.serviceName }}</b>
+              <small>{{ item.date }} · {{ item.staffName }} · {{ item.durationMinutes }}m</small>
+            </span>
+            <button class="mini" type="button" (click)="addSelectedPreviousService(item)">Add service</button>
+          </article>
+        </div>
+        <ng-template #noPreviousServices>
+          <div class="compact-empty">No previous services</div>
+        </ng-template>
+      </section>
+
+      <div class="service-line-head">
+        <strong>Services</strong>
+        <button class="mini" type="button" (click)="addServiceLine()">Add service</button>
+      </div>
+
+      <section class="service-card" *ngFor="let line of bookingLines; let lineIndex = index; trackBy: trackLine" aria-label="Service line">
+        <label class="smart-picker service-field-wide">
+          Service
+          <input
+            type="search"
+            placeholder="Search service"
+            [ngModel]="line.serviceSearch"
+            [name]="'serviceSearch' + line.id"
+            (focus)="line.serviceOpen = true"
+            (ngModelChange)="setServiceSearch(line, $event)"
+          />
+          <div class="picker-results" *ngIf="line.serviceOpen">
+            <button
+              *ngFor="let service of filteredServices(line); trackBy: trackByIndex"
+              type="button"
+              (mousedown)="$event.preventDefault(); selectService(line, service)"
+            >
+              <b>{{ service.name }}</b>
+              <span>{{ service.category }} · {{ service.durationMinutes }}m</span>
+            </button>
+            <small *ngIf="filteredServices(line).length === 0">No services</small>
+          </div>
+        </label>
+
+        <label class="smart-picker staff-field-wide">
+          Staff
+          <div class="staff-picker-input">
+            <input
+              type="search"
+              placeholder="Search staff"
+              [ngModel]="line.staffSearch"
+              [name]="'staffSearch' + line.id"
+              (focus)="line.staffOpen = true"
+              (ngModelChange)="setStaffSearch(line, $event)"
+            />
+            <button
+              class="requested-staff-heart"
+              type="button"
+              [class.active]="line.staffRequested"
+              [disabled]="!line.staffId"
+              [attr.aria-pressed]="line.staffRequested"
+              [attr.aria-label]="line.staffRequested ? 'Remove requested staff mark' : 'Mark selected staff as requested'"
+              [title]="line.staffRequested ? 'Requested staff' : 'Mark selected staff as requested'"
+              (click)="toggleStaffRequest(line)"
+            >♥</button>
+          </div>
+          <div class="picker-results" *ngIf="line.staffOpen">
+            <button
+              *ngFor="let person of filteredStaff(line); trackBy: trackByIndex"
+              type="button"
+              (mousedown)="$event.preventDefault(); selectStaff(line, person)"
+            >
+              <b>{{ person.name }}</b>
+              <span>{{ person.role }}</span>
+            </button>
+            <small *ngIf="filteredStaff(line).length === 0">No staff</small>
+          </div>
+        </label>
+
+        <label>
+        Date
+          <as-date-picker ariaLabel="Booking date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
+        </label>
+
+        <div class="booking-time-picker">
+          <span>Start</span>
+          <select [(ngModel)]="line.startTime" [name]="'startTime' + line.id" aria-label="Choose start time">
+            <option
+              *ngFor="let slot of bookingSlots(line); trackBy: trackByIndex"
+              [value]="slot.value"
+              [disabled]="slot.blocked && line.startTime !== slot.value"
+            >{{ slot.label }}{{ slot.blocked ? ' · Unavailable' : '' }}</option>
+          </select>
+        </div>
+
+        <label>
+          Duration
+          <input type="number" min="15" step="15" [(ngModel)]="line.durationMinutes" [name]="'duration' + line.id" />
+        </label>
+
+        <label>
+          Chair / room
+          <select [(ngModel)]="line.chairRoomId" [name]="'chairRoom' + line.id">
+            <option value="">No chair / room</option>
+            <option
+              *ngFor="let resource of chairRooms; trackBy: trackByIndex"
+              [value]="resource.id"
+              [disabled]="isChairRoomUnavailable(line, resource.id)"
+            >{{ resource.name }} · {{ resource.kind }}</option>
+          </select>
+        </label>
+        <small class="inline-error" *ngIf="isChairRoomUnavailable(line)">Chair / room unavailable for this time</small>
+
+        <button class="mini danger" type="button" [disabled]="bookingLines.length === 1" (click)="removeServiceLine(line.id)">Remove</button>
+      </section>
+
+      <label class="toggle-line">
+        <input type="checkbox" [(ngModel)]="notifyStaff" name="notifyStaff" />
+        Staff
+      </label>
+
+      <p class="inline-error" *ngIf="bookingError">{{ bookingError }}</p>
+    </form>
+
+    <footer>
+      <button type="button" (click)="closeNewBooking()">Cancel</button>
+      <button class="primary" type="button" [disabled]="savingBooking" (click)="createBooking()">
+        {{ savingBooking ? 'Saving...' : editingAppointmentId ? 'Save booking' : 'Create booking' }}
+      </button>
+    </footer>
+  </aside>
+</section>

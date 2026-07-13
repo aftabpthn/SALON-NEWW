@@ -1,0 +1,1214 @@
+import { CommonModule } from '@angular/common';
+import { Component, HostListener, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ApiService } from '../../shared/services/api.service';
+import { printInvoiceDocument } from '../../shared/utils/safe-invoice-print';
+
+type LineType = 'service' | 'product' | 'membership' | 'package' | 'gift_card' | 'custom';
+type CatalogLineType = 'service' | 'product';
+type DiscountType = 'amount' | 'percent';
+type SaleStatus = 'draft' | 'finalized';
+
+interface PosLine {
+  id: string;
+  lineType: LineType;
+  itemId: string | number | null;
+  itemName: string;
+  itemSearchText: string;
+  staffSearchText: string;
+  customName: string;
+  quantity: string;
+  unitPrice: string;
+  discount: string;
+  discountType: DiscountType;
+  taxPercent: string;
+  staffId: string | number | null;
+  staffSplits: StaffSplit[];
+}
+
+interface StaffSplit { staffId: string | number | null; staffName: string; percent: string; }
+interface ClientKpi {
+  walletPaise: number;
+  unpaidPaise: number;
+  membershipAssignDate: string | null;
+  membershipExpireDate: string | null;
+  membershipCredits: MembershipRedeemRow[];
+  packageCredits: PackageRedeemRow[];
+}
+
+interface MembershipRedeemRow {
+  id: string;
+  membershipId: string;
+  membershipName: string;
+  serviceId: string;
+  serviceName: string;
+  pendingQty: number;
+  redeemQty: string;
+  staffId: string | number | null;
+  staffName: string;
+  expiresAt: string | null;
+}
+
+interface PackageRedeemRow {
+  id: string;
+  packageId: string;
+  packageName: string;
+  serviceId: string;
+  serviceName: string;
+  pendingQty: number;
+  redeemQty: string;
+  staffId: string | number | null;
+  staffName: string;
+  expiresAt: string | null;
+}
+
+interface PaymentMode { code: string; label: string; balancePaise?: number; }
+interface QuickClient { name: string; phone: string; email: string; birthday: string; anniversary: string; tags: string; notes: string; }
+interface OfflineCheckout {
+  operationId: string;
+  checkout: any;
+  appointmentId: string;
+  createdAt: string;
+  status: 'pending' | 'conflict';
+  lastError: string;
+}
+
+@Component({
+  selector: 'app-pos-page',
+  standalone: true,
+  imports: [CommonModule, FormsModule, RouterLink],
+  templateUrl: './pos-page.component.html',
+  styleUrls: ['./pos-page.component.css'],
+})
+export class PosPageComponent implements OnInit {
+  clients: any[] = [];
+  staff: any[] = [];
+  services: any[] = [];
+  products: any[] = [];
+  memberships: any[] = [];
+  packages: any[] = [];
+  appointments: any[] = [];
+  paymentMethods: PaymentMode[] = [];
+  paymentInputs: Record<string, string> = {};
+
+  selectedClientId: string | number | null = null;
+  selectedStaffId: string | number | null = null;
+  clientSearchText = 'Walk-in client';
+  staffSearchText = '';
+  clientSearchActive = false;
+  staffSearchActive = false;
+  activeLineItemId: string | null = null;
+  activeLineStaffId: string | null = null;
+  quickClient: QuickClient = this.emptyQuickClient();
+  quickClientOpen = false;
+  quickClientSaving = false;
+  quickClientError = '';
+  quickServiceSearch = '';
+  quickProductSearch = '';
+  quickServiceActive = false;
+  quickProductActive = false;
+  quickServiceSelections: any[] = [];
+  quickProductSelections: any[] = [];
+  catalogPickerType: CatalogLineType | null = null;
+  catalogPickerSearch = '';
+  selectedMembershipId = '';
+  selectedPackageId = '';
+  giftCardAmount = '';
+  private readonly catalogPickerSelection = new Set<string>();
+
+  branchName = this.readStoredBranchName();
+  invoiceDate = this.toDisplayDate(new Date());
+  source = 'Counter';
+  reference = '';
+  billDiscount = '';
+  billDiscountType: DiscountType = 'amount';
+  couponCode = '';
+  tipAmount = '';
+  walletCreditAmount = '';
+  roundTotal = false;
+
+  saleLines: PosLine[] = [];
+  clientKpi: ClientKpi = this.emptyKpi();
+  membershipRedeemRows: MembershipRedeemRow[] = [];
+  packageRedeemRows: PackageRedeemRow[] = [];
+  selectedSale: any | null = null;
+  draftId: string | null = null;
+  message = '';
+  error = '';
+  saving = false;
+  isOnline = navigator.onLine;
+  offlineCheckouts: OfflineCheckout[] = [];
+  syncingOffline = false;
+  private lineSeed = 1;
+  private clientSearchRequest = 0;
+  private appointmentIdFromRoute = '';
+  private membershipPrefillApplied = false;
+
+  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute, private readonly router: Router) {}
+
+  ngOnInit(): void {
+    this.loadOfflineCheckouts();
+    this.syncOfflineCheckouts();
+    this.appointmentIdFromRoute = this.route.snapshot.queryParamMap.get('appointmentId') || '';
+    this.reference = this.route.snapshot.queryParamMap.get('reference') || '';
+    this.loadClients();
+    this.loadStaff();
+    this.loadServices();
+    this.loadProducts();
+    this.loadMemberships();
+    this.loadPackages();
+    this.loadAppointments();
+    this.loadPaymentMethods();
+    const draftId = this.route.snapshot.queryParamMap.get('draft');
+    if (draftId) this.restoreHeldInvoice(draftId);
+  }
+
+  @HostListener('window:online')
+  handleOnline(): void { this.isOnline = true; this.syncOfflineCheckouts(); }
+
+  @HostListener('window:offline')
+  handleOffline(): void { this.isOnline = false; }
+
+  get selectedClient(): any | null { return this.clients.find((c) => String(c.id) === String(this.selectedClientId)) ?? null; }
+  get subtotalPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineSubtotalPaise(l), 0); }
+  get lineDiscountPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineDiscountPaiseValue(l), 0); }
+  get billDiscountPaise(): number {
+    const base = Math.max(0, this.subtotalPaise - this.lineDiscountPaise);
+    const value = this.num(this.billDiscount);
+    if (!value) return 0;
+    return this.billDiscountType === 'percent' ? Math.min(base, Math.round((base * value) / 100)) : Math.min(base, this.toPaise(value));
+  }
+  get gstPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineGstPaise(l), 0); }
+  get tipPaise(): number { return this.toPaise(this.num(this.tipAmount)); }
+  get totalBeforeRoundPaise(): number { return Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.billDiscountPaise + this.gstPaise + this.tipPaise); }
+  get totalPaise(): number { return this.roundTotal ? Math.round(this.totalBeforeRoundPaise / 100) * 100 : this.totalBeforeRoundPaise; }
+  get paidNowPaise(): number { return this.paymentMethods.reduce((s, m) => s + this.toPaise(this.num(this.paymentInputs[m.code])), 0); }
+  get balanceDuePaise(): number { return Math.max(0, this.totalPaise - this.paidNowPaise); }
+  get walletCreditPaise(): number { return this.toPaise(this.num(this.walletCreditAmount)); }
+  get unappliedOverpayPaise(): number { const overpay = Math.max(0, this.paidNowPaise - this.totalPaise - this.walletCreditPaise); return overpay < 100 ? 0 : overpay; }
+  get advanceAdjustedPaise(): number { return 0; }
+  get canSave(): boolean { return !this.saving && this.saleLines.some((line) => this.isLineReady(line)) && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption(); }
+  get itemCount(): number { return this.saleLines.filter((line) => this.isLineReady(line)).length; }
+  get offlineConflictCount(): number { return this.offlineCheckouts.filter((item) => item.status === 'conflict').length; }
+  get offlineConflictMessage(): string { return this.offlineCheckouts.find((item) => item.status === 'conflict')?.lastError || ''; }
+
+  incrementLineQty(line: PosLine): void {
+    line.quantity = String(Math.max(1, this.num(line.quantity) + 1));
+  }
+
+  decrementLineQty(line: PosLine): void {
+    line.quantity = String(Math.max(1, this.num(line.quantity) - 1));
+  }
+
+  clearSaleLines(): void {
+    this.saleLines = [];
+  }
+
+  loadClients(): void { this.loadList('/api/v1/clients', (rows) => { this.clients = rows; const routeClientId = this.route.snapshot.queryParamMap.get('clientId'); if (routeClientId && !this.selectedClientId) this.onClientChange(routeClientId); const client = rows.find((item) => String(item.id) === String(this.selectedClientId)); if (client) this.clientSearchText = this.recordName(client); this.applyMembershipFromRoute(); this.applyAppointmentFromRoute(); }); }
+  loadServices(): void { this.loadList('/api/v1/services', (rows) => { this.services = rows; this.applyAppointmentFromRoute(); }); }
+  loadProducts(): void { this.loadList('/api/v1/products', (rows) => (this.products = rows)); }
+  loadMemberships(): void { this.loadList('/api/v1/memberships', (rows) => { this.memberships = rows.filter((item) => item.active !== false); this.applyMembershipFromRoute(); }); }
+  loadPackages(): void { this.loadList('/api/v1/packages', (rows) => (this.packages = rows.filter((item) => item.active !== false))); }
+  loadAppointments(): void { this.loadList('/api/v1/appointments', (rows) => { this.appointments = rows; this.applyAppointmentFromRoute(); }); }
+  loadStaff(): void {
+    this.loadList('/api/v1/staff', (rows) => {
+      this.staff = rows;
+      if (!this.selectedStaffId && rows.length) {
+        this.selectedStaffId = rows[0].id;
+        this.staffSearchText = this.recordName(rows[0]);
+        this.saleLines.forEach((line) => {
+          line.staffId = this.selectedStaffId;
+          line.staffSearchText = this.staffSearchText;
+        });
+      }
+      this.applyAppointmentFromRoute();
+    });
+  }
+
+  loadPaymentMethods(): void {
+    this.api.get<any>('/pos/payment-methods').subscribe({
+      next: (res: any) => {
+        const modes = this.list(res).map((m) => this.paymentMode(m)).filter(Boolean) as PaymentMode[];
+        this.paymentMethods = modes;
+        this.ensurePaymentInputs();
+      },
+      error: () => { this.paymentMethods = []; this.ensurePaymentInputs(); },
+    });
+  }
+
+  setClientSearch(value: string): void {
+    this.clientSearchText = value;
+    this.clientSearchActive = true;
+    this.quickClientOpen = false;
+    const query = value.trim();
+    if (!query) {
+      this.onClientChange(null);
+      return;
+    }
+    if (query.length < 3) return;
+
+    const request = ++this.clientSearchRequest;
+    this.api.get<any>(`/api/v1/clients?q=${encodeURIComponent(query)}&pageSize=25`).subscribe({
+      next: (res: any) => {
+        if (request === this.clientSearchRequest) this.clients = this.list(res).filter((item) => item?.id != null);
+      },
+      error: () => undefined,
+    });
+  }
+
+  selectClient(client: any): void {
+    this.clientSearchText = this.recordName(client);
+    this.clientSearchActive = false;
+    this.onClientChange(client.id);
+  }
+
+  setHeaderStaffSearch(value: string): void {
+    this.staffSearchText = value;
+    this.staffSearchActive = true;
+    if (!value.trim()) this.selectedStaffId = null;
+  }
+
+  selectHeaderStaff(person: any): void {
+    this.selectedStaffId = person.id;
+    this.staffSearchText = this.recordName(person);
+    this.staffSearchActive = false;
+  }
+
+  setCompletedAppointment(appointmentId: string): void {
+    this.reference = appointmentId;
+    const appointment = this.appointments.find((item) => String(item.id) === String(appointmentId));
+    if (!appointment) return;
+    const clientId = appointment.clientId ?? appointment.client_id ?? appointment.customerId ?? appointment.customer_id ?? null;
+    const staffId = appointment.staffId ?? appointment.staff_id ?? null;
+    const client = this.clients.find((item) => String(item.id) === String(clientId));
+    const person = this.staff.find((item) => String(item.id) === String(staffId));
+    if (client) this.selectClient(client);
+    else if (clientId) this.onClientChange(clientId);
+    if (person) this.selectHeaderStaff(person);
+    else if (staffId) this.selectedStaffId = staffId;
+
+    const bookingGroupId = String(appointment.bookingGroupId ?? appointment.booking_group_id ?? '');
+    const groupAppointments = bookingGroupId
+      ? this.appointments.filter((item) =>
+          String(item.bookingGroupId ?? item.booking_group_id ?? '') === bookingGroupId
+          && !['cancelled', 'canceled', 'no-show'].includes(String(item.status ?? '').toLowerCase()),
+        )
+      : [appointment];
+    const bookedLines = groupAppointments.flatMap((item) => {
+      const itemStaffId = item.staffId ?? item.staff_id ?? null;
+      const serviceIds = Array.isArray(item.serviceIds) ? item.serviceIds : Array.isArray(item.service_ids) ? item.service_ids : [];
+      return serviceIds.map((serviceId: string | number) => ({ serviceId, staffId: itemStaffId }));
+    });
+    if (bookedLines.length) {
+      this.saleLines = bookedLines.map(({ serviceId, staffId: lineStaffId }) => {
+        const line = this.newSaleLine('service');
+        const service = this.services.find((item) => String(item.id) === String(serviceId));
+        const lineStaff = this.staff.find((item) => String(item.id) === String(lineStaffId));
+        if (service) this.selectLineItem(line, service);
+        line.staffId = lineStaffId;
+        line.staffSearchText = lineStaff ? this.recordName(lineStaff) : '';
+        return line;
+      });
+    }
+  }
+
+  private applyAppointmentFromRoute(): void {
+    if (!this.appointmentIdFromRoute || !this.appointments.length || !this.clients.length || !this.staff.length || !this.services.length) return;
+    this.setCompletedAppointment(this.appointmentIdFromRoute);
+    this.appointmentIdFromRoute = '';
+  }
+
+  setLineItemSearch(line: PosLine, value: string): void {
+    line.itemSearchText = value;
+    line.itemId = null;
+    line.itemName = value.trim();
+    if (line.lineType === 'custom') line.customName = value;
+    this.activeLineItemId = line.id;
+  }
+
+  selectLineItem(line: PosLine, item: any): void {
+    line.itemId = item.id;
+    line.itemName = this.recordName(item);
+    line.itemSearchText = line.itemName;
+    line.unitPrice = this.paiseToInput(this.pricePaise(item));
+    const tax = this.firstNumber(item, ['taxPercent', 'gstPercent', 'tax_percent', 'gst_percent']);
+    line.taxPercent = tax > 0 ? String(tax) : '';
+    this.activeLineItemId = null;
+  }
+
+  openCatalogPicker(type: CatalogLineType): void {
+    this.catalogPickerType = type;
+    this.catalogPickerSearch = '';
+    this.catalogPickerSelection.clear();
+  }
+
+  closeCatalogPicker(): void { this.catalogPickerType = null; this.catalogPickerSelection.clear(); }
+
+  catalogPickerItems(): any[] {
+    const rows = this.catalogPickerType === 'product' ? this.products : this.services;
+    return this.ranked(rows, this.catalogPickerSearch, (item) => [this.recordName(item), item.category, item.sku, item.barcode, item.code, item.id]);
+  }
+
+  catalogPickerSelected(item: any): boolean { return this.catalogPickerSelection.has(String(item.id)); }
+  catalogPickerSelectedCount(): number { return this.catalogPickerSelection.size; }
+
+  toggleCatalogPickerItem(item: any): void {
+    const id = String(item.id);
+    if (this.catalogPickerSelection.has(id)) this.catalogPickerSelection.delete(id);
+    else this.catalogPickerSelection.add(id);
+  }
+
+  addCatalogPickerItems(): void {
+    const type = this.catalogPickerType;
+    if (!type) return;
+    const rows = type === 'product' ? this.products : this.services;
+    const items = rows.filter((item) => this.catalogPickerSelection.has(String(item.id)));
+    for (const item of items) {
+      const line = this.saleLines.find((candidate) => candidate.lineType === type && !candidate.itemId && !candidate.itemSearchText) ?? this.newSaleLine(type);
+      if (!this.saleLines.includes(line)) this.saleLines.push(line);
+      this.selectLineItem(line, item);
+    }
+    this.closeCatalogPicker();
+  }
+
+  addQuickService(item?: any): void {
+    if (item) { this.toggleQuickService(item); return; }
+    const services = this.quickServiceSelections.length ? this.quickServiceSelections : this.filteredQuickServices().slice(0, 1);
+    if (!services.length) return;
+    services.forEach((service) => this.addCatalogItem('service', service));
+    this.quickServiceSelections = [];
+    this.quickServiceSearch = '';
+    this.quickServiceActive = false;
+  }
+
+  toggleQuickService(item: any): void {
+    const id = String(item?.id ?? '');
+    if (!id) return;
+    this.quickServiceSelections = this.isQuickServiceSelected(item)
+      ? this.quickServiceSelections.filter((service) => String(service?.id) !== id)
+      : [...this.quickServiceSelections, item];
+  }
+
+  isQuickServiceSelected(item: any): boolean {
+    return this.quickServiceSelections.some((service) => String(service?.id) === String(item?.id));
+  }
+
+  quickServiceAddLabel(): string {
+    const count = this.quickServiceSelections.length;
+    return count ? `Add ${count}` : 'Add';
+  }
+
+  addQuickProduct(item?: any): void {
+    if (item) { this.toggleQuickProduct(item); return; }
+    const products = this.quickProductSelections.length ? this.quickProductSelections : this.filteredQuickProducts().slice(0, 1);
+    if (!products.length) return;
+    products.forEach((product) => this.addCatalogItem('product', product));
+    this.quickProductSelections = [];
+    this.quickProductSearch = '';
+    this.quickProductActive = false;
+  }
+
+  toggleQuickProduct(item: any): void {
+    const id = String(item?.id ?? '');
+    if (!id) return;
+    this.quickProductSelections = this.isQuickProductSelected(item)
+      ? this.quickProductSelections.filter((product) => String(product?.id) !== id)
+      : [...this.quickProductSelections, item];
+  }
+
+  isQuickProductSelected(item: any): boolean {
+    return this.quickProductSelections.some((product) => String(product?.id) === String(item?.id));
+  }
+
+  quickProductAddLabel(): string {
+    const count = this.quickProductSelections.length;
+    return count ? `Add ${count}` : 'Add';
+  }
+
+  addMembershipSale(): void {
+    const plan = this.memberships.find((item) => String(item.id) === String(this.selectedMembershipId));
+    if (!plan) return;
+    const routePrice = Number(this.route.snapshot.queryParamMap.get('unitPricePaise'));
+    this.addAddonLine('membership', plan, Number.isFinite(routePrice) && routePrice >= 0 ? routePrice : this.pricePaise(plan), this.firstNumber(plan, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18);
+    this.selectedMembershipId = '';
+  }
+
+  addPackageSale(): void {
+    const itemPackage = this.packages.find((item) => String(item.id) === String(this.selectedPackageId));
+    if (!itemPackage) return;
+    this.addAddonLine('package', itemPackage, this.pricePaise(itemPackage), this.firstNumber(itemPackage, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18);
+    this.selectedPackageId = '';
+  }
+
+  addGiftCardSale(): void {
+    const amountPaise = this.toPaise(this.num(this.giftCardAmount));
+    if (amountPaise <= 0) return;
+    const code = `GC-${Date.now().toString().slice(-6)}`;
+    this.addAddonLine('gift_card', { id: code, name: `Gift Card ${code}` }, amountPaise, 0);
+    this.giftCardAmount = '';
+  }
+
+  setLineStaffSearch(line: PosLine, value: string): void {
+    line.staffSearchText = value;
+    line.staffId = null;
+    this.activeLineStaffId = line.id;
+  }
+
+  selectLineStaff(line: PosLine, person: any): void {
+    line.staffId = person.id;
+    line.staffSearchText = this.recordName(person);
+    if (line.staffSplits.length) line.staffSplits[0] = { staffId: person.id, staffName: this.recordName(person), percent: line.staffSplits[0].percent || '100' };
+    this.activeLineStaffId = null;
+  }
+
+  addStaffSplit(line: PosLine): void {
+    if (line.staffSplits.length) {
+      line.staffSplits.push({ staffId: null, staffName: '', percent: '' });
+      return;
+    }
+    const person = this.staff.find((item) => item.id === line.staffId);
+    line.staffSplits = [
+      { staffId: line.staffId, staffName: person ? this.recordName(person) : '', percent: '50' },
+      { staffId: null, staffName: '', percent: '50' },
+    ];
+  }
+
+  removeStaffSplit(line: PosLine, index: number): void {
+    line.staffSplits = line.staffSplits.filter((_, splitIndex) => splitIndex !== index);
+    if (line.staffSplits.length < 2) line.staffSplits = [];
+  }
+
+  setLineSplitStaff(line: PosLine, index: number, staffId: string): void {
+    const person = this.staff.find((item) => String(item.id) === String(staffId));
+    const split = line.staffSplits[index];
+    if (!split) return;
+    split.staffId = staffId || null;
+    split.staffName = person ? this.recordName(person) : '';
+    if (index === 0) {
+      line.staffId = split.staffId;
+      line.staffSearchText = split.staffName;
+    }
+  }
+
+  setLineSplitPercent(line: PosLine, index: number, value: string): void {
+    const split = line.staffSplits[index];
+    if (!split) return;
+    split.percent = String(Math.max(0, Math.min(100, this.num(value))));
+  }
+
+  splitPercentTotal(line: PosLine): number {
+    return Math.round(line.staffSplits.reduce((sum, split) => sum + this.num(split.percent), 0));
+  }
+
+  filteredClients(): any[] {
+    const phone = this.phoneDigits(this.clientSearchText);
+    if (phone) {
+      return this.clients
+        .filter((client) => this.clientPhone(client).includes(phone))
+        .sort((a, b) => Number(!this.clientPhone(a).startsWith(phone)) - Number(!this.clientPhone(b).startsWith(phone)))
+        .slice(0, 8);
+    }
+    return this.ranked(this.clients, this.clientSearchText, (c) => [this.recordName(c), c.phone, c.mobile, c.whatsapp, c.email, c.code, c.customerCode, c.clientCode, c.id]);
+  }
+
+  filteredHeaderStaff(): any[] { return this.filteredStaff(this.staffSearchText); }
+  filteredLineStaff(line: PosLine): any[] { return this.filteredStaff(line.staffSearchText); }
+  filteredQuickServices(): any[] { return this.ranked(this.services, this.quickServiceSearch, (item) => [this.recordName(item), item.category, item.code, item.id]); }
+  filteredQuickProducts(): any[] { return this.ranked(this.products, this.quickProductSearch, (item) => [this.recordName(item), item.category, item.brand, item.sku, item.barcode, item.code, item.id]); }
+
+  filteredLineItems(line: PosLine): any[] {
+    if (!this.isCatalogLine(line.lineType)) return [];
+    const rows = line.lineType === 'service' ? this.services : this.products;
+    return this.ranked(rows, line.itemSearchText, (item) => [this.recordName(item), item.category, item.sku, item.barcode, item.code, item.id]);
+  }
+
+  showClientResults(): boolean { return this.clientSearchActive && this.filteredClients().length > 0; }
+  showAddClient(): boolean { return this.clientSearchActive && this.phoneDigits(this.clientSearchText).length >= 3 && !this.filteredClients().length; }
+  showHeaderStaffResults(): boolean { return this.staffSearchActive && this.filteredHeaderStaff().length > 0; }
+  showQuickServiceResults(): boolean { return this.quickServiceActive && this.quickServiceSearch.trim().length > 0 && this.filteredQuickServices().length > 0; }
+  showQuickProductResults(): boolean { return this.quickProductActive && this.quickProductSearch.trim().length > 0 && this.filteredQuickProducts().length > 0; }
+  showLineItemResults(line: PosLine): boolean { return this.activeLineItemId === line.id && this.filteredLineItems(line).length > 0; }
+  showLineStaffResults(line: PosLine): boolean { return this.activeLineStaffId === line.id && this.filteredLineStaff(line).length > 0; }
+  clientSearchHeading(): string { return this.normalizeSearch(this.clientSearchText).length >= 3 ? 'Matching contacts' : 'Recent contacts'; }
+  closeClientSearchSoon(): void { setTimeout(() => (this.clientSearchActive = false), 120); }
+  closeHeaderStaffSearchSoon(): void { setTimeout(() => (this.staffSearchActive = false), 120); }
+  closeQuickServiceSearchSoon(): void { setTimeout(() => (this.quickServiceActive = false), 120); }
+  closeQuickProductSearchSoon(): void { setTimeout(() => (this.quickProductActive = false), 120); }
+  closeLineItemSearchSoon(line: PosLine): void { setTimeout(() => { if (this.activeLineItemId === line.id) this.activeLineItemId = null; }, 120); }
+  closeLineStaffSearchSoon(line: PosLine): void { setTimeout(() => { if (this.activeLineStaffId === line.id) this.activeLineStaffId = null; }, 120); }
+
+  onClientChange(clientId: string | number | null): void {
+    this.selectedClientId = clientId;
+    this.selectedSale = null;
+    this.refreshClientKpi(clientId);
+  }
+
+  refreshClientKpi(clientId: string | number | null): void {
+    if (!clientId) { this.clientKpi = this.emptyKpi(); this.membershipRedeemRows = []; this.packageRedeemRows = []; return; }
+    if (this.selectedClient) this.clientKpi = this.kpiFrom(this.selectedClient);
+    this.api.get<any>(`/api/v1/pos/clients/${clientId}/kpi`).subscribe({
+      next: (res: any) => {
+        this.clientKpi = this.kpiFrom(res?.kpi ?? res);
+        this.membershipRedeemRows = this.clientKpi.membershipCredits;
+        this.packageRedeemRows = this.clientKpi.packageCredits;
+      },
+      error: () => undefined,
+    });
+  }
+
+  walkInClient(): void { this.clientSearchText = 'Walk-in client'; this.clientSearchActive = false; this.onClientChange(null); }
+
+  openQuickClient(): void {
+    this.quickClient = { ...this.emptyQuickClient(), phone: this.phoneDigits(this.clientSearchText) };
+    this.quickClientError = '';
+    this.quickClientOpen = true;
+    this.clientSearchActive = false;
+  }
+
+  closeQuickClient(): void { this.quickClientOpen = false; this.quickClientError = ''; }
+  setQuickClientName(value: string): void { this.quickClient.name = this.titleCase(value); }
+
+  saveQuickClient(): void {
+    const name = this.quickClient.name.trim();
+    const phone = this.phoneDigits(this.quickClient.phone);
+    if (!name || !phone) { this.quickClientError = 'Name and mobile number required'; return; }
+    this.quickClientSaving = true;
+    this.quickClientError = '';
+    this.api.post<any>('/api/v1/clients', {
+      firstName: name,
+      phone,
+      email: this.quickClient.email.trim(),
+      birthday: this.optionalDisplayDateToIso(this.quickClient.birthday),
+      anniversary: this.optionalDisplayDateToIso(this.quickClient.anniversary),
+      categories: this.quickClient.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      notes: this.quickClient.notes.trim(),
+    }).subscribe({
+      next: () => {
+        this.loadList('/api/v1/clients', (rows) => {
+          this.clients = rows;
+          const client = rows.find((item) => this.clientPhone(item) === phone);
+          if (client) this.selectClient(client);
+        });
+        this.quickClientOpen = false;
+        this.quickClientSaving = false;
+        this.message = 'Client added';
+      },
+      error: (err: any) => { this.quickClientError = err?.error?.message ?? err?.message ?? 'Client save failed'; this.quickClientSaving = false; },
+    });
+  }
+
+  scrollToTipRegister(): void {
+    document.getElementById('tip-register')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  addSaleLine(lineType: LineType = 'service'): void {
+    this.saleLines.push(this.newSaleLine(lineType));
+  }
+
+  removeSaleLine(line: PosLine): void {
+    this.saleLines = this.saleLines.filter((item) => item.id !== line.id);
+  }
+
+  packageRedeemCount(): number { return this.packageRedeemRows.reduce((sum, row) => sum + Math.max(0, this.num(row.redeemQty)), 0); }
+  membershipRedeemCount(): number { return this.membershipRedeemRows.reduce((sum, row) => sum + Math.max(0, this.num(row.redeemQty)), 0); }
+
+  setMembershipRedeemQty(row: MembershipRedeemRow, value: string): void {
+    row.redeemQty = String(Math.max(0, Math.min(row.pendingQty, this.num(value))));
+  }
+
+  setMembershipRedeemStaff(row: MembershipRedeemRow, staffId: string): void {
+    const person = this.staff.find((item) => String(item.id) === String(staffId));
+    row.staffId = staffId || null;
+    row.staffName = person ? this.recordName(person) : '';
+  }
+
+  redeemMembershipRow(row: MembershipRedeemRow): void {
+    if (this.num(row.redeemQty) <= 0 && row.pendingQty > 0) row.redeemQty = '1';
+  }
+
+  setPackageRedeemQty(row: PackageRedeemRow, value: string): void {
+    row.redeemQty = String(Math.max(0, Math.min(row.pendingQty, this.num(value))));
+  }
+
+  setPackageRedeemStaff(row: PackageRedeemRow, staffId: string): void {
+    const person = this.staff.find((item) => String(item.id) === String(staffId));
+    row.staffId = staffId || null;
+    row.staffName = person ? this.recordName(person) : '';
+  }
+
+  redeemPackageRow(row: PackageRedeemRow): void {
+    if (this.num(row.redeemQty) <= 0 && row.pendingQty > 0) row.redeemQty = '1';
+  }
+
+  fillPayment(method: PaymentMode): void { if (this.balanceDuePaise > 0) this.paymentInputs[method.code] = String(Math.round(this.balanceDuePaise / 100)); }
+  applyOverpayToWallet(): void { if (this.unappliedOverpayPaise > 0) this.walletCreditAmount = this.paiseToInput(this.walletCreditPaise + this.unappliedOverpayPaise); }
+  applyOverpayToTip(): void { if (this.unappliedOverpayPaise > 0) this.tipAmount = this.paiseToInput(this.tipPaise + this.unappliedOverpayPaise); }
+  clearPayments(): void { this.paymentInputs = {}; this.walletCreditAmount = ''; this.ensurePaymentInputs(); }
+  holdInvoice(): void { this.saveSale('draft'); }
+  finalizeSale(): void { this.saveSale('finalized'); }
+
+  syncOfflineCheckouts(): void {
+    const queued = this.offlineCheckouts.find((item) => item.status === 'pending');
+    if (!this.isOnline || this.syncingOffline || !queued) return;
+    this.syncingOffline = true;
+    this.api.post<any>('/api/v1/pos/offline-checkout', { operationId: queued.operationId, checkout: queued.checkout }).subscribe({
+      next: () => {
+        this.offlineCheckouts = this.offlineCheckouts.filter((item) => item.operationId !== queued.operationId);
+        this.persistOfflineCheckouts();
+        this.syncingOffline = false;
+        this.message = 'Offline checkout synced';
+        if (queued.appointmentId) this.completeOfflineAppointment(queued.appointmentId);
+        this.syncOfflineCheckouts();
+      },
+      error: (err: any) => {
+        queued.lastError = this.errorText(err, 'Offline checkout sync failed');
+        if (err?.status >= 400 && err?.status < 500) queued.status = 'conflict';
+        this.persistOfflineCheckouts();
+        this.syncingOffline = false;
+        this.error = queued.status === 'conflict' ? 'Offline checkout needs review' : queued.lastError;
+      },
+    });
+  }
+
+  discardOfflineConflicts(): void {
+    if (!this.offlineConflictCount || !confirm('Discard failed offline checkouts from this device?')) return;
+    this.offlineCheckouts = this.offlineCheckouts.filter((item) => item.status !== 'conflict');
+    this.persistOfflineCheckouts();
+  }
+
+  printSelectedSale(): void {
+    const id = this.selectedSale?.id ?? this.selectedSale?.saleId ?? this.selectedSale?.sale_id;
+    if (!id) return;
+    this.api.get<any>(`/api/v1/pos/invoices/${id}/print`).subscribe({ next: (res: any) => { if (!printInvoiceDocument(res?.data ?? res)) this.error = 'Print not available'; }, error: () => (this.error = 'Print not available') });
+  }
+
+  lineSubtotalPaise(line: PosLine): number { return this.toPaise(this.num(line.unitPrice)) * Math.max(0, this.num(line.quantity)); }
+  lineDiscountPaiseValue(line: PosLine): number {
+    const subtotal = this.lineSubtotalPaise(line);
+    const value = this.num(line.discount);
+    return line.discountType === 'percent'
+      ? Math.round(subtotal * Math.min(100, Math.max(0, value)) / 100)
+      : Math.min(subtotal, this.toPaise(value));
+  }
+  lineGstPaise(line: PosLine): number { return Math.round((Math.max(0, this.lineSubtotalPaise(line) - this.lineDiscountPaiseValue(line)) * Math.max(0, this.num(line.taxPercent))) / 100); }
+  lineTotalPaise(line: PosLine): number { return Math.max(0, this.lineSubtotalPaise(line) - this.lineDiscountPaiseValue(line) + this.lineGstPaise(line)); }
+
+  recordName(record: any): string {
+    const joinedName = [record?.firstName ?? record?.first_name, record?.lastName ?? record?.last_name].filter(Boolean).join(' ');
+    return String(record?.name ?? record?.fullName ?? record?.displayName ?? record?.staffName ?? record?.serviceName ?? record?.productName ?? joinedName ?? `#${record?.id ?? ''}`).trim();
+  }
+  resultMeta(record: any): string { return [record?.phone ?? record?.mobile, record?.category, record?.sku, record?.barcode, record?.role ?? record?.designation].filter(Boolean).join(' · '); }
+  clientWalletPaise(client: any): number { return this.firstNumber(client, ['walletBalancePaise', 'wallet_balance_paise']); }
+  clientHasDuplicates(client: any): boolean { return this.firstNumber(client, ['duplicateCount', 'duplicate_count']) > 0; }
+  whatsappUrl(client: any): string { const phone = this.phoneDigits(this.clientPhone(client)); return phone ? `https://wa.me/${phone.length === 10 ? `91${phone}` : phone}` : ''; }
+  callUrl(client: any): string { const phone = this.phoneDigits(this.clientPhone(client)); return phone ? `tel:${phone}` : ''; }
+  staffResultMeta(person: any): string { return [person?.employeeCode ?? person?.employee_code, person?.jobTitle ?? person?.job_title ?? person?.role, person?.mobilePhone ?? person?.mobile_phone ?? person?.phone, person?.branchName ?? person?.branch_name ?? person?.branchId ?? person?.branch_id].filter(Boolean).join(' · '); }
+  typeLabel(type: LineType): string {
+    return ({ service: 'Service', product: 'Product', membership: 'Membership', package: 'Package', gift_card: 'Gift card', custom: 'Custom' })[type];
+  }
+  addonLabel(item: any): string {
+    const price = this.pricePaise(item);
+    return price ? `${this.recordName(item)} - ${this.paiseToInput(price)}` : this.recordName(item);
+  }
+  clientInitial(): string { return (this.selectedClient ? this.recordName(this.selectedClient) : 'Walk-in client').trim().charAt(0).toUpperCase() || 'W'; }
+  formatDate(value: string | null | undefined): string { const v = String(value ?? '').slice(0, 10); const p = v.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : '-'; }
+  trackByLine(_: number, line: PosLine): string { return line.id; }
+  trackById(_: number, item: any): string | number { return item.id; }
+  trackByPayment(_: number, item: PaymentMode): string { return item.code; }
+  trackBySplit(index: number): number { return index; }
+  appointmentOptionLabel(item: any): string {
+    const clientId = item?.clientId ?? item?.client_id ?? item?.customerId ?? item?.customer_id ?? '';
+    const client = item?.clientName ?? item?.client_name ?? item?.customerName ?? item?.customer_name ?? this.clients.find((row) => String(row.id) === String(clientId));
+    const name = typeof client === 'string' ? client : client ? this.recordName(client) : 'Appointment';
+    const time = this.appointmentTimeLabel(item);
+    return [name, time].filter(Boolean).join(' · ');
+  }
+
+  private filteredStaff(query: string): any[] { return this.ranked(this.staff, query, (p) => [this.recordName(p), p.phone, p.mobile, p.mobilePhone, p.mobile_phone, p.role, p.designation, p.jobTitle, p.job_title, p.employeeCode, p.employee_code, p.staffCode, p.code, p.branchId, p.branch_id, p.id]); }
+  private addCatalogItem(type: CatalogLineType, item: any): void {
+    const line = this.saleLines.find((candidate) => candidate.lineType === type && !candidate.itemId && !candidate.itemSearchText) ?? this.newSaleLine(type);
+    if (!this.saleLines.includes(line)) this.saleLines.push(line);
+    this.selectLineItem(line, item);
+  }
+
+  private newSaleLine(lineType: LineType): PosLine {
+    return {
+      id: `line-${this.lineSeed++}`,
+      lineType,
+      itemId: null,
+      itemName: '',
+      itemSearchText: '',
+      staffSearchText: this.staffSearchText,
+      customName: '',
+      quantity: '1',
+      unitPrice: '',
+      discount: '',
+      discountType: 'amount',
+      taxPercent: '',
+      staffId: this.selectedStaffId,
+      staffSplits: [],
+    };
+  }
+
+  private addAddonLine(lineType: Extract<LineType, 'membership' | 'package' | 'gift_card'>, item: any, unitPricePaise: number, taxPercent: number): void {
+    this.saleLines.push({
+      ...this.newSaleLine(lineType),
+      itemId: item.id ?? null,
+      itemName: this.recordName(item),
+      itemSearchText: this.recordName(item),
+      unitPrice: this.paiseToInput(unitPricePaise),
+      taxPercent: taxPercent > 0 ? String(taxPercent) : '',
+    });
+  }
+
+  private applyMembershipFromRoute(): void {
+    if (this.membershipPrefillApplied || !this.clients.length || !this.memberships.length) return;
+    const membershipId = this.route.snapshot.queryParamMap.get('membershipId');
+    if (!membershipId) return;
+    const plan = this.memberships.find((item) => String(item.id) === membershipId);
+    if (!plan) return;
+    this.addAddonLine('membership', plan, this.pricePaise(plan), this.firstNumber(plan, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18);
+    this.membershipPrefillApplied = true;
+  }
+
+  private ranked(rows: any[], query: string, fieldsFor: (row: any) => unknown[]): any[] {
+    const q = this.normalizeSearch(query);
+    return rows
+      .map((row, index) => ({ row, score: q ? this.searchScore(fieldsFor(row), q) : Math.max(1, 20 - index) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map((item) => item.row);
+  }
+
+  private searchScore(fields: unknown[], query: string): number {
+    const compactQuery = this.compactSearch(query);
+    let best = 0;
+    for (const raw of fields) {
+      const value = this.normalizeSearch(raw);
+      if (!value) continue;
+      const compact = this.compactSearch(value);
+      if (value === query || compact === compactQuery) best = Math.max(best, 120);
+      else if (value.startsWith(query) || compact.startsWith(compactQuery)) best = Math.max(best, 95);
+      else if (value.includes(query) || compact.includes(compactQuery)) best = Math.max(best, 70);
+      else if (this.searchLettersExistInName(value, query)) best = Math.max(best, 35);
+    }
+    return best;
+  }
+
+  private searchLettersExistInName(value: string, query: string): boolean {
+    let at = 0;
+    for (const letter of query.replace(/\s+/g, '')) {
+      at = value.indexOf(letter, at);
+      if (at < 0) return false;
+      at += 1;
+    }
+    return true;
+  }
+
+  private saveSale(status: SaleStatus): void {
+    this.error = '';
+    this.message = '';
+    if (this.hasInvalidStaffSplit()) { this.error = 'Staff split total must be 100%'; return; }
+    if (this.hasInvalidMembershipRedemption()) { this.error = 'Membership redeem qty is not available'; return; }
+    if (this.hasInvalidPackageRedemption()) { this.error = 'Package redeem qty is not available'; return; }
+    if (!this.canSave) { this.error = 'Add at least one item'; return; }
+    if (!this.isOnline) {
+      if (status === 'draft' || this.draftId) { this.error = 'Held invoices require an internet connection'; return; }
+      this.queueOfflineCheckout();
+      return;
+    }
+    this.saving = true;
+    if (this.draftId) {
+      this.api.put<any>(`/api/v1/pos/invoices/${this.draftId}`, this.salePayload('draft')).subscribe({
+        next: (res: any) => status === 'draft' ? this.completeSave(res, 'draft') : this.finalizeHeldInvoice(),
+        error: (err: any) => this.saveError(err),
+      });
+      return;
+    }
+    const path = status === 'draft' ? '/api/v1/pos/invoices/draft' : '/api/v1/pos/sales';
+    this.api.post<any>(path, this.salePayload(status)).subscribe({ next: (res: any) => this.completeSave(res, status), error: (err: any) => this.saveError(err) });
+  }
+
+  private finalizeHeldInvoice(): void {
+    this.api.post<any>(`/api/v1/pos/invoices/${this.draftId}/finalize`, {}).subscribe({ next: (res: any) => this.completeSave(res, 'finalized'), error: (err: any) => this.saveError(err) });
+  }
+
+  private completeSave(res: any, status: SaleStatus): void {
+    this.selectedSale = res?.sale ?? res?.invoice ?? res;
+    this.draftId = status === 'draft' ? String(this.selectedSale?.id ?? this.draftId) : null;
+    this.message = status === 'draft' ? 'Invoice held' : 'Invoice saved';
+    this.saving = false;
+    this.loadPaymentMethods();
+    if (this.selectedClientId) this.refreshClientKpi(this.selectedClientId);
+    if (status === 'finalized') this.completeReferencedAppointment();
+  }
+
+  private completeReferencedAppointment(): void {
+    const appointmentId = this.reference.trim();
+    if (!this.appointments.some((item) => String(item.id) === appointmentId)) {
+      void this.router.navigate(['/pos/invoices']);
+      return;
+    }
+    this.api.post(`/api/v1/appointments/${appointmentId}/status`, { status: 'completed', reason: 'Invoice finalized' }).subscribe({
+      next: () => void this.router.navigate(['/pos/invoices']),
+      error: () => { this.error = 'Invoice saved, but appointment status could not be updated'; },
+    });
+  }
+
+  private saveError(err: any): void {
+    this.error = this.errorText(err, 'Unable to save invoice');
+    this.saving = false;
+  }
+
+  private queueOfflineCheckout(): void {
+    const tenantId = localStorage.getItem('aurashine_tenant_id') || '';
+    const branchId = localStorage.getItem('aurashine_branch_id') || '';
+    if (!tenantId || !branchId) { this.error = 'Tenant or branch session is missing'; return; }
+    const queued: OfflineCheckout = {
+      operationId: crypto.randomUUID(),
+      checkout: this.salePayload('finalized'),
+      appointmentId: this.reference.trim(),
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      lastError: '',
+    };
+    this.offlineCheckouts = [...this.offlineCheckouts, queued];
+    if (!this.persistOfflineCheckouts()) {
+      this.offlineCheckouts = this.offlineCheckouts.filter((item) => item.operationId !== queued.operationId);
+      this.error = 'Offline checkout could not be saved on this device';
+      return;
+    }
+    this.resetAfterOfflineCheckout();
+    this.message = 'Offline checkout saved';
+  }
+
+  private resetAfterOfflineCheckout(): void {
+    this.saleLines = [];
+    this.selectedSale = null;
+    this.selectedClientId = null;
+    this.clientSearchText = 'Walk-in client';
+    this.clientKpi = this.emptyKpi();
+    this.membershipRedeemRows = [];
+    this.packageRedeemRows = [];
+    this.reference = '';
+    this.billDiscount = '';
+    this.couponCode = '';
+    this.tipAmount = '';
+    this.walletCreditAmount = '';
+    this.roundTotal = false;
+    this.clearPayments();
+  }
+
+  private loadOfflineCheckouts(): void {
+    try {
+      const rows = JSON.parse(localStorage.getItem(this.offlineStorageKey()) || '[]');
+      this.offlineCheckouts = Array.isArray(rows)
+        ? rows.filter((item) => item?.operationId && item?.checkout && ['pending', 'conflict'].includes(item?.status))
+        : [];
+    } catch {
+      this.offlineCheckouts = [];
+      this.error = 'Offline checkout queue could not be read';
+    }
+  }
+
+  private persistOfflineCheckouts(): boolean {
+    try { localStorage.setItem(this.offlineStorageKey(), JSON.stringify(this.offlineCheckouts)); return true; }
+    catch { return false; }
+  }
+
+  private offlineStorageKey(): string {
+    const tenantId = localStorage.getItem('aurashine_tenant_id') || 'unknown';
+    const branchId = localStorage.getItem('aurashine_branch_id') || 'unknown';
+    return `aurashine_pos_offline:${tenantId}:${branchId}`;
+  }
+
+  private completeOfflineAppointment(appointmentId: string): void {
+    this.api.post(`/api/v1/appointments/${appointmentId}/status`, { status: 'completed', reason: 'Offline invoice synced' }).subscribe({
+      error: () => { this.error = 'Invoice synced, but appointment status could not be updated'; },
+    });
+  }
+
+  private errorText(err: any, fallback: string): string {
+    const body = err?.error;
+    return typeof body === 'string' ? body : body?.error?.message ?? body?.message ?? body?.error ?? err?.message ?? fallback;
+  }
+
+  private restoreHeldInvoice(id: string): void {
+    this.api.get<any>(`/api/v1/pos/invoices/${id}`).subscribe({
+      next: (res: any) => {
+        const details = res?.sale ? res : res?.data ?? res;
+        const sale = details.sale ?? details.invoice ?? details;
+        if (sale.status !== 'draft') { this.error = 'Only held invoices can be resumed'; return; }
+        this.draftId = id;
+        this.selectedSale = sale;
+        this.selectedClientId = (sale.clientId ?? sale.client_id ?? null) as any;
+        const restoredClient = this.selectedClient;
+        this.clientSearchText = restoredClient
+          ? this.recordName(restoredClient)
+          : String(details.clientKpi?.clientName ?? details.client_kpi?.client_name ?? sale.clientName ?? sale.client_name ?? 'Walk-in client');
+        this.selectedStaffId = (sale.staffId ?? sale.staff_id ?? null) as any;
+        this.source = sale.source ?? 'Counter';
+        this.reference = sale.referenceId ?? sale.reference_id ?? '';
+        this.invoiceDate = this.formatDate(sale.businessDate ?? sale.business_date ?? sale.createdAt ?? sale.created_at);
+        this.billDiscount = this.paiseToInput(this.firstMoney(sale, ['billDiscountPaise', 'bill_discount_paise']));
+        this.couponCode = sale.couponCode ?? sale.coupon_code ?? '';
+        this.tipAmount = this.paiseToInput(this.firstMoney(sale, ['tipPaise', 'tip_paise']));
+        this.saleLines = (details.lines ?? []).map((line: any) => this.restoreLine(line));
+        this.paymentInputs = {};
+        (details.payments ?? []).forEach((payment: any) => this.paymentInputs[String(payment.method ?? payment.code)] = this.paiseToInput(this.firstMoney(payment, ['amountPaise', 'amount_paise'])));
+        this.ensurePaymentInputs();
+        this.refreshClientKpi(this.selectedClientId);
+        this.message = 'Held invoice restored';
+      },
+      error: (err: any) => this.error = err?.error?.message ?? err?.message ?? 'Unable to restore held invoice',
+    });
+  }
+
+  private restoreLine(line: any): PosLine {
+    const type = String(line.lineType ?? line.line_type ?? 'custom') as LineType;
+    const amountType = String(line.discountType ?? line.discount_type ?? 'amount') === 'percent' ? 'percent' : 'amount';
+    const discount = amountType === 'percent' ? String((this.firstMoney(line, ['discountBps', 'discount_bps']) || 0) / 100) : this.paiseToInput(this.firstMoney(line, ['discountValuePaise', 'discount_value_paise', 'discountPaise', 'discount_paise']));
+    const itemName = String(line.itemName ?? line.item_name ?? '');
+    return { id: `line-${this.lineSeed++}`, lineType: type, itemId: (line.itemId ?? line.item_id ?? null) as any, itemName, itemSearchText: itemName, staffSearchText: '', customName: type === 'custom' ? itemName : '', quantity: String(line.quantity ?? 1), unitPrice: this.paiseToInput(this.firstMoney(line, ['unitPricePaise', 'unit_price_paise'])), discount, discountType: amountType, taxPercent: String(line.taxPercent ?? line.tax_percent ?? line.gstPercent ?? line.gst_percent ?? ''), staffId: (line.staffId ?? line.staff_id ?? null) as any, staffSplits: this.parseStaffSplits(line.staffSplits ?? line.staff_splits) };
+  }
+
+  private salePayload(status: SaleStatus): any {
+    const clientId = this.idPayload(this.selectedClientId);
+    const staffId = this.idPayload(this.selectedStaffId);
+    const lines: any[] = this.saleLines.filter((line) => this.isLineReady(line)).map((line) => {
+      const itemName = line.lineType === 'custom' ? line.customName.trim() : line.itemName;
+      const itemId = line.lineType === 'custom' || line.itemId == null ? null : String(line.itemId);
+      const lineStaffId = this.idPayload(line.staffId);
+      const staffSplits = this.payloadStaffSplits(line);
+      return {
+        lineType: line.lineType,
+        line_type: line.lineType,
+        itemId,
+        item_id: itemId,
+        itemName,
+        item_name: itemName,
+        serviceId: line.lineType === 'service' ? itemId : null,
+        service_id: line.lineType === 'service' ? itemId : null,
+        productId: line.lineType === 'product' ? itemId : null,
+        product_id: line.lineType === 'product' ? itemId : null,
+        membershipId: line.lineType === 'membership' ? itemId : null,
+        membership_id: line.lineType === 'membership' ? itemId : null,
+        packageId: line.lineType === 'package' ? itemId : null,
+        package_id: line.lineType === 'package' ? itemId : null,
+        giftCardCode: line.lineType === 'gift_card' ? itemId : null,
+        gift_card_code: line.lineType === 'gift_card' ? itemId : null,
+        staffId: lineStaffId,
+        staff_id: lineStaffId,
+        assignedStaffId: lineStaffId,
+        assigned_staff_id: lineStaffId,
+        staffSplits,
+        qty: this.num(line.quantity),
+        quantity: this.num(line.quantity),
+        unitPricePaise: this.toPaise(this.num(line.unitPrice)),
+        unit_price_paise: this.toPaise(this.num(line.unitPrice)),
+        discountType: line.discountType,
+        discount_type: line.discountType,
+        discountValue: this.num(line.discount),
+        discount_value: this.num(line.discount),
+        discountPaise: line.discountType === 'amount' ? this.lineDiscountPaiseValue(line) : null,
+        discount_paise: line.discountType === 'amount' ? this.lineDiscountPaiseValue(line) : null,
+        gstPercent: this.num(line.taxPercent),
+        gst_percent: this.num(line.taxPercent),
+        taxPercent: this.num(line.taxPercent),
+        tax_percent: this.num(line.taxPercent),
+      };
+    });
+    lines.push(...this.membershipRedeemRows
+      .map((row) => ({ row, quantity: Math.floor(this.num(row.redeemQty)) }))
+      .filter((item) => item.quantity > 0)
+      .map(({ row, quantity }) => ({
+        lineType: 'membership_redeem', line_type: 'membership_redeem',
+        itemId: row.id, item_id: row.id, itemName: `${row.membershipName} · ${row.serviceName}`, item_name: `${row.membershipName} · ${row.serviceName}`,
+        membershipId: row.membershipId, membership_id: row.membershipId,
+        serviceId: row.serviceId, service_id: row.serviceId,
+        staffId: row.staffId ? String(row.staffId) : '', staff_id: row.staffId ? String(row.staffId) : '',
+        qty: quantity, quantity, unitPricePaise: 0, unit_price_paise: 0, discountType: 'amount', discount_type: 'amount', discountValue: 0, discount_value: 0, gstPercent: 0, gst_percent: 0,
+      })));
+    const paymentSplit = this.cappedPaymentSplit();
+    const packageRedemptions = this.packageRedemptionPayload();
+    return {
+      status,
+      clientId,
+      client_id: clientId,
+      staffId,
+      staff_id: staffId,
+      branchName: this.branchName.trim() || null,
+      branch_name: this.branchName.trim() || null,
+      businessDate: this.displayDateToIso(this.invoiceDate),
+      business_date: this.displayDateToIso(this.invoiceDate),
+      source: this.source.trim() || 'Counter',
+      reference: this.reference.trim() || null,
+      referenceId: this.reference.trim() || null,
+      reference_id: this.reference.trim() || null,
+      lines,
+      billDiscountPaise: this.billDiscountPaise,
+      bill_discount_paise: this.billDiscountPaise,
+      billDiscountType: this.billDiscountType,
+      bill_discount_type: this.billDiscountType,
+      couponCode: this.couponCode.trim() || null,
+      coupon_code: this.couponCode.trim() || null,
+      tipPaise: this.tipPaise,
+      tip_paise: this.tipPaise,
+      walletCreditPaise: this.walletCreditPaise,
+      wallet_credit_paise: this.walletCreditPaise,
+      roundTotal: this.roundTotal,
+      round_total: this.roundTotal,
+      paymentSplit,
+      payment_split: paymentSplit,
+      payments: paymentSplit,
+      packageRedemptions,
+      subtotalPaise: this.subtotalPaise,
+      gstPaise: this.gstPaise,
+      totalPaise: this.totalPaise,
+    };
+  }
+
+  private isLineReady(line: PosLine): boolean {
+    if (this.num(line.quantity) <= 0 || this.num(line.unitPrice) < 0) return false;
+    return line.lineType === 'custom' ? !!line.customName.trim() : !!line.itemId && !!line.itemName;
+  }
+
+  private isCatalogLine(type: LineType): type is CatalogLineType { return type === 'service' || type === 'product'; }
+  private hasInvalidStaffSplit(): boolean { return this.saleLines.some((line) => line.staffSplits.length > 0 && this.splitPercentTotal(line) !== 100); }
+  private hasInvalidMembershipRedemption(): boolean { return this.membershipRedeemRows.some((row) => this.num(row.redeemQty) < 0 || this.num(row.redeemQty) > row.pendingQty); }
+  private hasInvalidPackageRedemption(): boolean { return this.packageRedeemRows.some((row) => this.num(row.redeemQty) < 0 || this.num(row.redeemQty) > row.pendingQty); }
+  private packageRedemptionPayload(): any[] {
+    return this.packageRedeemRows
+      .map((row) => ({ row, quantity: Math.floor(this.num(row.redeemQty)) }))
+      .filter((item) => item.quantity > 0)
+      .map(({ row, quantity }) => ({
+        clientPackageCreditId: row.id,
+        client_package_credit_id: row.id,
+        packageId: row.packageId,
+        package_id: row.packageId,
+        packageName: row.packageName,
+        package_name: row.packageName,
+        serviceId: row.serviceId,
+        service_id: row.serviceId,
+        serviceName: row.serviceName,
+        service_name: row.serviceName,
+        staffId: row.staffId ? String(row.staffId) : '',
+        staff_id: row.staffId ? String(row.staffId) : '',
+        quantity,
+      }));
+  }
+  private payloadStaffSplits(line: PosLine): any[] {
+    if (!line.staffSplits.length) return [];
+    return line.staffSplits.map((split) => ({
+      staffId: this.idPayload(split.staffId) || '',
+      staffName: split.staffName,
+      percent: this.num(split.percent),
+    }));
+  }
+  private cappedPaymentSplit(): any[] {
+    let remainingPaise = this.totalPaise;
+    const payments: any[] = [];
+
+    for (const method of this.paymentMethods) {
+      if (remainingPaise <= 0) break;
+      const typedPaise = this.toPaise(this.num(this.paymentInputs[method.code]));
+      const amountPaise = Math.min(typedPaise, remainingPaise);
+      if (amountPaise > 0) {
+        payments.push({ method: method.code, code: method.code, amountPaise, amount_paise: amountPaise });
+        remainingPaise -= amountPaise;
+      }
+    }
+
+    return payments;
+  }
+  private idPayload(value: string | number | null | undefined): string | null {
+    const text = value == null ? '' : String(value).trim();
+    return text || null;
+  }
+  private parseStaffSplits(raw: any): StaffSplit[] {
+    const rows = Array.isArray(raw) ? raw : [];
+    return rows.map((split) => ({
+      staffId: split?.staffId || split?.staff_id ? String(split?.staffId ?? split?.staff_id) : null,
+      staffName: String(split?.staffName ?? split?.staff_name ?? ''),
+      percent: String(split?.percent ?? ''),
+    })).filter((split) => split.staffId || this.num(split.percent) > 0);
+  }
+
+  private loadList(path: string, assign: (rows: any[]) => void): void { this.api.get<any>(path).subscribe({ next: (res: any) => assign(this.list(res).filter((x) => x?.id != null)), error: () => assign([]) }); }
+  private list(res: any): any[] { if (Array.isArray(res)) return res; for (const key of ['rows', 'items', 'data', 'clients', 'staff', 'services', 'products', 'appointments', 'paymentMethods', 'payment_methods']) if (Array.isArray(res?.[key])) return res[key]; return []; }
+  private paymentMode(mode: any): PaymentMode | null { const raw = String(mode?.code ?? mode?.method ?? mode?.key ?? mode?.name ?? '').trim(); if (!raw) return null; const code = raw.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/\s+/g, '_'); return { code, label: String(mode?.label ?? mode?.name ?? this.labelFor(code)), balancePaise: this.firstMoney(mode, ['balancePaise', 'balance_paise']) }; }
+  private ensurePaymentInputs(): void { const next: Record<string, string> = {}; this.paymentMethods.forEach((m) => (next[m.code] = this.paymentInputs[m.code] ?? '')); this.paymentInputs = next; }
+  private kpiFrom(data: any): ClientKpi {
+    return {
+      walletPaise: this.firstMoney(data, ['walletPaise', 'wallet_balance_paise', 'walletBalance', 'wallet_balance']),
+      unpaidPaise: this.firstMoney(data, ['unpaidPaise', 'unpaid_paise', 'unpaidAmountPaise', 'unpaid_amount_paise']),
+      membershipAssignDate: data?.membershipAssignDate ?? data?.membership_assign_date ?? data?.membershipAssignedAt ?? data?.membership_assigned_at ?? null,
+      membershipExpireDate: data?.membershipExpireDate ?? data?.membership_expire_date ?? data?.membershipExpiresAt ?? data?.membership_expires_at ?? null,
+      membershipCredits: this.membershipCreditsFrom(data?.membershipCredits ?? data?.membership_credits),
+      packageCredits: this.packageCreditsFrom(data?.packageCredits ?? data?.package_credits ?? data?.packageRedemptions ?? data?.package_redemptions),
+    };
+  }
+  private emptyKpi(): ClientKpi { return { walletPaise: 0, unpaidPaise: 0, membershipAssignDate: null, membershipExpireDate: null, membershipCredits: [], packageCredits: [] }; }
+  private membershipCreditsFrom(raw: any): MembershipRedeemRow[] {
+    const rows = Array.isArray(raw) ? raw : [];
+    return rows.map((row) => {
+      const staffId = row?.staffId ?? row?.staff_id ?? this.selectedStaffId ?? null;
+      const person = this.staff.find((item) => String(item.id) === String(staffId));
+      return {
+        id: String(row?.clientMembershipCreditId ?? row?.client_membership_credit_id ?? row?.id ?? ''),
+        membershipId: String(row?.membershipId ?? row?.membership_id ?? ''), membershipName: String(row?.membershipName ?? row?.membership_name ?? ''),
+        serviceId: String(row?.serviceId ?? row?.service_id ?? ''), serviceName: String(row?.serviceName ?? row?.service_name ?? ''),
+        pendingQty: Math.max(0, this.firstNumber(row, ['pendingQty', 'pending_qty', 'remainingQty', 'remaining_qty'])), redeemQty: '',
+        staffId, staffName: person ? this.recordName(person) : '', expiresAt: row?.expiresAt ?? row?.expires_at ?? null,
+      };
+    }).filter((row) => row.id && row.membershipId && row.serviceId && row.pendingQty > 0);
+  }
+  private packageCreditsFrom(raw: any): PackageRedeemRow[] {
+    const rows = Array.isArray(raw) ? raw : [];
+    return rows.map((row) => {
+      const id = String(row?.clientPackageCreditId ?? row?.client_package_credit_id ?? row?.id ?? '');
+      const staffId = row?.staffId ?? row?.staff_id ?? this.selectedStaffId ?? null;
+      const staff = this.staff.find((person) => String(person.id) === String(staffId));
+      const serviceId = String(row?.serviceId ?? row?.service_id ?? '');
+      const serviceName = String(row?.serviceName ?? row?.service_name ?? serviceId);
+      return {
+        id,
+        packageId: String(row?.packageId ?? row?.package_id ?? ''),
+        packageName: String(row?.packageName ?? row?.package_name ?? ''),
+        serviceId,
+        serviceName,
+        pendingQty: Math.max(0, this.firstNumber(row, ['pendingQty', 'pending_qty', 'remainingQty', 'remaining_qty'])),
+        redeemQty: '',
+        staffId,
+        staffName: staff ? this.recordName(staff) : '',
+        expiresAt: row?.expiresAt ?? row?.expires_at ?? null,
+      };
+    }).filter((row) => row.id && row.packageId && row.serviceId && row.pendingQty > 0);
+  }
+  private pricePaise(item: any): number { return this.firstMoney(item, ['pricePaise', 'unitPricePaise', 'defaultPricePaise', 'price_paise', 'unit_price_paise']) || this.toPaise(this.firstNumber(item, ['price', 'unitPrice', 'sellingPrice', 'mrp', 'rate'])); }
+  private firstMoney(obj: any, keys: string[]): number { for (const k of keys) if (obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '') return Math.round(Number(obj[k]) || 0); return 0; }
+  private firstNumber(obj: any, keys: string[]): number { for (const k of keys) if (obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '') return Number(obj[k]) || 0; return 0; }
+  private clientPhone(client: any): string { return this.phoneDigits(client?.phone ?? client?.mobile ?? client?.whatsapp); }
+  private phoneDigits(value: unknown): string { return String(value ?? '').replace(/\D/g, ''); }
+  private titleCase(value: string): string { return value.replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()); }
+  private emptyQuickClient(): QuickClient { return { name: '', phone: '', email: '', birthday: '', anniversary: '', tags: '', notes: '' }; }
+  private normalizeSearch(value: unknown): string { return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' '); }
+  private compactSearch(value: unknown): string { return this.normalizeSearch(value).replace(/\s+/g, ''); }
+  num(value: unknown): number { return value === null || value === undefined || value === '' ? 0 : Number(value) || 0; }
+  private toPaise(value: number): number { return Math.round((Number(value) || 0) * 100); }
+  private paiseToInput(value: number): string { return value ? (value / 100).toFixed(2).replace(/\.00$/, '') : ''; }
+  private labelFor(code: string): string { return code.split('_').map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' '); }
+  private appointmentTimeLabel(item: any): string {
+    const value = item?.startAt ?? item?.start_at ?? item?.startsAt ?? item?.starts_at ?? '';
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${this.formatDate(value)} ${date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
+  }
+  private displayDateToIso(value: string): string { const p = value.trim().split('/'); return p.length === 3 ? `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}` : new Date().toISOString().slice(0, 10); }
+  private optionalDisplayDateToIso(value: string): string | null { const p = value.trim().split('/'); return p.length === 3 && p.every((part) => /^\d+$/.test(part)) && p[2].length === 4 ? `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}` : null; }
+  private toDisplayDate(date: Date): string { return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`; }
+  private readStoredBranchName(): string { return localStorage.getItem('aurashine_branch_name') ?? localStorage.getItem('selectedBranchName') ?? localStorage.getItem('branchName') ?? ''; }
+}

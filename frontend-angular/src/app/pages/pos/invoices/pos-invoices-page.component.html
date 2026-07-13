@@ -1,0 +1,182 @@
+<section class="invoice-page">
+  <header class="invoice-hero">
+    <div>
+      <h1>Invoices & billing</h1>
+    </div>
+    <nav>
+      <a routerLink="/pos">Checkout</a>
+      <a routerLink="/reports/invoices">Reports</a>
+    </nav>
+  </header>
+
+  <p class="message" *ngIf="message">{{ message }}</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <section class="kpi-grid" aria-label="Invoice KPIs">
+    <article class="kpi-card cyan"><span>Invoices</span><strong>{{ totals.totalRows }}</strong></article>
+    <article class="kpi-card pink"><span>Total billed</span><strong>{{ money(totals.totalPaise) }}</strong></article>
+    <article class="kpi-card blue"><span>Collected</span><strong>{{ money(totals.paidPaise) }}</strong></article>
+    <article class="kpi-card mint"><span>Received due</span><strong>{{ money(totals.receivedDuePaise) }}</strong></article>
+    <article class="kpi-card peach"><span>Due</span><strong>{{ money(totals.balancePaise) }}</strong></article>
+    <article class="kpi-card sand"><span>Wallet</span><strong>{{ money(totals.walletPaise) }}</strong></article>
+  </section>
+
+  <main class="invoice-workspace">
+    <section class="invoice-register">
+      <div class="table-head"><span>Invoice</span><span>Date</span><span>Client</span><span>Staff</span><span>Payment mode</span><span>Total</span><span>Paid</span><span>Due</span><span>Status</span></div>
+      <button type="button" class="invoice-row" *ngFor="let invoice of invoices; trackBy: trackByInvoice" [class.selected]="selected?.id === invoice.id" (click)="select(invoice)">
+        <span><strong>{{ invoice.invoiceNumber }}</strong></span>
+        <span>{{ formatDate(invoice.businessDate) }}</span>
+        <span><strong>{{ invoice.clientName }}</strong><small *ngIf="invoice.clientPhone">{{ invoice.clientPhone }}</small></span>
+        <span>{{ invoice.staffName || '-' }}</span>
+        <span><mark>{{ paymentSummary(invoice) }}</mark></span>
+        <span class="amount total">{{ money(invoice.totalPaise) }}</span>
+        <span class="amount paid">{{ money(invoice.paidPaise) }}</span>
+        <span class="amount due">{{ money(invoice.balancePaise) }}</span>
+        <span><em>{{ invoice.status || '-' }}</em></span>
+      </button>
+      <p class="empty" *ngIf="!invoices.length">No invoices yet</p>
+    </section>
+
+    <aside class="invoice-detail" *ngIf="selected">
+      <div class="detail-head">
+        <div><span>Invoice</span><strong>{{ selected.invoiceNumber }}</strong></div>
+        <em>{{ selected.status }}</em>
+      </div>
+      <div class="detail-total"><span>Total</span><strong>{{ money(selected.totalPaise) }}</strong></div>
+      <section class="invoice-benefits" *ngIf="clientKpi">
+        <div><span>Active membership</span><strong>{{ clientKpi.membershipName || 'No active membership' }}</strong><small *ngIf="clientKpi.membershipExpiresAt">{{ formatDate(clientKpi.membershipExpiresAt) }}</small></div>
+        <div><span>Membership credits</span><strong>{{ clientKpi.membershipCredits.length }}</strong></div>
+        <div><span>Package credits</span><strong>{{ clientKpi.packageCredits.length }}</strong></div>
+      </section>
+      <section class="invoice-lines">
+        <h3>Invoice items</h3>
+        <div *ngFor="let line of invoiceLines; trackBy: trackByLine"><span>{{ lineTypeLabel(line.lineType) }}</span><strong>{{ line.itemName }}</strong><small>{{ line.quantity }} × {{ money(line.lineTotalPaise / (line.quantity || 1)) }}</small><b>{{ money(line.lineTotalPaise) }}</b></div>
+        <p class="empty" *ngIf="!detailsLoading && invoiceLines.length === 0">No invoice items</p>
+      </section>
+      <div class="detail-actions">
+        <button type="button" (click)="print()">Print</button>
+        <button type="button" (click)="download()">Download</button>
+      </div>
+      <button type="button" class="return-items" *ngIf="canReturn(selected)" [disabled]="returnLoading" (click)="openReturnDrawer()">Return items</button>
+      <button type="button" class="void-invoice" *ngIf="canVoid(selected)" [disabled]="voidLoading" (click)="openVoidDrawer()">Void invoice</button>
+      <button type="button" class="credit-note" *ngIf="canCreditNote(selected)" [disabled]="creditNoteLoading" (click)="openCreditNoteDrawer()">Create credit note</button>
+      <button type="button" class="ledger-check" [disabled]="ledgerLoading" (click)="verifyLedger()">{{ ledgerLoading ? 'Verifying…' : 'Verify ledger' }}</button>
+      <div class="ledger-result" *ngIf="ledgerVerification" [class.invalid]="!ledgerVerification.valid">
+        <strong>{{ ledgerVerification.valid ? 'Ledger verified' : 'Ledger verification failed' }}</strong>
+        <span *ngIf="ledgerVerification.valid">{{ ledgerVerification.events }} events</span>
+        <span *ngIf="!ledgerVerification.valid">Failed at event {{ ledgerVerification.failedAt }}</span>
+      </div>
+      <button type="button" class="payment-link-create" *ngIf="canCreatePaymentLink(selected)" [disabled]="paymentLinkLoading" (click)="openPaymentLinkDrawer()">Create payment link</button>
+      <section class="payment-links" *ngIf="paymentLinks.length">
+        <h3>Payment links</h3>
+        <article *ngFor="let link of paymentLinks">
+          <div><strong>{{ money(link.amountPaise) }}</strong><span>{{ link.provider }} · {{ link.status }}</span></div>
+          <button type="button" *ngIf="link.url" (click)="copyPaymentLink(link)">Copy</button>
+          <a *ngIf="link.url" [href]="link.url" target="_blank" rel="noopener noreferrer">Open</a>
+          <button type="button" [disabled]="!!reconcilingPaymentLinkId" (click)="reconcilePaymentLink(link)">{{ reconcilingPaymentLinkId === link.id ? 'Checking…' : 'Reconcile' }}</button>
+        </article>
+      </section>
+      <div class="reconciliation-result" *ngIf="paymentReconciliation">
+        <strong>Provider: {{ paymentReconciliation.providerStatus || 'unknown' }}</strong>
+        <span>Paid {{ money(paymentReconciliation.providerAmountPaidPaise) }}</span>
+        <span *ngIf="paymentReconciliation.requiresSignedWebhook">Awaiting signed webhook</span>
+      </div>
+      <label><span>Recipient</span><input [(ngModel)]="recipient" name="recipient" type="email" placeholder="Email address" /></label>
+      <button type="button" class="resend" (click)="requestResend()">Request resend</button>
+      <section class="history">
+        <h3>Action history</h3>
+        <div *ngFor="let item of history; trackBy: trackByHistory"><strong>{{ item.action }}</strong><span>{{ item.recipient || '-' }}</span><time>{{ item.createdAt | date:'dd/MM/yyyy, HH:mm' }}</time></div>
+        <p class="empty" *ngIf="!history.length">No actions yet</p>
+      </section>
+    </aside>
+  </main>
+</section>
+
+<div class="return-drawer-backdrop" *ngIf="returnDrawerOpen" (click)="closeReturnDrawer()">
+  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="return-items-title" (click)="$event.stopPropagation()">
+    <header class="return-drawer-head">
+      <div><span>Invoice return</span><h2 id="return-items-title">{{ selected?.invoiceNumber }}</h2></div>
+      <button type="button" class="drawer-close" aria-label="Close return items" (click)="closeReturnDrawer()">×</button>
+    </header>
+
+    <div class="return-drawer-body">
+      <label class="return-reason"><span>Reason</span><input [(ngModel)]="returnReason" name="returnReason" maxlength="500" placeholder="Reason for return" /></label>
+
+      <section class="return-lines" aria-label="Invoice items">
+        <article class="return-line" *ngFor="let line of returnLines">
+          <div class="return-line-copy"><strong>{{ line.itemName || 'Invoice item' }}</strong><span>{{ line.lineType || 'item' }} · Sold {{ line.quantity }}</span></div>
+          <div class="return-line-input"><label><span>Return qty</span><input [(ngModel)]="line.returnQuantity" [name]="'returnQty-' + line.id" type="number" inputmode="numeric" min="1" [max]="line.quantity" step="1" placeholder="0" /></label><strong>{{ money(returnLineAmount(line)) }}</strong></div>
+        </article>
+        <p class="empty" *ngIf="!returnLines.length">No returnable items on this invoice</p>
+      </section>
+
+      <label class="restock-choice"><input [(ngModel)]="restockProducts" name="restockProducts" type="checkbox" /><span>Restock returned products</span></label>
+    </div>
+
+    <footer class="return-drawer-footer">
+      <div><span>{{ selectedReturnCount() }} item line{{ selectedReturnCount() === 1 ? '' : 's' }}</span><strong>{{ money(selectedReturnAmount()) }}</strong></div>
+      <button type="button" (click)="closeReturnDrawer()">Cancel</button>
+      <button type="button" class="confirm-return" [disabled]="returnLoading || !returnLines.length" (click)="submitReturn()">{{ returnLoading ? 'Recording…' : 'Record return' }}</button>
+    </footer>
+  </aside>
+</div>
+
+<div class="return-drawer-backdrop" *ngIf="voidDrawerOpen" (click)="closeVoidDrawer()">
+  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="void-invoice-title" (click)="$event.stopPropagation()">
+    <header class="return-drawer-head">
+      <div><span>Invoice action</span><h2 id="void-invoice-title">Void {{ selected?.invoiceNumber }}</h2></div>
+      <button type="button" class="drawer-close" aria-label="Close void invoice" (click)="closeVoidDrawer()">×</button>
+    </header>
+
+    <div class="return-drawer-body">
+      <p class="void-warning">This unpaid invoice will be locked and cannot be edited or finalized.</p>
+      <label class="return-reason"><span>Manager approval reason</span><input [(ngModel)]="voidReason" name="voidReason" maxlength="500" placeholder="Reason for void" /></label>
+    </div>
+
+    <footer class="return-drawer-footer">
+      <button type="button" (click)="closeVoidDrawer()">Cancel</button>
+      <button type="button" class="confirm-void" [disabled]="voidLoading" (click)="submitVoid()">{{ voidLoading ? 'Voiding…' : 'Void invoice' }}</button>
+    </footer>
+  </aside>
+</div>
+
+<div class="return-drawer-backdrop" *ngIf="creditNoteDrawerOpen" (click)="closeCreditNoteDrawer()">
+  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="credit-note-title" (click)="$event.stopPropagation()">
+    <header class="return-drawer-head">
+      <div><span>Accounting action</span><h2 id="credit-note-title">Credit note · {{ selected?.invoiceNumber }}</h2></div>
+      <button type="button" class="drawer-close" aria-label="Close credit note" (click)="closeCreditNoteDrawer()">×</button>
+    </header>
+
+    <div class="return-drawer-body">
+      <p class="credit-note-warning">This creates an accounting credit note and updates the invoice status.</p>
+      <label class="return-reason"><span>Amount</span><input [(ngModel)]="creditNoteAmount" name="creditNoteAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
+      <label class="return-reason"><span>Reason</span><input [(ngModel)]="creditNoteReason" name="creditNoteReason" maxlength="500" placeholder="Reason for credit note" /></label>
+      <label class="return-reason"><span>Notes</span><input [(ngModel)]="creditNoteNotes" name="creditNoteNotes" maxlength="500" placeholder="Optional notes" /></label>
+    </div>
+
+    <footer class="return-drawer-footer">
+      <button type="button" (click)="closeCreditNoteDrawer()">Cancel</button>
+      <button type="button" class="confirm-credit-note" [disabled]="creditNoteLoading" (click)="submitCreditNote()">{{ creditNoteLoading ? 'Creating…' : 'Create credit note' }}</button>
+    </footer>
+  </aside>
+</div>
+
+<div class="return-drawer-backdrop" *ngIf="paymentLinkDrawerOpen" (click)="closePaymentLinkDrawer()">
+  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="payment-link-title" (click)="$event.stopPropagation()">
+    <header class="return-drawer-head">
+      <div><span>Online payment</span><h2 id="payment-link-title">Payment link · {{ selected?.invoiceNumber }}</h2></div>
+      <button type="button" class="drawer-close" aria-label="Close payment link" (click)="closePaymentLinkDrawer()">×</button>
+    </header>
+
+    <div class="return-drawer-body">
+      <p class="credit-note-warning">The provider link will be created for the selected invoice balance.</p>
+      <label class="return-reason"><span>Amount</span><input [(ngModel)]="paymentLinkAmount" name="paymentLinkAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
+    </div>
+
+    <footer class="return-drawer-footer">
+      <button type="button" (click)="closePaymentLinkDrawer()">Cancel</button>
+      <button type="button" class="confirm-payment-link" [disabled]="paymentLinkLoading" (click)="createPaymentLink()">{{ paymentLinkLoading ? 'Creating…' : 'Create payment link' }}</button>
+    </footer>
+  </aside>
+</div>

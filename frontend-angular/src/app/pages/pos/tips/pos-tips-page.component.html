@@ -1,0 +1,47 @@
+<section class="pos-ledger-page">
+  <header class="ledger-hero">
+    <h1>Tip register</h1>
+    <nav><a routerLink="/pos">Checkout</a><button type="button" (click)="load()">Refresh</button></nav>
+  </header>
+
+  <section class="ledger-filter-bar">
+    <input type="search" [(ngModel)]="search" placeholder="Search client, staff or invoice" />
+    <select [(ngModel)]="paymentMode"><option value="">All payment modes</option><option *ngFor="let mode of modes" [value]="mode">{{ mode }}</option></select>
+    <span class="record-count">{{ filtered.length }} tips</span>
+  </section>
+
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <section class="ledger-kpis" aria-label="Tip summary">
+    <article class="ledger-kpi"><span>Tips</span><strong>{{ money(totalPaise) }}</strong></article>
+    <article class="ledger-kpi"><span>Staff paid</span><strong>{{ staffPaid }}</strong></article>
+    <article class="ledger-kpi"><span>Cash tips</span><strong>{{ money(cashPaise) }}</strong></article>
+    <article class="ledger-kpi"><span>Digital tips</span><strong>{{ money(digitalPaise) }}</strong></article>
+  </section>
+
+  <main class="ledger-workspace">
+    <section class="ledger-table">
+      <div class="table-head tip-grid"><span>Date / time</span><span>Client</span><span>Staff</span><span>Tip amount</span><span>Payment mode</span><span>Invoice</span><span>Status</span></div>
+      <button type="button" class="ledger-row tip-grid" *ngFor="let tip of filtered; trackBy: trackById" [class.selected]="selected?.id === tip.id" (click)="select(tip)">
+        <span>{{ dateTime(tip.businessDate) }}</span>
+        <span><strong>{{ tip.clientName }}</strong><small *ngIf="tip.clientPhone">{{ tip.clientPhone }}</small></span>
+        <span>{{ tip.staffName || '-' }}</span>
+        <span class="amount">{{ money(tip.tipPaise) }}</span>
+        <span><mark class="payment-badge" [class]="'payment-badge ' + paymentClass(tip)">{{ tip.paymentMode }}</mark></span>
+        <span><strong>{{ tip.invoiceNumber }}</strong></span>
+        <span><em class="status-badge">{{ tip.status }}</em></span>
+      </button>
+      <p class="empty" *ngIf="!filtered.length">No tips yet</p>
+    </section>
+
+    <aside class="ledger-detail" *ngIf="selected">
+      <h2>Tip details</h2>
+      <div class="detail-section"><span class="detail-label">Client</span><strong>{{ selected.clientName }}</strong><span *ngIf="selected.clientPhone">{{ selected.clientPhone }}</span></div>
+      <div class="detail-section"><span class="detail-label">Staff</span><strong>{{ selected.staffName || 'Unassigned' }}</strong></div>
+      <div class="detail-section"><span class="detail-label">Invoice</span><strong>{{ selected.invoiceNumber }}</strong><span>{{ dateTime(selected.businessDate) }}</span></div>
+      <div class="detail-section"><span class="detail-label">Tip amount</span><strong>{{ money(selected.tipPaise) }}</strong></div>
+      <div class="detail-section"><span class="detail-label">Payment mode</span><strong>{{ selected.paymentMode }}</strong></div>
+      <div class="detail-section"><span class="detail-label">Status</span><strong>{{ selected.status }}</strong></div>
+    </aside>
+  </main>
+</section>

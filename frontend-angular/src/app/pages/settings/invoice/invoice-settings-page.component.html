@@ -1,0 +1,220 @@
+<section class="invoice-settings-page">
+  <header class="page-toolbar">
+    <div>
+      <a routerLink="/settings">Settings</a>
+      <h1>Invoice settings</h1>
+      <span class="branch-name">{{ branchName }}</span>
+    </div>
+    <div class="toolbar-actions">
+      <span class="save-state" [class.unsaved]="dirty">{{ saved || (dirty ? 'Unsaved changes' : 'All changes saved') }}</span>
+      <button type="button" class="reset-button" (click)="reset()" [disabled]="loading || saving">Reset</button>
+      <button type="button" class="save-button" (click)="save()" [disabled]="loading || saving || !dirty">{{ saving ? 'Saving...' : 'Save changes' }}</button>
+    </div>
+  </header>
+
+  <nav class="page-tabs" aria-label="Invoice setting groups">
+    <button type="button" [class.active]="activeTab === 'common'" (click)="activeTab = 'common'">Common</button>
+    <button type="button" [class.active]="activeTab === 'terms'" (click)="activeTab = 'terms'">Terms &amp; Conditions</button>
+    <button type="button" [class.active]="activeTab === 'language'" (click)="activeTab = 'language'">Dual Invoice Language</button>
+  </nav>
+
+  <p class="status error" *ngIf="error">{{ error }}</p>
+  <p class="status" *ngIf="loading">Loading invoice settings...</p>
+
+  <main class="studio" *ngIf="!loading">
+    <section class="settings-editor">
+      <ng-container *ngIf="activeTab === 'common'">
+        <nav class="category-tabs" aria-label="Invoice configuration categories">
+          <button
+            type="button"
+            *ngFor="let category of categories; trackBy: trackByCategory"
+            [class.active]="activeCategory === category.key"
+            (click)="selectCategory(category.key)"
+          >{{ category.label }}</button>
+        </nav>
+
+        <label class="settings-search">
+          <span>Search settings</span>
+          <input type="search" [(ngModel)]="search" placeholder="Search settings" />
+        </label>
+
+        <section class="editor-section" *ngIf="activeCategory === 'display' || activeCategory === 'print' || activeCategory === 'messages' || search">
+          <header>
+            <h2>{{ search ? 'Matching settings' : activeCategory === 'display' ? 'Display settings' : activeCategory === 'print' ? 'Print settings' : 'Message visibility' }}</h2>
+            <button type="button" class="text-button" (click)="reset()">Reset to default</button>
+          </header>
+
+          <div class="toggle-grid">
+            <button
+              type="button"
+              class="toggle-row"
+              *ngFor="let item of visibleToggles(); trackBy: trackByToggle"
+              [attr.aria-pressed]="settings[item.key]"
+              (click)="toggle(item.key)"
+            >
+              <span>{{ item.label }}</span>
+              <span class="switch" [class.on]="settings[item.key]"><span></span></span>
+            </button>
+          </div>
+
+          <p class="empty" *ngIf="!visibleToggles().length">No matching settings</p>
+        </section>
+
+        <section class="editor-section print-layout" *ngIf="activeCategory === 'print' && !search">
+          <header><h2>Invoice format</h2></header>
+          <div class="layout-options">
+            <button type="button" [class.active]="settings.layout === 'a4'" (click)="setLayout('a4')"><strong>A4</strong><span>Full invoice</span></button>
+            <button type="button" [class.active]="settings.layout === 'thermal'" (click)="setLayout('thermal')"><strong>Thermal</strong><span>Short print</span></button>
+          </div>
+        </section>
+
+        <section class="editor-section form-section" *ngIf="activeCategory === 'messages' && !search">
+          <header><h2>Invoice messages</h2></header>
+          <div class="form-grid two-column">
+            <label><span>Heading</span><input [(ngModel)]="settings.heading" maxlength="80" /></label>
+            <label><span>Invoice number prefix</span><input [(ngModel)]="settings.invoiceNumberPrefix" maxlength="24" /></label>
+            <label class="wide"><span>Thanks message</span><textarea [(ngModel)]="settings.thanksMessage" maxlength="240" rows="3"></textarea></label>
+            <label><span>Powered by</span><input [(ngModel)]="settings.poweredBy" maxlength="80" /></label>
+            <label><span>Room heading</span><input [(ngModel)]="settings.roomHeading" maxlength="80" /></label>
+          </div>
+        </section>
+
+        <section class="editor-section form-section" *ngIf="activeCategory === 'business' && !search">
+          <header><h2>Business profile</h2><span>Used on this branch's invoices</span></header>
+          <div class="form-grid two-column">
+            <label><span>Legal business name</span><input [(ngModel)]="profile.legalName" /></label>
+            <label><span>Trade name</span><input [(ngModel)]="profile.tradeName" /></label>
+            <label class="wide"><span>Address</span><input [(ngModel)]="profile.addressLine1" /></label>
+            <label class="wide"><span>Address line 2</span><input [(ngModel)]="profile.addressLine2" /></label>
+            <label><span>City</span><input [(ngModel)]="profile.city" /></label>
+            <label><span>State</span><input [(ngModel)]="profile.state" /></label>
+            <label><span>Pincode</span><input [(ngModel)]="profile.pincode" inputmode="numeric" /></label>
+            <label><span>Phone</span><input [(ngModel)]="profile.phone" type="tel" /></label>
+            <label><span>Email</span><input [(ngModel)]="profile.email" type="email" /></label>
+            <label><span>UPI ID</span><input [(ngModel)]="profile.upiId" /></label>
+            <label><span>UPI payee name</span><input [(ngModel)]="profile.upiPayeeName" /></label>
+            <label class="check-field"><input type="checkbox" [(ngModel)]="profile.isGstRegistered" /><span>GST registered</span></label>
+            <label *ngIf="profile.isGstRegistered"><span>GSTIN</span><input [(ngModel)]="profile.gstin" maxlength="15" /></label>
+          </div>
+        </section>
+      </ng-container>
+
+      <section class="editor-section form-section terms-section" *ngIf="activeTab === 'terms'">
+          <header><h2>Terms &amp; Conditions</h2></header>
+          <label><span>Invoice terms</span><textarea [(ngModel)]="settings.termsAndConditions" maxlength="4000" rows="14"></textarea></label>
+          <div class="terms-links">
+            <button type="button" class="toggle-row" [attr.aria-pressed]="settings.showFeedbackLink" (click)="toggle('showFeedbackLink')">
+              <span>Feedback link</span><span class="switch" [class.on]="settings.showFeedbackLink"><span></span></span>
+            </button>
+            <button type="button" class="toggle-row" [attr.aria-pressed]="settings.showInvoiceLink" (click)="toggle('showInvoiceLink')">
+              <span>Invoice link</span><span class="switch" [class.on]="settings.showInvoiceLink"><span></span></span>
+            </button>
+          </div>
+      </section>
+
+      <section class="language-editor" *ngIf="activeTab === 'language'">
+        <header class="language-toolbar">
+          <button type="button" class="toggle-row language-toggle" [attr.aria-pressed]="settings.dualLanguageEnabled" (click)="settings.dualLanguageEnabled = !settings.dualLanguageEnabled; saved = ''">
+            <span>Enable dual invoice language</span>
+            <span class="switch" [class.on]="settings.dualLanguageEnabled"><span></span></span>
+          </button>
+          <label>
+            <span>Second language name</span>
+            <input [(ngModel)]="settings.secondaryLanguageName" maxlength="40" placeholder="Hindi, Marathi, Arabic..." />
+          </label>
+        </header>
+
+        <div class="language-table" role="table" aria-label="Invoice label translations">
+          <div class="language-row language-head-row" role="row">
+            <strong role="columnheader">Invoice field</strong>
+            <strong role="columnheader">English</strong>
+            <strong role="columnheader">{{ settings.secondaryLanguageName || 'Second language' }}</strong>
+          </div>
+          <div class="language-row" role="row" *ngFor="let field of languageFields; trackBy: trackByLanguageField">
+            <label [for]="'english-' + field.key">{{ field.label }}</label>
+            <input [id]="'english-' + field.key" [(ngModel)]="settings.englishLabels[field.key]" maxlength="80" [attr.aria-label]="field.label + ' English label'" />
+            <input [(ngModel)]="settings.secondaryLabels[field.key]" maxlength="80" [placeholder]="settings.dualLanguageEnabled ? 'Enter translation' : 'Optional'" [attr.aria-label]="field.label + ' second language label'" />
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="preview-panel">
+      <header>
+        <div><h2>Live preview</h2><span>{{ settings.layout === 'a4' ? 'A4 invoice' : 'Thermal receipt' }}</span></div>
+        <div class="preview-layout">
+          <button type="button" [class.active]="settings.layout === 'a4'" (click)="setLayout('a4')">A4</button>
+          <button type="button" [class.active]="settings.layout === 'thermal'" (click)="setLayout('thermal')">Thermal</button>
+        </div>
+      </header>
+
+      <article class="invoice-preview" [class.thermal]="settings.layout === 'thermal'">
+        <header class="invoice-head">
+          <div *ngIf="settings.showBusinessName">
+            <small *ngIf="settings.headerIncludingLogo">AuraShine</small>
+            <strong>{{ profile.tradeName || profile.legalName || 'Business name' }}</strong>
+            <span *ngIf="profile.addressLine1">{{ profile.addressLine1 }}</span>
+            <span *ngIf="profile.city || profile.state">{{ profile.city }}<ng-container *ngIf="profile.city && profile.state">, </ng-container>{{ profile.state }} {{ profile.pincode }}</span>
+            <span *ngIf="profile.phone">{{ invoiceLabel('contact') }}: {{ profile.phone }}</span>
+            <span *ngIf="profile.email">{{ invoiceLabel('email') }}: {{ profile.email }}</span>
+            <span *ngIf="profile.isGstRegistered && profile.gstin">{{ invoiceLabel('gstin') }} {{ profile.gstin }}</span>
+          </div>
+          <div class="invoice-title" *ngIf="settings.headerIncludingLogo || settings.heading">
+            <h3>{{ settings.heading || 'INVOICE' }}</h3>
+            <span *ngIf="settings.showInvoiceId">{{ invoiceLabel('invoiceId') }}: {{ settings.invoiceNumberPrefix }}—</span>
+            <span *ngIf="settings.showDateTime">{{ invoiceLabel('date') }}: DD/MM/YYYY</span>
+            <span *ngIf="settings.showTime">{{ invoiceLabel('time') }}: --:--</span>
+          </div>
+        </header>
+
+        <section class="client-preview" *ngIf="settings.showClientName || settings.showClientContact || settings.showPaymentMethod || settings.showStaff || settings.showAppointmentTime || settings.showPendingServices">
+          <div *ngIf="settings.showClientName || settings.showClientContact">
+            <span>{{ invoiceLabel('customerName') }}</span>
+            <strong *ngIf="settings.showClientName">—</strong>
+            <small *ngIf="settings.showClientContact">{{ invoiceLabel('customerContact') }}: —</small>
+          </div>
+          <div>
+            <span *ngIf="settings.showPaymentMethod">{{ invoiceLabel('paymentMethod') }}</span>
+            <small *ngIf="settings.showStaff">{{ invoiceLabel('staff') }}</small>
+            <small *ngIf="settings.showAppointmentTime">{{ invoiceLabel('appointmentTime') }}</small>
+            <small *ngIf="settings.showPendingServices">{{ invoiceLabel('pendingServices') }}: —</small>
+            <small *ngIf="settings.roomHeading">{{ settings.roomHeading }}</small>
+          </div>
+        </section>
+
+        <section class="invoice-lines" *ngIf="settings.showBill">
+          <div class="line-head"><span>{{ invoiceLabel('items') }}</span><span>{{ invoiceLabel('hsnSac') }}</span><span>{{ invoiceLabel('quantity') }}</span><span>{{ invoiceLabel(settings.showPackageOfferPrice ? 'actualPrice' : 'price') }}</span></div>
+          <p>No invoice items selected</p>
+        </section>
+
+        <section class="invoice-summary" *ngIf="settings.showBill">
+          <div><span>{{ invoiceLabel('subtotal') }}</span><strong>—</strong></div>
+          <div *ngIf="settings.showDiscount"><span>{{ invoiceLabel('discount') }}</span><strong>—</strong></div>
+          <div *ngIf="profile.isGstRegistered"><span>{{ invoiceLabel('cgst') }} / {{ invoiceLabel('sgst') }} / {{ invoiceLabel('igst') }}</span><strong>—</strong></div>
+          <div><span>{{ invoiceLabel('total') }}</span><strong>—</strong></div>
+          <div *ngIf="settings.showWalletBalance"><span>{{ invoiceLabel('walletBalance') }}</span><strong>—</strong></div>
+        </section>
+
+        <section class="preview-notes" *ngIf="settings.showBillNotes || settings.termsAndConditions || settings.thanksMessage">
+          <span *ngIf="settings.showBillNotes">{{ invoiceLabel('billNotes') }}</span>
+          <p *ngIf="settings.termsAndConditions"><b>{{ invoiceLabel('terms') }}:</b> {{ settings.termsAndConditions }}</p>
+          <strong *ngIf="settings.thanksMessage">{{ settings.thanksMessage }}</strong>
+        </section>
+
+        <section class="upi-preview" *ngIf="profile.upiId"><span>{{ invoiceLabel('upiPayment') }}</span><strong>{{ profile.upiId }}</strong></section>
+        <footer>
+          <span *ngIf="settings.showDownloadButton">{{ invoiceLabel('downloadInvoice') }}</span>
+          <span *ngIf="settings.showFeedbackLink">{{ invoiceLabel('feedbackLink') }}</span>
+          <span *ngIf="settings.showInvoiceLink">{{ invoiceLabel('invoiceLink') }}</span>
+          <span *ngIf="settings.showSignature">{{ invoiceLabel('signature') }}</span>
+          <small *ngIf="settings.poweredBy">{{ invoiceLabel('poweredBy') }} {{ settings.poweredBy }}</small>
+        </footer>
+      </article>
+    </aside>
+  </main>
+
+  <footer class="mobile-save" *ngIf="!loading">
+    <span>{{ error || saved || (dirty ? 'Unsaved changes' : 'All changes saved') }}</span>
+    <button type="button" class="save-button" (click)="save()" [disabled]="saving || !dirty">{{ saving ? 'Saving...' : 'Save changes' }}</button>
+  </footer>
+</section>

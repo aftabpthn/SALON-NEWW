@@ -1,0 +1,10 @@
+.env
+target
+target_noblock
+*.log
+*.err
+*.sqlite
+.git
+.codex*
+graphify-out
+tmp_zip_extract

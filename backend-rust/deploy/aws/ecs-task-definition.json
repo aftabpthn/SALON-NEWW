@@ -1,0 +1,53 @@
+{
+  "family": "aura-shine-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "aura-shine-backend",
+      "image": "<ECR_IMAGE_URI>",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "APP_HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "APP_PORT",
+          "value": "8080"
+        },
+        {
+          "name": "APP_ENV",
+          "value": "production"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:aurashine/database-url"
+        },
+        {
+          "name": "REDIS_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:aurashine/redis-url"
+        },
+        {
+          "name": "JWT_ACCESS_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:aurashine/jwt-access-secret"
+        },
+        {
+          "name": "JWT_REFRESH_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:aurashine/jwt-refresh-secret"
+        }
+      ],
+      "essential": true
+    }
+  ]
+}
+
