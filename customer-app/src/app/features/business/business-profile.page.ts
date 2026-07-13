@@ -31,7 +31,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       @if (business()) {
       <main class="profile-page">
         <section class="cover">
-          <img [src]="business().coverImage || business().logoUrl || 'assets/icons/icon.svg'" [alt]="business().businessName + ' cover image'" />
+          <img [src]="business().coverImage || business().galleryImages[0] || business().logoUrl || 'assets/icons/icon.svg'" [alt]="business().businessName + ' cover image'" />
           <div class="cover-overlay"></div>
           <div class="cover-actions">
             <ion-button fill="clear" shape="round" [class.saved-action]="isSaved()" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleWishlist()">
@@ -595,7 +595,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
       .cover-copy p,
       .intro h2,
       .trust-row,
-      .gallery-section,
       .staff-section,
       .review-section,
       .info-grid,
