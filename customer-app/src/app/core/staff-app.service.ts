@@ -256,6 +256,7 @@ export type StaffBusiness = {
   performance: StaffBusinessPerformance;
   earnings: StaffBusinessEarnings | null;
   targets: StaffBusinessTarget[];
+  services: Array<{ id: string; name: string }>;
   dailyBreakdown: Array<{ date: string; performance: StaffBusinessPerformance } & StaffBusinessSummary>;
   pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; hasMore: boolean };
   appointments: StaffBusinessAppointment[];

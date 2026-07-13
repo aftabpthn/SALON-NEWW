@@ -416,6 +416,16 @@ function appointmentContext(query, access) {
   };
 }
 
+function branchServicesFor(context) {
+  if (!context.branchId || !tableExists("services")) return [];
+  const columns = columnsFor("services");
+  if (!columns.includes("tenantId") || !columns.includes("branchId")) return [];
+  const activeFilter = columns.includes("status") ? " AND status = 'active'" : "";
+  return db.prepare(`SELECT id, name FROM services
+    WHERE tenantId = @tenantId AND branchId = @branchId${activeFilter}
+    ORDER BY name ASC`).all({ tenantId: context.access.tenantId, branchId: context.branchId });
+}
+
 function appointmentBatch(context, cursor) {
   const params = {
     tenantId: context.access.tenantId,
@@ -726,6 +736,7 @@ function scan(query, access, options = {}) {
     performance: finishPerformance(performance, context.permissions.billing),
     earnings: earningsFor(context),
     targets: targetsFor(context),
+    services: branchServicesFor(context),
     dailyBreakdown,
     pagination: { page, pageSize, totalItems, totalPages, hasMore: page < totalPages },
     appointments

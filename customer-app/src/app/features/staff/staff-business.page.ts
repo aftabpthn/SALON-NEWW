@@ -353,9 +353,9 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
 
     for (const appointment of this.business()?.appointments || []) {
       add("Client", appointment.clientName);
-      for (const service of appointment.serviceNames) add("Service", service);
       add("Invoice", appointment.billing?.invoiceNumber || appointment.billing?.saleId);
     }
+    for (const service of this.business()?.services || []) add("Service", service.name);
 
     return suggestions
       .sort((a, b) => Number(!a.value.toLocaleLowerCase().startsWith(query)) - Number(!b.value.toLocaleLowerCase().startsWith(query)) || a.value.localeCompare(b.value))
