@@ -93,7 +93,7 @@ test("staff portal exposes complete Business UI and keeps Queue compatibility", 
   assert.match(appService, /businessInvoice/);
   assert.match(page, /My attributed revenue/);
   assert.match(page, /Actual.*Estimated/s);
-  assert.match(page, /Duty time/);
+  assert.match(page, />Duty</);
   assert.match(page, /Utilization/);
   assert.match(page, /Earnings & payroll/);
   assert.match(page, /Overlapping targets/);
