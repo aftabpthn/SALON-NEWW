@@ -63,7 +63,7 @@ type StaffRecentItem = { label: string; path: string };
       <nav class="mobile-bottom-nav" aria-label="Primary staff navigation">
         <a routerLink="/staff/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
         <a routerLink="/staff/appointments" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Bookings</span></a>
-        <a routerLink="/staff/queue" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Today' + 's Queue')"></path></svg><span>Queue</span></a>
+        <a routerLink="/staff/business" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Business')"></path></svg><span>Business</span></a>
         <a routerLink="/staff/attendance" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Attendance')"></path></svg><span>Attendance</span></a>
         <a routerLink="/staff/tasks" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a>
       </nav>      @if (showScrollTop()) { <button type="button" class="scroll-top-button" (click)="scrollToTop()" aria-label="Go to top">Top</button> }
@@ -72,7 +72,7 @@ type StaffRecentItem = { label: string; path: string };
         <section class="command-backdrop" (click)="closeCommand()">
           <div class="command-palette" role="dialog" aria-modal="true" aria-labelledby="staff-command-title" tabindex="-1" #commandDialog (keydown)="trapFocus($event, commandDialog)" (click)="$event.stopPropagation()">
             <div class="command-head"><strong id="staff-command-title">Command palette</strong><button type="button" (click)="closeCommand()">Close</button></div>
-            <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown)="onCommandKeydown($event)" placeholder="Search staff pages, clients, queue..." #commandInput autofocus />
+            <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown)="onCommandKeydown($event)" placeholder="Search staff pages, clients, business..." #commandInput autofocus />
             @if (query().trim()) { <small class="search-hint">{{ commandResults().length }} matches · Press Enter to open the first result</small> }
             <div class="command-list">
               @for (item of commandResults(); track item.path + item.label) {
@@ -235,7 +235,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   private readonly nav: StaffNavItem[] = [
     { label: "Dashboard", path: "/staff/dashboard", iconPath: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z", group: "Home" },
     { label: "Appointments", path: "/staff/appointments", iconPath: "M7 2v2H5a2 2 0 0 0-2 2v14h18V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5V7h14v3z", group: "Work" },
-    { label: "Today's Queue", path: "/staff/queue", iconPath: "M4 6h16v2H4V6zm0 5h12v2H4v-2zm0 5h8v2H4v-2z", group: "Work" },
+    { label: "Business", path: "/staff/business", iconPath: "M3 21V3h8v4h10v14H3zm3-3h2v-3H6v3zm0-6h2V9H6v3zm7 6h2v-3h-2v3zm0-6h2V9h-2v3zm5 6h1v-3h-1v3zm0-6h1V9h-1v3z", group: "Work" },
     { label: "Tasks", path: "/staff/tasks", iconPath: "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z", group: "Work", permission: "read:staff" },
     { label: "Attendance", path: "/staff/attendance", iconPath: "M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z", group: "Work" },
     { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "read:staff" },
@@ -260,8 +260,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const navItems = this.visibleNav().map((item) => ({ ...item }));
     const notices = (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" }));
     const coach = (this.os()?.aiCoach || []).map((card) => ({ label: card.title, path: "/staff/ai-coach", iconPath: this.iconFor("AI Coach"), group: card.body }));
-    const queue = (this.os()?.timeline || []).map((item) => ({ label: item.clientName, path: "/staff/queue", iconPath: this.iconFor("Today's Queue"), group: item.serviceNames?.join(", ") || "Appointment" }));
-    const all = [...navItems, ...notices, ...coach, ...queue];
+    const business = (this.os()?.timeline || []).map((item) => ({ label: item.clientName, path: "/staff/business", iconPath: this.iconFor("Business"), group: item.serviceNames?.join(", ") || "Appointment" }));
+    const all = [...navItems, ...notices, ...coach, ...business];
     if (!text) return all.slice(0, 12);
     return all
       .map((item) => ({ item, score: this.searchScore(item.label, item.group, text) }))
@@ -325,7 +325,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   private touchStartX = 0;
   private touchStartY = 0;
-  private readonly mobileSwipeRoutes = ["/staff/dashboard", "/staff/appointments", "/staff/queue", "/staff/clients", "/staff/tasks"];
+  private readonly mobileSwipeRoutes = ["/staff/dashboard", "/staff/appointments", "/staff/business", "/staff/clients", "/staff/tasks"];
 
   private navigateMobileSwipe(direction: number) {
     const current = this.router.url.split("?")[0];

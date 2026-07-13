@@ -96,6 +96,49 @@ export type StaffEnterpriseOs = {
   reports: Record<string, { days: number; revenue: number; services: number; productivityScore: number; rating: number }>;
 };
 
+export type StaffBusinessBilling = {
+  saleId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceStatus: string;
+  subtotalPaise: number;
+  discountPaise: number;
+  couponDiscountPaise: number;
+  afterDiscountPaise: number;
+  gstPaise: number;
+  totalPaise: number;
+  paidPaise: number;
+  duePaise: number;
+};
+
+export type StaffBusiness = {
+  date: string;
+  staff: StaffDashboard["staff"];
+  billingVisible: boolean;
+  summary: {
+    appointments: number;
+    completedServices: number;
+    scheduledMinutes: number;
+    completedMinutes: number;
+    workedMinutes: number;
+    bills: number;
+    subtotalPaise: number;
+    discountPaise: number;
+    couponDiscountPaise: number;
+    afterDiscountPaise: number;
+    gstPaise: number;
+    totalPaise: number;
+    paidPaise: number;
+    duePaise: number;
+  };
+  appointments: Array<StaffAppointment & {
+    state: string;
+    workedMinutes: number;
+    timer: { appointmentId: string; clientName: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number };
+    billing: StaffBusinessBilling | null;
+  }>;
+};
+
 export type StaffClient360 = {
   profile: { id: string; name: string; phone: string; email: string; birthday: string; notes: string; allergies: string; preferredStylist: string };
   membership: { status: string; plan: string };
@@ -304,6 +347,10 @@ export class StaffAppService {
 
   async enterpriseOs(query: Record<string, string> = {}): Promise<StaffEnterpriseOs> {
     return this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query);
+  }
+
+  async business(date: string): Promise<StaffBusiness> {
+    return this.get<StaffBusiness>("/staff-self/business", { date });
   }
 
   async client360(clientId: string): Promise<StaffClient360> {
