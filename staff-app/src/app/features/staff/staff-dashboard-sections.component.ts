@@ -27,8 +27,8 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="quick-actions-heading">Quick actions</h2></div></div>
         <div class="quick-action-grid">
           @for (action of viewModel.quickActions; track action.id) {
-            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span>{{ action.label }}</span></a> }
-            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span>{{ pendingLabel(action) }}</span></button> }
+            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ action.label }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></a> }
+            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ pendingLabel(action) }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></button> }
           }
         </div>
       </section>
@@ -73,6 +73,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
     @if (viewModel.coach.length) {
       <section class="dashboard-section" aria-labelledby="coach-heading">
         <div class="section-heading"><div><p class="eyebrow">Actionable guidance</p><h2 id="coach-heading">AI coach</h2></div><a routerLink="/staff/ai-coach">View coach</a></div>
+        <p class="section-intro">{{ viewModel.coachIntro }}</p>
         <div class="coach-list">
           @for (card of viewModel.coach; track card.title) {
             <a class="coach-item" [routerLink]="card.route"><span>{{ $index + 1 }}</span><div><strong>{{ card.title }}</strong><small>{{ card.body }}</small></div><b>{{ card.action }} <i aria-hidden="true">→</i></b></a>
@@ -83,10 +84,13 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
 
     @if (viewModel.performance.length) {
       <section class="dashboard-section performance-section" aria-labelledby="performance-heading">
-        <div class="section-heading"><div><p class="eyebrow">Your progress</p><h2 id="performance-heading">Performance summary</h2></div><a routerLink="/staff/performance">View details</a></div>
+        <div class="section-heading"><div><p class="eyebrow">Your progress</p><h2 id="performance-heading">Performance summary</h2></div>@if (viewModel.performanceRoute; as performanceRoute) { <a [routerLink]="performanceRoute">View details</a> }</div>
+        <p class="section-intro">{{ viewModel.performanceIntro }}</p>
         <div class="performance-grid">
           @for (metric of viewModel.performance; track metric.label) {
-            <article><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></article>
+            <article><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small>
+              @if (metric.progress !== undefined) { <div class="metric-progress" role="progressbar" [attr.aria-label]="metric.progressLabel || metric.label" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="metric.progress"><i [style.width.%]="metric.progress"></i></div> }
+            </article>
           }
         </div>
       </section>
@@ -94,7 +98,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
 
     @if (viewModel.availableTools.length) {
       <section class="dashboard-section more-tools" aria-labelledby="tools-heading">
-        <div class="section-heading"><div><p class="eyebrow">Workspace</p><h2 id="tools-heading">More tools</h2></div><button type="button" class="text-control" [attr.aria-expanded]="customizerOpen" (click)="customizerToggled.emit()">Customize</button></div>
+        <div class="section-heading"><div><p class="eyebrow">Your tools</p><h2 id="tools-heading">Pinned workspace</h2></div><button type="button" class="text-control" [attr.aria-expanded]="customizerOpen" (click)="customizerToggled.emit()">Customize</button></div>
         @if (viewModel.tools.length) {
            <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(tool.id)"></path></svg><span><strong>{{ tool.label }}</strong><small>{{ tool.hint }}</small></span></a> }</div>
         } @else { <p class="compact-empty">All optional tools are hidden. Use Customize to restore them.</p> }

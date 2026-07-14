@@ -183,6 +183,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (this.pendingMutation()) return;
     if (action.route) { await this.router.navigate(Array.isArray(action.route) ? [...action.route] : [action.route]); return; }
     if (action.kind === "clock") { await this.clockAction(); return; }
+    if (action.kind === "end-break") { await this.runMutation("end-break", () => this.staff.endBreak(), "Break ended."); return; }
     if (!action.appointmentId) return;
     if (action.kind === "start-service") await this.runServiceMutation(action, () => this.staff.startService(action.appointmentId!), "Service started.");
     if (action.kind === "complete-service") await this.runServiceMutation(action, () => this.staff.completeService(action.appointmentId!), "Service completed.");

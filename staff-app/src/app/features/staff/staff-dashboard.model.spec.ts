@@ -36,7 +36,7 @@ describe("staff dashboard permission-first view model", () => {
     expect(allowed.quickActions).toHaveLength(4);
     expect(allowed.quickActions.some((action) => allowed.hero.actions.some((hero) => hero.id === action.id || hero.route === action.route))).toBe(false);
     expect(restricted.quickActions.some((action) => action.id === "attendance")).toBe(false);
-    expect(allowed.hero.actions[1]?.label).toBe("View schedule");
+    expect(allowed.hero.actions).toHaveLength(1);
   });
 
   it("deduplicates the hero recommendation and lets a partial warning take precedence", () => {
@@ -56,6 +56,32 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.work.mode).toBe("active");
     expect(vm.hero.title).toContain("Anita");
     expect(vm.work.action?.kind).toBe("complete-service");
+  });
+
+  it("puts permitted critical floor alerts ahead of attendance and service work", () => {
+    const lateEnterprise = { ...enterprise, home: { ...enterprise.home, lateClients: 1, pendingPayments: 2 } };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:finance", "allow:staff-checkin-checkout"], { enterprise: lateEnterprise }));
+    expect(vm.hero.title).toBe("The floor needs attention");
+    expect(vm.hero.actions[0]).toMatchObject({ route: "/staff/appointments", primary: true });
+    expect(vm.alerts.map((alert) => alert.id)).toEqual(["late", "payments"]);
+    expect(vm.hero.actions.filter((action) => action.primary)).toHaveLength(1);
+  });
+
+  it("uses real break and completed-attendance state instead of offering another clock-in", () => {
+    const openAttendance = { id: "attendance-1", businessDate: today.date, clockInAt: "2026-07-14T03:30:00.000Z", clockOutAt: "", status: "clocked_in", source: "staff-app", overtimeMinutes: 0, grossMinutes: 0, totalBreakMinutes: 0, totalWorkedMinutes: 0, scheduledShiftMinutes: 540, overtimeCalculationStatus: "pending", overtimeReviewReason: "", overtimePolicyVersion: "1" };
+    const noAppointments = { ...dashboard, todayAppointments: [], liveAppointments: [], summary: { ...dashboard.summary, todayAppointments: 0 } };
+    const onBreak = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"], { dashboard: noAppointments, today: { ...today, attendance: [openAttendance], activeBreak: { id: "break-1", status: "active" }, tasks: [] } }));
+    const completed = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"], { dashboard: noAppointments, today: { ...today, schedules: [{ ...today.schedules[0], status: "completed" }], attendance: [{ ...openAttendance, clockOutAt: "2026-07-14T12:30:00.000Z", status: "clocked_out" }], tasks: [] } }));
+    expect(onBreak.hero.actions[0]).toMatchObject({ kind: "end-break", label: "End break" });
+    expect(completed.hero.title).toBe("Your shift is complete");
+    expect(completed.hero.actions.some((action) => action.kind === "clock")).toBe(false);
+  });
+
+  it("prioritizes an urgent open task ahead of a distant appointment", () => {
+    const distant = { ...appointment, startAt: "2026-07-14T15:00:00.000Z", endAt: "2026-07-14T16:00:00.000Z" };
+    const attended = { ...today, attendance: [{ id: "attendance-1", businessDate: today.date, clockInAt: "2026-07-14T03:30:00.000Z", clockOutAt: "", status: "clocked_in", source: "staff-app", overtimeMinutes: 0, grossMinutes: 0, totalBreakMinutes: 0, totalWorkedMinutes: 0, scheduledShiftMinutes: 540, overtimeCalculationStatus: "pending", overtimeReviewReason: "", overtimePolicyVersion: "1" }] };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { dashboard: { ...dashboard, todayAppointments: [distant], appointments: [distant] }, today: attended }));
+    expect(vm.hero).toMatchObject({ title: "1 task to move forward", detail: "Confirm consultation", actions: [{ id: "tasks", route: "/staff/tasks", primary: true }] });
   });
 
   it("shows a dedicated next-client state and appointment navigation", () => {
@@ -80,6 +106,24 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.availableTools.map((tool) => tool.id)).toEqual(["clients", "settings"]);
   });
 
+  it("orders authorized content by role profile without granting missing permissions", () => {
+    const receptionist = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"], { user: { ...user, role: "receptionist" } }));
+    const inventory = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"], { user: { ...user, role: "inventory-manager" } }));
+    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["appointments", "queue", "clients", "tasks"]);
+    expect(receptionist.availableTools[0].id).toBe("clients");
+    expect(inventory.quickActions.map((action) => action.id)).toEqual(["queue", "appointments", "tasks", "calendar"]);
+    expect(inventory.quickActions.some((action) => action.id === "clients")).toBe(false);
+    expect(inventory.availableTools.some((tool) => tool.id === "clients")).toBe(false);
+  });
+
+  it("adds compact live metadata with meaningful zero language to quick actions", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
+    expect(vm.quickActions.find((action) => action.id === "appointments")?.status).toBe("1 today");
+    expect(vm.quickActions.find((action) => action.id === "queue")?.status).toBe("No live services");
+    expect(vm.quickActions.find((action) => action.id === "tasks")?.status).toBe("1 pending");
+    expect(vm.quickActions.find((action) => action.id === "clients")?.status).toBeUndefined();
+  });
+
   it("keeps at most three actionable coach cards and filters generic positive statuses", () => {
     const filteredEnterprise = { ...enterprise, aiCoach: [...enterprise.aiCoach, { priority: "low", title: "No risk flags", body: "Everything is all clear.", action: "Keep going" }] };
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"], { enterprise: filteredEnterprise }));
@@ -95,6 +139,14 @@ describe("staff dashboard permission-first view model", () => {
     expect(complete.overview.map((metric) => metric.label)).toEqual(["Appointments", "Completed", "Open tasks", "Alerts"]);
     expect(fallback.overview).toHaveLength(3);
     expect(fallback.overview.every((metric) => metric.hint.length > 0)).toBe(true);
+  });
+
+  it("types and bounds performance progress using connected score data", () => {
+    const outOfRange = { ...enterprise, performance: { ...enterprise.performance, productivityScore: 120, avgUtilization: -5 } };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { enterprise: outOfRange }));
+    expect(vm.performance.find((metric) => metric.label === "Productivity")).toMatchObject({ progress: 100, progressLabel: "Productivity 120 out of 100" });
+    expect(vm.performance.find((metric) => metric.label === "Utilization")?.progress).toBe(0);
+    expect(vm.performance).toHaveLength(3);
   });
 
   it("honors authorized tool customization after permission filtering", () => {
