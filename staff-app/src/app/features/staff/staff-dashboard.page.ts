@@ -9,7 +9,7 @@ import { formatPaiseInr, PaiseInrPipe } from "../../core/paise-inr.pipe";
   standalone: true,
   imports: [DatePipe, PaiseInrPipe, RouterLink, IonSpinner],
   template: `
-    <section class="page">
+    <section class="page dashboard-page">
       <section class="staff-home-hero">
         <div class="hero-main">
           <p class="eyebrow">Staff home</p>

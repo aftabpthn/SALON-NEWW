@@ -223,7 +223,7 @@ type StaffRecentItem = { label: string; path: string };
       .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
       .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 100vw; min-width: 100vw; max-width: 100vw; box-sizing: border-box; height: 100dvh; overflow: auto; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-right: 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: none; }
       .staff-sidebar.open { transform: translateX(0); }
-      .drawer-close { display: block; width: 100%; min-height:44px;margin-bottom: 10px; padding: 9px 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface-secondary); color: var(--staff-text); font-weight: 750; text-align: left; }
+      .drawer-close { position: sticky; top: 0; z-index: 3; display: block; width: 100%; min-height: 48px; margin-bottom: 10px; padding: 9px 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface-secondary); color: var(--staff-text); font-weight: 750; text-align: left; box-shadow: 0 6px 16px rgba(31, 41, 55, .08); }
       .brand-card { display: block; }
       nav { display: grid; gap: 6px; margin-top: 14px; overflow: visible; }
       nav a { min-width: 0; padding: 12px 13px; border-radius: 16px; text-align: left; font-size: .92rem; white-space: normal; background: transparent; }
