@@ -2,7 +2,7 @@ import { DatePipe } from "@angular/common";
 import { Component, computed, OnInit, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { IonSpinner } from "@ionic/angular/standalone";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffAppointment, StaffDashboard } from "../../core/staff-app.service";
+import { StaffAppService, StaffAppointment, StaffDashboard } from "../../core/staff-app.service";
 import { businessDate } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 
@@ -28,9 +28,7 @@ function istDateKey(value: string | Date): string {
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Appointments</p><h1>Appointments</h1><p>Assigned bookings with service actions.</p></div></header>
       @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading appointments...</section> }
-      @if (message()) { <section class="notice success">{{ message() }}</section> }
-      @if (localError()) { <section class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !localError()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
 
       @if (dashboard()) {
         <section class="grid four">
@@ -72,8 +70,6 @@ function istDateKey(value: string | Date): string {
                 <div class="appointment-list-expanded">
                   <div class="row-actions">
                   @if (canSeeRevenue()) { <span class="badge">{{ item.value | paiseInr }}</span> }
-                  @if (staff.canStartServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="startService(item.id)">Start</button> }
-                  @if (staff.canCompleteServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="completeService(item.id)">Complete</button> }
                   <button class="link-button" type="button" (click)="openAppointment(item)">Details</button>
                   </div>
                 </div>
@@ -91,7 +87,6 @@ function istDateKey(value: string | Date): string {
           <div class="panel-title"><h2 id="appointment-detail-title">Appointment detail</h2><button class="link-button" type="button" (click)="closeDrawers()">Close</button></div>
           <section class="grid two compact-grid"><article class="kpi"><span>Work item</span><strong>Assigned appointment</strong></article><article class="kpi"><span>Status</span><strong>{{ item.status }}</strong></article></section>
           <div class="list"><div class="row"><strong>Time</strong><span>{{ item.startAt | date:'short' }} - {{ item.endAt | date:'shortTime' }}</span></div><div class="row"><strong>Services</strong><span>{{ item.serviceNames.join(', ') || '-' }}</span></div><div class="row"><strong>Duration</strong><span>{{ item.durationMinutes || 0 }} min</span></div><div class="row"><strong>Chair</strong><span>{{ item.chair || '-' }}</span></div></div>
-          <div class="row-actions drawer-actions">@if (staff.canStartServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="startService(item.id)">Start</button> } @if (staff.canCompleteServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="completeService(item.id)">Complete</button> }</div>
         </aside>
       }
     </section>
@@ -145,9 +140,6 @@ export class StaffAppointmentsPage implements OnInit {
     return rows.sort((left, right) => this.compareStartTimes(left, right, ascending));
   });
   readonly loading = signal(false);
-  readonly message = signal("");
-  readonly localError = signal("");
-  readonly pendingAppointmentId = signal("");
   readonly selectedAppointment = signal<StaffAppointment | null>(null);
   private loadGeneration = 0;
 
@@ -174,12 +166,8 @@ export class StaffAppointmentsPage implements OnInit {
   }
 
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["read:finance", "read:sales", "read:payments", "read:invoices"]); }
-  async startService(appointmentId: string) { await this.mutateAppointment(appointmentId, () => this.staff.startService(appointmentId), "Service started."); }
-  async completeService(appointmentId: string) { await this.mutateAppointment(appointmentId, () => this.staff.completeService(appointmentId), "Service completed."); }
-
   openAppointment(item: StaffAppointment) { this.selectedAppointment.set(item); }
   closeDrawers() { this.selectedAppointment.set(null); }
-  isPending(appointmentId: string): boolean { return this.pendingAppointmentId() === appointmentId; }
 
   private statusOf(item: StaffAppointment): string { return String(item.status || "").toLowerCase(); }
   private isCompleted(item: StaffAppointment, today: string): boolean {
@@ -193,20 +181,5 @@ export class StaffAppointmentsPage implements OnInit {
     if (Number.isNaN(leftTime)) return Number.isNaN(rightTime) ? 0 : 1;
     if (Number.isNaN(rightTime)) return -1;
     return ascending ? leftTime - rightTime : rightTime - leftTime;
-  }
-
-  private async mutateAppointment(appointmentId: string, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {
-    if (this.pendingAppointmentId()) return;
-    this.pendingAppointmentId.set(appointmentId);
-    this.message.set("");
-    this.localError.set("");
-    try {
-      const result = await mutate();
-      if (isQueuedMutation(result)) { this.message.set(`Offline change queued for sync (${result.queueId}).`); return; }
-      this.message.set(completedMessage);
-      this.selectedAppointment.set(null);
-      await this.load();
-    } catch { this.localError.set(this.staff.error() || "Unable to update the appointment."); }
-    finally { this.pendingAppointmentId.set(""); }
   }
 }

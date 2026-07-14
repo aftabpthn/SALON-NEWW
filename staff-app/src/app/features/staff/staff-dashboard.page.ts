@@ -77,9 +77,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (!dashboard) return null;
     return buildStaffDashboardViewModel({
       user: this.staff.user(), dashboard, enterprise: this.os(), today: this.today(), overtime: this.overtime(), leaveBalances: this.leaveBalances(),
-      hasPermission: (permission) => this.staff.hasPermission(permission),
-      canStartServiceStatus: (status) => this.staff.canStartServiceStatus(status),
-      canCompleteServiceStatus: (status) => this.staff.canCompleteServiceStatus(status)
+      hasPermission: (permission) => this.staff.hasPermission(permission)
     });
   });
   readonly recommendationIdentity = computed(() => {
@@ -175,9 +173,6 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (action.route) { await this.router.navigate(Array.isArray(action.route) ? [...action.route] : [action.route]); return; }
     if (action.kind === "clock") { await this.clockAction(); return; }
     if (action.kind === "end-break") { await this.runMutation("end-break", () => this.staff.endBreak(), "Break ended."); return; }
-    if (!action.appointmentId) return;
-    if (action.kind === "start-service") await this.runServiceMutation(action, () => this.staff.startService(action.appointmentId!), "Service started.");
-    if (action.kind === "complete-service") await this.runServiceMutation(action, () => this.staff.completeService(action.appointmentId!), "Service completed.");
   }
 
   dismissTip() {
@@ -193,10 +188,6 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (!this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"])) return;
     const open = this.openAttendance();
     await this.runMutation("attendance", () => open ? this.staff.clockOut(open.id) : this.staff.clockIn(), open ? "Clocked out." : "Clocked in.");
-  }
-
-  private async runServiceMutation(action: DashboardAction, mutate: () => Promise<MutationResult<unknown>>, message: string) {
-    await this.runMutation(action.appointmentId || action.id, mutate, message);
   }
 
   private async runMutation(id: string, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {

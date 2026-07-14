@@ -544,16 +544,6 @@ export class StaffAppService {
     return this.get<StaffBusinessInvoiceDetail>(`/staff-self/business/invoices/${encodeURIComponent(invoiceId)}`);
   }
 
-  canStartServiceStatus(status: string): boolean {
-    return this.hasPermission("update:appointments") &&
-      ["queued", "pending", "scheduled", "booked", "confirmed", "arrived"].includes(String(status || "").trim().toLowerCase());
-  }
-
-  canCompleteServiceStatus(status: string): boolean {
-    return this.hasPermission("update:appointments") &&
-      ["in-service", "in service", "inprogress", "in progress", "running", "active", "started"].includes(String(status || "").trim().toLowerCase());
-  }
-
   async updateNotification(id: string, status: "read" | "unread" | "archived" = "read"): Promise<unknown> {
     return this.queueableMutation("PATCH", `/staff-self/notifications/${encodeURIComponent(id)}`, { status });
   }
@@ -643,14 +633,6 @@ export class StaffAppService {
 
   async requestLeave(payload: { leaveType: string; startDate: string; endDate: string; reason: string }): Promise<unknown> {
     return this.post("/staff-os/mobile/request-leave", payload);
-  }
-
-  async startService(appointmentId: string): Promise<MutationResult<unknown>> {
-    return this.queueableMutation("POST", "/staff-os/mobile/start-service", { appointmentId });
-  }
-
-  async completeService(appointmentId: string): Promise<MutationResult<unknown>> {
-    return this.queueableMutation("POST", "/staff-os/mobile/complete-service", { appointmentId });
   }
 
   async completeTask(taskId: string, version: number): Promise<MutationResult<unknown>> {
@@ -1007,9 +989,6 @@ export class StaffAppService {
     if (method === "PATCH" && /^\/staff-os\/tasks\/[^/]+$/.test(path)) return Object.keys(body).every((key) => ["status", "version"].includes(key)) && typeof body["version"] === "number";
     if (method === "POST" && ["/staff-os/attendance/clock-in", "/staff-os/attendance/clock-out", "/staff-os/attendance/break-start", "/staff-os/attendance/break-end"].includes(path)) {
       return Object.keys(body).every((key) => ["staffId", "source", "attendanceId", "breakType"].includes(key));
-    }
-    if (method === "POST" && ["/staff-os/mobile/start-service", "/staff-os/mobile/complete-service"].includes(path)) {
-      return Object.keys(body).every((key) => ["staffId", "appointmentId"].includes(key)) && typeof body["appointmentId"] === "string";
     }
     return false;
   }

@@ -21,8 +21,6 @@ function input(permissions: string[], overrides: Partial<DashboardViewModelInput
   return {
     user: { ...user, permissions }, dashboard, enterprise, today, overtime: null, leaveBalances: [], now: new Date("2026-07-14T11:30:00.000Z"),
     hasPermission: (permission) => grants.has(permission),
-    canStartServiceStatus: (status) => ["booked", "confirmed", "arrived"].includes(status),
-    canCompleteServiceStatus: (status) => status === "in-service",
     ...overrides
   };
 }
@@ -69,11 +67,8 @@ describe("staff dashboard permission-first view model", () => {
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "update:appointments", "allow:staff-checkin-checkout"], { dashboard: activeDashboard, today: attended }));
     expect(vm.work.mode).toBe("active");
     expect(vm.hero).toMatchObject({ title: "You’re clocked in", detail: expect.stringContaining("Clocked in at"), shift: "09:00–18:00" });
-    expect(vm.hero.actions).toMatchObject([{ kind: "complete-service", primary: true }, { id: "attendance-details", route: "/staff/attendance" }]);
-    expect(vm.work.actions).toMatchObject([
-      { id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true },
-      { kind: "complete-service", primary: false }
-    ]);
+    expect(vm.hero.actions).toMatchObject([{ id: "queue", route: "/staff/queue", primary: true }, { id: "attendance-details", route: "/staff/attendance" }]);
+    expect(vm.work.actions).toEqual([{ id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true }]);
   });
 
   it("puts permitted critical floor alerts ahead of attendance and service work", () => {
@@ -114,10 +109,7 @@ describe("staff dashboard permission-first view model", () => {
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "update:appointments"], { dashboard: { ...dashboard, todayAppointments: [waiting], appointments: [waiting] } }));
     expect(vm.work).toMatchObject({ mode: "waiting", tone: "sage", title: "Assigned appointment", status: "Arrived" });
     expect(vm.work.meta).not.toMatch(/elapsed/i);
-    expect(vm.work.actions).toMatchObject([
-      { kind: "start-service", primary: true },
-      { id: "open-appointment", route: "/staff/appointments", primary: false }
-    ]);
+    expect(vm.work.actions).toEqual([{ id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true }]);
   });
 
   it("uses connected timer elapsed data and the queue route for an active service", () => {
@@ -125,10 +117,7 @@ describe("staff dashboard permission-first view model", () => {
     const timedEnterprise = { ...enterprise, serviceTimers: [{ appointmentId: active.id, status: active.status, elapsedMinutes: 35, totalMinutes: 60, remainingMinutes: 25, progress: 58 }] };
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "update:appointments"], { dashboard: { ...dashboard, liveAppointments: [active], todayAppointments: [active] }, enterprise: timedEnterprise }));
     expect(vm.work).toMatchObject({ mode: "active", tone: "sage", meta: "35 min elapsed", progress: 58 });
-    expect(vm.work.actions).toMatchObject([
-      { id: "open-service", label: "Open service", route: "/staff/queue", primary: true },
-      { kind: "complete-service", primary: false }
-    ]);
+    expect(vm.work.actions).toEqual([{ id: "open-service", label: "Open service", route: "/staff/queue", primary: true }]);
   });
 
   it("uses amber only when the connected timeline marks an appointment late", () => {

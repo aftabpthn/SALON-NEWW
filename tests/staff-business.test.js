@@ -8,6 +8,7 @@ const performanceService = readFileSync("server/services/staff-business-performa
 const salesReport = readFileSync("server/services/staff-sales-report.service.js", "utf8");
 const staffOs = readFileSync("server/services/staff-os.service.js", "utf8");
 const route = readFileSync("server/routes/staff-business.routes.js", "utf8");
+const mobileRoutes = readFileSync("server/routes/staff-mobile.routes.js", "utf8");
 const appRoutes = readFileSync("staff-app/src/app/app.routes.ts", "utf8");
 const appService = readFileSync("staff-app/src/app/core/staff-app.service.ts", "utf8");
 const page = readFileSync("staff-app/src/app/features/staff/staff-business.page.ts", "utf8");
@@ -73,23 +74,18 @@ test("backend uses bounded batches, self attribution, independent range data and
   assert.doesNotMatch(performanceService, /LIMIT 500/);
 });
 
-test("restricted responses and CSV omit monetary values while lifecycle actions are self-scoped", () => {
+test("restricted responses and CSV omit monetary values while staff lifecycle actions are disabled", () => {
   assert.match(performanceService, /if \(!billingVisible\)/);
   assert.match(performanceService, /performance\[key\] = null/);
   assert.match(performanceService, /return \[\.\.\.work, "Restricted"\]/);
-  assert.match(staffOs, /staffAppointmentForAction/);
-  assert.match(staffOs, /throw notFound\("Appointment not found"\)/);
-  assert.match(staffOs, /throw conflict\("Appointment is not in a valid state for this action"\)/);
-  assert.match(staffOs, /staffStartStatuses/);
-  assert.match(staffOs, /staffCompleteStatuses/);
-  assert.doesNotMatch(staffOs.match(/const staffCompleteStatuses[^;]+;/)?.[0] || "", /booked|confirmed|arrived/);
+  assert.doesNotMatch(staffOs, /staffAppointmentForAction|staffStartStatuses|staffCompleteStatuses/);
+  assert.doesNotMatch(mobileRoutes, /start-service|complete-service/);
 });
 
 test("staff portal exposes client-safe Business UI and keeps Queue compatibility", () => {
   assert.match(appRoutes, /path: "business"/);
   assert.match(appRoutes, /path: "queue"/);
-  assert.match(appService, /canStartServiceStatus/);
-  assert.match(appService, /canCompleteServiceStatus/);
+  assert.doesNotMatch(appService, /canStartServiceStatus|canCompleteServiceStatus|\/staff-os\/mobile\/(?:start|complete)-service/);
   assert.match(appService, /businessInvoice/);
   assert.match(page, /My attributed revenue/);
   assert.match(page, /Actual.*Estimated/s);

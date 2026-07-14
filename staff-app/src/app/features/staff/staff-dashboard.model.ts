@@ -1,7 +1,7 @@
 import { StaffAppointment, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffUser } from "../../core/staff-app.service";
 import { formatPaiseInr } from "../../core/paise-inr.pipe";
 
-export type DashboardActionKind = "clock" | "end-break" | "start-service" | "complete-service";
+export type DashboardActionKind = "clock" | "end-break";
 export type DashboardAction = {
   id: string;
   label: string;
@@ -58,8 +58,6 @@ export type DashboardViewModelInput = {
   leaveBalances: StaffLeaveBalance[];
   now?: Date;
   hasPermission: (permission: string) => boolean;
-  canStartServiceStatus: (status: string) => boolean;
-  canCompleteServiceStatus: (status: string) => boolean;
 };
 
 type ActionContext = DashboardViewModelInput & {
@@ -189,25 +187,13 @@ function context(input: DashboardViewModelInput): ActionContext {
   };
 }
 
-function serviceAction(input: ActionContext, appointment: StaffAppointment): DashboardAction | undefined {
-  if (!input.hasPermission("update:appointments") && !input.hasPermission("write:appointments")) return undefined;
-  if (input.canCompleteServiceStatus(appointment.status)) return { id: "complete-service", label: "Complete service", kind: "complete-service", appointmentId: appointment.id, primary: true };
-  if (input.canStartServiceStatus(appointment.status)) {
-    return { id: "start-service", label: "Start service", kind: "start-service", appointmentId: appointment.id, primary: true };
-  }
-  return undefined;
-}
-
 function appointmentActions(input: ActionContext, appointment: StaffAppointment, mode: DashboardWork["mode"]): DashboardAction[] {
   const actions: DashboardAction[] = [];
   const appointmentRoute = input.hasPermission("read:appointments") ? "/staff/appointments" : undefined;
   const queueRoute = input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : appointmentRoute;
-  const mutation = serviceAction(input, appointment);
   if (mode === "active") {
     if (queueRoute) actions.push({ id: queueRoute === "/staff/queue" ? "open-service" : "open-appointment", label: queueRoute === "/staff/queue" ? "Open service" : "Open appointment", route: queueRoute, primary: true });
-    if (mutation) actions.push({ ...mutation, primary: false });
   } else if (mode === "waiting") {
-    if (mutation) actions.push({ ...mutation, primary: true });
     if (appointmentRoute) actions.push({ id: "open-appointment", label: "Open appointment", route: appointmentRoute, primary: !actions.length });
   } else {
     if (appointmentRoute) actions.push({ id: "open-appointment", label: "Open appointment", route: appointmentRoute, primary: true });
@@ -304,9 +290,7 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
     detail = `Clocked in at ${timeLabel(input.openAttendance.clockInAt)}`;
     if (input.today?.activeBreak && canClock) actions.push({ id: "end-break", label: "End break", kind: "end-break", primary: true });
     else if (input.activeAppointment) {
-      const action = serviceAction(input, input.activeAppointment);
-      if (action) actions.push(action);
-      else if (input.hasPermission("read:appointments")) actions.push({ id: "queue", label: "View Current Service", route: "/staff/queue", primary: true });
+      if (input.hasPermission("read:appointments")) actions.push({ id: "queue", label: "View Current Service", route: "/staff/queue", primary: true });
     } else if (input.nextAppointment && input.hasPermission("read:appointments")) {
       actions.push({ id: "next", label: "View Next Appointment", route: "/staff/appointments", primary: true });
     } else if (input.openTaskCount > 0 && input.hasPermission("read:staff")) {

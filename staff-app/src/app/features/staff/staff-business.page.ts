@@ -3,7 +3,6 @@ import { Component, computed, HostListener, OnDestroy, OnInit, signal } from "@a
 import { FormsModule } from "@angular/forms";
 import { IonSpinner } from "@ionic/angular/standalone";
 import {
-  isQueuedMutation,
   StaffAppService,
   StaffBusiness,
   StaffBusinessAppointment,
@@ -265,8 +264,6 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
                       <span class="badge" [class.red]="item.state === 'late'" [class.green]="item.state === 'active'">{{ item.status }}</span>
                       <button class="link-button" type="button" (click)="openAppointment(item, $event)">Details</button>
                       @if (data.permissions.invoiceDetail && item.billing?.invoiceId) { <button class="link-button" type="button" (click)="openInvoice(item, $event)">Invoice</button> }
-                      @if (canUpdateBusiness() && isToday(item) && canStartService(item.timer.status)) { <button class="link-button" type="button" (click)="startService(item.id)">Start</button> }
-                      @if (canUpdateBusiness() && isToday(item) && canCompleteService(item.timer.status)) { <button class="link-button" type="button" (click)="completeService(item.id)">Complete</button> }
                     </div>
                   </div>
                 </details>
@@ -487,7 +484,6 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   }
 
   canReadBusiness(): boolean { return this.staff.hasPermission("read:appointments"); }
-  canUpdateBusiness(): boolean { return this.staff.hasAnyPermission(["write:staff", "update:staff", "write:appointments", "update:appointments"]); }
   formatMinutes(minutes: number): string { const safe = Math.max(0, Number(minutes || 0)); return `${Math.floor(safe / 60)}h ${safe % 60}m`; }
   formatMoney(paise: number | null): string { return formatPaiseInr(paise); }
   formatPercent(value: number | null): string { return value === null ? "—" : `${value}%`; }
@@ -532,9 +528,6 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   }
   dateLabel(date: string): string { return new Date(`${date}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }); }
   rangeLabel(): string { return `${this.dateLabel(this.fromDate())} – ${this.dateLabel(this.toDate())}`; }
-  isToday(item: StaffBusinessAppointment): boolean { return item.businessDate === this.todayDate; }
-  canStartService(status: string) { return this.staff.canStartServiceStatus(status); }
-  canCompleteService(status: string) { return this.staff.canCompleteServiceStatus(status); }
 
   liveElapsed(item: StaffBusinessAppointment): number {
     this.clock();
@@ -598,16 +591,6 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   @HostListener("document:keydown.escape")
   onEscape() {
     if (this.selectedAppointment() || this.invoiceDrawerOpen()) this.closeDrawers();
-  }
-
-  async startService(appointmentId: string) {
-    try { const result = await this.staff.startService(appointmentId); if (isQueuedMutation(result)) { this.message.set(`Service start queued for sync (${result.queueId}).`); return; } await this.reloadLoadedPages(); this.message.set("Service started."); }
-    catch { this.message.set(this.staff.error() || "Unable to start service."); }
-  }
-
-  async completeService(appointmentId: string) {
-    try { const result = await this.staff.completeService(appointmentId); if (isQueuedMutation(result)) { this.message.set(`Service completion queued for sync (${result.queueId}).`); return; } await this.reloadLoadedPages(); this.message.set("Service completed."); }
-    catch { this.message.set(this.staff.error() || "Unable to complete service."); }
   }
 
   private query(page = 1): StaffBusinessQuery {

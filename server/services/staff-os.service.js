@@ -5,7 +5,6 @@ import { jobQueueService } from "./job-queue.service.js";
 import { realtimeService } from "./realtime.service.js";
 import { securityService } from "./security.service.js";
 import { staffLoginService } from "./staff-login.service.js";
-import { appointmentLifecycleService } from "./appointment-lifecycle.service.js";
 import { istBusinessDate, staffOvertimeService } from "./staff-overtime.service.js";
 import { tenantService } from "./tenant.service.js";
 
@@ -48,32 +47,6 @@ function resolveSelfStaffId(input = {}, access = {}) {
     return linkedStaffId;
   }
   return requestedStaffId;
-}
-
-const staffStartStatuses = new Set(["queued", "pending", "scheduled", "booked", "confirmed", "arrived"]);
-const staffCompleteStatuses = new Set(["in-service", "in service", "inprogress", "in progress", "running", "active", "started"]);
-
-function staffAppointmentForAction(appointmentId, access = {}, allowedStatuses) {
-  access = normalizeAccess(access);
-  const staffId = staffLoginService.resolveStaffId({}, access);
-  const staff = staffLoginService.getStaff(staffId, access);
-  const identityIds = staffLoginService.staffIdentityIds(staff, access.tenantId).map(String);
-  const branchId = staff.branchId || access.branchId || "";
-  const params = {
-    appointmentId,
-    tenantId: access.tenantId,
-    branchId,
-    ...Object.fromEntries(identityIds.map((id, index) => [`staffId${index}`, id]))
-  };
-  const appointment = db.prepare(`SELECT * FROM appointments
-    WHERE id = @appointmentId AND tenantId = @tenantId
-      AND staffId IN (${identityIds.map((_, index) => `@staffId${index}`).join(", ")})
-      AND (@branchId = '' OR branchId = @branchId)`).get(params);
-  if (!appointment) throw notFound("Appointment not found");
-  if (!allowedStatuses.has(String(appointment.status || "").trim().toLowerCase())) {
-    throw conflict("Appointment is not in a valid state for this action");
-  }
-  return { access, appointment, staff };
 }
 
 function pickBranch(payload = {}, access = {}) {
@@ -3588,22 +3561,6 @@ export class StaffOsService {
       tasks: this.listTasks({ staffId, branchId: staff.branchId, status: "open" }, access),
       activeBreak: activeBreak ? rowToCamel(activeBreak) : null
     };
-  }
-
-  startService(payload = {}, access) {
-    const appointmentId = payload.appointmentId || payload.appointment_id || "";
-    if (!appointmentId) throw badRequest("appointmentId is required");
-    const scoped = staffAppointmentForAction(appointmentId, access, staffStartStatuses);
-    const result = appointmentLifecycleService.startService(appointmentId, scoped.access);
-    return { started: true, staffId: scoped.staff.id, appointmentId, startedAt: now(), ...result };
-  }
-
-  completeService(payload = {}, access) {
-    const appointmentId = payload.appointmentId || payload.appointment_id || "";
-    if (!appointmentId) throw badRequest("appointmentId is required");
-    const scoped = staffAppointmentForAction(appointmentId, access, staffCompleteStatuses);
-    const result = appointmentLifecycleService.complete(appointmentId, { notes: payload.notes || "" }, scoped.access);
-    return { completed: true, staffId: scoped.staff.id, appointmentId, completedAt: now(), notes: payload.notes || "", ...result };
   }
 
   mobilePayroll(query = {}, access) {
