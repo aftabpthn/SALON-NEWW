@@ -93,7 +93,7 @@ const QUICK_ACTIONS: readonly RegistryItem<DashboardAction>[] = [
 const TOOLS: readonly RegistryItem<DashboardTool>[] = [
   { item: { id: "calendar", label: "Shift calendar", hint: "Roster and schedule", route: "/staff/calendar" }, permissions: ["read:staff"] },
   { item: { id: "leave", label: "Leave", hint: "Requests and balances", route: "/staff/leaves" }, permissions: ["read:staff"] },
-  { item: { id: "chat", label: "Team chat", hint: "Staff conversations", route: "/staff/chat" }, permissions: ["read:staff"] },
+  { item: { id: "chat", label: "Chat", hint: "Team and private owner chat", route: "/staff/chat" }, permissions: ["read:staff"] },
   { item: { id: "reports", label: "Reports", hint: "Work summaries", route: "/staff/reports" }, permissions: ["read:staff"] },
   { item: { id: "payroll", label: "Payroll", hint: "Pay statements", route: "/staff/payroll" }, anyPermission: ["read:payroll", "read:finance"] },
   { item: { id: "settings", label: "Settings", hint: "Workspace preferences", route: "/staff/settings" } }

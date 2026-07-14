@@ -264,6 +264,15 @@ export class RealtimeService {
     return event;
   }
 
+  sendToUsers(type, payload = {}, { tenantId = "", userIds = [] } = {}) {
+    const recipients = new Set(userIds);
+    for (const client of this.clients.values()) {
+      if (tenantId && client.access.tenantId !== tenantId) continue;
+      if (!recipients.has(client.access.userId)) continue;
+      this.send(client.ws, type, payload, { private: true });
+    }
+  }
+
   listQueue(query = {}, access) {
     return repositories.realtimeQueue.list(query, scope(access, query.branchId || access.requestedBranchId || ""));
   }

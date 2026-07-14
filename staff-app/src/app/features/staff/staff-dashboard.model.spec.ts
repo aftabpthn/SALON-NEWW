@@ -28,6 +28,11 @@ function input(permissions: string[], overrides: Partial<DashboardViewModelInput
 }
 
 describe("staff dashboard permission-first view model", () => {
+  it("labels the workspace chat tool without implying it is team-only", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"]));
+    expect(vm.tools.find((tool) => tool.id === "chat")).toMatchObject({ label: "Chat", hint: "Team and private owner chat" });
+  });
+
   it("keeps attendance in the hero without duplicating first-viewport actions", () => {
     const allowed = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
     const restricted = buildStaffDashboardViewModel(input(["read:appointments"]));

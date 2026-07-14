@@ -193,6 +193,7 @@ import { staffOsRouter } from "./routes/staff-os.routes.js";
 import { staffEnterpriseRouter } from "./routes/staff-enterprise.routes.js";
 import { staffBusinessRouter } from "./routes/staff-business.routes.js";
 import { staffSelfRouter } from "./routes/staff-self.routes.js";
+import { teamChatRouter } from "./routes/team-chat.routes.js";
 import { superAdminRouter } from "./routes/super-admin.routes.js";
 import { terminalRouter } from "./routes/terminal.routes.js";
 import { whatsappRouter } from "./routes/whatsapp.routes.js";
@@ -523,6 +524,7 @@ export function createApp() {
   app.use("/api/v1", authenticateJwt(), staffEnterpriseRouter);
   app.use("/api/v1", authenticateJwt(), staffBusinessRouter);
   app.use("/api/v1", authenticateJwt(), staffSelfRouter);
+  app.use("/api/v1", teamChatRouter);
   app.use("/api/v1", authenticateJwt(), enterpriseCommandRouter);
   app.use("/api/v1", authenticateJwt(), engagementRouter);
   app.use("/api/v1", leadManagementRouter);

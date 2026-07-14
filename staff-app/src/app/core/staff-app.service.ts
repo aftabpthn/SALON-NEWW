@@ -428,6 +428,28 @@ type StaffLoginResponse = {
   user: StaffUser;
 };
 
+export type StaffChatConversation = {
+  id: string;
+  type: "team" | "private-owner";
+  title: string;
+  branchId: string;
+  participantUserIds: string[] | null;
+  messageCount: number;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StaffConversationMessage = {
+  id: string;
+  conversationId: string;
+  type: "team" | "private-owner";
+  senderUserId: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+};
+
 type StaffRefreshResponse = {
   accessToken: string;
   user?: StaffUser;
@@ -651,6 +673,22 @@ export class StaffAppService {
 
   async sendChatMessage(threadId: string, body: string): Promise<StaffChatMessage> {
     return this.post<StaffChatMessage>("/staff-self/chat/messages", { threadId, body });
+  }
+
+  async staffChatConversations(): Promise<StaffChatConversation[]> {
+    return this.get<StaffChatConversation[]>("/team-chat/conversations");
+  }
+
+  async startPrivateOwnerChat(idempotencyKey: string): Promise<StaffChatConversation> {
+    return this.postIdempotent<StaffChatConversation>("/team-chat/private-owner", {}, idempotencyKey);
+  }
+
+  async staffConversationMessages(conversationId: string): Promise<StaffConversationMessage[]> {
+    return this.get<StaffConversationMessage[]>(`/team-chat/conversations/${encodeURIComponent(conversationId)}/messages`);
+  }
+
+  async sendStaffConversationMessage(conversationId: string, body: string, idempotencyKey: string): Promise<StaffConversationMessage> {
+    return this.postIdempotent<StaffConversationMessage>(`/team-chat/conversations/${encodeURIComponent(conversationId)}/messages`, { body }, idempotencyKey);
   }
 
   async today(date = staffBusinessDate()): Promise<StaffToday> {
@@ -999,6 +1037,24 @@ export class StaffAppService {
       return parsed.filter((item): item is OfflineQueueEntry => this.isOfflineQueueEntry(item));
     } catch {
       return [];
+    }
+  }
+
+  private async postIdempotent<T>(path: string, body: Record<string, unknown>, idempotencyKey: string): Promise<T> {
+    this.loading.set(true);
+    this.error.set("");
+    if (!this.isOnline()) { this.loading.set(false); throw new Error("This action requires an internet connection."); }
+    try {
+      return await this.withRefreshRetry(async () => {
+        const headers = this.authHeaders().set("Idempotency-Key", idempotencyKey);
+        const response = await firstValueFrom(this.http.post<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, body, { headers }));
+        return this.unwrap(response);
+      });
+    } catch (error) {
+      this.error.set(this.errorMessage(error, "Unable to update chat."));
+      throw error;
+    } finally {
+      this.loading.set(false);
     }
   }
 
