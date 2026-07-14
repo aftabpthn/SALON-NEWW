@@ -164,3 +164,32 @@ input:focus,select:focus,textarea:focus{outline-color:var(--staff-focus-ring)}
   .dashboard-page .basic-home-card.wide{grid-column:span 2}
   .dashboard-page .attendance-spotlight{grid-template-columns:minmax(0,1fr) 112px}
 }
+
+/* Shared interaction continuity across every authenticated staff route. */
+.page{animation-duration:var(--staff-motion-fast);animation-timing-function:var(--staff-motion-ease)}
+.state{min-height:72px;background:var(--staff-surface-secondary);animation:none}
+.button,button.link-button,.kpi-button,.thread-row,.basic-home-card,.home-workbench a{
+  transition:transform var(--staff-motion-fast) var(--staff-motion-ease),background-color var(--staff-motion-fast) var(--staff-motion-ease),border-color var(--staff-motion-fast) var(--staff-motion-ease),color var(--staff-motion-fast) var(--staff-motion-ease),box-shadow var(--staff-motion-fast) var(--staff-motion-ease),opacity var(--staff-motion-fast) var(--staff-motion-ease)
+}
+.button:not(:disabled):active,button.link-button:not(:disabled):active,.kpi-button:not(:disabled):active,.thread-row:not(:disabled):active,.basic-home-card:active{transform:scale(.98)}
+button:disabled,.button:disabled{opacity:.7;cursor:progress}
+.list>.row,.kanban-card,.calendar-slot,.thread-row{content-visibility:auto;contain-intrinsic-block-size:72px}
+.detail-backdrop,.drawer-backdrop{animation:smooth-backdrop-in var(--staff-motion-fast) var(--staff-motion-ease) both}
+.detail-drawer{overscroll-behavior:contain;animation-duration:var(--staff-motion-standard);animation-timing-function:var(--staff-motion-ease)}
+.detail-drawer>.panel-title:first-child{position:sticky;top:-20px;z-index:4;margin:-20px -20px 16px;padding:16px 20px;border-bottom:1px solid var(--staff-border);background:var(--staff-surface-glass);backdrop-filter:blur(12px)}
+.chat-messages{overscroll-behavior:contain;scroll-behavior:smooth}
+input,select,textarea{scroll-margin-block:88px;transition:border-color var(--staff-motion-fast) var(--staff-motion-ease),box-shadow var(--staff-motion-fast) var(--staff-motion-ease),background-color var(--staff-motion-fast) var(--staff-motion-ease)}
+@keyframes smooth-backdrop-in{from{opacity:0}}
+
+@media(max-width:700px){
+  input,select,textarea{font-size:16px}
+  .detail-drawer{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+  .detail-drawer>.panel-title:first-child{top:-20px}
+  .row-actions{scrollbar-width:none}
+  .row-actions::-webkit-scrollbar{display:none}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .detail-backdrop,.drawer-backdrop{animation:none}
+  .chat-messages{scroll-behavior:auto}
+}

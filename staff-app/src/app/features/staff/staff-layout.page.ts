@@ -12,7 +12,7 @@ type StaffRecentItem = { label: string; path: string };
   template: `
     <section class="staff-app-shell" [class.staff-compact]="preferences().interface.compactMode">
       <button type="button" class="drawer-backdrop" [class.open]="menuOpen()" (click)="closeMenu()" aria-label="Close menu"></button>
-      <aside class="staff-sidebar" [class.open]="menuOpen()">
+      <aside class="staff-sidebar" [class.open]="menuOpen()" [attr.role]="menuOpen() ? 'dialog' : null" [attr.aria-modal]="menuOpen() ? 'true' : null" [attr.aria-label]="menuOpen() ? 'Staff navigation' : null" [attr.inert]="notificationsOpen() || commandOpen() ? '' : null" tabindex="-1" #menuDialog (keydown)="menuOpen() && trapFocus($event, menuDialog)">
         <button type="button" class="drawer-close" (click)="closeMenu()" aria-label="Close menu">Close</button>
         <div class="brand-card">
           <span class="brand-kicker">Aura Shine</span>
@@ -44,13 +44,13 @@ type StaffRecentItem = { label: string; path: string };
         <button type="button" class="nav-logout" (click)="logout()">Logout</button>
       </aside>
 
-      <div class="staff-main-shell" #mainShell (scroll)="onMainScroll()">
+       <div class="staff-main-shell" #mainShell (scroll)="onMainScroll($event)" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
         <header class="staff-topbar">
-          <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu"><span></span><span></span><span></span></button>
+           <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu" [attr.aria-expanded]="menuOpen()" #menuButton><span></span><span></span><span></span></button>
           <div class="staff-identity"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong></div></div>
           <div class="topbar-actions">
-            <button type="button" class="search-button" (click)="openCommand()" aria-label="Search staff workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button>
-            <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications">
+             <button type="button" class="search-button" (click)="openCommand()" aria-label="Search staff workspace" [attr.aria-expanded]="commandOpen()" #commandButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button>
+             <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
               <svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 10.8c0-3.5-2.1-6.1-5-6.7V3a1 1 0 0 0-2 0v1.1c-2.9.6-5 3.2-5 6.7V15l-1.6 2.4A1 1 0 0 0 5.2 19h13.6a1 1 0 0 0 .8-1.6L18 15v-4.2zM9.7 20a2.4 2.4 0 0 0 4.6 0H9.7z"></path>
               </svg>
@@ -61,13 +61,13 @@ type StaffRecentItem = { label: string; path: string };
             <span>{{ staff.user()?.branchId || 'branch scoped' }}</span>
           </div>
         </header>
-        <main class="staff-content">
+         <main class="staff-content" #contentShell (scroll)="onMainScroll($event)">
           @if (preferences().defaults.staffHints) { <p class="staff-policy-hint">Tip: use search to quickly open permitted staff tools, clients and appointments.</p> }
           <router-outlet />
         </main>
       </div>
 
-      <nav class="mobile-bottom-nav" aria-label="Primary staff navigation">
+       <nav class="mobile-bottom-nav" aria-label="Primary staff navigation" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
         <a routerLink="/staff/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
         <a routerLink="/staff/appointments" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Bookings</span></a>
         <a routerLink="/staff/business" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Business')"></path></svg><span>Business</span></a>
@@ -180,7 +180,7 @@ type StaffRecentItem = { label: string; path: string };
     .command-list button span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: var(--staff-primary-light); color: var(--staff-primary-hover); font-size: .72rem; font-weight: 800; }
     .command-list strong, .command-list small { display: block; color: var(--staff-text); }
     .command-list small { color: var(--staff-text-secondary); }
-    .notification-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(420px, 92vw); box-sizing: border-box; overflow: auto; padding: 14px; background: var(--staff-background); box-shadow: var(--staff-shadow-elevated); overscroll-behavior: contain; }
+     .notification-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(420px, 92vw); box-sizing: border-box; overflow: auto; padding: 14px; background: var(--staff-background); box-shadow: var(--staff-shadow-elevated); overscroll-behavior: contain; animation: shell-drawer-enter var(--staff-motion-standard) var(--staff-motion-ease) both; }
     .ai-brief { margin: 12px 0; padding: 12px; border: 1px solid var(--staff-border-accent); border-radius: 16px; color: var(--staff-primary-hover); background: var(--staff-primary-light); font-weight: 650; }
     .notice-list { display: grid; gap: 8px; }
     .notice-list article { padding: 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface); }
@@ -189,7 +189,13 @@ type StaffRecentItem = { label: string; path: string };
     .notice-list small { margin-top: 4px; color: var(--staff-text-secondary); font-weight: 600; }
     .notice-list span { margin-top: 6px; color: var(--staff-primary-hover); font-size: .76rem; font-weight: 750; text-transform: capitalize; }
     .notice-list button { min-height:44px;margin-top:8px;border:1px solid var(--staff-border-accent);border-radius:14px;background:var(--staff-surface);color:var(--staff-primary-hover);font-weight:750;padding:7px 10px; }
-    .staff-toast { position: fixed; left: 50%; bottom: 18px; z-index: 80; transform: translateX(-50%); max-width: min(420px, calc(100vw - 24px)); padding: 11px 14px; border-radius: 16px; background: var(--staff-text); color: var(--staff-text-inverse); font-weight: 750; box-shadow: var(--staff-shadow-elevated); }
+     .staff-toast { position: fixed; left: 50%; bottom: 18px; z-index: 80; transform: translateX(-50%); max-width: min(420px, calc(100vw - 24px)); padding: 11px 14px; border-radius: 16px; background: var(--staff-text); color: var(--staff-text-inverse); font-weight: 750; box-shadow: var(--staff-shadow-elevated); animation: shell-toast-enter var(--staff-motion-fast) var(--staff-motion-ease) both; }
+     .command-backdrop { animation: shell-fade-in var(--staff-motion-fast) var(--staff-motion-ease) both; }
+     .command-palette { animation: shell-dialog-enter var(--staff-motion-standard) var(--staff-motion-ease) both; overscroll-behavior: contain; }
+     @keyframes shell-fade-in { from { opacity: 0; } }
+     @keyframes shell-dialog-enter { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+     @keyframes shell-drawer-enter { from { opacity: 0; transform: translateX(20px); } }
+     @keyframes shell-toast-enter { from { opacity: 0; transform: translate(-50%, 8px); } }
     .mobile-bottom-nav { display: none; }
     .scroll-top-button { display: none; }
     @media (max-width: 900px) {
@@ -230,18 +236,24 @@ type StaffRecentItem = { label: string; path: string };
       nav a { min-width: 0; padding: 12px 13px; border-radius: 16px; text-align: left; font-size: .92rem; white-space: normal; background: transparent; }
       nav a.active { background: var(--staff-primary-light); color: var(--staff-primary-hover); border-color: var(--staff-border-accent); }
     }
-    @media (max-width: 560px) {
+     @media (max-width: 560px) {
       .staff-topbar { align-items: center; display: flex; }
       .staff-topbar strong { display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .network-status { display: none; }
 
       nav a { padding: 12px 13px; }
-    }
+     }
+     @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } }
   `]
 })
 export class StaffLayoutPage implements OnInit, OnDestroy {
   @ViewChild("commandInput") private commandInput?: ElementRef<HTMLInputElement>;
   @ViewChild("mainShell") private mainShell?: ElementRef<HTMLElement>;
+  @ViewChild("contentShell") private contentShell?: ElementRef<HTMLElement>;
+  @ViewChild("menuDialog") private menuDialog?: ElementRef<HTMLElement>;
+  @ViewChild("menuButton") private menuButton?: ElementRef<HTMLButtonElement>;
+  @ViewChild("commandButton") private commandButton?: ElementRef<HTMLButtonElement>;
+  @ViewChild("notificationButton") private notificationButton?: ElementRef<HTMLButtonElement>;
   readonly menuOpen = signal(false);
   readonly commandOpen = signal(false);
   readonly notificationsOpen = signal(false);
@@ -321,6 +333,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     window.clearTimeout(this.reconnectTimer);
     window.clearTimeout(this.toastTimer);
     this.socket?.close();
+    this.setOverlayLock(false);
   }
 
   @HostListener("window:online") onOnline() { this.online.set(true); void this.flushOfflineQueue(); void this.connectRealtime(); }
@@ -422,11 +435,18 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   openMenu() {
+    this.closeCommand(false);
+    this.closeNotifications(false);
     this.menuOpen.set(true);
+    this.setOverlayLock(true);
+    window.setTimeout(() => this.menuDialog?.nativeElement.querySelector<HTMLElement>(".drawer-close")?.focus(), 0);
   }
 
-  closeMenu() {
+  closeMenu(restoreFocus = true) {
+    const wasOpen = this.menuOpen();
     this.menuOpen.set(false);
+    this.syncOverlayLock();
+    if (wasOpen && restoreFocus) window.setTimeout(() => this.menuButton?.nativeElement.focus(), 0);
   }
 
   private searchScore(label: string, group: string, query: string): number {
@@ -457,30 +477,43 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   openCommand() {
+    this.closeMenu(false);
+    this.closeNotifications(false);
     this.commandOpen.set(true);
+    this.setOverlayLock(true);
     window.setTimeout(() => this.commandInput?.nativeElement.focus(), 0);
   }
 
-  closeCommand() {
+  closeCommand(restoreFocus = true) {
+    const wasOpen = this.commandOpen();
     this.commandOpen.set(false);
     this.query.set("");
+    this.syncOverlayLock();
+    if (wasOpen && restoreFocus) window.setTimeout(() => this.commandButton?.nativeElement.focus(), 0);
   }
 
   toggleNotifications() {
-    this.notificationsOpen.update((open) => !open);
+    if (this.notificationsOpen()) { this.closeNotifications(); return; }
+    this.closeMenu(false);
+    this.closeCommand(false);
+    this.notificationsOpen.set(true);
+    this.setOverlayLock(true);
     window.setTimeout(() => document.querySelector<HTMLElement>(".notification-drawer.open button")?.focus(), 0);
   }
 
-  closeNotifications() {
+  closeNotifications(restoreFocus = true) {
+    const wasOpen = this.notificationsOpen();
     this.notificationsOpen.set(false);
+    this.syncOverlayLock();
+    if (wasOpen && restoreFocus) window.setTimeout(() => this.notificationButton?.nativeElement.focus(), 0);
   }
 
-  onMainScroll() {
-    this.showScrollTop.set((this.mainShell?.nativeElement.scrollTop || 0) > 180);
+  onMainScroll(event: Event) {
+    this.showScrollTop.set(((event.currentTarget as HTMLElement | null)?.scrollTop || 0) > 180);
   }
 
   scrollToTop() {
-    const shell = this.mainShell?.nativeElement;
+    const shell = window.matchMedia("(max-width: 900px)").matches ? this.mainShell?.nativeElement : this.contentShell?.nativeElement;
     if (shell) shell.scrollTo({ top: 0, behavior: "smooth" });
     else window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -581,6 +614,14 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+
+  private syncOverlayLock() {
+    this.setOverlayLock(this.menuOpen() || this.commandOpen() || this.notificationsOpen());
+  }
+
+  private setOverlayLock(locked: boolean) {
+    document.documentElement.classList.toggle("staff-overlay-open", locked);
   }
 
   private remember(item: StaffRecentItem) {

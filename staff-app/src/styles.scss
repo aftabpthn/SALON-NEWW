@@ -56,6 +56,7 @@
   --staff-radius-control: 14px;
   --staff-radius-card: 20px;
   --staff-motion-fast: 180ms;
+  --staff-motion-standard: 220ms;
   --staff-motion-ease: cubic-bezier(.2,.8,.2,1);
 }
 
@@ -130,7 +131,20 @@ textarea {
   outline-offset: 2px;
 }
 
-button, a { -webkit-tap-highlight-color: transparent; }
-button:not(:disabled), a { transition: scale var(--staff-motion-fast) var(--staff-motion-ease), transform var(--staff-motion-fast) var(--staff-motion-ease), background-color var(--staff-motion-fast) var(--staff-motion-ease), border-color var(--staff-motion-fast) var(--staff-motion-ease), color var(--staff-motion-fast) var(--staff-motion-ease), box-shadow var(--staff-motion-fast) var(--staff-motion-ease); }
+html.staff-overlay-open,
+html.staff-overlay-open body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.staff-overlay-open .staff-main-shell,
+html.staff-overlay-open .staff-content,
+html:has(.detail-drawer) .staff-main-shell,
+html:has(.detail-drawer) .staff-content {
+  overflow: hidden;
+}
+
+button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:not(:disabled), a { transition: scale var(--staff-motion-fast) var(--staff-motion-ease), transform var(--staff-motion-fast) var(--staff-motion-ease), background-color var(--staff-motion-fast) var(--staff-motion-ease), border-color var(--staff-motion-fast) var(--staff-motion-ease), color var(--staff-motion-fast) var(--staff-motion-ease), box-shadow var(--staff-motion-fast) var(--staff-motion-ease), opacity var(--staff-motion-fast) var(--staff-motion-ease); }
 button:not(:disabled):active, a:active { scale: .98; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
