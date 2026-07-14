@@ -7,6 +7,7 @@ import { tenantService } from "./tenant.service.js";
 import { db } from "../db.js";
 import { can } from "../middleware/rbac.js";
 import { securityAdvancedService } from "./security-advanced.service.js";
+import { securityEphemeralGrantStore } from "../stores/security-ephemeral-grant.store.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
@@ -29,9 +30,9 @@ const TICKET_TTL_SECONDS = 30;
 const privilegedRoles = new Set(["owner", "admin", "superAdmin"]);
 
 export class RealtimeService {
-  constructor() {
+  constructor({ grantStore = securityEphemeralGrantStore } = {}) {
     this.clients = new Map();
-    this.tickets = new Map();
+    this.grantStore = grantStore;
     this.wss = null;
   }
 
@@ -56,14 +57,10 @@ export class RealtimeService {
   }
 
   issueTicket(access, { branchId = "" } = {}) {
-    for (const [id, issued] of this.tickets) {
-      if (issued.expiresAt <= Date.now()) this.tickets.delete(id);
-    }
     const requestedBranchId = branchId || access.requestedBranchId || access.branchId || "";
     if (requestedBranchId) tenantService.assertBranchAccess(access, requestedBranchId);
     const channels = this.authorizedChannels(access, requestedBranchId);
-    const jti = makeId("wst");
-    const expiresAt = Date.now() + TICKET_TTL_SECONDS * 1000;
+    const jti = this.grantStore.randomId();
     const auth = {
       sub: access.userId,
       tenantId: access.tenantId,
@@ -77,17 +74,41 @@ export class RealtimeService {
       jti: access.jti || "",
       iat: access.iat || 0
     };
-    this.tickets.set(jti, { auth, branchId: requestedBranchId, channels, expiresAt });
-    const ticket = authService.signJwt({ typ: "websocket_ticket", jti }, TICKET_TTL_SECONDS);
+    const bindings = {
+      subjectId: access.userId,
+      userId: access.userId,
+      staffId: access.staffId || "",
+      tenantId: access.tenantId,
+      branchId: requestedBranchId,
+      sessionId: access.jti || ""
+    };
+    const ticket = authService.signJwt({ typ: "websocket_ticket", jti, ...bindings }, TICKET_TTL_SECONDS);
+    this.grantStore.issue({
+      proof: ticket,
+      ttlSeconds: TICKET_TTL_SECONDS,
+      type: "realtime",
+      purpose: "websocket_ticket",
+      ...bindings,
+      payload: { auth, branchId: requestedBranchId, channels }
+    });
     return { ticket, expiresIn: TICKET_TTL_SECONDS, channels };
   }
 
   consumeTicket(ticket) {
     const payload = authService.verifyJwt(ticket);
     if (payload.typ !== "websocket_ticket" || !payload.jti) throw unauthorized("Invalid WebSocket ticket");
-    const issued = this.tickets.get(payload.jti);
-    this.tickets.delete(payload.jti);
-    if (!issued || issued.expiresAt <= Date.now()) throw unauthorized("WebSocket ticket is expired or already used");
+    const issued = this.grantStore.consume({
+      proof: ticket,
+      type: "realtime",
+      purpose: "websocket_ticket",
+      subjectId: payload.subjectId,
+      userId: payload.userId,
+      staffId: payload.staffId,
+      tenantId: payload.tenantId,
+      branchId: payload.branchId,
+      sessionId: payload.sessionId
+    })?.payload;
+    if (!issued) throw unauthorized("WebSocket ticket is expired or already used");
     this.assertCurrentAuthorization(issued.auth, issued.branchId);
     return issued;
   }

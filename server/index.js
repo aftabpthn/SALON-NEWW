@@ -4,6 +4,7 @@ import { startAbandonmentDetectorCron } from "./jobs/abandonment-detector.cron.j
 import { startDashboardCron } from "./jobs/dashboard-cron.js";
 import { startIdempotencyCleanupCron } from "./jobs/idempotency-cleanup.cron.js";
 import { startReconciliationCron } from "./jobs/reconciliation-cron.js";
+import { startSecurityEphemeralGrantsCleanupCron } from "./jobs/security-ephemeral-grants-cleanup.cron.js";
 import { startSlotCleanupCron } from "./jobs/slot-cleanup.cron.js";
 import { startWizardCleanupCron } from "./jobs/wizard-cleanup.cron.js";
 import { realtimeService } from "./services/realtime.service.js";
@@ -27,3 +28,4 @@ startIdempotencyCleanupCron();
 startWizardCleanupCron();
 startJobWorker();
 startReconciliationCron();
+startSecurityEphemeralGrantsCleanupCron();

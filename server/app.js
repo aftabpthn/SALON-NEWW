@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./db.js";
 import { ensureHappyHoursInvoiceColumns } from "./migrations/add-happy-hours-to-invoices.js";
+import { ensureSecurityEphemeralGrantsSchema } from "./migrations/create-security-ephemeral-grants.js";
+import { ensureStaffClientMediaSchema } from "./services/staff-client-media-schema.service.js";
 import "./jobs/flash-sale-monitor.js";
 import "./jobs/demand-snapshot.job.js";
 import "./jobs/offer-auto-sunset.job.js";
@@ -275,6 +277,8 @@ export function createApp() {
   ensureInvoicePaymentCollectionSchema();
   ensureBillingCompatibilitySchema();
   ensureHappyHoursInvoiceColumns();
+  ensureSecurityEphemeralGrantsSchema();
+  ensureStaffClientMediaSchema();
   ensureCashDrawerEodSchema();
   ensureGrowthRankBotSchema();
   ensureLegacyRevenueSchema();
@@ -313,6 +317,7 @@ export function createApp() {
       }
     })
   );
+  app.use("/uploads/staff-client-media", (_req, res) => res.status(404).json({ error: "Not found" }));
   app.use("/uploads", express.static(join(dataDir, "uploads"), { maxAge: "7d" }));
   const migrationJsonParser = express.json({
     limit: "96mb",

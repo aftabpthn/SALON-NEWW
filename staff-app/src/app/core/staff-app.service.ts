@@ -1,6 +1,6 @@
-import { HttpClient, HttpErrorResponse, HttpHeaders } from "@angular/common/http";
+import { HttpClient, HttpErrorResponse, HttpEventType, HttpHeaders } from "@angular/common/http";
 import { Injectable, signal } from "@angular/core";
-import { firstValueFrom } from "rxjs";
+import { firstValueFrom, Observable } from "rxjs";
 import { environment } from "../../environments/environment";
 import { resetCsrfState } from "./csrf.interceptor";
 
@@ -305,7 +305,7 @@ export type StaffClient360 = {
   productsBought: Array<{ id: string; total: number; createdAt: string; status: string }>;
   cancellationHistory: Array<{ id: string; startAt: string; status: string; notes: string }>;
   preferences?: { notes: string; allergies: string; tags: string[]; preferredStylist: string };
-  mediaPortfolio?: Array<{ id: string; title: string; type: string; url: string; createdAt: string }>;
+  mediaPortfolio?: Array<{ id: string; clientId?: string; title: string; type: string; url: string; mimeType?: string; byteSize?: number; createdAt: string }>;
   lifetimeSpend: number;
   visitFrequency: number;
   lastVisit: string;
@@ -337,6 +337,11 @@ export type StaffWorkspacePreferences = {
   interface: { compactMode: boolean };
   defaults: { staffHints: boolean };
 };
+
+export type StaffClientMedia = NonNullable<StaffClient360["mediaPortfolio"]>[number];
+export type StaffClientMediaUploadEvent =
+  | { state: "progress"; loaded: number; total: number | null; progress: number | null }
+  | { state: "completed"; media: StaffClientMedia };
 
 export type StaffAttendance = {
   id: string;
@@ -598,8 +603,50 @@ export class StaffAppService {
     return this.onlineMutation(() => this.patch<StaffAppointment>(`/staff-self/appointments/${encodeURIComponent(appointmentId)}`, payload));
   }
 
-  async addClientMedia(clientId: string, payload: { title: string; type?: string; url?: string; dataUrl?: string }): Promise<MutationResult<{ id: string; title: string; type: string; url: string; createdAt: string }>> {
-    return this.onlineMutation(() => this.post(`/staff-self/clients/${encodeURIComponent(clientId)}/media`, payload));
+  addClientMedia(clientId: string, file: File, payload: { title: string; type?: string }, idempotencyKey: string): Observable<StaffClientMediaUploadEvent> {
+    const body = new FormData();
+    body.append("file", file, file.name);
+    body.append("title", payload.title);
+    body.append("type", payload.type || "photo");
+    this.error.set("");
+
+    return new Observable((subscriber) => {
+      const request = this.authenticatedObservable(() => this.http.request<StaffClientMedia | ApiEnvelope<StaffClientMedia>>(
+        "POST",
+        `${this.baseUrl}/staff-self/clients/${encodeURIComponent(clientId)}/media`,
+        {
+          body,
+          headers: this.authHeaders().set("Idempotency-Key", idempotencyKey),
+          observe: "events",
+          reportProgress: true,
+          withCredentials: true
+        }
+      )).subscribe({
+        next: (event) => {
+          if (event.type === HttpEventType.UploadProgress) {
+            const total = event.total ?? null;
+            subscriber.next({ state: "progress", loaded: event.loaded, total, progress: total ? Math.round(event.loaded * 100 / total) : null });
+          } else if (event.type === HttpEventType.Response) {
+            subscriber.next({ state: "completed", media: this.unwrap(event.body as StaffClientMedia | ApiEnvelope<StaffClientMedia>) });
+          }
+        },
+        error: (error) => {
+          this.error.set(this.errorMessage(error, "Unable to add client media."));
+          subscriber.error(error);
+        },
+        complete: () => subscriber.complete()
+      });
+      return () => request.unsubscribe();
+    });
+  }
+
+  clientMediaBlob(mediaUrl: string): Observable<Blob> {
+    const url = this.safeMediaUrl(mediaUrl);
+    return this.authenticatedObservable(() => this.http.get(url, {
+      headers: this.authHeaders(),
+      responseType: "blob",
+      withCredentials: true
+    }));
   }
 
   async updateSchedule(scheduleId: string, payload: { version: number; scheduleDate?: string; startTime?: string; endTime?: string; status?: string; notes?: string }): Promise<unknown> {
@@ -971,6 +1018,45 @@ export class StaffAppService {
     } catch {
       return [];
     }
+  }
+
+  private authenticatedObservable<T>(request: () => Observable<T>): Observable<T> {
+    return new Observable((subscriber) => {
+      let requestSubscription: { unsubscribe(): void } | undefined;
+      let cancelled = false;
+      const run = async (retried: boolean) => {
+        try {
+          if (!this.accessTokenValue) await this.refreshSession();
+          if (cancelled) return;
+          requestSubscription = request().subscribe({
+            next: (value) => subscriber.next(value),
+            complete: () => subscriber.complete(),
+            error: (error) => {
+              if (!retried && this.isUnauthorized(error)) {
+                void this.refreshSession().then(() => run(true)).catch((refreshError) => subscriber.error(refreshError));
+                return;
+              }
+              subscriber.error(error);
+            }
+          });
+        } catch (error) {
+          if (!cancelled) subscriber.error(error);
+        }
+      };
+      void run(false);
+      return () => {
+        cancelled = true;
+        requestSubscription?.unsubscribe();
+      };
+    });
+  }
+
+  private safeMediaUrl(mediaUrl: string): string {
+    const appOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+    const apiUrl = new URL(this.baseUrl, appOrigin);
+    const url = new URL(mediaUrl, apiUrl);
+    if (!["http:", "https:"].includes(url.protocol) || url.origin !== apiUrl.origin) throw new Error("Invalid client media URL.");
+    return url.toString();
   }
 
   private async queueableMutation<T = unknown>(method: "POST" | "PATCH", path: string, body: Record<string, unknown>): Promise<MutationResult<T>> {

@@ -7,6 +7,8 @@ import { generalSettingsService } from "../services/general-settings.service.js"
 import { requireIdempotencyKey } from "../middleware/idempotency.middleware.js";
 import { staffSelfContext } from "../middleware/staff-self-context.middleware.js";
 import { staffSelfResponsePresenterService } from "../services/staff-self-response-presenter.service.js";
+import { staffClientMediaUpload } from "../middleware/staff-client-media-upload.middleware.js";
+import { staffClientMediaUploadService } from "../services/staff-client-media-upload.service.js";
 
 export const staffSelfRouter = Router();
 
@@ -67,11 +69,26 @@ staffSelfRouter.get(
 staffSelfRouter.post(
   "/staff-self/clients/:clientId/media",
   authenticateJwt(),
-  requireIdempotencyKey,
-  staffSelfContext(["title", "type", "url", "dataUrl"]),
   requirePermission("update", () => "clients"),
-  asyncHandler((req, res) => {
-    res.status(201).json(staffLoginService.addClientMedia(req.params.clientId, req.body, req.access));
+  staffClientMediaUpload,
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await staffClientMediaUploadService.create(req.params.clientId, req.body, req.file, req.access));
+  })
+);
+
+staffSelfRouter.get(
+  "/staff-self/client-media/:mediaId/content",
+  authenticateJwt(),
+  requirePermission("read", () => "clients"),
+  asyncHandler(async (req, res) => {
+    const content = await staffClientMediaUploadService.content(req.params.mediaId, req.access);
+    res.set("Cache-Control", "private, no-store");
+    res.set("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.set("Content-Disposition", "inline");
+    res.set("Content-Length", String(content.buffer.length));
+    res.set("Cross-Origin-Resource-Policy", "same-origin");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.type(content.mimeType).send(content.buffer);
   })
 );
 

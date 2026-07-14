@@ -1,5 +1,7 @@
 import { Injectable, effect, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { AuthSessionService } from './auth-session.service';
+import { ApiService } from './api.service';
 import { AppStateService } from './state/app-state.service';
 
 export type RealtimeFrame<T = unknown> = {
@@ -23,10 +25,12 @@ export class WebSocketService {
   private reconnectAttempt = 0;
   private started = false;
   private connectionKey = '';
+  private connectionAttempt = 0;
 
   constructor(
     private readonly auth: AuthSessionService,
-    private readonly appState: AppStateService
+    private readonly appState: AppStateService,
+    private readonly api: ApiService
   ) {
     effect(() => {
       this.auth.accessToken();
@@ -42,23 +46,33 @@ export class WebSocketService {
     this.scheduleReconcile(0);
   }
 
-  private reconcile(): void {
+  private async reconcile(): Promise<void> {
     const token = this.auth.accessToken();
     const authenticatedTenantId = this.auth.session()?.tenant.id || '';
     const selectedTenantId = this.appState.selectedTenantId();
     const branchId = this.appState.selectedBranchId();
     const key = `${token}|${authenticatedTenantId}|${selectedTenantId}|${branchId}`;
     if (!this.started || !token) {
+      this.connectionAttempt += 1;
       this.closeSocket();
       return;
     }
     if (this.connectionKey === key && this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
     this.closeSocket();
+    const attempt = ++this.connectionAttempt;
+    this.connectionKey = key;
+    let issued: { ticket: string };
+    try {
+      issued = await firstValueFrom(this.api.post<{ ticket: string }>('realtime/ticket', { branchId }));
+    } catch {
+      if (attempt === this.connectionAttempt && this.started) this.scheduleReconnect();
+      return;
+    }
+    if (attempt !== this.connectionAttempt || key !== this.currentConnectionKey() || !issued.ticket) return;
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${protocol}://${window.location.host}/api/v1/realtime?token=${encodeURIComponent(token)}&branchId=${encodeURIComponent(branchId)}`;
+    const url = `${protocol}://${window.location.host}/api/v1/realtime?ticket=${encodeURIComponent(issued.ticket)}`;
     const socket = new WebSocket(url);
     this.socket = socket;
-    this.connectionKey = key;
     socket.onopen = () => {
       if (this.socket !== socket) return;
       this.connected.set(true);
@@ -92,6 +106,7 @@ export class WebSocketService {
 
   disconnect(): void {
     this.started = false;
+    this.connectionAttempt += 1;
     this.clearReconnectTimer();
     this.reconnectAttempt = 0;
     this.closeSocket();
@@ -111,7 +126,7 @@ export class WebSocketService {
     this.clearReconnectTimer();
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.reconcile();
+      void this.reconcile();
     }, delay);
   }
 

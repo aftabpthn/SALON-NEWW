@@ -1,7 +1,5 @@
 import { randomBytes, randomUUID, scryptSync } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { columnsFor, dataDir, db } from "../db.js";
+import { columnsFor, db } from "../db.js";
 import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 import { realtimeService } from "./realtime.service.js";
 import { ensureTenantUserAccessColumns, normalizeBranchIdsForRole } from "./access-control.service.js";
@@ -270,23 +268,6 @@ function safeRun(sql, params = {}) {
   } catch {
     return null;
   }
-}
-
-function writeDataUrlMedia(payload = {}, mediaId = makeId("media")) {
-  const dataUrl = String(payload.dataUrl || payload.data_url || "").trim();
-  if (!dataUrl) return String(payload.url || "").trim();
-  const match = dataUrl.match(/^data:([\w/+.-]+);base64,(.+)$/);
-  if (!match) throw badRequest("Media dataUrl must be base64 data URL");
-  const mime = match[1];
-  const base64 = match[2];
-  const buffer = Buffer.from(base64, "base64");
-  if (buffer.length > 5 * 1024 * 1024) throw badRequest("Media upload must be under 5 MB");
-  const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
-  const dir = join(dataDir, "uploads", "staff-client-media");
-  mkdirSync(dir, { recursive: true });
-  const fileName = `${mediaId}.${ext}`;
-  writeFileSync(join(dir, fileName), buffer);
-  return `/uploads/staff-client-media/${fileName}`;
 }
 
 function scopedFilters(table, access, branchId = "") {
@@ -787,31 +768,6 @@ export class StaffLoginService {
     writeStaffSelfAudit("staff.schedule_rescheduled", "staff_schedules", id, access, branchId, staffId, next);
     realtimeService.broadcast("staff-self.calendar_updated", { schedule: updated }, { tenantId: access.tenantId, branchId });
     return updated;
-  }
-
-  addClientMedia(clientId, payload = {}, access) {
-    ensureStaffSelfAppSchema();
-    const dashboard = this.staffDashboard({}, access);
-    const branchId = dashboard.staff.branchId || access.branchId || "";
-    const client = this.clientRecord(access.tenantId, branchId, clientId);
-    if (!client) throw notFound("Client record not found");
-    const row = {
-      id: makeId("media"),
-      tenantId: access.tenantId,
-      branchId,
-      clientId,
-      title: String(payload.title || "Client media").trim(),
-      type: String(payload.type || "photo").trim(),
-      url: "",
-      createdAt: now()
-    };
-    if (!row.title) throw badRequest("Media title is required");
-    row.url = writeDataUrlMedia(payload, row.id) || String(payload.url || "").trim();
-    db.prepare(`INSERT INTO staffClientMedia (id, tenantId, branchId, clientId, title, type, url, createdAt)
-      VALUES (@id, @tenantId, @branchId, @clientId, @title, @type, @url, @createdAt)`).run(row);
-    writeStaffSelfAudit("staff.client_media_added", "staffClientMedia", row.id, access, branchId, dashboard.staff.id, { clientId, title: row.title, type: row.type });
-    realtimeService.broadcast("staff-self.client_media_added", { media: row }, { tenantId: access.tenantId, branchId });
-    return row;
   }
 
   chatThreads(query = {}, access) {

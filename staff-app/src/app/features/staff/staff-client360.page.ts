@@ -4,7 +4,7 @@ import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { IonSpinner } from "@ionic/angular/standalone";
 import { Subscription } from "rxjs";
-import { isQueuedMutation, StaffAppService, StaffClient360, StaffDashboard } from "../../core/staff-app.service";
+import { StaffAppService, StaffClient360, StaffDashboard } from "../../core/staff-app.service";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 
 @Component({
@@ -40,7 +40,7 @@ import { PaiseInrPipe } from "../../core/paise-inr.pipe";
         </section>
         <section class="grid two">
           <article class="panel"><div class="panel-title"><h2>Preferences</h2><span>{{ data.preferences?.tags?.length || 0 }} tags</span></div><div class="list"><div class="row"><strong>Notes</strong><span>{{ data.preferences?.notes || '-' }}</span></div><div class="row"><strong>Allergies</strong><span>{{ data.preferences?.allergies || '-' }}</span></div><div class="row"><strong>Preferred</strong><span>{{ data.preferences?.preferredStylist || '-' }}</span></div></div></article>
-          <article class="panel"><div class="panel-title"><h2>Media portfolio</h2><span>{{ data.mediaPortfolio?.length || 0 }}</span></div><div class="form-grid compact-grid"><label>Title<input [(ngModel)]="mediaTitle" [disabled]="mediaPending()" /></label><label>Type<input [(ngModel)]="mediaType" [disabled]="mediaPending()" /></label><label>URL<input [(ngModel)]="mediaUrl" [disabled]="mediaPending()" placeholder="Optional external URL" /></label><label>Upload<input type="file" accept="image/*" [disabled]="mediaPending()" (change)="onMediaFile($event)" /></label></div>@if (mediaFileName()) { <p class="insight">Ready to upload: {{ mediaFileName() }}</p> }<button class="link-button" type="button" [disabled]="mediaPending()" (click)="addMedia()">{{ mediaPending() ? 'Adding...' : 'Add media' }}</button><div class="media-grid">@for (media of data.mediaPortfolio || []; track media.id) { <article><div class="media-thumb">@if (media.url) { <img [src]="media.url" [alt]="media.title" /> } @else { {{ media.type }} } </div><strong>{{ media.title }}</strong><small>{{ media.createdAt || 'ready for upload' }}</small></article> } @empty { <p class="empty">No media attached yet.</p> }</div></article>
+          <article class="panel"><div class="panel-title"><h2>Media portfolio</h2><span>{{ data.mediaPortfolio?.length || 0 }}</span></div><div class="form-grid compact-grid"><label>Title<input [(ngModel)]="mediaTitle" [disabled]="mediaPending()" /></label><label>Type<input [(ngModel)]="mediaType" [disabled]="mediaPending()" /></label><label>Upload<input type="file" accept="image/jpeg,image/png,image/webp" [disabled]="mediaPending()" (change)="onMediaFile($event)" /></label></div>@if (mediaFileName()) { <p class="insight">Ready to upload: {{ mediaFileName() }}</p> }@if (mediaPreviewUrl()) { <div class="media-thumb"><img [src]="mediaPreviewUrl()" [alt]="mediaFileName()" /></div> }@if (mediaPending()) { <p class="insight">{{ mediaProgress() === null ? 'Uploading...' : 'Uploading ' + mediaProgress() + '%' }}</p> }<button class="link-button" type="button" [disabled]="mediaPending() || !mediaFileName()" (click)="addMedia()">{{ mediaPending() ? 'Adding...' : 'Add media' }}</button>@if (mediaFileName()) { <button class="link-button" type="button" (click)="cancelMedia()">Cancel</button> }<div class="media-grid">@for (media of data.mediaPortfolio || []; track media.id) { <article><div class="media-thumb">@if (mediaObjectUrls()[media.id]; as mediaSrc) { <img [src]="mediaSrc" [alt]="media.title" /> } @else { {{ media.type }} } </div><strong>{{ media.title }}</strong><small>{{ media.createdAt || 'ready for upload' }}</small></article> } @empty { <p class="empty">No media attached yet.</p> }</div></article>
         </section>
         <section class="panel"><div class="panel-title"><h2>Previous services</h2><span>{{ data.previousServices.length }}</span></div><div class="list">@for (item of data.previousServices; track item.id) { <div class="row"><div class="row-main"><strong>{{ item.startAt | date:'mediumDate' }}</strong><small>{{ item.serviceIds.join(', ') || 'Service' }}</small></div><span class="badge">{{ item.status }}</span></div> } @empty { <p class="empty">No previous services found.</p> }</div></section>
       }
@@ -55,9 +55,10 @@ export class StaffClient360Page implements OnInit, OnDestroy {
   readonly clientId = signal("");
   mediaTitle = "Before/after photo";
   mediaType = "photo";
-  mediaUrl = "";
-  readonly mediaDataUrl = signal("");
   readonly mediaFileName = signal("");
+  readonly mediaPreviewUrl = signal("");
+  readonly mediaProgress = signal<number | null>(null);
+  readonly mediaObjectUrls = signal<Record<string, string>>({});
   readonly mediaPending = signal(false);
   readonly message = signal("");
   readonly localError = signal("");
@@ -68,42 +69,53 @@ export class StaffClient360Page implements OnInit, OnDestroy {
   });
   constructor(readonly staff: StaffAppService, private readonly route: ActivatedRoute) {}
   private routeSubscription?: Subscription;
+  private mediaUploadSubscription?: Subscription;
+  private mediaLoadSubscriptions = new Subscription();
+  private mediaFile?: File;
+  private mediaIdempotencyKey = "";
   private loadGeneration = 0;
-  private fileGeneration = 0;
   ngOnInit() { this.routeSubscription = this.route.paramMap.subscribe((params) => void this.load(params.get("id") || "")); }
-  ngOnDestroy() { this.routeSubscription?.unsubscribe(); }
+  ngOnDestroy() { this.routeSubscription?.unsubscribe(); this.cancelMedia(); this.revokeMediaObjectUrls(); }
   async load(id = this.route.snapshot.paramMap.get("id") || "") {
     const generation = ++this.loadGeneration;
     this.client.set(null);
     this.dashboard.set(null);
-    this.clearMediaSelection();
+    this.cancelMedia();
+    this.revokeMediaObjectUrls();
     this.message.set("");
     this.localError.set("");
     this.clientId.set(id);
     this.loading.set(true);
     try {
-      if (id) { const client = await this.staff.client360(id); if (generation === this.loadGeneration) this.client.set(client); }
+      if (id) { const client = await this.staff.client360(id); if (generation === this.loadGeneration) { this.client.set(client); this.loadMediaObjectUrls(client, generation); } }
       else { const dashboard = await this.staff.dashboard(); if (generation === this.loadGeneration) this.dashboard.set(dashboard); }
     } catch { if (generation === this.loadGeneration) this.localError.set(this.staff.error() || "Unable to load Client 360."); }
     finally { if (generation === this.loadGeneration) this.loading.set(false); }
   }
 
-  async addMedia() {
+  addMedia() {
     const id = this.clientId();
-    if (!id || !this.mediaTitle.trim() || this.mediaPending()) return;
-    if (!this.mediaUrl.trim() && !this.mediaDataUrl()) { this.localError.set("Choose an image or enter an external URL."); return; }
+    const file = this.mediaFile;
+    if (!id || !file || !this.mediaTitle.trim() || !this.mediaIdempotencyKey || this.mediaPending()) return;
     this.mediaPending.set(true);
+    this.mediaProgress.set(0);
     this.message.set("");
     this.localError.set("");
-    try {
-      const result = await this.staff.addClientMedia(id, { title: this.mediaTitle.trim(), type: this.mediaType.trim() || "photo", url: this.mediaUrl.trim(), dataUrl: this.mediaDataUrl() });
-      if (isQueuedMutation(result)) { this.message.set(`Media addition queued for sync (${result.queueId}).`); this.clearMediaSelection(); return; }
-      this.message.set("Media added.");
-      this.clearMediaSelection();
-      const client = await this.staff.client360(id);
-      if (id === this.clientId()) this.client.set(client);
-    } catch { this.localError.set(this.staff.error() || "Unable to add client media."); }
-    finally { this.mediaPending.set(false); }
+    this.mediaUploadSubscription = this.staff.addClientMedia(id, file, { title: this.mediaTitle.trim(), type: this.mediaType.trim() || "photo" }, this.mediaIdempotencyKey).subscribe({
+      next: (event) => {
+        if (event.state === "progress") { this.mediaProgress.set(event.progress); return; }
+        const current = this.client();
+        this.clearMediaSelection();
+        this.mediaPending.set(false);
+        this.message.set("Media added.");
+        if (current && id === this.clientId()) {
+          const client = { ...current, mediaPortfolio: [event.media, ...(current.mediaPortfolio || []).filter((media) => media.id !== event.media.id)] };
+          this.client.set(client);
+          this.loadMediaObjectUrls(client, this.loadGeneration);
+        }
+      },
+      error: () => { this.mediaPending.set(false); this.localError.set(this.staff.error() || "Unable to add client media."); }
+    });
   }
 
   onMediaFile(event: Event) {
@@ -111,15 +123,56 @@ export class StaffClient360Page implements OnInit, OnDestroy {
     const file = input.files?.[0];
     if (!file) return;
     this.localError.set("");
-    if (!file.type.startsWith("image/")) { this.localError.set("Only image files can be uploaded."); input.value = ""; this.clearMediaSelection(); return; }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { this.localError.set("Choose a JPEG, PNG, or WebP image."); input.value = ""; this.clearMediaSelection(); return; }
     if (file.size > 5 * 1024 * 1024) { this.localError.set("Image must be 5 MB or smaller."); input.value = ""; this.clearMediaSelection(); return; }
-    const generation = ++this.fileGeneration;
+    this.clearMediaSelection();
+    this.mediaFile = file;
+    this.mediaIdempotencyKey = crypto.randomUUID();
     this.mediaFileName.set(file.name);
-    const reader = new FileReader();
-    reader.onload = () => { if (generation === this.fileGeneration) this.mediaDataUrl.set(String(reader.result || "")); };
-    reader.onerror = () => { if (generation === this.fileGeneration) { this.clearMediaSelection(); this.localError.set("Unable to read the selected image."); } };
-    reader.readAsDataURL(file);
+    this.mediaPreviewUrl.set(URL.createObjectURL(file));
   }
 
-  private clearMediaSelection() { this.fileGeneration += 1; this.mediaUrl = ""; this.mediaDataUrl.set(""); this.mediaFileName.set(""); }
+  cancelMedia() {
+    this.mediaUploadSubscription?.unsubscribe();
+    this.mediaUploadSubscription = undefined;
+    this.mediaPending.set(false);
+    this.clearMediaSelection();
+  }
+
+  private clearMediaSelection() {
+    if (this.mediaPreviewUrl()) URL.revokeObjectURL(this.mediaPreviewUrl());
+    this.mediaFile = undefined;
+    this.mediaIdempotencyKey = "";
+    this.mediaFileName.set("");
+    this.mediaPreviewUrl.set("");
+    this.mediaProgress.set(null);
+  }
+
+  private loadMediaObjectUrls(client: StaffClient360, generation: number) {
+    this.revokeMediaObjectUrls();
+    for (const media of client.mediaPortfolio || []) {
+      if (!media.url) continue;
+      try {
+        this.mediaLoadSubscriptions.add(this.staff.clientMediaBlob(media.url).subscribe({
+          next: (blob) => {
+            if (generation !== this.loadGeneration) return;
+            const objectUrl = URL.createObjectURL(blob);
+            const previous = this.mediaObjectUrls()[media.id];
+            if (previous) URL.revokeObjectURL(previous);
+            this.mediaObjectUrls.update((urls) => ({ ...urls, [media.id]: objectUrl }));
+          },
+          error: () => {}
+        }));
+      } catch {
+        // Historical external URLs stay hidden instead of blocking the portfolio.
+      }
+    }
+  }
+
+  private revokeMediaObjectUrls() {
+    this.mediaLoadSubscriptions.unsubscribe();
+    this.mediaLoadSubscriptions = new Subscription();
+    for (const url of Object.values(this.mediaObjectUrls())) URL.revokeObjectURL(url);
+    this.mediaObjectUrls.set({});
+  }
 }
