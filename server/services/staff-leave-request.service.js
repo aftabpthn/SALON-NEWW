@@ -66,6 +66,7 @@ export function validateStaffLeaveRequest(payload = {}, access = {}) {
 
 function pendingDuplicate({ tenantId, branchId, staffId, leaveType, startDate, endDate }) {
   if (!branchId || !startDate || !endDate) return null;
+  // ponytail: app-level duplicate guard is enough for one SQLite writer; add a DB unique key/idempotency key before multi-process writes.
   return db.prepare(`SELECT id,
       tenant_id AS tenantId,
       branch_id AS branchId,
