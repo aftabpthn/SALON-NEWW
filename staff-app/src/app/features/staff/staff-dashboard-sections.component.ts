@@ -47,14 +47,16 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
 
     <section class="dashboard-section" aria-labelledby="next-work-heading">
         <div class="section-heading"><div><p class="eyebrow">On the floor</p><h2 id="next-work-heading">{{ viewModel.work.mode === 'active' ? 'Current Service' : 'Next Work' }}</h2></div>@if (viewModel.work.queueRoute; as queueRoute) { <a [routerLink]="queueRoute">Open queue</a> }</div>
-      <article class="next-work-card" [class.active-work]="viewModel.work.mode === 'active'" [class.empty-work]="viewModel.work.mode === 'empty'">
+      <article class="next-work-card" [class.active-work]="viewModel.work.mode === 'active'" [class.waiting-work]="viewModel.work.mode === 'waiting'" [class.delayed-work]="viewModel.work.tone === 'amber'" [class.empty-work]="viewModel.work.mode === 'empty'">
         <div class="work-time"><span>{{ viewModel.work.eyebrow }}</span><b>{{ viewModel.work.meta }}</b></div>
-        <div class="work-main"><h3>{{ viewModel.work.title }}</h3><p>{{ viewModel.work.detail }}</p>
+        <div class="work-main"><h3>{{ viewModel.work.title }}</h3>@if (viewModel.work.detail) { <p>{{ viewModel.work.detail }}</p> }@if (viewModel.work.status) { <span class="work-status">{{ viewModel.work.status }}</span> }
           @if (viewModel.work.progress !== undefined) { <div class="timer-track" aria-label="Service progress"><span [style.width.%]="viewModel.work.progress"></span></div> }
         </div>
         <div class="work-actions">
-          @if (viewModel.work.clientRoute) { <a class="button" [routerLink]="viewModel.work.clientRoute">Client details</a> }
-          @if (viewModel.work.action; as action) { <button type="button" class="link-button primary-action" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
+          @for (action of viewModel.work.actions; track action.id) {
+            @if (action.route) { <a class="button" [class.primary]="action.primary" [routerLink]="action.route">{{ action.label }}</a> }
+            @else { <button type="button" class="link-button" [class.primary-action]="action.primary" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
+          }
           @if (viewModel.work.mode === 'empty' && viewModel.work.scheduleRoute; as scheduleRoute) { <a class="text-control" [routerLink]="scheduleRoute">View schedule</a> }
         </div>
       </article>
@@ -89,7 +91,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <p class="section-intro">{{ viewModel.performanceIntro }}</p>
         <div class="performance-grid">
           @for (metric of viewModel.performance; track metric.label) {
-            <article><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small>
+            <article [attr.title]="metric.explanation || null" [attr.aria-label]="metric.explanation ? metric.label + ': ' + metric.value + '. ' + metric.explanation : null"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small>
               @if (metric.progress !== undefined) { <div class="metric-progress" role="progressbar" [attr.aria-label]="metric.progressLabel || metric.label" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="metric.progress"><i [style.width.%]="metric.progress"></i></div> }
             </article>
           }

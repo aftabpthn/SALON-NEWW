@@ -11,21 +11,22 @@ export type DashboardAction = {
   primary?: boolean;
   status?: string;
 };
-export type DashboardMetric = { label: string; value: string; hint: string; route?: string; progress?: number; progressLabel?: string };
+export type DashboardMetric = { label: string; value: string; hint: string; route?: string; progress?: number; progressLabel?: string; explanation?: string };
 export type DashboardAlert = { id: string; title: string; detail: string; route: string; tone: "critical" | "attention" };
 export type DashboardCoachCard = { title: string; body: string; action: string; route: string };
 export type DashboardTool = { id: string; label: string; hint: string; route: string };
 export type DashboardWork = {
-  mode: "active" | "next" | "empty";
+  mode: "active" | "upcoming" | "waiting" | "delayed" | "empty";
+  tone: "neutral" | "sage" | "amber";
   eyebrow: string;
   title: string;
   detail: string;
   meta: string;
+  status?: string;
   progress?: number;
-  clientRoute?: readonly string[];
   queueRoute?: string;
   scheduleRoute?: string;
-  action?: DashboardAction;
+  actions: DashboardAction[];
 };
 
 export type StaffDashboardViewModel = {
@@ -150,6 +151,18 @@ function durationLabel(minutes: number): string {
   return `${Math.floor(safe / 60)}h ${safe % 60}m`;
 }
 
+function compactDurationLabel(minutes: number): string {
+  const safe = Math.max(0, Number(minutes || 0));
+  const hours = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return hours ? `${hours}h${remainder ? ` ${remainder}m` : ""}` : `${remainder} min`;
+}
+
+function minutesUntilLabel(minutes: number): string {
+  if (minutes <= 0) return "Due now";
+  return `In ${compactDurationLabel(minutes)}`;
+}
+
 function openTasks(input: DashboardViewModelInput): StaffToday["tasks"] {
   return (input.today?.tasks || []).filter((task) => String(task.status || "open").toLowerCase() !== "completed");
 }
@@ -194,6 +207,24 @@ function serviceAction(input: ActionContext, appointment: StaffAppointment): Das
   return undefined;
 }
 
+function appointmentActions(input: ActionContext, appointment: StaffAppointment, mode: DashboardWork["mode"]): DashboardAction[] {
+  const actions: DashboardAction[] = [];
+  const appointmentRoute = input.hasPermission("read:appointments") ? "/staff/appointments" : undefined;
+  const queueRoute = input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : appointmentRoute;
+  const mutation = serviceAction(input, appointment);
+  if (mode === "active") {
+    if (queueRoute) actions.push({ id: queueRoute === "/staff/queue" ? "open-service" : "open-appointment", label: queueRoute === "/staff/queue" ? "Open service" : "Open appointment", route: queueRoute, primary: true });
+    if (mutation) actions.push({ ...mutation, primary: false });
+  } else if (mode === "waiting") {
+    if (mutation) actions.push({ ...mutation, primary: true });
+    if (appointmentRoute) actions.push({ id: "open-appointment", label: "Open appointment", route: appointmentRoute, primary: !actions.length });
+  } else {
+    if (appointmentRoute) actions.push({ id: "open-appointment", label: "Open appointment", route: appointmentRoute, primary: true });
+  }
+  if (appointment.clientId && input.hasPermission("read:clients")) actions.push({ id: "view-client", label: "View client", route: ["/staff/client-360", appointment.clientId] });
+  return actions.slice(0, 3);
+}
+
 function alerts(input: ActionContext): DashboardAlert[] {
   const home = input.enterprise?.home;
   if (!home) return [];
@@ -210,25 +241,33 @@ function work(input: ActionContext): DashboardWork {
   const active = input.activeAppointment;
   if (active) {
     const timer = input.enterprise?.serviceTimers.find((item) => item.appointmentId === active.id);
+    const overrun = timer ? Math.max(0, timer.elapsedMinutes - timer.totalMinutes) : 0;
     return {
-      mode: "active", eyebrow: "Current service", title: active.clientName || "Walk-in client",
-      detail: `${active.serviceNames.join(", ") || "Service"} · ${statusLabel(active.status)}`, meta: timer ? `${durationLabel(timer.remainingMinutes)} remaining` : `Started ${timeLabel(active.startAt)}`,
-      progress: timer?.progress, clientRoute: active.clientId && input.hasPermission("read:clients") ? ["/staff/client-360", active.clientId] : undefined,
-      queueRoute: input.hasPermission("read:appointments") ? "/staff/queue" : undefined,
-      action: serviceAction(input, active)
+      mode: "active", tone: overrun ? "amber" : "sage", eyebrow: "Current service", title: active.clientName || "Walk-in client",
+      detail: active.serviceNames.join(", ") || "Service", status: statusLabel(active.status),
+      meta: timer ? (overrun ? `${compactDurationLabel(timer.elapsedMinutes)} elapsed · ${compactDurationLabel(overrun)} over` : `${compactDurationLabel(timer.elapsedMinutes)} elapsed`) : "Timer unavailable",
+      progress: timer?.progress, actions: appointmentActions(input, active, "active"),
+      queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined,
     };
   }
   const next = input.nextAppointment;
-  if (next) return {
-    mode: "next", eyebrow: "Next client", title: next.clientName || "Walk-in client",
-    detail: `${next.serviceNames.join(", ") || "Service"} · ${next.durationMinutes || 0} min`, meta: `${timeLabel(next.startAt)} · ${statusLabel(next.status)}`,
-    clientRoute: next.clientId && input.hasPermission("read:clients") ? ["/staff/client-360", next.clientId] : undefined,
-    queueRoute: input.hasPermission("read:appointments") ? "/staff/queue" : undefined,
-    action: serviceAction(input, next)
-  };
+  if (next) {
+    const status = String(next.status || "").trim().toLowerCase();
+    const timeline = input.enterprise?.timeline.find((item) => item.id === next.id);
+    const waiting = ["arrived", "checked-in", "checked in", "queued"].includes(status);
+    const delayed = timeline?.state === "late";
+    const mode: DashboardWork["mode"] = waiting ? "waiting" : delayed ? "delayed" : "upcoming";
+    const minutesToStart = timeline?.minutesToStart ?? Math.round((new Date(next.startAt).getTime() - (input.now || new Date()).getTime()) / 60000);
+    return {
+      mode, tone: delayed ? "amber" : waiting ? "sage" : "neutral", eyebrow: waiting ? "Client waiting" : delayed ? "Running late" : "Next client",
+      title: next.clientName || "Walk-in client", detail: `${next.serviceNames.join(", ") || "Service"} · ${next.durationMinutes || 0} min`,
+      meta: delayed ? `${timeLabel(next.startAt)} · ${compactDurationLabel(Math.abs(minutesToStart))} late` : waiting ? timeLabel(next.startAt) : `${timeLabel(next.startAt)} · ${minutesUntilLabel(minutesToStart)}`,
+      status: statusLabel(next.status), actions: appointmentActions(input, next, mode), queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined
+    };
+  }
   return {
-    mode: "empty", eyebrow: "Next client", title: "No client waiting", detail: "Assigned bookings—including walk-ins—will appear here.", meta: "Schedule clear",
-    queueRoute: input.hasPermission("read:appointments") ? "/staff/queue" : undefined,
+    mode: "empty", tone: "neutral", eyebrow: "Next client", title: "No client waiting right now.", detail: "", meta: "Schedule clear", actions: [],
+    queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined,
     scheduleRoute: input.hasPermission("read:appointments") ? "/staff/appointments" : undefined
   };
 }
@@ -331,20 +370,31 @@ export function shouldShowDashboardRecommendation(state: DashboardRecommendation
     && recommendationText !== normalizedRecommendationValue(primary.label);
 }
 
-function actionableCoachCard(card: StaffEnterpriseOs["aiCoach"][number]): boolean {
-  const text = `${card.title} ${card.body} ${card.action}`.trim();
-  if (!text || /no risk flags?|no risks?|all (?:clear|good)|keep it up|great job|stay motivated|you(?:'|’)re doing (?:great|well)/i.test(text)) return false;
-  return !!String(card.action || "").trim() && !/^(review|view|learn more|keep going)$/i.test(String(card.action).trim());
-}
-
-function coachRoute(card: StaffEnterpriseOs["aiCoach"][number], input: DashboardViewModelInput): string {
-  const text = `${card.title} ${card.body} ${card.action}`;
-  if (/payment|invoice|checkout/i.test(text) && FINANCIAL_PERMISSIONS.some(input.hasPermission)) return "/staff/business";
-  if (/client|preference|vip/i.test(text) && input.hasPermission("read:clients")) return "/staff/clients";
-  if (/task/i.test(text) && input.hasPermission("read:staff")) return "/staff/tasks";
-  if (/queue|timer|in progress/i.test(text) && input.hasPermission("read:appointments")) return "/staff/queue";
-  if (/appointment|booking|service note/i.test(text) && input.hasPermission("read:appointments")) return "/staff/appointments";
-  return "/staff/ai-coach";
+function coachCards(input: ActionContext, workItem: DashboardWork): DashboardCoachCard[] {
+  if (!input.hasPermission("read:staff")) return [];
+  const cards: DashboardCoachCard[] = [];
+  const add = (card: DashboardCoachCard) => { if (!cards.some((item) => item.route === card.route && item.title === card.title)) cards.push(card); };
+  const canOpenAttendance = ATTENDANCE_PERMISSIONS.some(input.hasPermission);
+  if (input.today?.schedules.length && !input.openAttendance && !input.shiftCompleted && canOpenAttendance) {
+    add({ title: "Attendance required", body: "Your scheduled shift is ready to start.", action: "Open attendance", route: "/staff/attendance" });
+  }
+  if (workItem.mode === "waiting") {
+    add({ title: "Client waiting", body: `${workItem.title} is ready for ${workItem.detail.split(" · ")[0].toLowerCase()}.`, action: "Open appointment", route: "/staff/appointments" });
+  } else if (workItem.mode === "active") {
+    const open = workItem.actions.find((action) => !!action.route);
+    if (open?.route && typeof open.route === "string") add({ title: "Service in progress", body: `${workItem.title}’s ${workItem.detail.toLowerCase()} is currently active.`, action: open.label, route: open.route });
+  } else if (workItem.mode === "delayed") {
+    add({ title: "Appointment needs attention", body: `${workItem.title} is past the scheduled start time.`, action: "Open appointment", route: "/staff/appointments" });
+  } else if (workItem.mode === "upcoming") {
+    add({ title: "Prepare for the next client", body: `${workItem.title} is scheduled for ${workItem.detail.split(" · ")[0].toLowerCase()}.`, action: "Open appointment", route: "/staff/appointments" });
+  }
+  if (input.priorityTask && taskPriority(input.priorityTask, input.now || new Date()) <= 1) {
+    add({ title: "Priority task", body: input.priorityTask.title || "A priority task needs follow-up.", action: "Open tasks", route: "/staff/tasks" });
+  }
+  if (!cards.length && input.dashboard.todayAppointments.length && input.hasPermission("read:appointments")) {
+    add({ title: "Review today’s schedule", body: `${input.dashboard.todayAppointments.length} appointment${input.dashboard.todayAppointments.length === 1 ? " is" : "s are"} connected for today.`, action: "View schedule", route: "/staff/appointments" });
+  }
+  return cards.slice(0, 3);
 }
 
 function quickActionStatus(id: string, input: ActionContext): string | undefined {
@@ -393,7 +443,7 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   const performance: DashboardMetric[] = [];
   if (input.hasPermission("read:staff") && input.enterprise) {
     performance.push(
-      { label: "Productivity", value: `${input.enterprise.performance.productivityScore}/100`, hint: "Current score", progress: input.enterprise.performance.productivityScore, progressLabel: `Productivity ${input.enterprise.performance.productivityScore} out of 100` },
+      { label: "Productivity", value: `${input.enterprise.performance.productivityScore}/100`, hint: "Current score", progress: input.enterprise.performance.productivityScore, progressLabel: `Productivity ${input.enterprise.performance.productivityScore} out of 100`, explanation: "Productivity uses the average connected daily score; completed services provide the fallback when daily records are unavailable." },
       { label: "Services", value: String(input.enterprise.performance.completedServices || input.dashboard.summary.completedAppointments), hint: "Completed" },
       { label: "Utilization", value: `${input.enterprise.performance.avgUtilization || 0}%`, hint: "Average utilization", progress: input.enterprise.performance.avgUtilization || 0, progressLabel: `Utilization ${input.enterprise.performance.avgUtilization || 0} percent` }
     );
@@ -407,18 +457,13 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     ...metric,
     progress: metric.progress === undefined ? undefined : Math.min(100, Math.max(0, Number(metric.progress) || 0))
   }));
-  const coach = input.hasPermission("read:staff") ? (input.enterprise?.aiCoach || []).filter(actionableCoachCard).filter((card) => {
-    const text = `${card.title} ${card.body} ${card.action}`;
-    if (activeAlerts.some((alert) => alert.id === "payments") && /payment|invoice|checkout/i.test(text)) return false;
-    return !heroModel.actions.some((action) => action.id === "tasks" && /task/i.test(text));
-  }).slice(0, 3).map((card) => ({
-    title: card.title, body: card.body, action: card.action, route: coachRoute(card, input)
-  })) : [];
+  const workItem = work(ctx);
+  const coach = coachCards(ctx, workItem);
   const quickActions = orderByIds(quick, roleProfile(input).quick, (action) => action.id).slice(0, 4);
   return {
-    hero: heroModel, quickActions, overview: orderedOverview.slice(0, 4), work: work(ctx), alerts: activeAlerts,
-    coachIntro: coach.length ? `${coach.length} focused suggestion${coach.length === 1 ? "" : "s"} from today’s connected records.` : "",
-    coach, performanceIntro: orderedPerformance.length ? "Based on connected service and staff performance records." : "",
+    hero: heroModel, quickActions, overview: orderedOverview.slice(0, 4), work: workItem, alerts: activeAlerts,
+    coachIntro: coach.length ? `Prioritized from today’s connected work and attendance records.` : "",
+    coach, performanceIntro: orderedPerformance.length ? "A concise view from connected performance records." : "",
     performanceRoute: input.hasPermission("read:staff") ? "/staff/performance" : undefined,
     performance: orderedPerformance, tools: visibleTools, availableTools
   };

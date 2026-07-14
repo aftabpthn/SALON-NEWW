@@ -211,7 +211,7 @@ type StaffRecentItem = { label: string; path: string };
         .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: var(--staff-header-height); padding: calc(3px + env(safe-area-inset-top)) 12px 3px; gap: 2px; }
       .menu-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; width: 48px; height: 48px; margin: 0 2px 0 -10px; padding: 0; border: 0; border-radius: 14px; background: transparent; color: var(--staff-text); font-size: .78rem; font-weight: 750; box-shadow: none; }
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
-       .staff-identity { flex: 1 1 auto; gap: 10px; overflow: hidden; }
+       .staff-identity { flex: 1 1 auto; width:0; max-width:none; gap: 10px; overflow: hidden; }
       .profile-avatar { width: 38px; height: 38px; background: color-mix(in srgb, var(--staff-primary) 76%, transparent); }
         .staff-identity span { max-width: 100%; font-size: .7rem; }
         .staff-identity strong { max-width: 100%; font-size: .88rem; }
@@ -251,11 +251,16 @@ type StaffRecentItem = { label: string; path: string };
 
       nav a { padding: 12px 13px; }
      }
-     @media (max-width: 380px) {
-       .profile-avatar { display:none; }
-       .staff-identity { gap:4px; }
-       .staff-identity small { max-width:100%; }
-     }
+      @media (max-width: 380px) {
+        .profile-avatar { display:none; }
+        .staff-identity { gap:4px; }
+        .staff-identity small { max-width:100%; }
+      }
+      @media (max-width: 900px) and (any-pointer: coarse) {
+        @supports selector(.staff-app-shell:has(input:focus)) {
+          .staff-app-shell:has(input:focus,textarea:focus,select:focus) .mobile-bottom-nav { opacity:0;pointer-events:none;transform:translate(-50%,calc(100% + var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom))); }
+        }
+      }
      @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } }
   `]
 })

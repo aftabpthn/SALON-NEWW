@@ -66,7 +66,10 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.work.mode).toBe("active");
     expect(vm.hero).toMatchObject({ title: "You’re clocked in", detail: expect.stringContaining("Clocked in at"), shift: "09:00–18:00" });
     expect(vm.hero.actions).toMatchObject([{ kind: "complete-service", primary: true }, { id: "attendance-details", route: "/staff/attendance" }]);
-    expect(vm.work.action?.kind).toBe("complete-service");
+    expect(vm.work.actions).toMatchObject([
+      { id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true },
+      { kind: "complete-service", primary: false }
+    ]);
   });
 
   it("puts permitted critical floor alerts ahead of attendance and service work", () => {
@@ -96,9 +99,44 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.hero).toMatchObject({ title: "You’re clocked in", actions: [{ id: "next", route: "/staff/appointments", primary: true }, { id: "attendance-details" }] });
   });
 
-  it("shows a dedicated next-client state and appointment navigation", () => {
+  it("shows an upcoming client with real timing, status, and permission-safe actions", () => {
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:clients"]));
-    expect(vm.work).toMatchObject({ mode: "next", title: "Anita", clientRoute: ["/staff/client-360", "client-1"] });
+    expect(vm.work).toMatchObject({ mode: "upcoming", title: "Anita", status: "Confirmed", meta: expect.stringContaining("In 30 min") });
+    expect(vm.work.actions).toEqual([
+      { id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true },
+      { id: "view-client", label: "View client", route: ["/staff/client-360", "client-1"] }
+    ]);
+  });
+
+  it("models waiting clients with sage emphasis and only valid service actions", () => {
+    const waiting = { ...appointment, status: "arrived" };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:clients", "update:appointments"], { dashboard: { ...dashboard, todayAppointments: [waiting], appointments: [waiting] } }));
+    expect(vm.work).toMatchObject({ mode: "waiting", tone: "sage", title: "Anita", status: "Arrived" });
+    expect(vm.work.meta).not.toMatch(/elapsed/i);
+    expect(vm.work.actions).toMatchObject([
+      { kind: "start-service", primary: true },
+      { id: "open-appointment", route: "/staff/appointments", primary: false },
+      { id: "view-client", route: ["/staff/client-360", "client-1"] }
+    ]);
+  });
+
+  it("uses connected timer elapsed data and the queue route for an active service", () => {
+    const active = { ...appointment, status: "in-service" };
+    const timedEnterprise = { ...enterprise, serviceTimers: [{ appointmentId: active.id, clientName: active.clientName, status: active.status, elapsedMinutes: 35, totalMinutes: 60, remainingMinutes: 25, progress: 58 }] };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "update:appointments"], { dashboard: { ...dashboard, liveAppointments: [active], todayAppointments: [active] }, enterprise: timedEnterprise }));
+    expect(vm.work).toMatchObject({ mode: "active", tone: "sage", meta: "35 min elapsed", progress: 58 });
+    expect(vm.work.actions).toMatchObject([
+      { id: "open-service", label: "Open service", route: "/staff/queue", primary: true },
+      { kind: "complete-service", primary: false }
+    ]);
+  });
+
+  it("uses amber only when the connected timeline marks an appointment late", () => {
+    const delayed = { ...appointment, startAt: "2026-07-14T11:00:00.000Z", endAt: "2026-07-14T12:30:00.000Z" };
+    const lateEnterprise = { ...enterprise, timeline: [{ id: delayed.id, clientId: delayed.clientId, clientName: delayed.clientName, serviceNames: delayed.serviceNames, startAt: delayed.startAt, endAt: delayed.endAt, status: delayed.status, state: "late", minutesToStart: -30, durationMinutes: delayed.durationMinutes }] };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments"], { dashboard: { ...dashboard, todayAppointments: [delayed], appointments: [delayed] }, enterprise: lateEnterprise }));
+    expect(vm.work).toMatchObject({ mode: "delayed", tone: "amber", meta: expect.stringContaining("30 min late") });
+    expect(vm.work.actions[0]).toMatchObject({ label: "Open appointment", route: "/staff/appointments", primary: true });
   });
 
   it("never grants financial visibility from a role name and caps performance at three", () => {
@@ -136,13 +174,25 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.quickActions.find((action) => action.id === "clients")?.status).toBe("Search profiles");
   });
 
-  it("keeps at most three actionable coach cards and filters generic positive statuses", () => {
-    const filteredEnterprise = { ...enterprise, aiCoach: [...enterprise.aiCoach, { priority: "low", title: "No risk flags", body: "Everything is all clear.", action: "Keep going" }] };
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"], { enterprise: filteredEnterprise }));
-    expect(vm.coach).toHaveLength(2);
-    expect(vm.coach[0].route).toBe("/staff/clients");
-    expect(vm.coach[1].route).toBe("/staff/tasks");
-    expect(vm.coach.some((card) => /no risk flags/i.test(card.title))).toBe(false);
+  it("builds at most three coach actions from connected state in operational priority", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"]));
+    expect(vm.coach).toHaveLength(3);
+    expect(vm.coach.map((card) => card.title)).toEqual(["Attendance required", "Prepare for the next client", "Priority task"]);
+    expect(vm.coach.map((card) => card.route)).toEqual(["/staff/attendance", "/staff/appointments", "/staff/tasks"]);
+    expect(vm.coach.every((card) => card.action.length > 0)).toBe(true);
+  });
+
+  it("never invents a missing-booking recommendation and hides coach when nothing is useful", () => {
+    const emptyDashboard = { ...dashboard, summary: { ...dashboard.summary, appointments: 0, todayAppointments: 0 }, todayAppointments: [], appointments: [] };
+    const fillerEnterprise = { ...enterprise, aiCoach: [{ priority: "high", title: "Morning summary", body: "0 appointments.", action: "Open the first booking" }] };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { dashboard: emptyDashboard, enterprise: fillerEnterprise, today: { ...today, schedules: [], tasks: [] } }));
+    expect(vm.coach).toEqual([]);
+    expect(vm.coachIntro).toBe("");
+  });
+
+  it("does not expose coach routes without the section permission", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"]));
+    expect(vm.coach).toEqual([]);
   });
 
   it("builds four backed overview metrics or a complete three-metric fallback", () => {
@@ -157,6 +207,7 @@ describe("staff dashboard permission-first view model", () => {
     const outOfRange = { ...enterprise, performance: { ...enterprise.performance, productivityScore: 120, avgUtilization: -5 } };
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { enterprise: outOfRange }));
     expect(vm.performance.find((metric) => metric.label === "Productivity")).toMatchObject({ progress: 100, progressLabel: "Productivity 120 out of 100" });
+    expect(vm.performance.find((metric) => metric.label === "Productivity")?.explanation).toContain("completed services provide the fallback");
     expect(vm.performance.find((metric) => metric.label === "Utilization")?.progress).toBe(0);
     expect(vm.performance).toHaveLength(3);
   });
@@ -174,6 +225,7 @@ describe("staff dashboard permission-first view model", () => {
     const vm = buildStaffDashboardViewModel(input(["read:appointments"], { dashboard: emptyDashboard, enterprise: null, today: emptyToday }));
     expect(vm).not.toHaveProperty("empty");
     expect(vm.work.mode).toBe("empty");
+    expect(vm.work).toMatchObject({ eyebrow: "Next client", meta: "Schedule clear", title: "No client waiting right now.", detail: "", scheduleRoute: "/staff/appointments" });
     expect(vm.overview[0]).toMatchObject({ value: "0", hint: "No bookings" });
   });
 });
