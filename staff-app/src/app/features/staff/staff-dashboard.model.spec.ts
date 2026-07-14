@@ -31,12 +31,12 @@ describe("staff dashboard permission-first view model", () => {
   it("keeps attendance in the hero without duplicating first-viewport actions", () => {
     const allowed = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
     const restricted = buildStaffDashboardViewModel(input(["read:appointments"]));
-    expect(allowed.hero.title).toContain("Clock in");
+    expect(allowed.hero).toMatchObject({ title: "Ready to start?", detail: "Not clocked in" });
     expect(allowed.quickActions.some((action) => action.id === "attendance")).toBe(false);
     expect(allowed.quickActions).toHaveLength(4);
-    expect(allowed.quickActions.some((action) => allowed.hero.actions.some((hero) => hero.id === action.id || hero.route === action.route))).toBe(false);
+    expect(allowed.quickActions.some((action) => allowed.hero.actions.some((hero) => hero.primary && (hero.id === action.id || hero.route === action.route)))).toBe(false);
     expect(restricted.quickActions.some((action) => action.id === "attendance")).toBe(false);
-    expect(allowed.hero.actions).toHaveLength(1);
+    expect(allowed.hero.actions).toMatchObject([{ id: "attendance", primary: true }, { id: "schedule", label: "Today’s schedule" }]);
   });
 
   it("deduplicates the hero recommendation and lets a partial warning take precedence", () => {
@@ -109,7 +109,7 @@ describe("staff dashboard permission-first view model", () => {
   it("orders authorized content by role profile without granting missing permissions", () => {
     const receptionist = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"], { user: { ...user, role: "receptionist" } }));
     const inventory = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"], { user: { ...user, role: "inventory-manager" } }));
-    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["appointments", "queue", "clients", "tasks"]);
+    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["appointments", "queue", "tasks", "clients"]);
     expect(receptionist.availableTools[0].id).toBe("clients");
     expect(inventory.quickActions.map((action) => action.id)).toEqual(["queue", "appointments", "tasks", "calendar"]);
     expect(inventory.quickActions.some((action) => action.id === "clients")).toBe(false);
