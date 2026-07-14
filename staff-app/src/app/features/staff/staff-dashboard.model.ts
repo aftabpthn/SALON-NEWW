@@ -37,7 +37,6 @@ export type StaffDashboardViewModel = {
   performance: DashboardMetric[];
   tools: DashboardTool[];
   availableTools: DashboardTool[];
-  empty: boolean;
 };
 
 export type DashboardViewModelInput = {
@@ -73,11 +72,12 @@ const FINANCIAL_PERMISSIONS = ["read:finance", "read:sales", "read:payments", "r
 const ATTENDANCE_PERMISSIONS = ["allow:staff-checkin-checkout", "write:staff"] as const;
 
 const QUICK_ACTIONS: readonly RegistryItem<DashboardAction>[] = [
-  { item: { id: "attendance", label: "Clock in or out", kind: "clock" }, anyPermission: ATTENDANCE_PERMISSIONS },
+  { item: { id: "attendance", label: "Attendance", kind: "clock" }, anyPermission: ATTENDANCE_PERMISSIONS },
   { item: { id: "appointments", label: "Appointments", route: "/staff/appointments" }, permissions: ["read:appointments"] },
-  { item: { id: "queue", label: "Live queue", route: "/staff/queue" }, permissions: ["read:appointments"] },
-  { item: { id: "tasks", label: "My tasks", route: "/staff/tasks" }, permissions: ["read:staff"] },
-  { item: { id: "clients", label: "Find client", route: "/staff/clients" }, permissions: ["read:clients"] }
+  { item: { id: "queue", label: "Queue", route: "/staff/queue" }, permissions: ["read:appointments"] },
+  { item: { id: "tasks", label: "Tasks", route: "/staff/tasks" }, permissions: ["read:staff"] },
+  { item: { id: "clients", label: "Clients", route: "/staff/clients" }, permissions: ["read:clients"] },
+  { item: { id: "calendar", label: "Calendar", route: "/staff/calendar" }, permissions: ["read:staff"] }
 ];
 
 const TOOLS: readonly RegistryItem<DashboardTool>[] = [
@@ -202,7 +202,7 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
   if (activeAlerts.some((item) => item.tone === "critical")) {
     title = "The floor needs attention"; detail = activeAlerts[0].detail; actions.push({ id: "urgent", label: "Review urgent items", route: activeAlerts[0].route, primary: true });
   } else if (!input.openAttendance && ATTENDANCE_PERMISSIONS.some(input.hasPermission)) {
-    title = "Clock in to start your shift"; detail = shift ? `Your shift is ${shiftText}.` : "Attendance is ready when you begin."; actions.push({ id: "attendance", label: "Clock in", kind: "clock", primary: true });
+    title = "Clock in to start your shift"; detail = ""; actions.push({ id: "attendance", label: "Clock in", kind: "clock", primary: true });
   } else if (input.activeAppointment) {
     title = `Continue with ${input.activeAppointment.clientName || "your client"}`; detail = input.activeAppointment.serviceNames.join(", ") || "Service in progress";
     const action = serviceAction(input, input.activeAppointment); if (action) actions.push(action);
@@ -233,6 +233,19 @@ function orderedTools(input: DashboardViewModelInput): DashboardTool[] {
   });
 }
 
+function sameAction(left: DashboardAction, right: DashboardAction): boolean {
+  if (left.id === right.id) return true;
+  if (!left.route || !right.route) return false;
+  const routeKey = (route: string | readonly string[]) => Array.isArray(route) ? route.join("/") : route;
+  return routeKey(left.route) === routeKey(right.route);
+}
+
+function actionableCoachCard(card: StaffEnterpriseOs["aiCoach"][number]): boolean {
+  const text = `${card.title} ${card.body} ${card.action}`.trim();
+  if (!text || /no risk flags?|no risks?|all (?:clear|good)|keep it up|great job|stay motivated|you(?:'|’)re doing (?:great|well)/i.test(text)) return false;
+  return !!String(card.action || "").trim() && !/^(review|view|learn more|keep going)$/i.test(String(card.action).trim());
+}
+
 export function buildStaffDashboardViewModel(input: DashboardViewModelInput): StaffDashboardViewModel {
   const ctx = context(input);
   const activeAlerts = alerts(ctx);
@@ -244,7 +257,11 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     if (item.id === "calendar" && input.overtime) return { ...item, hint: `${durationLabel(input.overtime.weekMinutes)} overtime this week` };
     return item;
   });
-  const quick = QUICK_ACTIONS.filter((entry) => allowed(entry, ctx)).map((entry) => ({ ...entry.item, label: entry.item.id === "attendance" ? (ctx.openAttendance ? "Clock out" : "Clock in") : entry.item.label }));
+  const heroModel = hero(ctx, activeAlerts);
+  const quick = QUICK_ACTIONS
+    .filter((entry) => allowed(entry, ctx))
+    .map((entry) => ({ ...entry.item, label: entry.item.id === "attendance" ? (ctx.openAttendance ? "Clock out" : "Clock in") : entry.item.label }))
+    .filter((action) => !heroModel.actions.some((heroAction) => sameAction(action, heroAction)));
   const overview: DashboardMetric[] = [
     { label: "Appointments", value: String(input.dashboard.summary.todayAppointments), hint: input.dashboard.summary.todayAppointments ? "Assigned today" : "No bookings assigned", route: "/staff/appointments" }
   ];
@@ -252,7 +269,10 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     { label: "Completed", value: String(input.dashboard.summary.completedAppointments), hint: input.dashboard.summary.completedAppointments ? "Services finished" : "Nothing completed yet", route: "/staff/reports" },
     { label: "Open tasks", value: String(ctx.openTaskCount), hint: ctx.openTaskCount ? "Needs follow-up" : "All clear", route: "/staff/tasks" }
   );
-  if (input.overtime) overview.push({ label: "Today’s overtime", value: durationLabel(input.overtime.todayMinutes), hint: input.overtime.todayMinutes ? "Completed attendance" : "No overtime recorded", route: "/staff/attendance" });
+  if (input.enterprise && input.hasPermission("read:staff")) {
+    const unread = input.enterprise.notifications.filter((note) => String(note.status || "unread") !== "read").length;
+    overview.push({ label: "Alerts", value: String(activeAlerts.length), hint: activeAlerts.length ? `${unread || activeAlerts.length} to review` : "No new alerts", route: "/staff/notifications" });
+  } else if (input.overtime) overview.push({ label: "Overtime", value: durationLabel(input.overtime.todayMinutes), hint: input.overtime.todayMinutes ? "Recorded today" : "None recorded", route: "/staff/attendance" });
   const performance: DashboardMetric[] = [];
   if (input.hasPermission("read:staff") && input.enterprise) {
     performance.push(
@@ -260,18 +280,16 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
       { label: "Services", value: String(input.enterprise.performance.completedServices || input.dashboard.summary.completedAppointments), hint: "Completed" },
       { label: "Utilization", value: `${input.enterprise.performance.avgUtilization || 0}%`, hint: "Average utilization" }
     );
-    if (input.enterprise.performance.avgRating) performance.push({ label: "Rating", value: String(input.enterprise.performance.avgRating), hint: "Average rating" });
   }
   if (FINANCIAL_PERMISSIONS.some(input.hasPermission)) {
     const value = Number(input.enterprise?.home.expectedRevenue || input.dashboard.summary.revenue || 0);
-    if (value || performance.length < 2) {
+    if (value > 0) {
       const revenue = { label: "Revenue", value: formatPaiseInr(value), hint: "Connected sales and bookings", route: "/staff/business" };
-      if (performance.length >= 4) performance.splice(3, 1, revenue); else performance.push(revenue);
+      if (performance.length >= 3) performance.splice(2, 1, revenue); else performance.push(revenue);
     }
   }
-  const coach = input.hasPermission("read:staff") ? (input.enterprise?.aiCoach || []).slice(0, 3).map((card) => ({
+  const coach = input.hasPermission("read:staff") ? (input.enterprise?.aiCoach || []).filter(actionableCoachCard).slice(0, 3).map((card) => ({
     title: card.title, body: card.body, action: card.action, route: /client/i.test(`${card.title} ${card.action}`) && input.hasPermission("read:clients") ? "/staff/clients" : /task/i.test(`${card.title} ${card.action}`) ? "/staff/tasks" : "/staff/ai-coach"
   })) : [];
-  const hasOperationalData = input.dashboard.summary.todayAppointments > 0 || ctx.openTaskCount > 0 || !!ctx.openAttendance || activeAlerts.length > 0;
-  return { hero: hero(ctx, activeAlerts), quickActions: quick.slice(0, 4), overview: overview.slice(0, 4), work: work(ctx), alerts: activeAlerts, coach, performance: performance.slice(0, 4), tools: visibleTools, availableTools, empty: !hasOperationalData };
+  return { hero: heroModel, quickActions: quick.slice(0, 4), overview: overview.slice(0, 4), work: work(ctx), alerts: activeAlerts, coach, performance: performance.slice(0, 3), tools: visibleTools, availableTools };
 }

@@ -28,11 +28,13 @@ function input(permissions: string[], overrides: Partial<DashboardViewModelInput
 }
 
 describe("staff dashboard permission-first view model", () => {
-  it("prioritizes clock-in and exposes attendance only with backend permission", () => {
-    const allowed = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"]));
+  it("keeps attendance in the hero without duplicating first-viewport actions", () => {
+    const allowed = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
     const restricted = buildStaffDashboardViewModel(input(["read:appointments"]));
     expect(allowed.hero.title).toContain("Clock in");
-    expect(allowed.quickActions.some((action) => action.id === "attendance")).toBe(true);
+    expect(allowed.quickActions.some((action) => action.id === "attendance")).toBe(false);
+    expect(allowed.quickActions).toHaveLength(4);
+    expect(allowed.quickActions.some((action) => allowed.hero.actions.some((hero) => hero.id === action.id || hero.route === action.route))).toBe(false);
     expect(restricted.quickActions.some((action) => action.id === "attendance")).toBe(false);
   });
 
@@ -51,12 +53,14 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.work).toMatchObject({ mode: "next", title: "Anita", clientRoute: ["/staff/client-360", "client-1"] });
   });
 
-  it("never grants financial visibility from a role name", () => {
+  it("never grants financial visibility from a role name and caps performance at three", () => {
     const restricted = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"]));
     const financial = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:finance"]));
     expect(restricted.performance.some((metric) => metric.label === "Revenue")).toBe(false);
     expect(restricted.alerts.some((alert) => alert.id === "payments")).toBe(false);
     expect(financial.performance.some((metric) => metric.label === "Revenue")).toBe(true);
+    expect(financial.performance).toHaveLength(3);
+    expect(financial.performance.find((metric) => metric.label === "Revenue")?.value).toMatch(/^₹/);
     expect(financial.availableTools.some((tool) => tool.id === "payroll")).toBe(true);
   });
 
@@ -66,11 +70,21 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.availableTools.map((tool) => tool.id)).toEqual(["clients", "settings"]);
   });
 
-  it("caps AI coach at three real cards and maps permitted actions", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"]));
-    expect(vm.coach).toHaveLength(3);
+  it("keeps at most three actionable coach cards and filters generic positive statuses", () => {
+    const filteredEnterprise = { ...enterprise, aiCoach: [...enterprise.aiCoach, { priority: "low", title: "No risk flags", body: "Everything is all clear.", action: "Keep going" }] };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"], { enterprise: filteredEnterprise }));
+    expect(vm.coach).toHaveLength(2);
     expect(vm.coach[0].route).toBe("/staff/clients");
     expect(vm.coach[1].route).toBe("/staff/tasks");
+    expect(vm.coach.some((card) => /no risk flags/i.test(card.title))).toBe(false);
+  });
+
+  it("builds four backed overview metrics or a complete three-metric fallback", () => {
+    const complete = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"]));
+    const fallback = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { enterprise: null }));
+    expect(complete.overview.map((metric) => metric.label)).toEqual(["Appointments", "Completed", "Open tasks", "Alerts"]);
+    expect(fallback.overview).toHaveLength(3);
+    expect(fallback.overview.every((metric) => metric.hint.length > 0)).toBe(true);
   });
 
   it("honors authorized tool customization after permission filtering", () => {
@@ -80,11 +94,11 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.tools.length).toBeLessThanOrEqual(6);
   });
 
-  it("uses a meaningful clear-floor empty state instead of inventing metrics", () => {
+  it("uses the next-work empty state without a redundant global empty state", () => {
     const emptyDashboard = { ...dashboard, summary: { ...dashboard.summary, appointments: 0, todayAppointments: 0, revenue: 0, appointmentValue: 0 }, todayAppointments: [], appointments: [] };
     const emptyToday = { ...today, tasks: [] };
     const vm = buildStaffDashboardViewModel(input(["read:appointments"], { dashboard: emptyDashboard, enterprise: null, today: emptyToday }));
-    expect(vm.empty).toBe(true);
+    expect(vm).not.toHaveProperty("empty");
     expect(vm.work.mode).toBe("empty");
     expect(vm.overview[0]).toMatchObject({ value: "0", hint: "No bookings assigned" });
   });

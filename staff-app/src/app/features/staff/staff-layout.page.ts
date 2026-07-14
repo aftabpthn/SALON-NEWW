@@ -2,6 +2,7 @@ import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, comp
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import { StaffAppService, StaffEnterpriseOs, StaffWorkspacePreferences } from "../../core/staff-app.service";
+import { formatStaffRoleLabel } from "./staff-role-label";
 
 type StaffNavItem = { label: string; path: string; iconPath: string; group: string; permission?: string; anyPermissions?: readonly string[] };
 type StaffRecentItem = { label: string; path: string };
@@ -17,11 +18,11 @@ type StaffRecentItem = { label: string; path: string };
         <div class="brand-card">
           <span class="brand-kicker">Aura Shine</span>
           <strong>{{ preferences().workspace.workspaceName }}</strong>
-          <small>{{ staff.user()?.role || 'staff' }} workspace</small>
+          <small>{{ roleLabel() }} workspace</small>
         </div>
         <a class="user-card" routerLink="/staff/profile" (click)="closeMenu()" aria-label="Open my profile">
           <b>{{ initials() }}</b>
-          <div><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ staff.user()?.branchId || 'branch scoped' }}</small></div>
+          <div><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ roleLabel() }} · {{ branchLabel() }}</small></div>
         </a>
         <button type="button" class="theme-button" [attr.aria-label]="theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" [attr.aria-pressed]="theme() === 'dark'" (click)="toggleTheme()">
           @if (theme() === 'dark') { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V2h1v2h-1zm0 18v-2h1v2h-1zM4 13H2v-1h2v1zm18 0h-2v-1h2v1zM5.6 6.3 4.2 4.9l.7-.7 1.4 1.4-.7.7zm13.5 13.5-1.4-1.4.7-.7 1.4 1.4-.7.7zm0-14.2-.7.7-1.4-1.4.7-.7 1.4 1.4-.7.7zM6.3 18.4l-1.4 1.4-.7-.7 1.4-1.4.7.7zM12.5 7a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"></path></svg><span>Light mode</span> }
@@ -47,7 +48,7 @@ type StaffRecentItem = { label: string; path: string };
        <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
         <header class="staff-topbar">
            <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu" [attr.aria-expanded]="menuOpen()" #menuButton><span></span><span></span><span></span></button>
-          <a class="staff-identity" routerLink="/staff/profile" aria-label="Open my profile"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }} · {{ staff.user()?.role || 'staff' }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong></div></a>
+          <a class="staff-identity" routerLink="/staff/profile" aria-label="Open my profile"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ roleLabel() }} · {{ branchLabel() }}</small></div></a>
           <div class="topbar-actions">
              @if (visibleNav().length) { <button type="button" class="search-button" (click)="openCommand()" aria-label="Search permitted staff tools" [attr.aria-expanded]="commandOpen()" #commandButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button> }
              @if (staff.hasPermission('read:staff')) { <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
@@ -58,7 +59,6 @@ type StaffRecentItem = { label: string; path: string };
              </button> }
             <span class="net-status network-status" [class.offline]="!online()" aria-live="polite">{{ online() ? 'Online' : 'Offline' }}</span>
             @if (offlinePending()) { <span class="queue-status">{{ offlinePending() }} queued</span> }
-            <span>{{ staff.user()?.branchId || 'branch scoped' }}</span>
           </div>
         </header>
          <main class="staff-content">
@@ -144,6 +144,7 @@ type StaffRecentItem = { label: string; path: string };
     .staff-identity>div { display:grid;gap:1px;min-width:0; }
     .staff-identity span { flex: 0 0 auto; overflow: visible; color: var(--staff-text-secondary); font-size: .66rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
     .staff-identity strong { overflow: hidden; color: var(--staff-text); font-size: .92rem; text-overflow: ellipsis; white-space: nowrap; }
+    .staff-identity small { overflow:hidden;color:var(--staff-text-secondary);font-size:.68rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap; }
     .staff-topbar strong { color: var(--staff-text); }
     .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex-wrap: wrap; }
     .topbar-actions span { color: var(--staff-text-secondary); font-weight: 650; }
@@ -207,8 +208,9 @@ type StaffRecentItem = { label: string; path: string };
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
       .staff-identity { flex: 1 1 auto; gap: 14px; }
       .profile-avatar { width: 38px; height: 38px; background: color-mix(in srgb, var(--staff-primary) 76%, transparent); }
-      .staff-identity span { flex: 0 1 auto; max-width: 76px; font-size: .56rem; }
-      .staff-identity strong { max-width: none; font-size: .8rem; }
+       .staff-identity span { flex: 0 1 auto; max-width: 110px; font-size: .56rem; }
+       .staff-identity strong { max-width: none; font-size: .8rem; }
+       .staff-identity small { max-width:150px;font-size:.6rem; }
       .staff-topbar p { font-size: .66rem; }
       .topbar-actions { gap: 0; flex: 0 0 auto; }
       .search-button span,.search-button kbd,.topbar-actions > span:not(.queue-status) { display: none; }
@@ -242,6 +244,11 @@ type StaffRecentItem = { label: string; path: string };
       .network-status { display: none; }
 
       nav a { padding: 12px 13px; }
+     }
+     @media (max-width: 380px) {
+       .profile-avatar { display:none; }
+       .staff-identity { gap:4px; }
+       .staff-identity small { max-width:112px; }
      }
      @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } }
   `]
@@ -398,6 +405,10 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const hour = Number(new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false }).format(new Date()));
     return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   }
+
+  roleLabel(): string { return formatStaffRoleLabel(this.staff.user()?.role); }
+
+  branchLabel(): string { return this.staff.user()?.branchId ? "Active branch" : "Branch not selected"; }
 
   isDashboard(): boolean { return this.router.url.split("?")[0] === "/staff/dashboard"; }
 

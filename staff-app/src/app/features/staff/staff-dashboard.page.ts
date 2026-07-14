@@ -30,12 +30,12 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
         @if (refreshing() && data()) { <div class="refresh-line" role="status"><ion-spinner name="crescent" /> Refreshing today’s data</div> }
 
         @if (showTip()) {
-          <aside class="context-notice" aria-label="Dashboard tip"><div><b>Start with the recommended action</b><span>This dashboard reorders your next step as the floor changes.</span></div><button type="button" (click)="dismissTip()" aria-label="Dismiss dashboard tip">Dismiss</button></aside>
+          <aside class="context-notice" aria-label="Recommended action"><span class="recommendation-mark" aria-hidden="true">✓</span><b>{{ recommendationText() }}</b><button type="button" (click)="dismissTip()" aria-label="Dismiss recommendation">×</button></aside>
         }
 
         @if (actionMessage()) { <section class="notice" [class.success]="!actionFailed()" role="status">{{ actionMessage() }}</section> }
         @if (optionalErrors().length) {
-          <details class="section-error"><summary>Some optional dashboard details could not refresh</summary><p>{{ optionalErrors().join(' ') }}</p><button type="button" class="text-control" (click)="load()">Try again</button></details>
+          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Some information may be outdated.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
         }
 
         @if (initialLoading()) {
@@ -76,10 +76,9 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   readonly customizerOpen = signal(false);
   readonly online = signal(typeof navigator === "undefined" ? true : navigator.onLine);
   readonly queuedActions = signal(0);
-  readonly tipDismissed = signal(false);
+  readonly dismissedRecommendation = signal("");
   readonly hiddenTools = signal<Set<string>>(new Set());
   readonly toolOrder = signal<string[]>([]);
-  readonly showTip = computed(() => this.preferences()?.defaults.staffHints !== false && !this.tipDismissed());
   readonly viewModel = computed(() => {
     const dashboard = this.data();
     if (!dashboard) return null;
@@ -91,6 +90,16 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       canCompleteServiceStatus: (status) => this.staff.canCompleteServiceStatus(status)
     });
   });
+  readonly recommendationIdentity = computed(() => {
+    const hero = this.viewModel()?.hero;
+    const action = hero?.actions[0];
+    return action ? [action.id, action.appointmentId || "", action.route || "", hero?.title || ""].join(":") : "";
+  });
+  readonly recommendationText = computed(() => this.viewModel()?.hero.title || "Review today’s priorities");
+  readonly showTip = computed(() => {
+    const identity = this.recommendationIdentity();
+    return !!identity && this.preferences()?.defaults.staffHints !== false && this.dismissedRecommendation() !== identity;
+  });
 
   private loadGeneration = 0;
   private readonly attendanceUpdated = () => void this.load();
@@ -98,7 +107,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
 
   ngOnInit() {
-    this.tipDismissed.set(this.readTipDismissal());
+    this.dismissedRecommendation.set(this.readRecommendationDismissal());
     this.hiddenTools.set(this.readHiddenTools());
     this.toolOrder.set(this.readToolOrder());
     window.addEventListener("aura:attendance-updated", this.attendanceUpdated);
@@ -172,8 +181,10 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   }
 
   dismissTip() {
-    this.tipDismissed.set(true);
-    localStorage.setItem(this.scopedKey("dashboardTipDismissed"), "true");
+    const identity = this.recommendationIdentity();
+    if (!identity) return;
+    this.dismissedRecommendation.set(identity);
+    this.writeScopedValue("dashboardRecommendationDismissed", identity);
   }
 
   toggleCustomizer() { this.customizerOpen.update((open) => !open); }
@@ -182,7 +193,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     const next = new Set(this.hiddenTools());
     if (next.has(toolId)) next.delete(toolId); else next.add(toolId);
     this.hiddenTools.set(next);
-    localStorage.setItem(this.scopedKey("dashboardHiddenTools"), JSON.stringify([...next]));
+    this.writeScopedValue("dashboardHiddenTools", JSON.stringify([...next]));
   }
 
   moveToolEarlier(toolId: string) {
@@ -191,7 +202,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (index <= 0) return;
     [available[index - 1], available[index]] = [available[index], available[index - 1]];
     this.toolOrder.set(available);
-    localStorage.setItem(this.scopedKey("dashboardToolOrder"), JSON.stringify(available));
+    this.writeScopedValue("dashboardToolOrder", JSON.stringify(available));
   }
 
   async signOut() { await this.staff.logout(); await this.router.navigateByUrl("/staff/login"); }
@@ -236,7 +247,8 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     return labels[module];
   }
   private scopedKey(suffix: string): string { const user = this.staff.user(); return `auraStaff:${user?.id || user?.staffId || "unknown"}:${user?.branchId || "workspace"}:${suffix}`; }
-  private readTipDismissal(): boolean { return localStorage.getItem(this.scopedKey("dashboardTipDismissed")) === "true"; }
+  private readRecommendationDismissal(): string { try { return localStorage.getItem(this.scopedKey("dashboardRecommendationDismissed")) || ""; } catch { return ""; } }
+  private writeScopedValue(suffix: string, value: string) { try { localStorage.setItem(this.scopedKey(suffix), value); } catch { /* Preferences remain usable when storage is unavailable. */ } }
   private readHiddenTools(): Set<string> {
     try {
       const scoped = localStorage.getItem(this.scopedKey("dashboardHiddenTools"));

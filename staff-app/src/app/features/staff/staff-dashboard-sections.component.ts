@@ -11,7 +11,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
       <div class="today-hero-copy">
         <p class="eyebrow">{{ viewModel.hero.eyebrow }}</p>
         <h1 id="today-heading">{{ viewModel.hero.title }}</h1>
-        <p>{{ viewModel.hero.detail }}</p>
+        @if (viewModel.hero.detail) { <p>{{ viewModel.hero.detail }}</p> }
         <span class="shift-line"><b>Shift</b> {{ viewModel.hero.shift }}</span>
       </div>
       <div class="hero-action-stack" aria-label="Recommended next actions">
@@ -27,8 +27,8 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="quick-actions-heading">Quick actions</h2></div></div>
         <div class="quick-action-grid">
           @for (action of viewModel.quickActions; track action.id) {
-            @if (action.route) { <a [routerLink]="action.route"><span>{{ action.label }}</span><b aria-hidden="true">→</b></a> }
-            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span>{{ pendingLabel(action) }}</span><b aria-hidden="true">→</b></button> }
+            @if (action.route) { <a [routerLink]="action.route"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg><span>{{ action.label }}</span></a> }
+            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg><span>{{ pendingLabel(action) }}</span></button> }
           }
         </div>
       </section>
@@ -36,7 +36,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
 
     <section class="dashboard-section" aria-labelledby="overview-heading">
       <div class="section-heading"><div><p class="eyebrow">At a glance</p><h2 id="overview-heading">Today overview</h2></div></div>
-      <div class="overview-grid">
+       <div class="overview-grid" [class.three-metrics]="viewModel.overview.length === 3" [class.single-metric]="viewModel.overview.length === 1">
         @for (metric of viewModel.overview; track metric.label) {
           @if (metric.route) { <a class="overview-card" [routerLink]="metric.route"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></a> }
           @else { <article class="overview-card"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></article> }
@@ -75,7 +75,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <div class="section-heading"><div><p class="eyebrow">Actionable guidance</p><h2 id="coach-heading">AI coach</h2></div><a routerLink="/staff/ai-coach">View coach</a></div>
         <div class="coach-list">
           @for (card of viewModel.coach; track card.title) {
-            <article><div><span>{{ $index + 1 }}</span><h3>{{ card.title }}</h3></div><p>{{ card.body }}</p><a [routerLink]="card.route">{{ card.action || 'Review suggestion' }} <b aria-hidden="true">→</b></a></article>
+            <a class="coach-item" [routerLink]="card.route"><span>{{ $index + 1 }}</span><div><strong>{{ card.title }}</strong><small>{{ card.body }}</small></div><b>{{ card.action }} <i aria-hidden="true">→</i></b></a>
           }
         </div>
       </section>
@@ -96,7 +96,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
       <section class="dashboard-section more-tools" aria-labelledby="tools-heading">
         <div class="section-heading"><div><p class="eyebrow">Workspace</p><h2 id="tools-heading">More tools</h2></div><button type="button" class="text-control" [attr.aria-expanded]="customizerOpen" (click)="customizerToggled.emit()">Customize</button></div>
         @if (viewModel.tools.length) {
-          <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route"><strong>{{ tool.label }}</strong><small>{{ tool.hint }}</small><b aria-hidden="true">→</b></a> }</div>
+           <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(tool.id)"></path></svg><span><strong>{{ tool.label }}</strong><small>{{ tool.hint }}</small></span></a> }</div>
         } @else { <p class="compact-empty">All optional tools are hidden. Use Customize to restore them.</p> }
         @if (customizerOpen) {
           <div class="tool-customizer" aria-label="Dashboard tool visibility">
@@ -105,12 +105,24 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         }
       </section>
     }
-
-    @if (viewModel.empty) { <section class="dashboard-empty"><strong>Your floor is clear.</strong><p>No active work, urgent items, or open tasks are assigned right now.</p>@if (viewModel.work.scheduleRoute; as scheduleRoute) { <a class="button" [routerLink]="scheduleRoute">Check appointments</a> }</section> }
   `,
   styleUrls: ["./staff-app.styles.css"]
 })
 export class StaffDashboardSectionsComponent {
+  private readonly icons: Readonly<Record<string, string>> = {
+    appointments: "M7 2v2H5a2 2 0 0 0-2 2v15h18V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 7H5v10h14V9z",
+    attendance: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11H7v-2h4V6h2v7z",
+    queue: "M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h11v2H4v-2z",
+    tasks: "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z",
+    clients: "M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.8 0-1.2.1 1.3.9 2.2 2 2.2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z",
+    calendar: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z",
+    leave: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z",
+    learning: "M12 3 1 8l11 5 9-4.1V16h2V8L12 3zm-6 9v4c0 2 4 4 6 4s6-2 6-4v-4l-6 2.7L6 12z",
+    chat: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z",
+    reports: "M5 3h11l3 3v15H5V3zm3 8h8v2H8v-2zm0 4h8v2H8v-2z",
+    payroll: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+    settings: "M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7 7 0 0 0 7 6L4.6 5l-2 3.5 2 1.5a8 8 0 0 0 0 3l-2 1.5 2 3.5L7 17a7 7 0 0 0 2.6 1.5L10 21h4l.4-2.5A7 7 0 0 0 17 17l2.4 1 2-3.5-2-1.5zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"
+  };
   @Input({ required: true }) viewModel!: StaffDashboardViewModel;
   @Input() pendingAction = "";
   @Input() customizerOpen = false;
@@ -123,6 +135,8 @@ export class StaffDashboardSectionsComponent {
   pendingLabel(action: DashboardAction): string {
     return this.pendingAction === action.id || this.pendingAction === action.appointmentId ? "Saving…" : action.label;
   }
+
+  iconFor(id: string): string { return this.icons[id] || this.icons["settings"]; }
 
   isToolVisible(tool: DashboardTool): boolean {
     return !this.hiddenToolIds.has(tool.id);
