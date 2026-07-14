@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { env } from "../config/env.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { authenticateJwt } from "../middleware/auth.js";
 import { authService } from "../services/auth.service.js";
@@ -7,54 +6,14 @@ import { issueCsrfToken } from "../services/csrf-token.service.js";
 import { intrusionDetectionService } from "../services/intrusion-detection.service.js";
 import { securityService } from "../services/security.service.js";
 import { validateBody } from "../validators/request-validator.js";
+import {
+  clearAuthRefreshCookie,
+  publicAuthSession,
+  refreshTokenRequest,
+  setAuthRefreshCookie
+} from "../services/auth-cookie-session.service.js";
 
 export const authRouter = Router();
-
-function parseCookies(req) {
-  return Object.fromEntries(
-    String(req.get("cookie") || "")
-      .split(";")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .map((part) => {
-        const equalsAt = part.indexOf("=");
-        const key = equalsAt >= 0 ? part.slice(0, equalsAt) : part;
-        const value = equalsAt >= 0 ? part.slice(equalsAt + 1) : "";
-        return [decodeURIComponent(key), decodeURIComponent(value)];
-      })
-  );
-}
-
-function cookieOptions(maxAgeSeconds) {
-  return {
-    httpOnly: true,
-    secure: env.nodeEnv === "production",
-    sameSite: env.refreshCookieSameSite,
-    path: "/",
-    maxAge: maxAgeSeconds * 1000
-  };
-}
-
-function publicSession(result) {
-  if (env.allowRefreshTokenInResponse) return result;
-  const { refreshToken: _refreshToken, ...safeResult } = result;
-  return safeResult;
-}
-
-function setRefreshCookie(res, result) {
-  if (!result?.refreshToken) return;
-  res.cookie(env.refreshCookieName, result.refreshToken, cookieOptions(env.jwtRefreshTtlDays * 24 * 60 * 60));
-}
-
-function clearRefreshCookie(res) {
-  res.clearCookie(env.refreshCookieName, cookieOptions(0));
-}
-
-function refreshTokenFromRequest(req) {
-  const cookieToken = parseCookies(req)[env.refreshCookieName] || "";
-  if (cookieToken) return cookieToken;
-  return env.allowLegacyRefreshTokenBody ? String(req.body?.refreshToken || "") : "";
-}
 
 function demoStaffLogin(req) {
   return authService.login({
@@ -107,8 +66,8 @@ authRouter.post(
       branchId: result.user.branchId,
       branchIds: result.user.branchIds || []
     }, req);
-    setRefreshCookie(res, result);
-    res.status(201).json(publicSession(result));
+    setAuthRefreshCookie(res, result);
+    res.status(201).json(publicAuthSession(result));
   })
 );
 
@@ -116,7 +75,7 @@ authRouter.get(
   "/auth/demo-staff-open",
   asyncHandler((req, res) => {
     const result = demoStaffLogin(req);
-    setRefreshCookie(res, result);
+    setAuthRefreshCookie(res, result);
     res.redirect(302, "/staff/open");
   })
 );
@@ -125,17 +84,18 @@ authRouter.get(
   "/auth/demo-staff-session",
   asyncHandler((req, res) => {
     const result = demoStaffLogin(req);
-    setRefreshCookie(res, result);
-    res.json(publicSession(result));
+    setAuthRefreshCookie(res, result);
+    res.json(publicAuthSession(result));
   })
 );
 
 authRouter.post(
   "/auth/refresh",
   asyncHandler((req, res) => {
-    const result = authService.refresh(refreshTokenFromRequest(req));
-    setRefreshCookie(res, result);
-    res.json(publicSession(result));
+    const refreshRequest = refreshTokenRequest(req);
+    const result = authService.refresh(refreshRequest.token, { fromCookie: refreshRequest.fromCookie });
+    setAuthRefreshCookie(res, result);
+    res.json(publicAuthSession(result));
   })
 );
 
@@ -143,8 +103,8 @@ authRouter.post(
   "/auth/logout",
   authenticateJwt(),
   asyncHandler((req, res) => {
-    const result = authService.logout(refreshTokenFromRequest(req), req.access);
-    clearRefreshCookie(res);
+    const result = authService.logout(refreshTokenRequest(req).token, req.access);
+    clearAuthRefreshCookie(res);
     res.json(result);
   })
 );

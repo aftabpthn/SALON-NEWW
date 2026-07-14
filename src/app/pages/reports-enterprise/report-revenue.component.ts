@@ -1,23 +1,24 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-revenue',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="revenue-metrics inner-stats-grid">
-        <div class="metric-card teal"><span>Total Revenue</span><strong>{{ d()?.total | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="metric-card blue"><span>Service Revenue</span><strong>{{ d()?.service | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="metric-card green"><span>Product Revenue</span><strong>{{ d()?.product | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="metric-card violet"><span>Membership Revenue</span><strong>{{ d()?.membership | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="metric-card amber"><span>Gift Card Revenue</span><strong>{{ d()?.giftCard | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="metric-card red"><span>Refunds/Discounts</span><strong>-{{ d()?.refunds | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+        <div class="metric-card teal"><span>Total Revenue</span><strong>{{ d()?.total | auraMoney:'1.0-0' }}</strong></div>
+        <div class="metric-card blue"><span>Service Revenue</span><strong>{{ d()?.service | auraMoney:'1.0-0' }}</strong></div>
+        <div class="metric-card green"><span>Product Revenue</span><strong>{{ d()?.product | auraMoney:'1.0-0' }}</strong></div>
+        <div class="metric-card violet"><span>Membership Revenue</span><strong>{{ d()?.membership | auraMoney:'1.0-0' }}</strong></div>
+        <div class="metric-card amber"><span>Gift Card Revenue</span><strong>{{ d()?.giftCard | auraMoney:'1.0-0' }}</strong></div>
+        <div class="metric-card red"><span>Refunds/Discounts</span><strong>-{{ d()?.refunds | auraMoney:'1.0-0' }}</strong></div>
       </div>
 
       <div class="revenue-charts">
@@ -54,7 +55,7 @@ import { Subscription } from 'rxjs';
             <tbody>
               <tr *ngFor="let t of txns()">
                 <td>{{ t.date }}</td><td>{{ t.invoice }}</td><td>{{ t.client }}</td><td>{{ t.staff }}</td>
-                <td><strong>{{ t.amount | currency:'INR':'symbol':'1.0-0' }}</strong></td><td><span class="badge">{{ t.paymentMethod }}</span></td>
+                <td><strong>{{ t.amount | auraMoney:'1.0-0' }}</strong></td><td><span class="badge">{{ t.paymentMethod }}</span></td>
               </tr>
               <tr *ngIf="txns().length===0"><td colspan="6" class="empty-cell">No transactions found for this period.</td></tr>
             </tbody>

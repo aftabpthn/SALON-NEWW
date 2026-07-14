@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -8,11 +8,13 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-staff-sales-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -127,24 +129,24 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="metrics-grid inner-stats-grid">
           <article class="metric-card">
             <span>Total attributed sales</span>
-            <strong>{{ data.totals?.totalRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.totalRevenue || 0 | auraMoney:'1.0-0' }}</strong>
             <small>{{ data.totals?.itemCount || 0 }} line items</small>
           </article>
           <article class="metric-card">
             <span>Service sales</span>
-            <strong>{{ data.totals?.serviceRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.serviceRevenue || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Product sales</span>
-            <strong>{{ data.totals?.productRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.productRevenue || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Membership + package</span>
-            <strong>{{ membershipPackageRevenue(data) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ membershipPackageRevenue(data) | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Gift card sales</span>
-            <strong>{{ data.totals?.giftCardRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.giftCardRevenue || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Total clients</span>
@@ -156,24 +158,24 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </article>
           <article class="metric-card">
             <span>Average bill</span>
-            <strong>{{ data.totals?.averageBill || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.averageBill || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Pending due</span>
-            <strong>{{ data.totals?.pendingDue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.pendingDue || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Discount given</span>
-            <strong>{{ data.totals?.discountGiven || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.discountGiven || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Staff tips</span>
-            <strong>{{ data.totals?.tips || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.tips || 0 | auraMoney:'1.0-0' }}</strong>
             <small><a routerLink="/pos/tips">Open payout register</a></small>
           </article>
           <article class="metric-card">
             <span>Estimated commission</span>
-            <strong>{{ data.totals?.estimatedCommission || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.estimatedCommission || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
         </div>
 
@@ -224,18 +226,18 @@ import { StateComponent } from '../shared/ui/state/state.component';
                     <td><strong>{{ row.staffName }}</strong><small>{{ row.itemCount }} items</small></td>
                     <td>{{ row.staffCode || row.staffId }}</td>
                     <td>{{ row.contact || '-' }}</td>
-                    <td>{{ row.serviceRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.productRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ membershipPackageRevenue({ totals: row }) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.giftCardRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.totalRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row.serviceRevenue | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.productRevenue | auraMoney:'1.0-0' }}</td>
+                    <td>{{ membershipPackageRevenue({ totals: row }) | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.giftCardRevenue | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.totalRevenue | auraMoney:'1.0-0' }}</td>
                     <td>{{ row.clientsCount || 0 }}</td>
                     <td>{{ row.invoiceCount || 0 }}</td>
-                    <td>{{ row.averageBill | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.pendingDue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.discountGiven | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.tips | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.estimatedCommission | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row.averageBill | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.pendingDue | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.discountGiven | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.tips | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.estimatedCommission | auraMoney:'1.0-0' }}</td>
                     <td><span class="score-pill" [class.good]="row.performanceScore >= 75" [class.warn]="row.performanceScore < 45">{{ row.performanceScore || 0 }}</span></td>
                     <td><a class="ghost-button mini" routerLink="/staff-os/staff-profile" [queryParams]="staffProfileParams(row)">Open</a></td>
                   </tr>
@@ -250,12 +252,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
                               <tr *ngFor="let service of row.serviceBreakdown || []">
                                 <td>{{ service.serviceName }}</td>
                                 <td>{{ service.quantity }}</td>
-                                <td>{{ service.grossSale | currency: 'INR':'symbol':'1.0-0' }}</td>
-                                <td>{{ service.discount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                                <td>{{ service.netSale | currency: 'INR':'symbol':'1.0-0' }}</td>
-                                <td>{{ service.gst | currency: 'INR':'symbol':'1.0-0' }}</td>
-                                <td>{{ service.cogs | currency: 'INR':'symbol':'1.0-0' }} <span class="badge warning" *ngIf="service.costSignal === 'missing_cost'">missing cost</span></td>
-                                <td>{{ service.grossMargin | currency: 'INR':'symbol':'1.0-0' }}</td>
+                                <td>{{ service.grossSale | auraMoney:'1.0-0' }}</td>
+                                <td>{{ service.discount | auraMoney:'1.0-0' }}</td>
+                                <td>{{ service.netSale | auraMoney:'1.0-0' }}</td>
+                                <td>{{ service.gst | auraMoney:'1.0-0' }}</td>
+                                <td>{{ service.cogs | auraMoney:'1.0-0' }} <span class="badge warning" *ngIf="service.costSignal === 'missing_cost'">missing cost</span></td>
+                                <td>{{ service.grossMargin | auraMoney:'1.0-0' }}</td>
                                 <td>{{ service.marginPercent }}%</td>
                                 <td>{{ service.clientCount }}</td>
                                 <td>{{ service.repeatClientCount }}</td>
@@ -273,9 +275,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                               <tr *ngFor="let product of row.productBreakdown || []">
                                 <td>{{ product.productName }}</td>
                                 <td>{{ product.quantity }}</td>
-                                <td>{{ product.netSale | currency: 'INR':'symbol':'1.0-0' }}</td>
-                                <td>{{ product.cogs | currency: 'INR':'symbol':'1.0-0' }}</td>
-                                <td>{{ product.grossMargin | currency: 'INR':'symbol':'1.0-0' }}</td>
+                                <td>{{ product.netSale | auraMoney:'1.0-0' }}</td>
+                                <td>{{ product.cogs | auraMoney:'1.0-0' }}</td>
+                                <td>{{ product.grossMargin | auraMoney:'1.0-0' }}</td>
                                 <td>{{ product.clientCount }}</td>
                                 <td>{{ product.lastSoldAt || '-' }}</td>
                               </tr>
@@ -305,24 +307,24 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="metrics-grid compact">
             <article class="metric-card">
               <span>Gross service sale</span>
-              <strong>{{ data.totals?.grossServiceSale || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ data.totals?.grossServiceSale || 0 | auraMoney:'1.0-0' }}</strong>
             </article>
             <article class="metric-card">
               <span>Final service sale</span>
-              <strong>{{ data.totals?.finalServiceSale || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ data.totals?.finalServiceSale || 0 | auraMoney:'1.0-0' }}</strong>
             </article>
             <article class="metric-card">
               <span>Discount amount</span>
-              <strong>{{ data.totals?.serviceDiscountAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ data.totals?.serviceDiscountAmount || 0 | auraMoney:'1.0-0' }}</strong>
               <small>{{ data.totals?.serviceDiscountPercent || 0 }}% leakage</small>
             </article>
             <article class="metric-card">
               <span>Share before discount</span>
-              <strong>{{ data.totals?.staffServiceShareBeforeDiscount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ data.totals?.staffServiceShareBeforeDiscount || 0 | auraMoney:'1.0-0' }}</strong>
             </article>
             <article class="metric-card">
               <span>Share after discount</span>
-              <strong>{{ data.totals?.staffServiceShareAfterDiscount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ data.totals?.staffServiceShareAfterDiscount || 0 | auraMoney:'1.0-0' }}</strong>
               <small>{{ discountModeLabel() }}</small>
             </article>
           </div>
@@ -355,15 +357,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
                     <td>{{ row.staffCode || row.staffId }}</td>
                     <td>{{ row.contact || '-' }}</td>
                     <td>{{ row.serviceQty || 0 }}</td>
-                    <td>{{ serviceAmountFor(row) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.grossServiceSale | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.finalServiceSale | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ serviceAmountFor(row) | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.grossServiceSale | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.finalServiceSale | auraMoney:'1.0-0' }}</td>
                     <td>{{ row.serviceDiscountPercent || 0 }}%</td>
                     <td>{{ row.serviceClientsCount || 0 }}</td>
                     <td>{{ row.serviceInvoiceCount || 0 }}</td>
-                    <td>{{ row.pendingDue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.discountGiven | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.estimatedCommission | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row.pendingDue | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.discountGiven | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.estimatedCommission | auraMoney:'1.0-0' }}</td>
                     <td><a class="ghost-button mini" routerLink="/staff-os/staff-profile" [queryParams]="staffProfileParams(row)">Open</a></td>
                   </tr>
                   <tr class="expanded-row" *ngIf="isExpanded(row)">
@@ -400,12 +402,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
                             <tr *ngFor="let serviceRow of row.serviceSaleRows || []">
                               <td><strong>{{ serviceRow.serviceName }}</strong><small>{{ serviceRow.serviceGroup }}</small></td>
                               <td>{{ serviceRow.qty }}</td>
-                              <td *ngIf="discountMode !== 'with_discount'">{{ serviceRow.grossPrice | currency: 'INR':'symbol':'1.0-0' }}</td>
-                              <td>{{ serviceRow.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                              <td *ngIf="discountMode !== 'with_discount'">{{ serviceRow.grossPrice | auraMoney:'1.0-0' }}</td>
+                              <td>{{ serviceRow.discountAmount | auraMoney:'1.0-0' }}</td>
                               <td *ngIf="discountMode === 'compare'">{{ serviceRow.discountPercent || 0 }}%</td>
-                              <td *ngIf="discountMode !== 'without_discount'">{{ serviceRow.finalPrice | currency: 'INR':'symbol':'1.0-0' }}</td>
-                              <td *ngIf="discountMode !== 'with_discount'">{{ serviceRow.serviceShareBeforeDiscount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                              <td *ngIf="discountMode !== 'without_discount'">{{ serviceRow.serviceShareAfterDiscount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                              <td *ngIf="discountMode !== 'without_discount'">{{ serviceRow.finalPrice | auraMoney:'1.0-0' }}</td>
+                              <td *ngIf="discountMode !== 'with_discount'">{{ serviceRow.serviceShareBeforeDiscount | auraMoney:'1.0-0' }}</td>
+                              <td *ngIf="discountMode !== 'without_discount'">{{ serviceRow.serviceShareAfterDiscount | auraMoney:'1.0-0' }}</td>
                               <td>{{ serviceRow.invoiceNumber || '-' }}</td>
                               <td>{{ serviceRow.invoiceDate || '-' }} <small>{{ serviceRow.invoiceTime || '' }}</small></td>
                               <td>{{ serviceRow.appointmentDate || '-' }}</td>
@@ -417,8 +419,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
                               <td>{{ serviceRow.staffSharePercent || 100 }}%</td>
                               <td>{{ serviceRow.paymentMode || '-' }}</td>
                               <td>{{ serviceRow.transactionId || '-' }}</td>
-                              <td>{{ serviceRow.gst | currency: 'INR':'symbol':'1.0-0' }}</td>
-                              <td>{{ serviceRow.dueAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                              <td>{{ serviceRow.gst | auraMoney:'1.0-0' }}</td>
+                              <td>{{ serviceRow.dueAmount | auraMoney:'1.0-0' }}</td>
                               <td class="row-actions">
                                 <a class="ghost-button mini" routerLink="/pos/invoices" [queryParams]="{ q: serviceRow.invoiceNumber }" *ngIf="canAccessPath('/pos/invoices')">Invoice</a>
                                 <a class="ghost-button mini" routerLink="/clients" [queryParams]="{ q: serviceRow.customerContact || serviceRow.customerName }">Client</a>
@@ -451,7 +453,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="metrics-grid compact">
             <article class="metric-card">
               <span>Product sales</span>
-              <strong>{{ productStats().productRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ productStats().productRevenue | auraMoney:'1.0-0' }}</strong>
             </article>
             <article class="metric-card">
               <span>Product units</span>
@@ -471,7 +473,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </article>
             <article class="metric-card">
               <span>Product commission</span>
-              <strong>{{ productStats().estimatedCommission | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ productStats().estimatedCommission | auraMoney:'1.0-0' }}</strong>
             </article>
           </div>
           <div class="report-info-strip">
@@ -487,11 +489,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><button class="ghost-button mini" type="button" (click)="toggleStaff(row)">{{ isExpanded(row) ? 'Hide' : 'Expand' }}</button></td>
                   <td><strong>{{ row.staffName }}</strong><small>{{ row.staffCode || row.staffId }}</small></td>
                   <td>{{ row.contact || '-' }}</td>
-                  <td>{{ row.productRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.productRevenue | auraMoney:'1.0-0' }}</td>
                   <td>{{ row.productCount || 0 }}</td>
                   <td>{{ (row.productBreakdown || []).length }}</td>
                   <td><span class="badge warning" *ngIf="hasMissingCost(row.productBreakdown)">Missing cost</span><span class="badge" *ngIf="!hasMissingCost(row.productBreakdown)">OK</span></td>
-                  <td>{{ productCommission(row) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ productCommission(row) | auraMoney:'1.0-0' }}</td>
                   <td><a class="ghost-button mini" routerLink="/staff-os/staff-profile" [queryParams]="staffProfileParams(row)">Open</a></td>
                 </tr>
                 <tr class="expanded-row" *ngIf="isExpanded(row)">
@@ -504,9 +506,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                           <tr *ngFor="let product of row.productBreakdown || []">
                             <td>{{ product.productName }}</td>
                             <td>{{ product.quantity }}</td>
-                            <td>{{ product.netSale | currency: 'INR':'symbol':'1.0-0' }}</td>
-                            <td>{{ product.cogs | currency: 'INR':'symbol':'1.0-0' }}</td>
-                            <td>{{ product.grossMargin | currency: 'INR':'symbol':'1.0-0' }}</td>
+                            <td>{{ product.netSale | auraMoney:'1.0-0' }}</td>
+                            <td>{{ product.cogs | auraMoney:'1.0-0' }}</td>
+                            <td>{{ product.grossMargin | auraMoney:'1.0-0' }}</td>
                             <td>{{ product.marginPercent }}%</td>
                             <td>{{ product.clientCount }}</td>
                             <td>{{ product.repeatClientCount }}</td>
@@ -539,12 +541,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of data.staff || []">
                   <td><strong>{{ row.staffName }}</strong><small>{{ row.staffCode || row.staffId }}</small></td>
-                  <td>{{ row.serviceRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.productRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ membershipPackageRevenue({ totals: row }) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.tips | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.estimatedCommission | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.pendingDue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.serviceRevenue | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.productRevenue | auraMoney:'1.0-0' }}</td>
+                  <td>{{ membershipPackageRevenue({ totals: row }) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.tips | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.estimatedCommission | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.pendingDue | auraMoney:'1.0-0' }}</td>
                   <td><span class="score-pill" [class.good]="row.performanceScore >= 75" [class.warn]="row.performanceScore < 45">{{ row.performanceScore || 0 }}</span></td>
                 </tr>
                 <tr *ngIf="!(data.staff || []).length"><td colspan="8">No commission rows found.</td></tr>
@@ -582,13 +584,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </thead>
               <tbody>
                 <tr *ngFor="let item of data.items || []">
-                  <td>{{ item.date | date: 'dd MMM yyyy' }}</td>
+                  <td>{{ item.date | auraDate:'date' }}</td>
                   <td>{{ item.staffName }}</td>
                   <td>{{ item.itemTypeLabel }}</td>
                   <td>{{ item.itemName }}</td>
                   <td>{{ item.quantity }}</td>
                   <td>{{ item.sharePercent || 100 }}%</td>
-                  <td>{{ item.amount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ item.amount | auraMoney:'1.0-0' }}</td>
                   <td>
                     <span class="badge" [class.warning]="item.sourceStaffId !== 'line_item'">
                       {{ sourceLabel(item.sourceStaffId) }}

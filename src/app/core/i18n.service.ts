@@ -13,9 +13,12 @@ export type LocalePreference = {
 
 type LocaleOption = { code: string; label: string; languageCode: string; currencyCode: string; dateLocale: string; numberLocale: string; direction?: TextDirection };
 type Dictionary = Record<string, string>;
+type DateTimePresentation = { dateFormat: string; timeFormat: string; timezone: string; businessDayStartHour: number };
 
 const STORAGE_KEY = 'aura.localizationPreference';
 const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ur']);
+const DEFAULT_DATE_TIME: DateTimePresentation = { dateFormat: 'DD/MM/YYYY', timeFormat: '12h', timezone: 'Asia/Kolkata', businessDayStartHour: 0 };
+export const AURA_DATE_PIPE_DEFAULT_OPTIONS = { dateFormat: 'dd/MM/yyyy', timezone: 'Asia/Kolkata' };
 
 const DEFAULT_PREFERENCE: LocalePreference = {
   countryCode: 'IN',
@@ -131,6 +134,7 @@ export class I18nService {
   readonly countries = COUNTRY_OPTIONS;
   readonly languages = LANGUAGE_OPTIONS;
   readonly preference = signal<LocalePreference>(this.readPreference());
+  readonly dateTimePresentation = signal<DateTimePresentation>(DEFAULT_DATE_TIME);
   readonly countryCode = computed(() => this.preference().countryCode);
   readonly languageCode = computed(() => this.preference().languageCode);
   readonly direction = computed(() => this.preference().direction);
@@ -175,13 +179,77 @@ export class I18nService {
     return next;
   }
 
-  formatMoney(amount: number): string {
+  hasSavedPreference(): boolean {
+    return !!localStorage.getItem(STORAGE_KEY);
+  }
+
+  formatMoney(amount: number, digitsInfo = '1.0-2'): string {
     const pref = this.preference();
-    return new Intl.NumberFormat(pref.numberLocale, { style: 'currency', currency: pref.currencyCode }).format(amount);
+    const match = digitsInfo.match(/^\d+\.(\d+)-(\d+)$/);
+    return new Intl.NumberFormat(pref.numberLocale, {
+      style: 'currency',
+      currency: pref.currencyCode,
+      minimumFractionDigits: Number(match?.[1] ?? 0),
+      maximumFractionDigits: Number(match?.[2] ?? 2)
+    }).format(amount);
   }
 
   formatDate(value: string | number | Date): string {
-    return new Intl.DateTimeFormat(this.preference().dateLocale).format(new Date(value));
+    const presentation = this.dateTimePresentation();
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: presentation.timezone,
+      year: 'numeric',
+      month: presentation.dateFormat.includes('MM') ? '2-digit' : 'numeric',
+      day: presentation.dateFormat.includes('DD') ? '2-digit' : 'numeric'
+    };
+    const formatted = new Intl.DateTimeFormat('en-CA', options).formatToParts(new Date(value));
+    const part = (type: Intl.DateTimeFormatPartTypes) => formatted.find((item) => item.type === type)?.value || '';
+    const values: Record<string, string> = { YYYY: part('year'), MM: part('month'), DD: part('day') };
+    return presentation.dateFormat.replace(/YYYY|MM|DD/g, (token) => values[token]);
+  }
+
+  formatDateTime(value: string | number | Date): string {
+    const presentation = this.dateTimePresentation();
+    const time = new Intl.DateTimeFormat(this.preference().dateLocale, {
+      timeZone: presentation.timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: presentation.timeFormat === '12h'
+    }).format(new Date(value));
+    return `${this.formatDate(value)} ${time}`;
+  }
+
+  formatTime(value: string | number | Date): string {
+    const presentation = this.dateTimePresentation();
+    return new Intl.DateTimeFormat(this.preference().dateLocale, {
+      timeZone: presentation.timezone,
+      hour: '2-digit', minute: '2-digit', hour12: presentation.timeFormat === '12h'
+    }).format(new Date(value));
+  }
+
+  formatMonthYear(value: string | number | Date): string {
+    return new Intl.DateTimeFormat(this.preference().dateLocale, {
+      timeZone: this.dateTimePresentation().timezone,
+      month: 'short', year: 'numeric'
+    }).format(new Date(value));
+  }
+
+  businessDateKey(value: string | number | Date = new Date()): string {
+    const presentation = this.dateTimePresentation();
+    const shifted = new Date(new Date(value).getTime() - presentation.businessDayStartHour * 60 * 60 * 1000);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: presentation.timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(shifted);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  }
+
+  configureDateTime(presentation: Partial<DateTimePresentation>): void {
+    const next = { ...DEFAULT_DATE_TIME, ...presentation };
+    this.dateTimePresentation.set(next);
+    AURA_DATE_PIPE_DEFAULT_OPTIONS.dateFormat = next.dateFormat === 'MM/DD/YYYY' ? 'MM/dd/yyyy' : next.dateFormat === 'YYYY-MM-DD' ? 'yyyy-MM-dd' : 'dd/MM/yyyy';
+    AURA_DATE_PIPE_DEFAULT_OPTIONS.timezone = next.timezone;
   }
 
   private readPreference(): LocalePreference {

@@ -5,6 +5,7 @@ import { AuthSessionService } from '../../../core/auth-session.service';
 import { grantsAllow, staticGrantsForRole } from '../../../core/permission.guard';
 import { routePermissionForPath } from '../../../core/access-rules';
 import { AppStateService } from '../../../core/state/app-state.service';
+import { GeneralSettingsService } from '../../../core/general-settings.service';
 
 export type CommandKind = 'action' | 'nav';
 
@@ -229,11 +230,13 @@ export class CommandPaletteComponent {
   constructor(
     private readonly router: Router,
     private readonly state: AppStateService,
-    private readonly session: AuthSessionService
+    private readonly session: AuthSessionService,
+    private readonly generalSettings: GeneralSettingsService
   ) {}
 
   @HostListener('window:keydown', ['$event'])
   onGlobalKey(event: KeyboardEvent): void {
+    if (!this.generalSettings.commandSearchEnabled()) return;
     if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
       event.preventDefault();
       this.toggle();
@@ -242,6 +245,7 @@ export class CommandPaletteComponent {
 
   @HostListener('window:aura:command-palette:open')
   onOpenEvent(): void {
+    if (!this.generalSettings.commandSearchEnabled()) return;
     this.openPalette();
   }
 
@@ -250,6 +254,7 @@ export class CommandPaletteComponent {
   }
 
   openPalette(): void {
+    if (!this.generalSettings.commandSearchEnabled()) return;
     this.query.set('');
     this.open.set(true);
     this.syncActive();

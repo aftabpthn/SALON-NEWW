@@ -1,12 +1,13 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-offline-device-health',
   standalone: true,
-  imports: [CommonModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -47,7 +48,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ device.queued }}</td>
                 <td>{{ device.conflicts }}</td>
                 <td>{{ device.cacheSnapshots }}</td>
-                <td>{{ device.lastSeen | date: 'short' }}</td>
+                <td>{{ device.lastSeen | auraDate:'date' }}</td>
                 <td>{{ device.nextAction }}</td>
               </tr>
               <tr *ngIf="!devices().length"><td colspan="7">No device sync activity yet.</td></tr>

@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,6 +8,7 @@ import { AuthSessionService } from '../core/auth-session.service';
 import { staticGrantsForRole } from '../core/permission.guard';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type AppTone = 'teal' | 'blue' | 'amber' | 'green' | 'red' | 'violet' | 'neutral';
 
@@ -159,7 +160,7 @@ const SUITE_GROUPS: SuiteGroup[] = [
 @Component({
   selector: 'app-apps-launchpad',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DecimalPipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, DecimalPipe, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="apps-shell">
       <header class="lp-header">
@@ -178,18 +179,18 @@ const SUITE_GROUPS: SuiteGroup[] = [
       <div class="lp-signals" *ngIf="report() as data" aria-label="Live suite signals">
         <article class="lp-signal">
           <span class="ls-l">Today</span>
-          <strong class="ls-v">{{ data.revenueToday | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong class="ls-v">{{ data.revenueToday | auraMoney:'1.0-0' }}</strong>
           <small>{{ data.totalBookings | number }} bookings tracked</small>
         </article>
         <article class="lp-signal">
           <span class="ls-l">Month</span>
-          <strong class="ls-v">{{ data.revenueMonth | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong class="ls-v">{{ data.revenueMonth | auraMoney:'1.0-0' }}</strong>
           <small>{{ data.repeatCustomerRate | number: '1.0-0' }}% repeat rate</small>
         </article>
         <article class="lp-signal">
           <span class="ls-l">Cash control</span>
-          <strong class="ls-v">{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }}</strong>
-          <small>{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }} received due</small>
+          <strong class="ls-v">{{ data.pendingPayments | auraMoney:'1.0-0' }}</strong>
+          <small>{{ data.receivedDue | auraMoney:'1.0-0' }} received due</small>
         </article>
         <article class="lp-signal">
           <span class="ls-l">Suite coverage</span>

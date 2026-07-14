@@ -17,11 +17,13 @@ export type UserRole =
   | (string & {});
 
 const DEFAULT_TENANT_ID = 'tenant_aura';
+const TENANT_KEY = 'aura.selectedTenantId';
+const BRANCH_KEY = 'aura.selectedBranchId';
 
 @Injectable({ providedIn: 'root' })
 export class AppStateService {
-  readonly selectedTenantId = signal(this.normalizeTenantId(localStorage.getItem('aura.selectedTenantId')));
-  readonly selectedBranchId = signal(localStorage.getItem('aura.selectedBranchId') || '');
+  readonly selectedTenantId = signal(this.normalizeTenantId(localStorage.getItem(TENANT_KEY)));
+  readonly selectedBranchId = signal(this.readBranch(this.selectedTenantId()));
   readonly userRole = signal<UserRole>(this.normalizeRole(localStorage.getItem('aura.userRole')));
   readonly globalSearch = signal('');
 
@@ -32,13 +34,20 @@ export class AppStateService {
   setTenant(tenantId: string): void {
     const normalizedTenantId = this.normalizeTenantId(tenantId);
     this.selectedTenantId.set(normalizedTenantId);
-    localStorage.setItem('aura.selectedTenantId', normalizedTenantId);
-    this.setBranch('');
+    localStorage.setItem(TENANT_KEY, normalizedTenantId);
+    this.selectedBranchId.set(this.readBranch(normalizedTenantId));
   }
 
-  setBranch(branchId: string): void {
+  setBranch(branchId: string, persist = true): void {
     this.selectedBranchId.set(branchId);
-    localStorage.setItem('aura.selectedBranchId', branchId);
+    const tenantBranchKey = `${BRANCH_KEY}.${this.selectedTenantId()}`;
+    if (persist) {
+      localStorage.setItem(BRANCH_KEY, branchId);
+      localStorage.setItem(tenantBranchKey, branchId);
+    } else {
+      localStorage.removeItem(BRANCH_KEY);
+      localStorage.removeItem(tenantBranchKey);
+    }
   }
 
   setRole(role: UserRole): void {
@@ -51,6 +60,10 @@ export class AppStateService {
     const value = tenantId || DEFAULT_TENANT_ID;
     if (/^tenant_(ai|import)_/i.test(value)) return DEFAULT_TENANT_ID;
     return value;
+  }
+
+  private readBranch(tenantId: string): string {
+    return localStorage.getItem(`${BRANCH_KEY}.${tenantId}`) || localStorage.getItem(BRANCH_KEY) || '';
   }
 
   private normalizeRole(role: string | null): UserRole {

@@ -5,6 +5,7 @@ import { tenantService } from "./tenant.service.js";
 import { ensureCashDrawerEodSchema } from "./cash-drawer-eod-schema.service.js";
 import { balanceSheetService } from "./balance-sheet.service.js";
 import { ensureBalanceSheetSchema } from "./balance-sheet-schema.service.js";
+import { generalSettingsService } from "./general-settings.service.js";
 
 const MODES = ["cash", "card", "gpay", "phonepe", "paytm", "upi", "online", "other"];
 const NON_CASH_MODES = new Set(["card", "gpay", "phonepe", "paytm", "upi", "online", "other"]);
@@ -1726,6 +1727,7 @@ export class CashDrawerEodService {
   }
 
   queueApprovalWhatsapp(session, payload = {}, access = {}) {
+    if (!generalSettingsService.ownerNotificationsEnabled(access, session.branch_id)) return "";
     if (!hasTable("message_logs")) return "";
     const messageId = makeId("msg");
     db.prepare(
@@ -2949,6 +2951,7 @@ export class CashDrawerEodService {
   }
 
   queueOwnerReport(report, settings, access = {}) {
+    if (!generalSettingsService.ownerNotificationsEnabled(access, report.branchId)) return this.reportToApi(report);
     const channels = String(settings.reportChannel || "whatsapp,inapp").split(",").map((item) => item.trim());
     if (!channels.includes("whatsapp") || !hasTable("message_logs")) return this.reportToApi(report);
     const owner = db.prepare(

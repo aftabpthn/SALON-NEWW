@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -10,6 +10,8 @@ import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { PosMembershipPlan, PosSettingsService } from '../core/pos-settings.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type MembershipReport = {
   metrics?: {
@@ -74,7 +76,7 @@ type PlanLifecycleDialog = {
 @Component({
   selector: 'app-memberships',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack memberships-page inner-page-shell">
       <div class="module-hero membership-hero membership-action-bar inner-page-header">
@@ -152,11 +154,11 @@ type PlanLifecycleDialog = {
         </article>
         <article class="metric-card">
           <span>Membership revenue</span>
-          <strong>{{ (report().metrics?.soldRevenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ (report().metrics?.soldRevenue || 0) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article class="metric-card">
           <span>Redeemed discount</span>
-          <strong>{{ (report().metrics?.redeemedDiscount || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ (report().metrics?.redeemedDiscount || 0) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article class="metric-card">
           <span>Renewal risk</span>
@@ -182,7 +184,7 @@ type PlanLifecycleDialog = {
         </article>
 
         <article class="overview-card">
-          <h3>{{ (report().metrics?.pendingLiability || 0) | currency: 'INR':'symbol':'1.0-0' }}</h3>
+          <h3>{{ (report().metrics?.pendingLiability || 0) | auraMoney:'1.0-0' }}</h3>
           <p>{{ report().metrics?.creditsRemaining || 0 }} credits still available for redemption.</p>
         </article>
 
@@ -255,7 +257,7 @@ type PlanLifecycleDialog = {
                     </div>
                   </div>
                 </td>
-                <td>{{ plan.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ plan.price | auraMoney:'1.0-0' }}</td>
                 <td>{{ planSoldCount(plan) }}</td>
                 <td><span class="status-pill">{{ plan.status || (plan.active ? 'Active' : 'Inactive') }}</span></td>
                 <td class="action-cell">
@@ -305,7 +307,7 @@ type PlanLifecycleDialog = {
                     </div>
                   </div>
                 </td>
-                <td>{{ packagePrice(item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ packagePrice(item) | auraMoney:'1.0-0' }}</td>
                 <td>{{ packageSoldCount(item) }}</td>
                 <td>{{ packageTotalCredits(item) }}</td>
                 <td><span class="status-pill">{{ packageStatus(item) }}</span></td>
@@ -321,7 +323,7 @@ type PlanLifecycleDialog = {
               <p>{{ packageRuleText(pkg) }}</p>
             </div>
             <div class="mini-stats">
-              <article><span>Price</span><strong>{{ packagePrice(pkg) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Price</span><strong>{{ packagePrice(pkg) | auraMoney:'1.0-0' }}</strong></article>
               <article><span>Credits</span><strong>{{ packageTotalCredits(pkg) }}</strong></article>
               <article><span>Sold</span><strong>{{ packageSoldCount(pkg) }}</strong></article>
             </div>
@@ -339,7 +341,7 @@ type PlanLifecycleDialog = {
           <div class="quick-grid">
             <article class="action-card" *ngFor="let card of giftCards()">
               <strong>{{ card.code }}</strong>
-              <span>{{ card.balance | currency: 'INR':'symbol':'1.0-0' }} balance Â· expires {{ card.expiryDate }}</span>
+              <span>{{ card.balance | auraMoney:'1.0-0' }} balance Â· expires {{ card.expiryDate }}</span>
             </article>
             <article class="action-card" *ngIf="!giftCards().length">
               <strong>No gift card yet.</strong>
@@ -514,8 +516,8 @@ type PlanLifecycleDialog = {
               <tr *ngFor="let membership of visibleMemberships()">
                 <td>{{ clientName(membership.clientId) }}</td>
                 <td><strong>{{ membership.planName }}</strong><small>{{ membership.status }}</small></td>
-                <td>{{ membershipTakenDate(membership) | date: 'mediumDate' }}</td>
-                <td>{{ membership.validityDate ? (membership.validityDate | date: 'mediumDate') : 'No expiry' }}</td>
+                <td>{{ membershipTakenDate(membership) | auraDate:'date' }}</td>
+                <td>{{ membership.validityDate ? (membership.validityDate | auraDate:'date') : 'No expiry' }}</td>
                 <td>
                   <span class="badge" [class.danger]="membershipDaysLeft(membership) < 0">
                     {{ membershipDaysLeftLabel(membership) }}
@@ -524,7 +526,7 @@ type PlanLifecycleDialog = {
                 <td>{{ membership.creditsRemaining || 0 }} / {{ membership.planCredits || 0 }}</td>
                 <td>{{ membershipDiscount(membership) }}%</td>
                 <td>{{ membership.autoRenew ? 'Yes' : 'No' }}</td>
-                <td>{{ membership.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ membership.price | auraMoney:'1.0-0' }}</td>
                 <td>
                   <div class="inline-actions">
                     <button class="ghost-button mini" type="button" (click)="renewMembership(membership)">Renew</button>
@@ -665,7 +667,7 @@ type PlanLifecycleDialog = {
             </div>
             <div class="wallet-snapshot-grid">
               <div><span>Retry count</span><b>{{ item.retryCount || 0 }}</b></div>
-              <div><span>Next retry</span><b>{{ item.nextRetryAt ? (item.nextRetryAt | date: 'short') : '-' }}</b></div>
+              <div><span>Next retry</span><b>{{ item.nextRetryAt ? (item.nextRetryAt | auraDate:'date') : '-' }}</b></div>
               <div><span>Payment method</span><b>{{ item.paymentMethod?.label || 'Missing' }}</b></div>
               <div><span>WhatsApp</span><b>{{ item.whatsappReminderStatus || 'not_queued' }}</b></div>
             </div>
@@ -708,11 +710,11 @@ type PlanLifecycleDialog = {
             <thead><tr><th>When</th><th>Client</th><th>Action</th><th>Amount</th><th>Discount</th><th>Credits</th><th>Payment</th><th>Invoice</th><th>Note</th></tr></thead>
             <tbody>
               <tr *ngFor="let row of ledger()">
-                <td>{{ row.createdAt | date: 'short' }}</td>
+                <td>{{ row.createdAt | auraDate:'date' }}</td>
                 <td>{{ clientName(row.clientId) }}</td>
                 <td>{{ row.action }}</td>
-                <td>{{ (row.paidAmount || row.amount) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ row.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ (row.paidAmount || row.amount) | auraMoney:'1.0-0' }}</td>
+                <td>{{ row.discountAmount | auraMoney:'1.0-0' }}</td>
                 <td>{{ row.creditsBefore }} â†’ {{ row.creditsAfter }}</td>
                 <td>{{ paymentLabel(row) }}</td>
                 <td>{{ row.invoiceId || '-' }}</td>
@@ -732,10 +734,10 @@ type PlanLifecycleDialog = {
         </div>
 
         <section class="member-count-strip compact-count-strip">
-          <article><span>Sale revenue</span><strong>{{ commissionMetric('saleRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article><span>Renewal revenue</span><strong>{{ commissionMetric('renewalRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article><span>Upgrade revenue</span><strong>{{ commissionMetric('upgradeRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article><span>Commission preview</span><strong>{{ commissionMetric('commissionPreview') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ commissionReport().metrics?.['doubleCountGuardedRows'] || 0 }} duplicate guarded</small></article>
+          <article><span>Sale revenue</span><strong>{{ commissionMetric('saleRevenue') | auraMoney:'1.0-0' }}</strong></article>
+          <article><span>Renewal revenue</span><strong>{{ commissionMetric('renewalRevenue') | auraMoney:'1.0-0' }}</strong></article>
+          <article><span>Upgrade revenue</span><strong>{{ commissionMetric('upgradeRevenue') | auraMoney:'1.0-0' }}</strong></article>
+          <article><span>Commission preview</span><strong>{{ commissionMetric('commissionPreview') | auraMoney:'1.0-0' }}</strong><small>{{ commissionReport().metrics?.['doubleCountGuardedRows'] || 0 }} duplicate guarded</small></article>
         </section>
 
         <div class="two-grid compact-workbench">
@@ -751,11 +753,11 @@ type PlanLifecycleDialog = {
                 <tbody>
                   <tr *ngFor="let row of commissionReport().staff">
                     <td><strong>{{ row['staffName'] || 'System' }}</strong><small>{{ row['role'] || row['staffId'] || '-' }}</small></td>
-                    <td>{{ row['saleRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row['renewalRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row['upgradeRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row['saleRevenue'] | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row['renewalRevenue'] | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row['upgradeRevenue'] | auraMoney:'1.0-0' }}</td>
                     <td>{{ row['retentionRate'] || 0 }}%</td>
-                    <td>{{ row['commissionPreview'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row['commissionPreview'] | auraMoney:'1.0-0' }}</td>
                     <td><span class="badge" [class.danger]="row['reversalFlags']">{{ row['reversalFlags'] || 0 }}</span></td>
                   </tr>
                 </tbody>
@@ -778,7 +780,7 @@ type PlanLifecycleDialog = {
             <div class="quick-grid" *ngIf="commissionReport().cancellationImpact?.length; else noCommissionImpact">
               <article class="action-card" *ngFor="let item of commissionReport().cancellationImpact">
                 <strong>{{ clientName(item['clientId']) }}</strong>
-                <span>{{ item['action'] }} Â· {{ item['commissionImpact'] | currency: 'INR':'symbol':'1.0-0' }} impact</span>
+                <span>{{ item['action'] }} Â· {{ item['commissionImpact'] | auraMoney:'1.0-0' }} impact</span>
                 <span>{{ item['reversalReason'] || 'Commission reversal requires review.' }}</span>
                 <span>Audit: {{ item['auditStatus'] || 'missing' }}</span>
               </article>
@@ -797,13 +799,13 @@ type PlanLifecycleDialog = {
             <thead><tr><th>When</th><th>Staff</th><th>Client</th><th>Action</th><th>Revenue</th><th>Rate</th><th>Commission</th><th>Audit</th><th>Status</th></tr></thead>
             <tbody>
               <tr *ngFor="let entry of commissionReport().entries">
-                <td>{{ entry['createdAt'] | date: 'short' }}</td>
+                <td>{{ entry['createdAt'] | auraDate:'date' }}</td>
                 <td>{{ entry['staffName'] || 'System' }}</td>
                 <td>{{ clientName(entry['clientId']) }}</td>
                 <td>{{ entry['action'] }}</td>
-                <td>{{ entry['revenue'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ entry['revenue'] | auraMoney:'1.0-0' }}</td>
                 <td>{{ ((entry['commissionRate'] || 0) * 100) | number: '1.1-1' }}%</td>
-                <td>{{ entry['commissionImpact'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ entry['commissionImpact'] | auraMoney:'1.0-0' }}</td>
                 <td><span class="badge" [class.danger]="entry['auditRequired']">{{ entry['auditStatus'] }}</span></td>
                 <td>{{ entry['status'] }}</td>
               </tr>
@@ -985,11 +987,11 @@ type PlanLifecycleDialog = {
         <section class="member-count-strip compact-count-strip">
           <article role="button" tabindex="0" (click)="setReportTab('activeMembers')" (keydown.enter)="setReportTab('activeMembers')"><span>Active members</span><strong>{{ reportMetric('activeMembers') }}</strong></article>
           <article role="button" tabindex="0" (click)="setReportTab('expiringSoon')" (keydown.enter)="setReportTab('expiringSoon')"><span>Expiring soon</span><strong>{{ reportMetric('expiringSoon') }}</strong></article>
-          <article role="button" tabindex="0" (click)="setReportTab('renewalRevenue')" (keydown.enter)="setReportTab('renewalRevenue')"><span>Renewal revenue</span><strong>{{ reportMetric('renewalRevenue') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article role="button" tabindex="0" (click)="setReportTab('creditLiability')" (keydown.enter)="setReportTab('creditLiability')"><span>Credit liability</span><strong>{{ reportMetric('creditLiability') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article role="button" tabindex="0" (click)="setReportTab('discountLeakage')" (keydown.enter)="setReportTab('discountLeakage')"><span>Discount leakage</span><strong>{{ reportMetric('discountLeakage') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article role="button" tabindex="0" (click)="setReportTab('membershipRedeem')" (keydown.enter)="setReportTab('membershipRedeem')"><span>Membership redeem</span><strong>{{ reportMetric('totalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ reportMetric('redeemCount') }} redemptions</small></article>
-          <article role="button" tabindex="0" (click)="setReportTab('membershipSalesByCustomer')" (keydown.enter)="setReportTab('membershipSalesByCustomer')"><span>Customer sales</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ reportMetric('membershipSalesTotalCount') }} sale rows</small></article>
+          <article role="button" tabindex="0" (click)="setReportTab('renewalRevenue')" (keydown.enter)="setReportTab('renewalRevenue')"><span>Renewal revenue</span><strong>{{ reportMetric('renewalRevenue') | auraMoney:'1.0-0' }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('creditLiability')" (keydown.enter)="setReportTab('creditLiability')"><span>Credit liability</span><strong>{{ reportMetric('creditLiability') | auraMoney:'1.0-0' }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('discountLeakage')" (keydown.enter)="setReportTab('discountLeakage')"><span>Discount leakage</span><strong>{{ reportMetric('discountLeakage') | auraMoney:'1.0-0' }}</strong></article>
+          <article role="button" tabindex="0" (click)="setReportTab('membershipRedeem')" (keydown.enter)="setReportTab('membershipRedeem')"><span>Membership redeem</span><strong>{{ reportMetric('totalRedeemed') | auraMoney:'1.0-0' }}</strong><small>{{ reportMetric('redeemCount') }} redemptions</small></article>
+          <article role="button" tabindex="0" (click)="setReportTab('membershipSalesByCustomer')" (keydown.enter)="setReportTab('membershipSalesByCustomer')"><span>Customer sales</span><strong>{{ reportMetric('membershipSalesOfferPrice') | auraMoney:'1.0-0' }}</strong><small>{{ reportMetric('membershipSalesTotalCount') }} sale rows</small></article>
           <article role="button" tabindex="0" (click)="setReportTab('actionQueue')" (keydown.enter)="setReportTab('actionQueue')"><span>Action queue</span><strong>{{ reportMetric('actionQueue') }}</strong></article>
         </section>
 
@@ -1035,7 +1037,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('activeMembers').length; else noActiveReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Expiry</th><th>Credits</th><th>Price</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('activeMembers').slice(0, 8)">
-                  <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td>{{ row['expiresOn'] || '-' }}</td><td>{{ row['creditsRemaining'] || 0 }} / {{ row['planCredits'] || 0 }}</td><td>{{ row['price'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td>{{ row['expiresOn'] || '-' }}</td><td>{{ row['creditsRemaining'] || 0 }} / {{ row['planCredits'] || 0 }}</td><td>{{ row['price'] | auraMoney:'1.0-0' }}</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noActiveReport><div class="empty-panel compact-empty"><strong>No active members.</strong></div></ng-template>
@@ -1057,7 +1059,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('renewalRevenue').length; else noRenewalReport">
               <table><thead><tr><th>Date</th><th>Revenue</th><th>Count</th><th>Staff</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('renewalRevenue').slice(0, 8)">
-                  <td>{{ row['date'] }}</td><td>{{ row['revenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['count'] }}</td><td>{{ row['staffCount'] }}</td>
+                  <td>{{ row['date'] }}</td><td>{{ row['revenue'] | auraMoney:'1.0-0' }}</td><td>{{ row['count'] }}</td><td>{{ row['staffCount'] }}</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noRenewalReport><div class="empty-panel compact-empty"><strong>No renewal revenue.</strong></div></ng-template>
@@ -1068,7 +1070,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('cancelledMemberships').length; else noCancelledReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Amount</th><th>When</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('cancelledMemberships').slice(0, 8)">
-                  <td>{{ row['clientName'] }}</td><td>{{ row['planName'] || row['planId'] }}</td><td>{{ (row['amount'] || row['price'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['createdAt'] || row['takenOn'] || '-' }}</td>
+                  <td>{{ row['clientName'] }}</td><td>{{ row['planName'] || row['planId'] }}</td><td>{{ (row['amount'] || row['price'] || 0) | auraMoney:'1.0-0' }}</td><td>{{ row['createdAt'] || row['takenOn'] || '-' }}</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noCancelledReport><div class="empty-panel compact-empty"><strong>No cancellations.</strong></div></ng-template>
@@ -1079,7 +1081,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('staffWiseSales').length; else noStaffReport">
               <table><thead><tr><th>Staff</th><th>Sale</th><th>Renewal</th><th>Upgrade</th><th>Commission</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('staffWiseSales').slice(0, 8)">
-                  <td>{{ row['staffName'] || 'System' }}</td><td>{{ row['saleRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['renewalRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['upgradeRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['commissionPreview'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['staffName'] || 'System' }}</td><td>{{ row['saleRevenue'] | auraMoney:'1.0-0' }}</td><td>{{ row['renewalRevenue'] | auraMoney:'1.0-0' }}</td><td>{{ row['upgradeRevenue'] | auraMoney:'1.0-0' }}</td><td>{{ row['commissionPreview'] | auraMoney:'1.0-0' }}</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noStaffReport><div class="empty-panel compact-empty"><strong>No staff sales rows.</strong></div></ng-template>
@@ -1090,7 +1092,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('planWiseProfitability').length; else noPlanReport">
               <table><thead><tr><th>Plan</th><th>Revenue</th><th>Leakage</th><th>Liability</th><th>Margin</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('planWiseProfitability').slice(0, 8)">
-                  <td>{{ row['planName'] }}</td><td>{{ row['revenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['discountLeakage'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['creditLiability'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['marginPercent'] || 0 }}%</td>
+                  <td>{{ row['planName'] }}</td><td>{{ row['revenue'] | auraMoney:'1.0-0' }}</td><td>{{ row['discountLeakage'] | auraMoney:'1.0-0' }}</td><td>{{ row['creditLiability'] | auraMoney:'1.0-0' }}</td><td>{{ row['marginPercent'] || 0 }}%</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noPlanReport><div class="empty-panel compact-empty"><strong>No plan profitability rows.</strong></div></ng-template>
@@ -1101,7 +1103,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('creditLiability').length; else noCreditReport">
               <table><thead><tr><th>Client</th><th>Plan</th><th>Credits</th><th>Value</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('creditLiability').slice(0, 8)">
-                  <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td>{{ row['creditsRemaining'] }}</td><td>{{ row['liabilityValue'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['clientName'] }}</td><td>{{ row['planName'] }}</td><td>{{ row['creditsRemaining'] }}</td><td>{{ row['liabilityValue'] | auraMoney:'1.0-0' }}</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noCreditReport><div class="empty-panel compact-empty"><strong>No credit liability.</strong></div></ng-template>
@@ -1123,7 +1125,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('upgradeDowngrade').length; else noLifecycleReport">
               <table><thead><tr><th>Client</th><th>Action</th><th>Amount</th><th>Staff</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('upgradeDowngrade').slice(0, 8)">
-                  <td>{{ row['clientName'] }}</td><td>{{ row['action'] }}</td><td>{{ (row['amount'] || row['refundAmount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['staffName'] || 'System' }}</td>
+                  <td>{{ row['clientName'] }}</td><td>{{ row['action'] }}</td><td>{{ (row['amount'] || row['refundAmount'] || 0) | auraMoney:'1.0-0' }}</td><td>{{ row['staffName'] || 'System' }}</td>
                 </tr></tbody></table>
             </div>
             <ng-template #noLifecycleReport><div class="empty-panel compact-empty"><strong>No upgrade or downgrade rows.</strong></div></ng-template>
@@ -1134,7 +1136,7 @@ type PlanLifecycleDialog = {
             <div class="table-wrap compact-table inner-table-wrap" *ngIf="reportSet('discountLeakage').length; else noDiscountReport">
               <table><thead><tr><th>Invoice</th><th>Plan</th><th>Discount</th><th>Risk</th></tr></thead>
                 <tbody><tr *ngFor="let row of reportSet('discountLeakage').slice(0, 8)">
-                  <td>{{ row['invoiceId'] || '-' }}</td><td>{{ row['planName'] || row['planId'] }}</td><td>{{ row['discountAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td><td><span class="badge" [ngClass]="riskBadgeClass(row['riskLevel'])">{{ row['riskLevel'] }}</span></td>
+                  <td>{{ row['invoiceId'] || '-' }}</td><td>{{ row['planName'] || row['planId'] }}</td><td>{{ row['discountAmount'] | auraMoney:'1.0-0' }}</td><td><span class="badge" [ngClass]="riskBadgeClass(row['riskLevel'])">{{ row['riskLevel'] }}</span></td>
                 </tr></tbody></table>
             </div>
             <ng-template #noDiscountReport><div class="empty-panel compact-empty"><strong>No discount leakage.</strong></div></ng-template>
@@ -1149,10 +1151,10 @@ type PlanLifecycleDialog = {
             </div>
             <section class="member-count-strip compact-count-strip">
               <article><span>Total Count</span><strong>{{ reportMetric('membershipSalesTotalCount') }}</strong></article>
-              <article><span>Total Offer Price</span><strong>{{ reportMetric('membershipSalesOfferPrice') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article><span>Total Ewallet</span><strong>{{ reportMetric('membershipSalesTotalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article><span>Pending Ewallet</span><strong>{{ reportMetric('membershipSalesPendingEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article><span>Total Redeemed</span><strong>{{ reportMetric('membershipSalesTotalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Total Offer Price</span><strong>{{ reportMetric('membershipSalesOfferPrice') | auraMoney:'1.0-0' }}</strong></article>
+              <article><span>Total Ewallet</span><strong>{{ reportMetric('membershipSalesTotalEwallet') | auraMoney:'1.0-0' }}</strong></article>
+              <article><span>Pending Ewallet</span><strong>{{ reportMetric('membershipSalesPendingEwallet') | auraMoney:'1.0-0' }}</strong></article>
+              <article><span>Total Redeemed</span><strong>{{ reportMetric('membershipSalesTotalRedeemed') | auraMoney:'1.0-0' }}</strong></article>
               <article><span>Renewal Count</span><strong>{{ reportMetric('membershipSalesRenewalCount') }}</strong></article>
               <article><span>Active Memberships</span><strong>{{ reportMetric('membershipSalesActiveMemberships') }}</strong></article>
               <article><span>Expired Memberships</span><strong>{{ reportMetric('membershipSalesExpiredMemberships') }}</strong></article>
@@ -1165,12 +1167,12 @@ type PlanLifecycleDialog = {
                   <td>{{ row['planName'] }}<small>{{ row['businessLabel'] || '' }}</small></td>
                   <td>{{ row['planType'] || '-' }}</td>
                   <td><span class="badge">{{ row['saleType'] || 'New Sale' }}</span></td>
-                  <td>{{ row['offerPrice'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row['paidAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row['dueAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row['totalEwallet'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row['pendingEwallet'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row['redeemedAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['offerPrice'] | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row['paidAmount'] | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row['dueAmount'] | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row['totalEwallet'] | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row['pendingEwallet'] | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row['redeemedAmount'] | auraMoney:'1.0-0' }}</td>
                   <td>{{ row['staffName'] || 'System' }}</td>
                   <td>{{ row['invoiceNumber'] || row['invoiceId'] || '-' }}</td>
                   <td>{{ row['branchId'] || '-' }}</td>
@@ -1198,8 +1200,8 @@ type PlanLifecycleDialog = {
             </div>
             <section class="member-count-strip compact-count-strip">
               <article><span>Total Membership</span><strong>{{ reportMetric('totalMembership') }}</strong></article>
-              <article><span>Total Ewallet</span><strong>{{ reportMetric('totalEwallet') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article><span>Total Redeemed</span><strong>{{ reportMetric('totalRedeemed') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article><span>Total Ewallet</span><strong>{{ reportMetric('totalEwallet') | auraMoney:'1.0-0' }}</strong></article>
+              <article><span>Total Redeemed</span><strong>{{ reportMetric('totalRedeemed') | auraMoney:'1.0-0' }}</strong></article>
               <article><span>Redeem Count</span><strong>{{ reportMetric('redeemCount') }}</strong></article>
               <article><span>Active Wallet Clients</span><strong>{{ reportMetric('clientsWithActiveWallet') }}</strong></article>
               <article><span>Last Redeemed Today</span><strong>{{ reportMetric('lastRedeemedToday') }}</strong></article>
@@ -1210,8 +1212,8 @@ type PlanLifecycleDialog = {
                   <td>{{ row['clientName'] }}</td>
                   <td>{{ row['phone'] || '-' }}</td>
                   <td>{{ row['planName'] }}<small>{{ row['businessLabel'] || row['planType'] || '' }}</small></td>
-                  <td>{{ row['ewalletBalance'] | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row['lastRedeemedAmount'] | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row['ewalletBalance'] | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row['lastRedeemedAmount'] | auraMoney:'1.0-0' }}</td>
                   <td>{{ row['lastRedeemedDate'] || '-' }}</td>
                   <td>{{ row['lastRedeemedTime'] || '-' }}</td>
                   <td>{{ row['posReference'] || '-' }}</td>
@@ -1301,7 +1303,7 @@ type PlanLifecycleDialog = {
           <article><span>Reward clients</span><strong>{{ rewardMetric('totalRewardClients') }}</strong></article>
           <article><span>Points earned</span><strong>{{ rewardMetric('totalPointsEarned') }}</strong></article>
           <article><span>Points redeemed</span><strong>{{ rewardMetric('totalPointsRedeemed') }}</strong></article>
-          <article><span>Reward revenue</span><strong>{{ rewardMetric('revenueFromRewardUsers') | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article><span>Reward revenue</span><strong>{{ rewardMetric('revenueFromRewardUsers') | auraMoney:'1.0-0' }}</strong></article>
           <article><span>Repeat rate</span><strong>{{ rewardMetric('repeatVisitRate') }}%</strong></article>
           <article><span>Abuse alerts</span><strong>{{ rewardAbuseRows().length }}</strong></article>
         </section>
@@ -1338,7 +1340,7 @@ type PlanLifecycleDialog = {
             <table><thead><tr><th>Client</th><th>Visits</th><th>Total sale</th><th>Earned</th><th>Redeemed</th><th>Balance</th><th>Repeat revenue</th><th>Suggested action</th></tr></thead>
               <tbody><tr *ngFor="let row of rewardRoiRows().slice(0, 80)">
                 <td>{{ row['clientName'] || clientName(row['clientId']) }}<small>{{ row['clientPhone'] || '' }}</small></td>
-                <td>{{ row['visits'] || 0 }}</td><td>{{ row['totalSale'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['rewardEarned'] || 0 }}</td><td>{{ row['rewardRedeemed'] || 0 }}</td><td>{{ row['pendingRewardBalance'] || 0 }}</td><td>{{ row['repeatRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['suggestedAction'] }}</td>
+                <td>{{ row['visits'] || 0 }}</td><td>{{ row['totalSale'] | auraMoney:'1.0-0' }}</td><td>{{ row['rewardEarned'] || 0 }}</td><td>{{ row['rewardRedeemed'] || 0 }}</td><td>{{ row['pendingRewardBalance'] || 0 }}</td><td>{{ row['repeatRevenue'] | auraMoney:'1.0-0' }}</td><td>{{ row['suggestedAction'] }}</td>
               </tr></tbody></table>
           </div>
           <ng-template #noRewardRoi><div class="empty-panel compact-empty"><strong>No reward ROI rows.</strong><span>Reward users vs non-reward revenue appears after loyalty activity starts.</span></div></ng-template>
@@ -1349,7 +1351,7 @@ type PlanLifecycleDialog = {
           <div class="table-wrap compact-table inner-table-wrap" *ngIf="expiringRewardRows().length; else noExpiringRewards">
             <table><thead><tr><th>Client</th><th>Phone</th><th>Points expiring</th><th>Expiry date</th><th>Days left</th><th>Value</th><th>Last visit</th><th>Reminder</th></tr></thead>
               <tbody><tr *ngFor="let row of expiringRewardRows().slice(0, 80)">
-                <td>{{ row['clientName'] }}</td><td>{{ row['phone'] || '-' }}</td><td>{{ row['pointsExpiring'] || 0 }}</td><td>{{ row['expiryDate'] }}</td><td><span class="badge" [class.danger]="row['daysLeft'] <= 7">{{ row['daysLeft'] }}d</span></td><td>{{ row['estimatedValue'] | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row['lastVisitDate'] || '-' }}</td>
+                <td>{{ row['clientName'] }}</td><td>{{ row['phone'] || '-' }}</td><td>{{ row['pointsExpiring'] || 0 }}</td><td>{{ row['expiryDate'] }}</td><td><span class="badge" [class.danger]="row['daysLeft'] <= 7">{{ row['daysLeft'] }}d</span></td><td>{{ row['estimatedValue'] | auraMoney:'1.0-0' }}</td><td>{{ row['lastVisitDate'] || '-' }}</td>
                 <td><button class="ghost-button mini" type="button" [disabled]="saving()" (click)="sendRewardExpiryReminder(row)">Send WhatsApp</button><small>{{ row['reminderStatus']?.['status'] || 'not_sent' }}</small></td>
               </tr></tbody></table>
           </div>
@@ -1388,7 +1390,7 @@ type PlanLifecycleDialog = {
             </article>
             <article>
               <span>Current expiry</span>
-              <strong>{{ renewal.validityDate ? (renewal.validityDate | date: 'mediumDate') : 'No expiry' }}</strong>
+              <strong>{{ renewal.validityDate ? (renewal.validityDate | auraDate:'date') : 'No expiry' }}</strong>
             </article>
           </div>
 
@@ -1483,27 +1485,27 @@ type PlanLifecycleDialog = {
             </article>
             <article>
               <span>Old price</span>
-              <strong>{{ dialog.summary.oldPrice | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ dialog.summary.oldPrice | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>Unused value</span>
-              <strong>{{ dialog.summary.unusedValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ dialog.summary.unusedValue | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>Target value</span>
-              <strong>{{ (dialog.summary.targetValue || dialog.summary.newPrice) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ (dialog.summary.targetValue || dialog.summary.newPrice) | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>Payable difference</span>
-              <strong>{{ lifecyclePayableAmount() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ lifecyclePayableAmount() | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>Credit note</span>
-              <strong>{{ (dialog.summary.creditNoteAmount || lifecycleRefundAmount()) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ (dialog.summary.creditNoteAmount || lifecycleRefundAmount()) | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>Refund amount</span>
-              <strong>{{ lifecycleRefundAmount() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ lifecycleRefundAmount() | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>New expiry</span>
@@ -1523,7 +1525,7 @@ type PlanLifecycleDialog = {
               <span>Target plan</span>
               <select formControlName="targetPlanId" (change)="syncLifecycleTargetPlan()">
                 <option value="">Select target plan</option>
-                <option *ngFor="let plan of activeMembershipPlans()" [value]="plan.id">{{ plan.name }} Â· {{ plan.price | currency: 'INR':'symbol':'1.0-0' }}</option>
+                <option *ngFor="let plan of activeMembershipPlans()" [value]="plan.id">{{ plan.name }} Â· {{ plan.price | auraMoney:'1.0-0' }}</option>
               </select>
             </label>
             <label class="field">

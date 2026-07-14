@@ -6,6 +6,7 @@
   "scripts": {
     "api": "node server/index.js",
     "client": "set GOMAXPROCS=2&& set NG_BUILD_MAX_WORKERS=2&& set NODE_OPTIONS=--max-old-space-size=4096&& ng serve --host 127.0.0.1 --port 4300 --proxy-config proxy.conf.json",
+    "staff": "npm --prefix staff-app start",
     "dev": "concurrently -k -n API,WEB -c cyan,green \"npm:api\" \"npm:client\"",
     "start:api": "node server/index.js",
     "start:prod": "node server/index.js",
@@ -20,6 +21,7 @@
     "smoke:staff-mobile": "node scripts/smoke-staff-mobile.mjs",
     "build": "npm run build:client",
     "build:client": "ng build",
+    "build:staff": "npm --prefix staff-app run build",
     "start": "node server/index.js",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest"
@@ -39,6 +41,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.1",
     "firebase-admin": "^14.1.0",
+    "multer": "^2.2.0",
     "rxjs": "^7.8.2",
     "three": "^0.184.0",
     "tslib": "^2.8.1",

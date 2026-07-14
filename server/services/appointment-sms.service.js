@@ -5,6 +5,7 @@ import { invoiceNotificationService } from "./invoice-notification.service.js";
 import { jobQueueService } from "./job-queue.service.js";
 import { securityService } from "./security.service.js";
 import { tenantService } from "./tenant.service.js";
+import { generalSettingsService } from "./general-settings.service.js";
 
 function compactUnique(values = []) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
@@ -75,6 +76,9 @@ class AppointmentSmsService {
     if (!appointment) throw notFound("Appointment not found");
     const branchId = appointment.branchId || access.branchId || "";
     if (branchId) tenantService.assertBranchAccess(access, branchId);
+    if (target === "owner" && !generalSettingsService.ownerNotificationsEnabled(access, branchId)) {
+      return { queued: false, target, count: 0, recipients: [], emailRecipients: [], messageLogs: [], policyDisabled: true };
+    }
 
     const context = this.contextForAppointment(appointment, access, branchId);
     const recipients = this.recipientsForTarget(target, context);

@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
@@ -6,6 +6,8 @@ import { AuthSessionService } from '../core/auth-session.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type TenantFilter = 'all' | 'active' | 'trial' | 'suspended' | 'risk' | 'paymentDue';
 type AdminFormTab = 'subscription' | 'limits' | 'security' | 'sso' | 'exports' | 'features' | 'impersonation' | 'plans';
@@ -16,7 +18,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
 @Component({
   selector: 'app-super-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, DecimalPipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, DecimalPipe, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -31,8 +33,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
       <ng-container *ngIf="overview() as overview">
         <div class="metrics-grid">
           <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/salons"><span>Salons</span><strong>{{ overview.metrics.salons }}</strong><small>{{ overview.metrics.activeSalons }} active</small></aura-kpi-card>
-          <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/mrr"><span>MRR</span><strong>{{ overview.metrics.monthlyRecurringRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ overview.metrics.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} metered usage</small></aura-kpi-card>
-          <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/tenant-sales"><span>Tenant sales</span><strong>{{ overview.metrics.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+          <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/mrr"><span>MRR</span><strong>{{ overview.metrics.monthlyRecurringRevenue | auraMoney:'1.0-0' }}</strong><small>{{ overview.metrics.meteredUsageRevenue | auraMoney:'1.0-0' }} metered usage</small></aura-kpi-card>
+          <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/tenant-sales"><span>Tenant sales</span><strong>{{ overview.metrics.transactionRevenue | auraMoney:'1.0-0' }}</strong></aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/suspended"><span>Suspended</span><strong>{{ overview.metrics.suspendedSalons }}</strong></aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/trials"><span>Trials</span><strong>{{ overview.metrics.trialSalons }}</strong></aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/super-admin/health"><span>Health</span><strong>{{ overview.metrics.averageHealth | number: '1.0-1' }}</strong></aura-kpi-card>
@@ -60,7 +62,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <div>
                 <h2>Invoice revenue, MRR base and outstanding exposure</h2>
               </div>
-              <span class="badge">{{ overview.revenueCommand?.arr | currency: 'INR':'symbol':'1.0-0' }} ARR</span>
+              <span class="badge">{{ overview.revenueCommand?.arr | auraMoney:'1.0-0' }} ARR</span>
             </div>
             <div class="revenue-bars">
               <article *ngFor="let point of revenueTrend(overview)">
@@ -69,7 +71,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <span class="bar-due" [style.height.%]="revenueBarHeight(point.outstanding, revenueTrend(overview))"></span>
                 </div>
                 <strong>{{ point.label }}</strong>
-                <small>{{ point.total | currency: 'INR':'symbol':'1.0-0' }}</small>
+                <small>{{ point.total | auraMoney:'1.0-0' }}</small>
               </article>
             </div>
             <div class="quick-grid compact-grid">
@@ -113,17 +115,17 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
           <div class="command-kpi-grid">
             <article class="command-kpi accent">
               <span>MRR</span>
-              <strong>{{ command.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ command.mrr | auraMoney:'1.0-0' }}</strong>
               <small>{{ command.activeSalons }} active salons</small>
             </article>
             <article class="command-kpi danger">
               <span>Churn risk</span>
               <strong>{{ command.churnRisk }}</strong>
-              <small>{{ command.mrrAtRisk | currency: 'INR':'symbol':'1.0-0' }} MRR at risk</small>
+              <small>{{ command.mrrAtRisk | auraMoney:'1.0-0' }} MRR at risk</small>
             </article>
             <article class="command-kpi warning">
               <span>Unpaid amount</span>
-              <strong>{{ command.unpaid | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ command.unpaid | auraMoney:'1.0-0' }}</strong>
               <small>{{ command.paymentDue }} payment due</small>
             </article>
             <article class="command-kpi success">
@@ -658,11 +660,11 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>High-risk alerts</span>
             </article>
             <article class="action-card">
-              <strong>{{ tenant.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ tenant.outstanding | auraMoney:'1.0-0' }}</strong>
               <span>Outstanding billing exposure</span>
             </article>
             <article class="action-card">
-              <strong>{{ tenant.monthlyRecurringRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ tenant.monthlyRecurringRevenue | auraMoney:'1.0-0' }}</strong>
               <span>Monthly recurring revenue</span>
             </article>
             <article class="action-card">
@@ -694,9 +696,9 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <article>
                 <div>
                   <strong>Billing mix</strong>
-                  <span>{{ tenant.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} usage · {{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }} tenant sales</span>
+                  <span>{{ tenant.meteredUsageRevenue | auraMoney:'1.0-0' }} usage · {{ tenant.transactionRevenue | auraMoney:'1.0-0' }} tenant sales</span>
                 </div>
-                <strong>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tenant.totalBillingAmount | auraMoney:'1.0-0' }}</strong>
               </article>
             </div>
 
@@ -770,11 +772,11 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
           </div>
           <div class="quick-grid">
             <article class="action-card">
-              <strong>{{ revenue.arr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ revenue.arr | auraMoney:'1.0-0' }}</strong>
               <span>Annual recurring revenue</span>
             </article>
             <article class="action-card">
-              <strong>{{ revenue.arpu | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ revenue.arpu | auraMoney:'1.0-0' }}</strong>
               <span>Average revenue per active salon</span>
             </article>
             <article class="action-card">
@@ -782,15 +784,15 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>MRR quality after outstanding exposure</span>
             </article>
             <article class="action-card">
-              <strong>{{ revenue.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ revenue.outstanding | auraMoney:'1.0-0' }}</strong>
               <span>Outstanding billing to collect</span>
             </article>
             <article class="action-card">
-              <strong>{{ revenue.suspendedMrrAtRisk | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ revenue.suspendedMrrAtRisk | auraMoney:'1.0-0' }}</strong>
               <span>Suspended MRR at risk</span>
             </article>
             <article class="action-card">
-              <strong>{{ revenue.trialMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ revenue.trialMrr | auraMoney:'1.0-0' }}</strong>
               <span>Trial MRR pipeline</span>
             </article>
           </div>
@@ -803,8 +805,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ plan.tenantCount }} salons · {{ plan.sharePct | number: '1.0-1' }}% MRR share · {{ plan.averageHealth | number: '1.0-1' }} health</span>
                 </div>
                 <div style="text-align:right;flex-shrink:0">
-                  <strong>{{ plan.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ plan.arr | currency: 'INR':'symbol':'1.0-0' }} ARR</span>
+                  <strong>{{ plan.mrr | auraMoney:'1.0-0' }}</strong>
+                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ plan.arr | auraMoney:'1.0-0' }} ARR</span>
                 </div>
               </article>
             </div>
@@ -816,8 +818,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.subscriptionStatus }} · {{ tenant.healthScore | number: '1.0-1' }} health</span>
                 </div>
                 <div style="text-align:right;flex-shrink:0">
-                  <strong>{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }} sales</span>
+                  <strong>{{ tenant.totalBillingAmount | auraMoney:'1.0-0' }}</strong>
+                  <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ tenant.transactionRevenue | auraMoney:'1.0-0' }} sales</span>
                 </div>
               </article>
             </div>
@@ -831,7 +833,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
                 <span class="badge" [style.background]="risk.severity === 'high' ? 'var(--danger,#dc2626)' : 'var(--warning,#f59e0b)'" style="color:#fff">{{ risk.severity }}</span>
-                <strong>{{ risk.amountAtRisk | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ risk.amountAtRisk | auraMoney:'1.0-0' }}</strong>
               </div>
             </article>
           </div>
@@ -845,15 +847,15 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
           </div>
           <div class="quick-grid">
             <article class="action-card">
-              <strong>{{ intel.expansionPipeline | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ intel.expansionPipeline | auraMoney:'1.0-0' }}</strong>
               <span>Estimated upsell pipeline</span>
             </article>
             <article class="action-card">
-              <strong>{{ intel.netRevenueExposure | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ intel.netRevenueExposure | auraMoney:'1.0-0' }}</strong>
               <span>Revenue exposure</span>
             </article>
             <article class="action-card">
-              <strong>{{ intel.collectionPriority | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ intel.collectionPriority | auraMoney:'1.0-0' }}</strong>
               <span>Collection priority</span>
             </article>
             <article class="action-card">
@@ -869,7 +871,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <strong>{{ tenant.name }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.signal }} · {{ tenant.healthScore | number: '1.0-1' }} health</span>
                 </div>
-                <strong>{{ tenant.estimatedUpsell | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tenant.estimatedUpsell | auraMoney:'1.0-0' }}</strong>
               </article>
             </div>
 
@@ -879,7 +881,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <strong>{{ tenant.name }}</strong>
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.reason }} · {{ tenant.planName }} · {{ tenant.healthScore | number: '1.0-1' }} health</span>
                 </div>
-                <strong>{{ tenant.mrrAtRisk + tenant.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tenant.mrrAtRisk + tenant.outstanding | auraMoney:'1.0-0' }}</strong>
               </article>
             </div>
           </div>
@@ -890,7 +892,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <strong>{{ plan.name }}</strong>
                 <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ plan.tenants }} tenants · {{ plan.atRisk }} at risk · {{ plan.averageHealth | number: '1.0-1' }} avg health</span>
               </div>
-              <strong>{{ plan.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ plan.mrr | auraMoney:'1.0-0' }}</strong>
             </article>
           </div>
         </section>
@@ -898,25 +900,25 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
         <section class="panel" *ngIf="overview.revenueLeakageReport as leakage">
           <div class="section-title">
             <div>
-              <h2>{{ leakage.totalLeakage | currency: 'INR':'symbol':'1.0-0' }} leakage across billing, adoption and rollout gaps</h2>
+              <h2>{{ leakage.totalLeakage | auraMoney:'1.0-0' }} leakage across billing, adoption and rollout gaps</h2>
             </div>
             <span class="badge" [style.background]="leakage.lowUsageExpiringCount ? 'var(--danger,#dc2626)' : 'var(--success,#C87D4B)'" style="color:#fff">{{ leakage.lowUsageExpiringCount }} churn-risk badges</span>
           </div>
           <div class="quick-grid">
             <article class="action-card">
-              <strong>{{ leakage.outstandingBilling | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ leakage.outstandingBilling | auraMoney:'1.0-0' }}</strong>
               <span>Outstanding billing</span>
             </article>
             <article class="action-card">
-              <strong>{{ leakage.suspendedMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ leakage.suspendedMrr | auraMoney:'1.0-0' }}</strong>
               <span>Suspended MRR</span>
             </article>
             <article class="action-card">
-              <strong>{{ leakage.expiredTrialPipeline | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ leakage.expiredTrialPipeline | auraMoney:'1.0-0' }}</strong>
               <span>Expired trial pipeline</span>
             </article>
             <article class="action-card">
-              <strong>{{ leakage.lowAdoptionMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ leakage.lowAdoptionMrr | auraMoney:'1.0-0' }}</strong>
               <span>Low adoption MRR</span>
             </article>
           </div>
@@ -930,7 +932,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                   <span class="badge" [style.background]="healthFlagTone(item.severity)" style="color:#fff">{{ item.severity }}</span>
-                  <strong style="display:block">{{ item.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong style="display:block">{{ item.amount | auraMoney:'1.0-0' }}</strong>
                 </div>
               </article>
             </div>
@@ -942,7 +944,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ tenant.planName }} · {{ tenant.daysLeft }} days left · {{ tenant.usage.appointments }} appts · {{ tenant.usage.clients }} clients</span>
                 </div>
                 <div style="text-align:right;flex-shrink:0">
-                  <strong>{{ tenant.mrrAtRisk | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong>{{ tenant.mrrAtRisk | auraMoney:'1.0-0' }}</strong>
                   <button type="button" class="link-button" (click)="openTenantDrilldown(tenant.id)">Open 360</button>
                 </div>
               </article>
@@ -967,7 +969,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>Failed payments</span>
             </article>
             <article class="action-card">
-              <strong>{{ billingOps.failedPaymentAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ billingOps.failedPaymentAmount | auraMoney:'1.0-0' }}</strong>
               <span>Failed payment value</span>
             </article>
             <article class="action-card">
@@ -975,7 +977,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>Paused subscriptions</span>
             </article>
             <article class="action-card">
-              <strong>{{ billingOps.dunningAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ billingOps.dunningAmount | auraMoney:'1.0-0' }}</strong>
               <span>Dunning amount</span>
             </article>
           </div>
@@ -989,7 +991,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span class="badge" [style.background]="healthFlagTone(tenant.billingOps.dunningSeverity)" style="color:#fff">{{ tenant.billingOps.dunningStatus }}</span>
               <span>{{ tenant.billingOps.failedPaymentCount }} failed · {{ tenant.billingOps.unpaidInvoiceCount }} unpaid</span>
               <div style="text-align:right">
-                <strong>{{ tenant.billingOps.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tenant.billingOps.outstanding | auraMoney:'1.0-0' }}</strong>
                 <button type="button" class="link-button" (click)="openTenantDrilldown(tenant.id)">Open 360</button>
               </div>
             </article>
@@ -1038,7 +1040,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                   <span class="badge" [style.background]="healthFlagTone(alert.severity)" style="color:#fff">{{ alert.severity }}</span>
-                  <strong style="display:block">{{ alert.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong style="display:block">{{ alert.outstanding | auraMoney:'1.0-0' }}</strong>
                 </div>
               </article>
               <article *ngIf="!quota.billingAlerts?.length">
@@ -1057,19 +1059,19 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
           </div>
           <div class="quick-grid" *ngIf="overview.revenueGrowthSummary as summary">
             <article class="action-card">
-              <strong>{{ summary.latestMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ summary.latestMrr | auraMoney:'1.0-0' }}</strong>
               <span>{{ summary.latestMonth }} MRR · {{ summary.momentum }}</span>
             </article>
             <article class="action-card">
-              <strong>{{ summary.latestArr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ summary.latestArr | auraMoney:'1.0-0' }}</strong>
               <span>Current ARR run-rate</span>
             </article>
             <article class="action-card">
-              <strong>{{ summary.netGrowth | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ summary.netGrowth | auraMoney:'1.0-0' }}</strong>
               <span>Net MRR growth vs previous month</span>
             </article>
             <article class="action-card">
-              <strong>{{ summary.totalChurnedMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ summary.totalChurnedMrr | auraMoney:'1.0-0' }}</strong>
               <span>6-month churn overlay</span>
             </article>
           </div>
@@ -1081,11 +1083,11 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                   <span [style.width.%]="revenueBarWidth(row.mrr, graph)" style="display:block;height:100%;background:var(--success,#C87D4B)"></span>
                 </span>
                 <span *ngIf="row.churnedMrr" style="display:block;height:5px;background:var(--danger,#dc2626);border-radius:999px;margin-top:6px" [style.width.%]="revenueBarWidth(row.churnedMrr, graph)"></span>
-                <small style="color:var(--text-muted)">Growth {{ row.growth | currency: 'INR':'symbol':'1.0-0' }} · churn {{ row.churnedMrr | currency: 'INR':'symbol':'1.0-0' }}</small>
+                <small style="color:var(--text-muted)">Growth {{ row.growth | auraMoney:'1.0-0' }} · churn {{ row.churnedMrr | auraMoney:'1.0-0' }}</small>
               </div>
               <div style="text-align:right">
-                <strong>{{ row.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ row.arr | currency: 'INR':'symbol':'1.0-0' }} ARR</span>
+                <strong>{{ row.mrr | auraMoney:'1.0-0' }}</strong>
+                <span style="display:block;font-size:0.78em;color:var(--text-muted)">{{ row.arr | auraMoney:'1.0-0' }} ARR</span>
               </div>
             </article>
           </div>
@@ -1107,11 +1109,11 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>Average conversion days</span>
             </article>
             <article class="action-card">
-              <strong>{{ funnel.paidMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ funnel.paidMrr | auraMoney:'1.0-0' }}</strong>
               <span>Paid MRR</span>
             </article>
             <article class="action-card">
-              <strong>{{ funnel.trialPipelineMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ funnel.trialPipelineMrr | auraMoney:'1.0-0' }}</strong>
               <span>Trial pipeline MRR</span>
             </article>
           </div>
@@ -1131,15 +1133,15 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
             <div>
               <h2>{{ churn.highRiskCount }} high-risk and {{ churn.mediumRiskCount }} medium-risk tenants</h2>
             </div>
-            <span class="badge" style="background:var(--danger,#dc2626);color:#fff">{{ churn.mrrAtRisk | currency: 'INR':'symbol':'1.0-0' }} MRR at risk</span>
+            <span class="badge" style="background:var(--danger,#dc2626);color:#fff">{{ churn.mrrAtRisk | auraMoney:'1.0-0' }} MRR at risk</span>
           </div>
           <div class="quick-grid" *ngIf="churn.riskMix">
             <article class="action-card">
-              <strong>{{ churn.riskMix.highMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ churn.riskMix.highMrr | auraMoney:'1.0-0' }}</strong>
               <span>High-risk MRR</span>
             </article>
             <article class="action-card">
-              <strong>{{ churn.riskMix.mediumMrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ churn.riskMix.mediumMrr | auraMoney:'1.0-0' }}</strong>
               <span>Medium-risk MRR</span>
             </article>
             <article class="action-card">
@@ -1154,7 +1156,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <span style="display:block;font-size:0.8em;color:var(--text-muted)">{{ action.recommendedAction }} · {{ action.ownerQueue }}</span>
               </div>
               <span class="badge" [style.background]="churnTone(action.probability)" style="color:#fff">{{ action.dueInDays }}d SLA</span>
-              <strong style="text-align:right">{{ action.mrrAtRisk | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong style="text-align:right">{{ action.mrrAtRisk | auraMoney:'1.0-0' }}</strong>
             </article>
           </div>
           <div class="activity-list">
@@ -1267,7 +1269,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>Selected tenants</span>
             </article>
             <article class="action-card">
-              <strong>{{ bulk.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ bulk.mrr | auraMoney:'1.0-0' }}</strong>
               <span>Selected MRR impact</span>
             </article>
             <article class="action-card">
@@ -1275,7 +1277,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <span>High-risk selected</span>
             </article>
             <article class="action-card">
-              <strong>{{ bulk.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ bulk.outstanding | auraMoney:'1.0-0' }}</strong>
               <span>Outstanding exposure</span>
             </article>
           </div>
@@ -1311,8 +1313,8 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                     </small>
                     <small style="display:block;color:var(--text-muted)">Roles {{ tenant.rolePermissionMatrix?.summary || 'default matrix' }}</small>
                   </td>
-                  <td class="money-cell">{{ tenant.totalBillingAmount | currency: 'INR':'symbol':'1.0-0' }}<small>{{ tenant.meteredUsageRevenue | currency: 'INR':'symbol':'1.0-0' }} usage</small></td>
-                  <td class="money-cell">{{ tenant.transactionRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td class="money-cell">{{ tenant.totalBillingAmount | auraMoney:'1.0-0' }}<small>{{ tenant.meteredUsageRevenue | auraMoney:'1.0-0' }} usage</small></td>
+                  <td class="money-cell">{{ tenant.transactionRevenue | auraMoney:'1.0-0' }}</td>
                   <td class="usage-cell">
                     {{ tenant.usage.clients }} clients · {{ tenant.usage.appointments }} bookings
                     <small style="display:block;color:var(--text-muted)">
@@ -1378,11 +1380,11 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <span>Selected tenants</span>
               </article>
               <article class="action-card">
-                <strong>{{ preview.mrr | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ preview.mrr | auraMoney:'1.0-0' }}</strong>
                 <span>MRR impact</span>
               </article>
               <article class="action-card">
-                <strong>{{ preview.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ preview.outstanding | auraMoney:'1.0-0' }}</strong>
                 <span>Outstanding exposure</span>
               </article>
               <article class="action-card">
@@ -1458,7 +1460,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <span>Invoices</span>
               </article>
               <article class="action-card">
-                <strong>{{ tenant.drilldown.invoiceSummary.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tenant.drilldown.invoiceSummary.outstanding | auraMoney:'1.0-0' }}</strong>
                 <span>Outstanding</span>
               </article>
               <article class="action-card">
@@ -1475,7 +1477,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 </article>
                 <article *ngSwitchCase="'billing'">
                   <strong>Billing</strong>
-                  <span>{{ tenant.drilldown?.invoiceSummary?.outstanding | currency: 'INR':'symbol':'1.0-0' }} outstanding · {{ tenant.billingOps?.dunningStatus || 'Clear' }} · {{ tenant.billingOps?.failedPaymentCount || 0 }} failed payments</span>
+                  <span>{{ tenant.drilldown?.invoiceSummary?.outstanding | auraMoney:'1.0-0' }} outstanding · {{ tenant.billingOps?.dunningStatus || 'Clear' }} · {{ tenant.billingOps?.failedPaymentCount || 0 }} failed payments</span>
                 </article>
                 <article *ngSwitchCase="'users'">
                   <strong>Users</strong>
@@ -1519,7 +1521,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <article *ngFor="let point of tenant.riskTimeline">
                   <span [style.height.%]="timelineBarHeight(point)" [style.background]="riskTone(point.label)"></span>
                   <strong>{{ point.score }}</strong>
-                  <small>{{ point.day | date: 'MMM d' }}</small>
+                  <small>{{ point.day | auraDate:'date' }}</small>
                 </article>
               </div>
             </div>
@@ -1576,7 +1578,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
                 <article *ngFor="let invoice of tenant.drilldown.recentInvoices">
                   <div>
                     <strong>{{ invoice.invoiceNumber }}</strong>
-                    <span>{{ invoice.createdAt || 'No date' }} · paid {{ invoice.paid | currency: 'INR':'symbol':'1.0-0' }} · due {{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ invoice.createdAt || 'No date' }} · paid {{ invoice.paid | auraMoney:'1.0-0' }} · due {{ invoice.balance | auraMoney:'1.0-0' }}</span>
                   </div>
                   <span class="badge">{{ invoice.status }}</span>
                 </article>
@@ -2214,7 +2216,7 @@ type SuperAdminViewKey = 'overview' | 'revenue' | 'command' | 'intelligence' | '
               <article *ngFor="let plan of overview.plans" class="plan-row">
                 <div>
                   <strong>{{ plan.name }}</strong>
-                  <span>{{ plan.priceMonthly | currency: 'INR':'symbol':'1.0-0' }}/mo · {{ plan.trialDays }} trial days</span>
+                  <span>{{ plan.priceMonthly | auraMoney:'1.0-0' }}/mo · {{ plan.trialDays }} trial days</span>
                   <span style="display:block;font-size:0.78em;color:var(--text-muted)">
                     {{ plan.limits?.branches || 0 }} branches · {{ plan.limits?.staff || 0 }} staff · {{ plan.limits?.clients || 0 }} clients · {{ plan.limits?.supportTier || 'standard' }}
                   </span>

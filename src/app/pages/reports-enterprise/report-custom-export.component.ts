@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';

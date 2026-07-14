@@ -1,13 +1,15 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-finance-engine',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="finance-workspace">
       <section class="page-title">
@@ -20,12 +22,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <app-state [loading]="loading()" [error]="error()"></app-state>
 
       <section class="metrics-grid" *ngIf="summary()?.metrics as metrics">
-        <article><span>Revenue</span><strong>{{ metrics.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Cash</span><strong>{{ metrics.cash | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>UPI</span><strong>{{ metrics.upi | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Expenses</span><strong>{{ metrics.expenses | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Outstanding</span><strong>{{ metrics.outstanding | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>P/L</span><strong>{{ metrics.profitLoss | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>Revenue</span><strong>{{ metrics.revenue | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Cash</span><strong>{{ metrics.cash | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>UPI</span><strong>{{ metrics.upi | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Expenses</span><strong>{{ metrics.expenses | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Outstanding</span><strong>{{ metrics.outstanding | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>P/L</span><strong>{{ metrics.profitLoss | auraMoney:'1.0-0' }}</strong></article>
       </section>
 
       <section class="workdesk">
@@ -65,7 +67,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
           <form [formGroup]="invoiceForm">
             <h3>Partial payment and refund</h3>
-            <label class="field full"><span>Invoice</span><select formControlName="invoiceId"><option *ngFor="let invoice of invoices()" [value]="invoice.id">{{ invoice.invoiceNumber }} · {{ invoice.status }} · {{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</option></select></label>
+            <label class="field full"><span>Invoice</span><select formControlName="invoiceId"><option *ngFor="let invoice of invoices()" [value]="invoice.id">{{ invoice.invoiceNumber }} · {{ invoice.status }} · {{ invoice.balance | auraMoney:'1.0-0' }}</option></select></label>
             <label class="field"><span>Amount</span><input type="number" formControlName="amount" /></label>
             <label class="field"><span>Mode</span><select formControlName="mode"><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option></select></label>
             <label class="field full"><span>Reason/reference</span><input formControlName="reason" /></label>
@@ -101,9 +103,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tr *ngFor="let invoice of summary()?.outstanding || []">
                 <td>{{ invoice.invoiceNumber }}</td>
                 <td><span class="badge">{{ invoice.status }}</span></td>
-                <td>{{ invoice.total | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ invoice.paid | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ invoice.total | auraMoney:'1.0-0' }}</td>
+                <td>{{ invoice.paid | auraMoney:'1.0-0' }}</td>
+                <td>{{ invoice.balance | auraMoney:'1.0-0' }}</td>
               </tr>
               <tr *ngIf="!(summary()?.outstanding || []).length"><td colspan="5"><div class="empty-state"><strong>No outstanding invoices</strong><span>All visible invoices are settled.</span></div></td></tr>
             </tbody>
@@ -119,8 +121,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </div>
           <div class="rank-list">
-            <article *ngFor="let item of summary()?.expenses || []"><div><strong>{{ item.category }}</strong><span>{{ item.vendor || item.paymentMode }}</span></div><strong>{{ item.amount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article *ngFor="let item of summary()?.refunds || []"><div><strong>Refund</strong><span>{{ item.reason || item.invoiceId }}</span></div><strong>{{ item.amount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article *ngFor="let item of summary()?.expenses || []"><div><strong>{{ item.category }}</strong><span>{{ item.vendor || item.paymentMode }}</span></div><strong>{{ item.amount | auraMoney:'1.0-0' }}</strong></article>
+            <article *ngFor="let item of summary()?.refunds || []"><div><strong>Refund</strong><span>{{ item.reason || item.invoiceId }}</span></div><strong>{{ item.amount | auraMoney:'1.0-0' }}</strong></article>
           </div>
         </div>
         <div>
@@ -130,7 +132,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
           </div>
           <div class="rank-list">
-            <article *ngFor="let closing of summary()?.closings || []"><div><strong>{{ closing.businessDate }}</strong><span>{{ closing.status }} · variance {{ closing.variance | currency: 'INR':'symbol':'1.0-0' }}</span></div><small>{{ closing.createdAt | date: 'short' }}</small></article>
+            <article *ngFor="let closing of summary()?.closings || []"><div><strong>{{ closing.businessDate }}</strong><span>{{ closing.status }} · variance {{ closing.variance | auraMoney:'1.0-0' }}</span></div><small>{{ closing.createdAt | auraDate:'date' }}</small></article>
           </div>
         </div>
       </section>

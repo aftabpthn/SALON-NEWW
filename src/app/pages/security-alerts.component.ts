@@ -1,13 +1,14 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-security-alerts',
   standalone: true,
-  imports: [CommonModule, DatePipe, RouterLink, StateComponent],
+  imports: [AuraDatePipe, CommonModule, RouterLink, StateComponent],
   template: `
     <section class="alerts-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -41,7 +42,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ alert.summary }}</td>
                 <td>{{ alert.ipAddress || '-' }}</td>
                 <td>{{ alert.userId || '-' }}</td>
-                <td>{{ alert.createdAt | date: 'short' }}</td>
+                <td>{{ alert.createdAt | auraDate:'date' }}</td>
                 <td>{{ alert.status }}</td>
                 <td><button class="ghost-button mini" type="button" [disabled]="alert.status === 'resolved'" (click)="resolve(alert)">Resolve</button></td>
               </tr>

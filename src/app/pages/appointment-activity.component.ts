@@ -8,6 +8,7 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 type ActivityViewKey = 'overview' | 'alerts' | 'insights' | 'filters' | 'review' | 'client' | 'register' | 'activity';
@@ -127,7 +128,7 @@ interface ClientScoreRow {
 @Component({
   selector: 'app-appointment-activity',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="appointment-activity-page inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -244,7 +245,7 @@ interface ClientScoreRow {
                   <td>{{ row.completed }}</td>
                   <td>{{ row.cancelled }}</td>
                   <td>{{ row.notBilled }}</td>
-                  <td>{{ row.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.revenue | auraMoney:'1.0-0' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -469,7 +470,7 @@ interface ClientScoreRow {
                     <a [routerLink]="['/pos/invoices']" [queryParams]="{ search: row.invoiceNumber }" *ngIf="row.invoiceNumber; else noInvoice">{{ row.invoiceNumber }}</a>
                   </ng-container>
                   <ng-template #noInvoice><strong>No invoice</strong></ng-template>
-                  <small>{{ label(row.paymentStatus) }} · {{ row.total | currency: 'INR':'symbol':'1.0-0' }} / {{ row.paid | currency: 'INR':'symbol':'1.0-0' }} / {{ row.balance | currency: 'INR':'symbol':'1.0-0' }}</small>
+                  <small>{{ label(row.paymentStatus) }} · {{ row.total | auraMoney:'1.0-0' }} / {{ row.paid | auraMoney:'1.0-0' }} / {{ row.balance | auraMoney:'1.0-0' }}</small>
                 </td>
                 <td>
                   <strong>{{ label(row.messageStatus.status) }}</strong>
@@ -567,7 +568,7 @@ interface ClientScoreRow {
         <div class="detail-grid">
           <article><span>Booked</span><strong>{{ formatDateTime(register.bookedAt) }}</strong><small>{{ label(register.bookingMode) }} · {{ register.createdBy }}</small></article>
           <article><span>Appointment</span><strong>{{ formatDateTime(register.appointmentStartAt) }}</strong><small>{{ register.durationMinutes }} minutes</small></article>
-          <article><span>Invoice</span><strong>{{ register.invoiceNumber || 'No invoice' }}</strong><small>{{ label(register.paymentStatus) }} · Due {{ register.balance | currency: 'INR':'symbol':'1.0-0' }}</small></article>
+          <article><span>Invoice</span><strong>{{ register.invoiceNumber || 'No invoice' }}</strong><small>{{ label(register.paymentStatus) }} · Due {{ register.balance | auraMoney:'1.0-0' }}</small></article>
           <article><span>Last update</span><strong>{{ register.lastUpdatedBy }}</strong><small>{{ formatDateTime(register.lastUpdatedAt) }}</small></article>
         </div>
         <div class="drawer-actions">

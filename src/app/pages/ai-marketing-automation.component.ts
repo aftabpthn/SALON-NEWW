@@ -1,15 +1,16 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'register';
 
 @Component({
   selector: 'app-ai-marketing-automation',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="marketing-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -155,7 +156,7 @@ type MarketingViewKey = 'overview' | 'workdesk' | 'offers' | 'output' | 'registe
                 <tr *ngFor="let offer of summary.recommendations">
                   <td><strong>{{ offer.title }}</strong></td>
                   <td>{{ offer.description }}</td>
-                  <td>{{ offer.estimatedRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ offer.estimatedRevenue | auraMoney:'1.0-0' }}</td>
                 </tr>
               </tbody>
             </table>

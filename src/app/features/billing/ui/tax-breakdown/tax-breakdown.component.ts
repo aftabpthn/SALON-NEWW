@@ -1,14 +1,15 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
+import { AuraMoneyPipe } from '../../../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-tax-breakdown',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe],
+  imports: [AuraMoneyPipe, CommonModule],
   template: `
     <section class="billing-panel">
       <h3>Tax breakdown</h3>
-      <p>Total tax: {{ taxTotal | currency:'INR' }}</p>
+      <p>Total tax: {{ taxTotal | auraMoney }}</p>
     </section>
   `
 })

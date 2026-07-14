@@ -1,12 +1,13 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { BillingRepository } from '../../data/billing.repository';
+import { AuraMoneyPipe } from '../../../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-invoice-list-page',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink],
+  imports: [AuraMoneyPipe, CommonModule, RouterLink],
   styles: [`
     .invoice-list-page { display: grid; gap: 16px; }
     .billing-hero, .invoice-list-card, .invoice-empty-state, .state-message { border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)); border-radius: var(--aura-card-radius-premium, 14px); background: var(--aura-surface-raised, #fff); box-shadow: 0 12px 30px rgba(75, 18, 56, 0.07); }
@@ -107,7 +108,7 @@ import { BillingRepository } from '../../data/billing.repository';
             <strong>{{ invoice.invoice_no }}</strong>
             <span>Open invoice details</span>
           </span>
-          <span class="amount">{{ invoice.grand_total | currency:'INR' }}</span>
+          <span class="amount">{{ invoice.grand_total | auraMoney }}</span>
           <span class="status-chip" [class.paid]="invoice.payment_status === 'paid'" [class.due]="invoice.payment_status !== 'paid'">{{ invoice.payment_status }}</span>
           <span class="invoice-meta"><span>View</span><strong>Details</strong></span>
         </a>

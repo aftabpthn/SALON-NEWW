@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type ReportColumn = { key: string; label: string; type?: 'currency' | 'number' | 'percent' | 'date' | 'badge' };
 type ReportDefinition = { id: string; title: string; description: string; badge: string };
@@ -104,7 +105,7 @@ type InvoiceLine = {
 @Component({
   selector: 'app-invoice-reports',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero invoice-report-hero inner-page-header">
@@ -409,19 +410,19 @@ type InvoiceLine = {
       <ng-container *ngIf="!loading() && !error()">
         <div class="metrics-grid invoice-report-kpis" *ngIf="activeReport() === 'sale-summary'; else defaultInvoiceKpis">
           <article class="metric-card"><span>Total Bill</span><strong>{{ saleSummary().totalBill }}</strong></article>
-          <article class="metric-card"><span>Bill Average</span><strong>{{ saleSummary().billAverage | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Total Sale</span><strong>{{ saleSummary().totalSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Received Amount</span><strong>{{ saleSummary().receivedAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Pending Amount</span><strong>{{ saleSummary().pendingAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Prepaid Payment</span><strong>{{ saleSummary().prepaidPayment | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Return Sales</span><strong>{{ saleSummary().returnSales | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Total Tip Amount</span><strong>{{ saleSummary().totalTipAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Total Tax</span><strong>{{ saleSummary().totalTax | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Bill Average</span><strong>{{ saleSummary().billAverage | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Total Sale</span><strong>{{ saleSummary().totalSale | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Received Amount</span><strong>{{ saleSummary().receivedAmount | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Pending Amount</span><strong>{{ saleSummary().pendingAmount | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Prepaid Payment</span><strong>{{ saleSummary().prepaidPayment | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Return Sales</span><strong>{{ saleSummary().returnSales | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Total Tip Amount</span><strong>{{ saleSummary().totalTipAmount | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Total Tax</span><strong>{{ saleSummary().totalTax | auraMoney:'1.0-0' }}</strong></article>
         </div>
         <ng-template #defaultInvoiceKpis>
           <div class="metrics-grid invoice-report-kpis service-clients-kpis" *ngIf="activeReport() === 'service-clients'; else serviceTrendsKpis">
             <article class="metric-card"><span>Total clients</span><strong>{{ serviceClientsSummary()['totalClients'] || 0 }}</strong></article>
-            <article class="metric-card"><span>Total service revenue</span><strong>{{ (serviceClientsSummary()['totalServiceRevenue'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Total service revenue</span><strong>{{ (serviceClientsSummary()['totalServiceRevenue'] || 0) | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Total service rows</span><strong>{{ serviceClientsSummary()['totalServiceRows'] || 0 }}</strong></article>
             <article class="metric-card"><span>Appointment rows</span><strong>{{ serviceClientsSummary()['appointmentRows'] || 0 }}</strong></article>
             <article class="metric-card"><span>Quick sale rows</span><strong>{{ serviceClientsSummary()['quickSaleRows'] || 0 }}</strong></article>
@@ -429,30 +430,30 @@ type InvoiceLine = {
           <ng-template #serviceTrendsKpis>
           <div class="metrics-grid invoice-report-kpis service-trends-kpis" *ngIf="activeReport() === 'service-trends'; else productInvoiceKpis">
             <article class="metric-card"><span>Total services sold</span><strong>{{ serviceTrendsSummary()['totalServicesSold'] || 0 }}</strong></article>
-            <article class="metric-card"><span>Total service revenue</span><strong>{{ (serviceTrendsSummary()['totalServiceRevenue'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Total service revenue</span><strong>{{ (serviceTrendsSummary()['totalServiceRevenue'] || 0) | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Total quantity sold</span><strong>{{ serviceTrendsSummary()['totalQuantitySold'] || 0 }}</strong></article>
-            <article class="metric-card"><span>Average service price</span><strong>{{ (serviceTrendsSummary()['averageServicePrice'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Average service price</span><strong>{{ (serviceTrendsSummary()['averageServicePrice'] || 0) | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Top service</span><strong>{{ serviceTrendsSummary()['topService'] || '-' }}</strong></article>
             <article class="metric-card"><span>Top service group</span><strong>{{ serviceTrendsSummary()['topServiceGroup'] || '-' }}</strong></article>
             <article class="metric-card"><span>Lowest selling service</span><strong>{{ serviceTrendsSummary()['lowestSellingService'] || '-' }}</strong></article>
             <article class="metric-card"><span>Highest margin service</span><strong>{{ serviceTrendsSummary()['highestMarginService'] || '-' }}</strong></article>
             <article class="metric-card"><span>Lowest margin service</span><strong>{{ serviceTrendsSummary()['lowestMarginService'] || '-' }}</strong></article>
             <article class="metric-card"><span>Peak selling hour</span><strong>{{ serviceTrendsSummary()['peakSellingHour'] || '-' }}</strong></article>
-            <article class="metric-card"><span>Discount leakage</span><strong>{{ (serviceTrendsSummary()['discountLeakage'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Service GST collected</span><strong>{{ (serviceTrendsSummary()['serviceGstCollected'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Discount leakage</span><strong>{{ (serviceTrendsSummary()['discountLeakage'] || 0) | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Service GST collected</span><strong>{{ (serviceTrendsSummary()['serviceGstCollected'] || 0) | auraMoney:'1.0-0' }}</strong></article>
           </div>
           </ng-template>
         </ng-template>
         <ng-template #productInvoiceKpis>
           <div class="metrics-grid invoice-report-kpis product-sales-kpis" *ngIf="activeReport() === 'products'; else deletedInvoiceKpis">
             <article class="metric-card"><span>Total Product</span><strong>{{ productSalesSummary().totalProduct }}</strong></article>
-            <article class="metric-card"><span>Products Sale</span><strong>{{ productSalesSummary().productsSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Tax On Products</span><strong>{{ productSalesSummary().taxOnProducts | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Taxable Amount</span><strong>{{ productSalesSummary().taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Discount</span><strong>{{ productSalesSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Products Sale After Discount</span><strong>{{ productSalesSummary().productsSaleAfterDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>COGS</span><strong>{{ productSalesSummary().cogs | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Gross Margin</span><strong>{{ productSalesSummary().grossMargin | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Products Sale</span><strong>{{ productSalesSummary().productsSale | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Tax On Products</span><strong>{{ productSalesSummary().taxOnProducts | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Taxable Amount</span><strong>{{ productSalesSummary().taxableAmount | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Discount</span><strong>{{ productSalesSummary().discount | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Products Sale After Discount</span><strong>{{ productSalesSummary().productsSaleAfterDiscount | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>COGS</span><strong>{{ productSalesSummary().cogs | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Gross Margin</span><strong>{{ productSalesSummary().grossMargin | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Avg Margin %</span><strong>{{ productSalesSummary().averageMarginPercent }}%</strong></article>
             <article class="metric-card"><span>Low Stock Items</span><strong>{{ productSalesSummary().lowStockItems }}</strong></article>
             <article class="metric-card"><span>Low Margin Alerts</span><strong>{{ productSalesSummary().lowMarginItems }}</strong></article>
@@ -463,23 +464,23 @@ type InvoiceLine = {
         <ng-template #deletedInvoiceKpis>
           <div class="metrics-grid invoice-report-kpis deleted-invoice-kpis" *ngIf="activeReport() === 'deleted-invoice-approvals'; else regularInvoiceKpis">
             <article class="metric-card"><span>Total deleted bills</span><strong>{{ deletedInvoiceApprovalSummary()['totalBill'] || 0 }}</strong></article>
-            <article class="metric-card"><span>Total sale</span><strong>{{ (deletedInvoiceApprovalSummary()['totalSale'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Received amount</span><strong>{{ (deletedInvoiceApprovalSummary()['receivedAmount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Pending amount</span><strong>{{ (deletedInvoiceApprovalSummary()['pendingAmount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Total sale</span><strong>{{ (deletedInvoiceApprovalSummary()['totalSale'] || 0) | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Received amount</span><strong>{{ (deletedInvoiceApprovalSummary()['receivedAmount'] || 0) | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Pending amount</span><strong>{{ (deletedInvoiceApprovalSummary()['pendingAmount'] || 0) | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Approved deletes</span><strong>{{ deletedInvoiceApprovalSummary()['approvedDeletes'] || 0 }}</strong></article>
             <article class="metric-card"><span>Approval gaps</span><strong>{{ deletedInvoiceApprovalSummary()['approvalGaps'] || 0 }}</strong></article>
           </div>
         </ng-template>
         <ng-template #regularInvoiceKpis>
           <div class="metrics-grid invoice-report-kpis">
-            <article class="metric-card"><span>Gross billed</span><strong>{{ summary().gross | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Discount</span><strong>{{ summary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ summary().discountRate }}% leakage watch</small></article>
-            <article class="metric-card"><span>Net taxable</span><strong>{{ summary().taxable | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>GST</span><strong>{{ summary().gst | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Final sale</span><strong>{{ summary().final | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Due</span><strong>{{ summary().due | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Product sales</span><strong>{{ summary().products | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Membership sales</span><strong>{{ summary().memberships | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Gross billed</span><strong>{{ summary().gross | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Discount</span><strong>{{ summary().discount | auraMoney:'1.0-0' }}</strong><small>{{ summary().discountRate }}% leakage watch</small></article>
+            <article class="metric-card"><span>Net taxable</span><strong>{{ summary().taxable | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>GST</span><strong>{{ summary().gst | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Final sale</span><strong>{{ summary().final | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Due</span><strong>{{ summary().due | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Product sales</span><strong>{{ summary().products | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Membership sales</span><strong>{{ summary().memberships | auraMoney:'1.0-0' }}</strong></article>
           </div>
         </ng-template>
 
@@ -531,12 +532,12 @@ type InvoiceLine = {
           <div class="discount-intelligence-stack" *ngIf="activeReport() === 'sales-discount-intelligence'">
             <div class="metrics-grid invoice-report-kpis discount-intelligence-kpis">
               <article class="metric-card"><span>Total invoices</span><strong>{{ salesDiscountSummary().totalInvoices }}</strong></article>
-              <article class="metric-card"><span>Gross sale</span><strong>{{ salesDiscountSummary().grossSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article class="metric-card"><span>Total discount</span><strong>{{ salesDiscountSummary().totalDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ salesDiscountSummary().discountRate }}% leakage</small></article>
-              <article class="metric-card"><span>Net sale</span><strong>{{ salesDiscountSummary().netSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article class="metric-card"><span>Manual discount</span><strong>{{ salesDiscountSummary().manualDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article class="metric-card"><span>Coupon discount</span><strong>{{ salesDiscountSummary().couponDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-              <article class="metric-card"><span>Membership / loyalty</span><strong>{{ salesDiscountSummary().membershipLoyaltyDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+              <article class="metric-card"><span>Gross sale</span><strong>{{ salesDiscountSummary().grossSale | auraMoney:'1.0-0' }}</strong></article>
+              <article class="metric-card"><span>Total discount</span><strong>{{ salesDiscountSummary().totalDiscount | auraMoney:'1.0-0' }}</strong><small>{{ salesDiscountSummary().discountRate }}% leakage</small></article>
+              <article class="metric-card"><span>Net sale</span><strong>{{ salesDiscountSummary().netSale | auraMoney:'1.0-0' }}</strong></article>
+              <article class="metric-card"><span>Manual discount</span><strong>{{ salesDiscountSummary().manualDiscount | auraMoney:'1.0-0' }}</strong></article>
+              <article class="metric-card"><span>Coupon discount</span><strong>{{ salesDiscountSummary().couponDiscount | auraMoney:'1.0-0' }}</strong></article>
+              <article class="metric-card"><span>Membership / loyalty</span><strong>{{ salesDiscountSummary().membershipLoyaltyDiscount | auraMoney:'1.0-0' }}</strong></article>
               <article class="metric-card"><span>Risk alerts</span><strong>{{ salesDiscountSummary().highRiskInvoices }}</strong><small>{{ salesDiscountSummary().marginLossAlerts }} margin loss</small></article>
             </div>
 
@@ -555,7 +556,7 @@ type InvoiceLine = {
                   <thead><tr><th>Staff</th><th>Bills</th><th>Discount</th><th>Risk</th></tr></thead>
                   <tbody>
                     <tr *ngFor="let row of salesDiscountStaffRows().slice(0, 6)">
-                      <td>{{ row['staffName'] }}</td><td>{{ row['totalBills'] }}</td><td>{{ row['discountGiven'] | currency:'INR':'symbol':'1.0-0' }}</td><td><span class="badge">{{ row['risk'] }}</span></td>
+                      <td>{{ row['staffName'] }}</td><td>{{ row['totalBills'] }}</td><td>{{ row['discountGiven'] | auraMoney:'1.0-0' }}</td><td><span class="badge">{{ row['risk'] }}</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -566,7 +567,7 @@ type InvoiceLine = {
                   <thead><tr><th>Client</th><th>Visits</th><th>Discount</th><th>Risk</th></tr></thead>
                   <tbody>
                     <tr *ngFor="let row of salesDiscountClientRows().slice(0, 6)">
-                      <td>{{ row['clientName'] }}</td><td>{{ row['totalVisits'] }}</td><td>{{ row['totalDiscountReceived'] | currency:'INR':'symbol':'1.0-0' }}</td><td><span class="badge">{{ row['repeatDiscountRisk'] }}</span></td>
+                      <td>{{ row['clientName'] }}</td><td>{{ row['totalVisits'] }}</td><td>{{ row['totalDiscountReceived'] | auraMoney:'1.0-0' }}</td><td><span class="badge">{{ row['repeatDiscountRisk'] }}</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -577,7 +578,7 @@ type InvoiceLine = {
                   <thead><tr><th>Invoice</th><th>Margin</th><th>Approval</th><th>Alert</th></tr></thead>
                   <tbody>
                     <tr *ngFor="let row of salesDiscountRiskRows().slice(0, 6)">
-                      <td>{{ row['invoiceNumber'] }}</td><td>{{ row['grossMargin'] | currency:'INR':'symbol':'1.0-0' }}</td><td><span class="badge">{{ row['approvalStatus'] }}</span></td><td>{{ row['suspiciousDiscountAlert'] }}</td>
+                      <td>{{ row['invoiceNumber'] }}</td><td>{{ row['grossMargin'] | auraMoney:'1.0-0' }}</td><td><span class="badge">{{ row['approvalStatus'] }}</span></td><td>{{ row['suspiciousDiscountAlert'] }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -586,12 +587,12 @@ type InvoiceLine = {
           </div>
 
           <div class="metrics-grid due-recovery-kpis" *ngIf="activeReport() === 'due-recovery'">
-            <article class="metric-card"><span>Total pending due</span><strong>{{ (dueRecoverySummary()['totalPendingDue'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Total pending due</span><strong>{{ (dueRecoverySummary()['totalPendingDue'] || 0) | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Pending invoices</span><strong>{{ dueRecoverySummary()['pendingInvoiceCount'] || 0 }}</strong></article>
-            <article class="metric-card"><span>0-10 days</span><strong>{{ (dueRecoverySummary()['bucket0To10'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>11-20 days</span><strong>{{ (dueRecoverySummary()['bucket11To20'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>21+ days</span><strong>{{ (dueRecoverySummary()['bucket21Plus'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article class="metric-card"><span>Recovered this month</span><strong>{{ (dueRecoverySummary()['recoveredThisMonth'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>0-10 days</span><strong>{{ (dueRecoverySummary()['bucket0To10'] || 0) | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>11-20 days</span><strong>{{ (dueRecoverySummary()['bucket11To20'] || 0) | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>21+ days</span><strong>{{ (dueRecoverySummary()['bucket21Plus'] || 0) | auraMoney:'1.0-0' }}</strong></article>
+            <article class="metric-card"><span>Recovered this month</span><strong>{{ (dueRecoverySummary()['recoveredThisMonth'] || 0) | auraMoney:'1.0-0' }}</strong></article>
             <article class="metric-card"><span>Call follow-up pending</span><strong>{{ dueRecoverySummary()['callFollowUpPending'] || 0 }}</strong></article>
             <article class="metric-card"><span>Daily follow-up due today</span><strong>{{ dueRecoverySummary()['dailyFollowUpDueToday'] || 0 }}</strong></article>
           </div>

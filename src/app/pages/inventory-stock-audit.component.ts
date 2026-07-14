@@ -1,15 +1,16 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-inventory-stock-audit',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack inventory-enterprise-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -35,7 +36,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span>Counts <strong>{{ counts().length }}</strong></span>
             <span>Leakage <strong>{{ leakage().length }}</strong></span>
             <span>Transfers <strong>{{ recommendations().length }}</strong></span>
-            <span>Open variance <strong>{{ openVarianceValue() | currency:'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Open variance <strong>{{ openVarianceValue() | auraMoney:'1.0-0' }}</strong></span>
           </div>
         </div>
 
@@ -56,7 +57,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td><strong>{{ count.countNumber || count.id }}</strong><small>{{ count.createdAt || count.created_at || 'Stock count' }}</small></td>
                 <td><span class="audit-chip" [class.warn]="count.status !== 'submitted'">{{ count.status || 'draft' }}</span></td>
                 <td>{{ branchName(count.branchId) }}</td>
-                <td>{{ count.totalVarianceValue | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ count.totalVarianceValue | auraMoney:'1.0-0' }}</td>
                 <td>{{ lineCount(count) }}</td>
                 <td><button class="zenoti-mini-button" type="button" (click)="submitCount(count)" [disabled]="count.status === 'submitted' || saving()">Submit</button></td>
               </tr>
@@ -73,7 +74,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td><strong>{{ finding.findingType || 'Leakage' }}</strong><small>{{ finding.createdAt || finding.created_at || 'Finding' }}</small></td>
                 <td>{{ productName(finding.productId) }}</td>
                 <td><span class="audit-chip danger">{{ finding.severity || 'risk' }}</span></td>
-                <td>{{ finding.estimatedLoss | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ finding.estimatedLoss | auraMoney:'1.0-0' }}</td>
                 <td>{{ finding.status || 'open' }}</td>
                 <td>{{ finding.referenceType || '-' }} {{ finding.referenceId || '' }}</td>
               </tr>

@@ -1,15 +1,17 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory' | 'reports' | 'insights' | 'drilldowns';
 @Component({
   selector: 'app-reports',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <div class="page inner-page-shell">
       <!-- ═══════ STICKY HEADER ═══════ -->
@@ -101,7 +103,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
           <div class="kpi-grid inner-stats-grid">
             <div class="kpi-card" (click)="navigate('/kpi-details/analytics/14-day-forecast')">
               <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="kpi-trend up">+{{ a.summary.trendPercent || 0 }}%</span></span>
-              <strong class="kpi-val">{{ a.summary.projectedRevenue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <strong class="kpi-val">{{ a.summary.projectedRevenue | auraMoney:'1.0-0' }}</strong>
               <span class="kpi-label">AI Forecast</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/analytics/high-churn-risk')">
@@ -127,12 +129,12 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
           <div class="kpi-grid inner-stats-grid">
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/sales-revenue')">
               <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><span class="kpi-trend up">{{ r.sales.count }} sales</span></span>
-              <strong class="kpi-val">{{ r.sales.revenue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <strong class="kpi-val">{{ r.sales.revenue | auraMoney:'1.0-0' }}</strong>
               <span class="kpi-label">Total Revenue</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/gst-collected')">
               <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 6v12M16 6v12M6 10h4M6 14h4M14 10h4M14 14h4"/></svg></span><span class="kpi-trend up">{{ r.gst.invoices }} invoices</span></span>
-              <strong class="kpi-val">{{ r.gst.collected | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <strong class="kpi-val">{{ r.gst.collected | auraMoney:'1.0-0' }}</strong>
               <span class="kpi-label">GST Collected</span>
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/bookings')">
@@ -142,7 +144,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
             </div>
             <div class="kpi-card" (click)="navigate('/kpi-details/reports/low-stock-count')">
               <span class="kpi-top"><span class="kpi-icon" style="background:#ede8e3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span><span class="kpi-trend down">{{ r.inventory.lowStock }} low</span></span>
-              <strong class="kpi-val">{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <strong class="kpi-val">{{ r.inventory.stockValue | auraMoney:'1.0-0' }}</strong>
               <span class="kpi-label">Stock Value</span>
             </div>
           </div>
@@ -190,19 +192,19 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
             <div class="ea-side">
               <div class="ea-side-card">
                 <span class="ea-side-label">Sales revenue</span>
-                <strong>{{ r.sales.revenue | currency:'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ r.sales.revenue | auraMoney:'1.0-0' }}</strong>
               </div>
               <div class="ea-side-card">
                 <span class="ea-side-label">GST collected</span>
-                <strong>{{ r.gst.collected | currency:'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ r.gst.collected | auraMoney:'1.0-0' }}</strong>
               </div>
               <div class="ea-side-card">
                 <span class="ea-side-label">Inventory value</span>
-                <strong>{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ r.inventory.stockValue | auraMoney:'1.0-0' }}</strong>
               </div>
               <div class="ea-side-card ea-side-card-accent">
                 <span class="ea-side-label">Gross profit</span>
-                <strong>{{ r.profitLoss.grossProfit | currency:'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ r.profitLoss.grossProfit | auraMoney:'1.0-0' }}</strong>
               </div>
             </div>
           </div>
@@ -349,7 +351,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
           <div class="inv-grid">
               <div class="inv-card">
                 <span class="inv-label">Stock value</span>
-                <strong>{{ r.inventory.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ r.inventory.stockValue | auraMoney:'1.0-0' }}</strong>
               </div>
               <div class="inv-card inv-card-warn">
                 <span class="inv-label">Low stock alerts</span>
@@ -464,7 +466,7 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
                       <tr class="sch-row" [class.sch-row-open]="expandedSchedule() === s.id" (click)="toggleSchedule(s.id)">
                         <td><strong>{{ s.name }}</strong></td>
                         <td>{{ s.cadence }}</td>
-                        <td>{{ s.nextRunAt | date:'short' }}</td>
+                        <td>{{ s.nextRunAt | auraDate:'date' }}</td>
                         <td><span class="sch-badge" [class]="s.status?.toLowerCase()">{{ s.status }}</span></td>
                         <td class="sch-toggle">{{ expandedSchedule() === s.id ? '−' : '+' }}</td>
                       </tr>
@@ -481,11 +483,11 @@ type ReportViewKey = 'overview' | 'revenue' | 'bookings' | 'staff' | 'inventory'
                             </div>
                             <div class="sch-detail-item">
                               <span>Last run</span>
-                              <span>{{ (s.lastRunAt | date:'short') || '—' }}</span>
+                              <span>{{ (s.lastRunAt | auraDate:'date') || '—' }}</span>
                             </div>
                             <div class="sch-detail-item">
                               <span>Created</span>
-                              <span>{{ (s.createdAt | date:'short') || '—' }}</span>
+                              <span>{{ (s.createdAt | auraDate:'date') || '—' }}</span>
                             </div>
                           </div>
                         </td>

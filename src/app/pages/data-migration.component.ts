@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../core/api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type MigrationSummary = {
   totalRows: number;
@@ -147,7 +148,7 @@ type MigrationRecoveryReport = {
 @Component({
   selector: 'app-data-migration',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <section class="migration-shell" [class.child-page-active]="migrationChildActive()" [class.migration-section-mode]="activeMigrationSection()">
       <header class="command-header">
@@ -426,8 +427,8 @@ type MigrationRecoveryReport = {
             <p class="diag-stale" *ngIf="analyzerVersionMissing()">Old analyzer / cached job detected. Start fresh import required.</p>
             <div class="diag-grid">
               <span>Job ID</span><strong>{{ analyzerDiagnostics()?.jobId || largeJob()?.id || '-' }}</strong>
-              <span>Job created</span><strong>{{ largeJob()?.createdAt ? (largeJob()?.createdAt | date:'short') : '-' }}</strong>
-              <span>Analyzed at</span><strong>{{ analyzerDiagnostics()?.generatedAt ? (analyzerDiagnostics()?.generatedAt | date:'short') : '-' }}</strong>
+              <span>Job created</span><strong>{{ largeJob()?.createdAt ? (largeJob()?.createdAt | auraDate:'date') : '-' }}</strong>
+              <span>Analyzed at</span><strong>{{ analyzerDiagnostics()?.generatedAt ? (analyzerDiagnostics()?.generatedAt | auraDate:'date') : '-' }}</strong>
               <span>Analyzer version</span><strong [class.bad]="analyzerVersionMissing()">{{ analyzerDiagnostics()?.analyzerFixVersion || 'missing' }}</strong>
               <span>Adapter</span><strong>{{ analyzerDiagnostics()?.adapter || '-' }}</strong>
               <span>Source</span><strong>{{ analyzerDiagnostics()?.sourceSoftware || '-' }}</strong>
@@ -625,7 +626,7 @@ type MigrationRecoveryReport = {
             <article *ngFor="let approval of recentApprovals()" [class.pending]="approval.status === 'pending'" [class.approved]="approval.status === 'approved'" [class.rejected]="approval.status === 'rejected'">
               <div>
                 <strong>{{ approval.status | titlecase }} · {{ approval.resource || 'migration' }}</strong>
-                <small>{{ approval.submittedAt | date:'short' }} {{ approval.reviewedAt ? '· reviewed ' + (approval.reviewedAt | date:'short') : '' }}</small>
+                <small>{{ approval.submittedAt | auraDate:'date' }} {{ approval.reviewedAt ? '· reviewed ' + (approval.reviewedAt | auraDate:'date') : '' }}</small>
               </div>
               <span>{{ approval.note || 'No note' }}</span>
             </article>
@@ -817,7 +818,7 @@ type MigrationRecoveryReport = {
             </thead>
             <tbody>
               <tr *ngFor="let job of jobs()" [class.selected]="selectedJob()?.id === job.id">
-                <td>{{ job.createdAt | date: 'short' }}</td>
+                <td>{{ job.createdAt | auraDate:'date' }}</td>
                 <td>{{ job.sourceSoftware }}</td>
                 <td>{{ job.fileName }}</td>
                 <td><span class="badge">{{ job.status }}</span></td>

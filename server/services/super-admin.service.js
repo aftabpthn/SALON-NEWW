@@ -2,6 +2,7 @@ import { columnsFor, db, tenantScopedTables } from "../db.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { tenantService } from "./tenant.service.js";
 import { realtimeService } from "./realtime.service.js";
+import { generalSettingsService } from "./general-settings.service.js";
 import { authService } from "./auth.service.js";
 import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 
@@ -2450,7 +2451,7 @@ export class SuperAdminService {
         .find((message) => message.payload?.eventKey === eventKey && message.payload?.source === "super-admin-quota-alert");
       if (existing) return { tenantId: alert.tenantId, metric: alert.metric, status: "already_queued", messageLogId: existing.id, supportTicketLink: alert.supportTicketLink };
       const body = `Quota crossed for ${tenant.name}: ${alert.metric} is ${alert.used}/${alert.limit} (${alert.usagePct}%). Support ticket: ${alert.supportTicketLink}`;
-      const email = tenant.ownerEmail
+      const email = tenant.ownerEmail && generalSettingsService.ownerNotificationsEnabledForTenant(alert.tenantId)
         ? repositories.messageLogs.create({
             id: makeId("msg"),
             branchId: "",

@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -11,6 +11,7 @@ import { PosHeldInvoiceDraft, PosPaymentMode, PosSettingsService } from '../core
 import { AppStateService } from '../core/state/app-state.service';
 import { DATE_RANGE_PRESETS, DateRangePreset, dateRangeParams, rangeForPreset, todayKey } from '../shared/date-range-presets';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type InvoiceRegisterRow = {
   id: string;
@@ -65,7 +66,7 @@ type ProductConsumeDraftRow = {
 @Component({
   selector: 'app-pos-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -88,11 +89,11 @@ type ProductConsumeDraftRow = {
       <ng-container *ngIf="!loading()">
         <div class="metrics-grid inner-stats-grid">
           <a class="metric-card" routerLink="/pos/invoices" [class.active-filter-card]="isAllView()"><span>Invoices</span><strong>{{ rows().length }}</strong></a>
-          <article class="metric-card"><span>Total billed</span><strong>{{ billedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Collected</span><strong>{{ paidTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }" [class.active-filter-card]="isReceivedDueView()"><span>Received due</span><strong>{{ receivedDueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></a>
-          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'due' }" [class.active-filter-card]="isDueView()"><span>Due</span><strong>{{ dueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></a>
-          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'wallet' }" [class.active-filter-card]="isWalletView()"><span>Wallet</span><strong>{{ walletTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ walletClientCount() }} clients with balance</small></a>
+          <article class="metric-card"><span>Total billed</span><strong>{{ billedTotal() | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Collected</span><strong>{{ paidTotal() | auraMoney:'1.0-0' }}</strong></article>
+          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }" [class.active-filter-card]="isReceivedDueView()"><span>Received due</span><strong>{{ receivedDueTotal() | auraMoney:'1.0-0' }}</strong></a>
+          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'due' }" [class.active-filter-card]="isDueView()"><span>Due</span><strong>{{ dueTotal() | auraMoney:'1.0-0' }}</strong></a>
+          <a class="metric-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'wallet' }" [class.active-filter-card]="isWalletView()"><span>Wallet</span><strong>{{ walletTotal() | auraMoney:'1.0-0' }}</strong><small>{{ walletClientCount() }} clients with balance</small></a>
         </div>
 
         <section class="billing-control-strip">
@@ -110,22 +111,22 @@ type ProductConsumeDraftRow = {
             </a>
             <a class="billing-control-card" routerLink="/pos/invoices" [queryParams]="{ filter: 'due' }" [class.warn]="dueTotal() > 0">
               <span>Settlement</span>
-              <strong>{{ settlementCollectedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>Advance {{ bookingAdvanceAdjustedTotal() | currency: 'INR':'symbol':'1.0-0' }} · Due {{ dueTotal() | currency: 'INR':'symbol':'1.0-0' }}</small>
+              <strong>{{ settlementCollectedTotal() | auraMoney:'1.0-0' }}</strong>
+              <small>Advance {{ bookingAdvanceAdjustedTotal() | auraMoney:'1.0-0' }} · Due {{ dueTotal() | auraMoney:'1.0-0' }}</small>
             </a>
             <a class="billing-control-card" routerLink="/reports/invoices">
               <span>GST reports</span>
-              <strong>{{ gstCollectedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ gstCollectedTotal() | auraMoney:'1.0-0' }}</strong>
             </a>
             <a class="billing-control-card" routerLink="/inventory/financial">
               <span>Margin view</span>
-              <strong>{{ marginGrossTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ marginGrossTotal() | auraMoney:'1.0-0' }}</strong>
               <small>{{ marginPercentLabel() }} gross margin from billing analytics</small>
             </a>
             <a class="billing-control-card" routerLink="/command-center/payment-intelligence" [class.warn]="fraudFlagCount() > 0">
               <span>Fraud flags</span>
               <strong>{{ fraudFlagCount() }}</strong>
-              <small>{{ amountAtRisk() | currency: 'INR':'symbol':'1.0-0' }} amount at risk</small>
+              <small>{{ amountAtRisk() | auraMoney:'1.0-0' }} amount at risk</small>
             </a>
             <a class="billing-control-card" routerLink="/inventory/product-consume" [class.warn]="consumePendingCount() > 0">
               <span>Inventory/profit</span>
@@ -183,11 +184,11 @@ type ProductConsumeDraftRow = {
                 <strong>{{ selectedDateLabel() }}</strong>
               </div>
               <div><span>{{ isWalletView() ? 'Clients' : 'Invoices' }}</span><strong>{{ isWalletView() ? filteredWalletClients().length : filteredRows().length }}</strong></div>
-              <div><span>Billed</span><strong>{{ billedTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Collected</span><strong>{{ paidTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Received due</span><strong>{{ receivedDueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Due</span><strong>{{ dueTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Wallet</span><strong>{{ walletTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Billed</span><strong>{{ billedTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Collected</span><strong>{{ paidTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Received due</span><strong>{{ receivedDueTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Due</span><strong>{{ dueTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Wallet</span><strong>{{ walletTotal() | auraMoney:'1.0-0' }}</strong></div>
             </div>
 
             <div class="table-wrap" *ngIf="isWalletView(); else invoiceRegisterTable">
@@ -209,8 +210,8 @@ type ProductConsumeDraftRow = {
                     <td><strong>{{ client.name }}</strong></td>
                     <td>{{ client.phone || '-' }}</td>
                     <td>{{ client.branchName }}</td>
-                    <td class="right invoice-paid-amount">{{ client.walletBalance | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right invoice-due-amount">{{ client.unpaidBalance | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td class="right invoice-paid-amount">{{ client.walletBalance | auraMoney:'1.0-0' }}</td>
+                    <td class="right invoice-due-amount">{{ client.unpaidBalance | auraMoney:'1.0-0' }}</td>
                     <td>{{ dateTimeLabel(client.lastWalletActivity) }}</td>
                     <td><span class="badge">{{ client.source }}</span></td>
                     <td class="right">
@@ -268,16 +269,16 @@ type ProductConsumeDraftRow = {
                           *ngFor="let paymentMode of paymentModeSummary(row)"
                         >
                           {{ paymentMode.label }}
-                          <small>{{ paymentMode.amount | currency: 'INR':'symbol':'1.0-0' }}</small>
+                          <small>{{ paymentMode.amount | auraMoney:'1.0-0' }}</small>
                         </span>
                       </div>
                       <ng-template #noPaymentModes>
                         <span class="muted">No payment</span>
                       </ng-template>
                     </td>
-                    <td class="right invoice-total-amount">{{ row.total | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right invoice-paid-amount">{{ row.paid | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right invoice-due-amount">{{ row.balance | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td class="right invoice-total-amount">{{ row.total | auraMoney:'1.0-0' }}</td>
+                    <td class="right invoice-paid-amount">{{ row.paid | auraMoney:'1.0-0' }}</td>
+                    <td class="right invoice-due-amount">{{ row.balance | auraMoney:'1.0-0' }}</td>
                     <td><span class="badge">{{ row.status }}</span></td>
               <td class="right invoice-action-cell">
                 <div class="invoice-actions invoice-actions--saved">
@@ -437,12 +438,12 @@ type ProductConsumeDraftRow = {
                     </td>
                     <td>{{ itemStaffName(row.item, invoice) }}</td>
                     <td class="right">{{ itemQuantity(row.item) }}</td>
-                    <td class="right">{{ lineRate(row.item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right">{{ lineDiscount(invoice, row.item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right">{{ lineTaxable(invoice, row.item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td class="right">{{ lineRate(row.item) | auraMoney:'1.0-0' }}</td>
+                    <td class="right">{{ lineDiscount(invoice, row.item) | auraMoney:'1.0-0' }}</td>
+                    <td class="right">{{ lineTaxable(invoice, row.item) | auraMoney:'1.0-0' }}</td>
                     <td class="right">{{ lineGstRate(row.item) }}%</td>
-                    <td class="right">{{ lineGstAmount(invoice, row.item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right line-final">{{ lineFinal(invoice, row.item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td class="right">{{ lineGstAmount(invoice, row.item) | auraMoney:'1.0-0' }}</td>
+                    <td class="right line-final">{{ lineFinal(invoice, row.item) | auraMoney:'1.0-0' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -484,12 +485,12 @@ type ProductConsumeDraftRow = {
                     </td>
                     <td>{{ itemStaffName(item, invoice) }}</td>
                     <td class="right">{{ itemQuantity(item) }}</td>
-                    <td class="right">{{ lineRate(item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right">{{ lineDiscount(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right">{{ lineTaxable(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td class="right">{{ lineRate(item) | auraMoney:'1.0-0' }}</td>
+                    <td class="right">{{ lineDiscount(invoice, item) | auraMoney:'1.0-0' }}</td>
+                    <td class="right">{{ lineTaxable(invoice, item) | auraMoney:'1.0-0' }}</td>
                     <td class="right">{{ lineGstRate(item) }}%</td>
-                    <td class="right">{{ lineGstAmount(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td class="right line-final">{{ lineFinal(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td class="right">{{ lineGstAmount(invoice, item) | auraMoney:'1.0-0' }}</td>
+                    <td class="right line-final">{{ lineFinal(invoice, item) | auraMoney:'1.0-0' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -523,12 +524,12 @@ type ProductConsumeDraftRow = {
                       </td>
                       <td>{{ itemStaffName(item, invoice) }}</td>
                       <td class="right">{{ itemQuantity(item) }}</td>
-                      <td class="right">{{ lineRate(item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td class="right">{{ lineDiscount(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td class="right">{{ lineTaxable(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                      <td class="right">{{ lineRate(item) | auraMoney:'1.0-0' }}</td>
+                      <td class="right">{{ lineDiscount(invoice, item) | auraMoney:'1.0-0' }}</td>
+                      <td class="right">{{ lineTaxable(invoice, item) | auraMoney:'1.0-0' }}</td>
                       <td class="right">{{ lineGstRate(item) }}%</td>
-                      <td class="right">{{ lineGstAmount(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td class="right line-final">{{ lineFinal(invoice, item) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                      <td class="right">{{ lineGstAmount(invoice, item) | auraMoney:'1.0-0' }}</td>
+                      <td class="right line-final">{{ lineFinal(invoice, item) | auraMoney:'1.0-0' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -542,7 +543,7 @@ type ProductConsumeDraftRow = {
                   <strong>{{ tip.staffName || tip.staffId }}</strong>
                   <span>{{ modeLabel(tip.paymentMode || 'cash') }}</span>
                 </div>
-                <strong>{{ tip.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tip.amount | auraMoney:'1.0-0' }}</strong>
               </article>
               <p class="inline-hint" *ngIf="!invoice.tips.length">No tips on this invoice.</p>
             </div>
@@ -555,7 +556,7 @@ type ProductConsumeDraftRow = {
                   <span>{{ payment.reference || 'Counter collection' }}</span>
                   <span class="muted">{{ dateTimeLabel(payment.createdAt || payment.created_at) }}</span>
                 </div>
-                <strong>{{ payment.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ payment.amount | auraMoney:'1.0-0' }}</strong>
               </article>
               <p class="inline-hint" *ngIf="!invoice.payments.length">No payment collected yet.</p>
             </div>
@@ -591,8 +592,8 @@ type ProductConsumeDraftRow = {
                       <td>{{ line.settlementPaymentId || '-' }}</td>
                       <td>{{ line.paymentReference || '-' }}</td>
                       <td class="right">{{ line.daysToRecovery }}</td>
-                      <td class="right invoice-paid-amount">{{ line.amount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td class="right invoice-due-amount">{{ line.pendingAfter | currency: 'INR':'symbol':'1.0-0' }}</td>
+                      <td class="right invoice-paid-amount">{{ line.amount | auraMoney:'1.0-0' }}</td>
+                      <td class="right invoice-due-amount">{{ line.pendingAfter | auraMoney:'1.0-0' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -604,9 +605,9 @@ type ProductConsumeDraftRow = {
             <div class="info-grid compact-info">
               <div><span>Payment status</span><strong>{{ invoice.status || invoice.paymentStatus }}</strong></div>
               <div><span>Invoice state</span><strong>{{ invoice.documentStatus || '-' }}</strong></div>
-              <div><span>Online paid</span><strong>{{ invoice.onlinePaidAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Online paid</span><strong>{{ invoice.onlinePaidAmount | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Payment link</span><strong>{{ invoice.paymentLinkId || latestPaymentLinkId() || 'Not created' }}</strong></div>
-              <div><span>Due before send</span><strong>{{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Due before send</span><strong>{{ invoice.balance | auraMoney:'1.0-0' }}</strong></div>
             </div>
             <div class="hero-actions">
               <button class="primary-button" type="button" *ngIf="invoice.balance > 0" [disabled]="paymentActionLoading().startsWith(invoice.id)" (click)="createPaymentLink(invoice)">
@@ -625,7 +626,7 @@ type ProductConsumeDraftRow = {
                   <strong>Booking advance · {{ collection.invoice?.bookingAdvanceStatus || 'not_required' }}</strong>
                   <span>Advance is tracked separately from invoice settlement.</span>
                 </div>
-                <strong>{{ advanceAmount(collection.invoice || {}) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ advanceAmount(collection.invoice || {}) | auraMoney:'1.0-0' }}</strong>
               </article>
               <article *ngFor="let link of collection.links || []">
                 <div>
@@ -633,14 +634,14 @@ type ProductConsumeDraftRow = {
                   <span>{{ link.providerLinkId }} · expires {{ dateTimeLabel(link.expiresAt) }}</span>
                   <span class="muted">{{ link.paymentLink }}</span>
                 </div>
-                <strong>{{ link.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ link.amount | auraMoney:'1.0-0' }}</strong>
               </article>
               <article *ngFor="let event of collection.events || []">
                 <div>
                   <strong>{{ event.event_type || event.eventType }}</strong>
                   <span>{{ event.message || event.status }} · {{ dateTimeLabel(event.created_at || event.createdAt) }}</span>
                 </div>
-                <strong>{{ event.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ event.amount | auraMoney:'1.0-0' }}</strong>
               </article>
               <p class="inline-hint" *ngIf="!(collection.links || []).length && !(collection.events || []).length">No online payment timeline yet.</p>
             </div>
@@ -648,37 +649,37 @@ type ProductConsumeDraftRow = {
             <div class="settlement-breakdown">
               <article class="settlement-card">
                 <span>Booking advance adjusted</span>
-                <strong>{{ bookingAdvanceAdjustedAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ bookingAdvanceAdjustedAmount(invoice) | auraMoney:'1.0-0' }}</strong>
               </article>
               <article class="settlement-card">
                 <span>Counter payment collected</span>
-                <strong>{{ counterPaymentCollectedAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ counterPaymentCollectedAmount(invoice) | auraMoney:'1.0-0' }}</strong>
               </article>
               <article class="settlement-card" [class.is-due]="remainingCounterPaymentAmount(invoice) > 0">
                 <span>Remaining counter payment</span>
-                <strong>{{ remainingCounterPaymentAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ remainingCounterPaymentAmount(invoice) | auraMoney:'1.0-0' }}</strong>
                 <small *ngIf="remainingCounterPaymentAmount(invoice) > 0">Abhi itna aur collect karna baaki hai.</small>
                 <small *ngIf="remainingCounterPaymentAmount(invoice) <= 0">Invoice settlement complete hai.</small>
               </article>
             </div>
 
             <div class="summary-lines">
-              <div><span>Booking advance paid</span><strong>{{ advanceAmount(paymentTimeline()?.invoice || {}) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Booking advance pending</span><strong>{{ advancePendingAmount(paymentTimeline()?.invoice || {}) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Booking advance adjusted</span><strong>{{ bookingAdvanceAdjustedAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Counter payment collected</span><strong>{{ counterPaymentCollectedAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Remaining counter payment</span><strong>{{ remainingCounterPaymentAmount(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Booking advance paid</span><strong>{{ advanceAmount(paymentTimeline()?.invoice || {}) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Booking advance pending</span><strong>{{ advancePendingAmount(paymentTimeline()?.invoice || {}) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Booking advance adjusted</span><strong>{{ bookingAdvanceAdjustedAmount(invoice) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Counter payment collected</span><strong>{{ counterPaymentCollectedAmount(invoice) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Remaining counter payment</span><strong>{{ remainingCounterPaymentAmount(invoice) | auraMoney:'1.0-0' }}</strong></div>
               <div *ngIf="invoiceBenefitCreditsUsedCount(invoice) > 0"><span>Package/member credits used</span><strong>{{ invoiceBenefitCreditsUsed(invoice) }}</strong></div>
               <div *ngIf="invoiceBenefitCreditsUsedCount(invoice) > 0"><span>Benefit balance left</span><strong>{{ invoiceBenefitRemaining(invoice) }}</strong></div>
-              <div><span>Subtotal</span><strong>{{ invoice.subtotal | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Discount</span><strong>{{ invoice.discount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Subtotal</span><strong>{{ invoice.subtotal | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Discount</span><strong>{{ invoice.discount | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Discount rate</span><strong>{{ invoiceDiscountRate(invoice) }}%</strong></div>
-              <div><span>Taxable value</span><strong>{{ invoiceTaxableTotal(invoice) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>GST</span><strong>{{ invoice.gst | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Tips</span><strong>{{ invoice.tipTotal | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div class="total"><span>Total</span><strong>{{ invoice.total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Paid</span><strong>{{ invoice.paid | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div [class.total]="invoice.balance > 0"><span>Due</span><strong>{{ invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Taxable value</span><strong>{{ invoiceTaxableTotal(invoice) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>GST</span><strong>{{ invoice.gst | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Tips</span><strong>{{ invoice.tipTotal | auraMoney:'1.0-0' }}</strong></div>
+              <div class="total"><span>Total</span><strong>{{ invoice.total | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Paid</span><strong>{{ invoice.paid | auraMoney:'1.0-0' }}</strong></div>
+              <div [class.total]="invoice.balance > 0"><span>Due</span><strong>{{ invoice.balance | auraMoney:'1.0-0' }}</strong></div>
             </div>
           </section>
         </div>
@@ -689,7 +690,7 @@ type ProductConsumeDraftRow = {
           <div class="section-title">
             <div>
               <h2>{{ approvalActionTitle(request.action) }}</h2>
-              <p>{{ request.invoice.invoiceNumber }} · {{ request.invoice.clientName }} · {{ request.invoice.total | currency: 'INR':'symbol':'1.0-0' }}</p>
+              <p>{{ request.invoice.invoiceNumber }} · {{ request.invoice.clientName }} · {{ request.invoice.total | auraMoney:'1.0-0' }}</p>
             </div>
             <button class="ghost-button mini" type="button" (click)="closeApprovalDialog()">Close</button>
           </div>
@@ -700,7 +701,7 @@ type ProductConsumeDraftRow = {
             <div><span>Policy</span><strong>{{ approvalPolicyLabel(request.action, request.invoice) }}</strong></div>
             <div><span>Status</span><strong>Pending request</strong></div>
             <div><span>Branch</span><strong>{{ request.invoice.branchName }}</strong></div>
-            <div><span>Due</span><strong>{{ request.invoice.balance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Due</span><strong>{{ request.invoice.balance | auraMoney:'1.0-0' }}</strong></div>
           </div>
 
           <label class="field">
@@ -737,7 +738,7 @@ type ProductConsumeDraftRow = {
             <div><span>Invoice status</span><strong>{{ request.invoice.status }}</strong></div>
             <div><span>Branch</span><strong>{{ request.invoice.branchName }}</strong></div>
             <div><span>Invoice date</span><strong>{{ dateLabel(request.invoice.createdAt) }}</strong></div>
-            <div><span>Original total</span><strong>{{ request.invoice.total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Original total</span><strong>{{ request.invoice.total | auraMoney:'1.0-0' }}</strong></div>
           </div>
 
           <label class="field">

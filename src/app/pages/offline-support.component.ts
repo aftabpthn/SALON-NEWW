@@ -1,15 +1,16 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-offline-support',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, DatePipe, RouterLink, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -53,7 +54,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <span>{{ readinessLabel() }}</span>
             </article>
             <article class="action-card aura-card aura-card--type-action">
-              <strong>{{ summary()?.snapshots?.[0]?.createdAt ? (summary()?.snapshots?.[0]?.createdAt | date: 'short') : 'No cache yet' }}</strong>
+              <strong>{{ summary()?.snapshots?.[0]?.createdAt ? (summary()?.snapshots?.[0]?.createdAt | auraDate:'date') : 'No cache yet' }}</strong>
               <span>Latest cache snapshot</span>
             </article>
           </div>

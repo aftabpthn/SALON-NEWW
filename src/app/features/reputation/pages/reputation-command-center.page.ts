@@ -7,6 +7,7 @@ import { ApiRecord } from '../../../core/api.service';
 import { StateComponent } from '../../../shared/ui/state/state.component';
 import { ReputationApiService } from '../data-access/reputation-api.service';
 import { PlatformSummary, ReputationAlert, ReputationDashboard, ReputationReview, ReviewPlatform, SupportedPlatform } from '../domain/reputation.models';
+import { AuraDatePipe } from '../../../shared/pipes/aura-date.pipe';
 
 type ReputationTab = 'overview' | 'feedback' | 'rating' | 'recovery' | 'staff';
 
@@ -39,7 +40,7 @@ interface StaffPreview {
 @Component({
   selector: 'app-reputation-command-center-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="rep-page">
       <header class="page-heading">
@@ -254,7 +255,7 @@ interface StaffPreview {
                 <span [class]="'severity ' + alert.severity"></span>
                 <div>
                   <strong>{{ alert.severity || 'normal' | titlecase }} review alert</strong>
-                  <small>{{ alert.createdAt ? (alert.createdAt | date: 'medium') : 'Time not captured' }}</small>
+                  <small>{{ alert.createdAt ? (alert.createdAt | auraDate:'date') : 'Time not captured' }}</small>
                 </div>
               </button>
             </div>
@@ -412,7 +413,7 @@ interface StaffPreview {
                 <div>
                   <strong>{{ review.reviewerName }}</strong>
                   <p>{{ review.reviewText || 'No review text captured.' }}</p>
-                  <small>{{ review.platformName }} · {{ review.createdAt ? (review.createdAt | date: 'mediumDate') : 'Date missing' }}</small>
+                  <small>{{ review.platformName }} · {{ review.createdAt ? (review.createdAt | auraDate:'date') : 'Date missing' }}</small>
                 </div>
                 <span [class]="'sentiment ' + sentimentClass(review)">{{ sentimentLabel(review) }}</span>
               </a>

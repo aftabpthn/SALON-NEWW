@@ -1,12 +1,13 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-offline-sync-queue',
   standalone: true,
-  imports: [CommonModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -35,7 +36,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <span>Appointment priority</span>
             </article>
             <article class="action-card">
-              <strong>{{ retryDashboard()?.metrics?.oldestQueuedAt ? (retryDashboard()?.metrics?.oldestQueuedAt | date: 'short') : 'Clear' }}</strong>
+              <strong>{{ retryDashboard()?.metrics?.oldestQueuedAt ? (retryDashboard()?.metrics?.oldestQueuedAt | auraDate:'date') : 'Clear' }}</strong>
               <span>Oldest queued</span>
               <small>{{ retryDashboard()?.conflictHandling?.policy }}</small>
             </article>
@@ -74,7 +75,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td><span class="badge">{{ item.status }}</span></td>
                 <td>{{ item.serverId || '-' }}</td>
                 <td>{{ item.errorMessage || item.conflictReason || '-' }}</td>
-                <td>{{ item.createdAt | date: 'short' }}</td>
+                <td>{{ item.createdAt | auraDate:'date' }}</td>
                 <td><button class="ghost-button" type="button" [disabled]="!canRetry(item)" (click)="retryItem(item)">Retry</button></td>
               </tr>
               <tr *ngIf="!queue().length"><td colspan="9">No sync queue items found.</td></tr>

@@ -1,10 +1,11 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type RecipeTab = 'recipes' | 'planner' | 'intelligence' | 'usage' | 'alerts';
 
@@ -31,7 +32,7 @@ const DEFAULT_MODIFIERS = [
 @Component({
   selector: 'app-inventory-recipes',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack inventory-enterprise-page recipes-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -81,7 +82,7 @@ const DEFAULT_MODIFIERS = [
                   <td><strong>{{ recipe.serviceName || recipe.recipeName }}</strong><small>{{ recipe.recipeName }}</small></td>
                   <td>{{ branchName(recipe.branchId) }}</td>
                   <td><span class="recipe-chip" *ngFor="let item of recipe.items">{{ item.productName }} x {{ item.quantityPerService }} {{ item.unit || 'pcs' }}</span></td>
-                  <td>{{ recipe.expectedCost | currency:'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ recipe.expectedCost | auraMoney:'1.0-0' }}</td>
                   <td>{{ recipe.expectedMarginPct || 0 }}%</td>
                   <td><span class="badge" [class.warn]="recipe.approvalStatus !== 'approved'">{{ recipe.approvalStatus || 'approved' }}</span></td>
                   <td>{{ recipe.approvalStatus === 'approved' ? 'Ready' : 'Approval pending' }}</td>
@@ -129,8 +130,8 @@ const DEFAULT_MODIFIERS = [
                 <tr *ngFor="let row of usageLogs()">
                   <td><strong>{{ row.serviceName || row.serviceId }}</strong><small>{{ row.usageModifierKey }} x {{ row.usageModifierMultiplier }}</small></td>
                   <td>{{ row.staffId || '-' }}</td>
-                  <td>{{ row.expectedCost | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.actualCost | currency:'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.expectedCost | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.actualCost | auraMoney:'1.0-0' }}</td>
                   <td><span class="badge" [class.warn]="row.overuseFlag">{{ row.variancePct || 0 }}%</span></td>
                   <td>{{ row.referenceType }} · {{ row.referenceId }}</td>
                 </tr>
@@ -175,7 +176,7 @@ const DEFAULT_MODIFIERS = [
           </div>
           <form [formGroup]="recipeForm" (ngSubmit)="saveRecipe()" class="enterprise-form">
             <label class="field"><span>Branch</span><select formControlName="branchId"><option value="">All branches</option><option *ngFor="let branch of branches()" [value]="branch.id">{{ branch.name }}</option></select></label>
-            <label class="field"><span>Service</span><select formControlName="serviceId"><option value="">Select service</option><option *ngFor="let service of services()" [value]="service.id">{{ service.name }} · {{ service.price | currency:'INR':'symbol':'1.0-0' }}</option></select></label>
+            <label class="field"><span>Service</span><select formControlName="serviceId"><option value="">Select service</option><option *ngFor="let service of services()" [value]="service.id">{{ service.name }} · {{ service.price | auraMoney:'1.0-0' }}</option></select></label>
             <label class="field"><span>Recipe name</span><input formControlName="recipeName" placeholder="Keratin standard usage" /></label>
             <label class="field"><span>Approval status</span><select formControlName="approvalStatus"><option value="approved">Approved</option><option value="pending_approval">Pending approval</option><option value="draft">Draft</option></select></label>
             <label class="field"><span>Margin floor %</span><input type="number" formControlName="marginFloorPct" /></label>
@@ -224,8 +225,8 @@ const DEFAULT_MODIFIERS = [
         <section class="panel impact-panel">
           <div class="section-title"><div><h2>Cost, margin and stock</h2></div></div>
           <div class="impact-stack">
-            <article><span>Expected service cost</span><strong>{{ expectedCostPreview() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Service margin</span><strong>{{ marginPreview() | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ marginPctPreview() }}% after professional stock</small></article>
+            <article><span>Expected service cost</span><strong>{{ expectedCostPreview() | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Service margin</span><strong>{{ marginPreview() | auraMoney:'1.0-0' }}</strong><small>{{ marginPctPreview() }}% after professional stock</small></article>
             <article><span>Product filter</span><strong>Consumable / Both</strong><small>{{ recipeProducts().length }} products available for BOM</small></article>
             <article><span>FIFO mode</span><strong>Enforced</strong></article>
             <article><span>Live tracking</span><strong>SERVICE_USE</strong></article>
@@ -238,7 +239,7 @@ const DEFAULT_MODIFIERS = [
           <div class="line-audit">
             <div><strong>{{ activeLineCount() }}</strong><span>active lines</span></div>
             <div><strong>{{ totalWastePct() }}%</strong><span>avg waste</span></div>
-            <div><strong>{{ selectedServicePrice() | currency:'INR':'symbol':'1.0-0' }}</strong><span>service price</span></div>
+            <div><strong>{{ selectedServicePrice() | auraMoney:'1.0-0' }}</strong><span>service price</span></div>
           </div>
         </section>
       </div>

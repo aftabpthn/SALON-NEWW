@@ -1,12 +1,13 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-offline-conflict-center',
   standalone: true,
-  imports: [CommonModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -27,7 +28,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ item.operation }}</td>
                 <td>{{ item.deviceId }}</td>
                 <td>{{ item.errorMessage || item.conflictReason || 'Needs review' }}</td>
-                <td>{{ item.createdAt | date: 'short' }}</td>
+                <td>{{ item.createdAt | auraDate:'date' }}</td>
                 <td><span class="badge">Keep server</span> <span class="badge">Keep device</span> <span class="badge">Merge</span></td>
               </tr>
               <tr *ngIf="!conflicts().length"><td colspan="6">No offline conflicts found.</td></tr>

@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type StaffWorkspacePanel = 'overview' | 'directory' | 'actions' | 'payroll' | 'runs';
 
@@ -31,7 +32,7 @@ type StaffDirectoryRow = ApiRecord & {
 @Component({
   selector: 'app-staff-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DecimalPipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, DecimalPipe, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack staff-page">
       <section class="staff-command-center">
@@ -73,17 +74,17 @@ type StaffDirectoryRow = ApiRecord & {
         <div class="metrics-grid staff-metrics-grid">
           <aura-kpi-card tone="neutral" target="/kpi-details/staff/total-revenue">
             <span>Total revenue</span>
-            <strong>{{ summary.metrics.totalRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ summary.metrics.totalRevenue | auraMoney:'1.0-0' }}</strong>
             <small>{{ summary.metrics.staffCount }} active staff</small>
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/staff/commission">
             <span>Commission</span>
-            <strong>{{ summary.metrics.totalCommission | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ summary.metrics.totalCommission | auraMoney:'1.0-0' }}</strong>
             <small>{{ summary.commission.entries.length }} commission lines</small>
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/staff/incentives">
             <span>Incentives</span>
-            <strong>{{ summary.metrics.totalIncentives | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ summary.metrics.totalIncentives | auraMoney:'1.0-0' }}</strong>
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/staff/average-score">
             <span>Average score</span>
@@ -136,7 +137,7 @@ type StaffDirectoryRow = ApiRecord & {
                       <tr *ngFor="let person of summary.ranking">
                         <td><strong>{{ person.name }}</strong><small>{{ person.role }}</small></td>
                         <td>{{ person.performanceScore | number: '1.0-1' }}</td>
-                        <td>{{ person.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                        <td>{{ person.revenue | auraMoney:'1.0-0' }}</td>
                         <td>{{ person.bookings }}</td>
                         <td>{{ person.serviceEfficiency | number: '1.0-1' }}%</td>
                         <td>{{ person.attendanceScore | number: '1.0-1' }}%</td>
@@ -155,8 +156,8 @@ type StaffDirectoryRow = ApiRecord & {
                       <span>{{ row.reason }}</span>
                     </div>
                     <div class="right">
-                      <strong>{{ row.incentive | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                      <small>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }} commission</small>
+                      <strong>{{ row.incentive | auraMoney:'1.0-0' }}</strong>
+                      <small>{{ row.commission | auraMoney:'1.0-0' }} commission</small>
                     </div>
                   </article>
                 </div>
@@ -197,11 +198,11 @@ type StaffDirectoryRow = ApiRecord & {
                           <small>{{ person.assignedServices }} services</small>
                         </td>
                         <td>
-                          <strong>{{ person.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                          <strong>{{ person.revenue | auraMoney:'1.0-0' }}</strong>
                           <small>{{ person.bookings || 0 }} bookings</small>
                         </td>
                         <td>
-                          <strong>{{ person.commission + person.incentive | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                          <strong>{{ person.commission + person.incentive | auraMoney:'1.0-0' }}</strong>
                           <small>{{ person.presentDays }} present days</small>
                         </td>
                       </tr>
@@ -281,10 +282,10 @@ type StaffDirectoryRow = ApiRecord & {
                       <td><strong>{{ row.name }}</strong><small>{{ row.role }}</small></td>
                       <td>{{ row.presentDays }}</td>
                       <td>{{ row.minutesWorked }}</td>
-                      <td>{{ row.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td>{{ row.incentive | currency: 'INR':'symbol':'1.0-0' }}</td>
-                      <td>{{ row.grossPayout | currency: 'INR':'symbol':'1.0-0' }}</td>
+                      <td>{{ row.revenue | auraMoney:'1.0-0' }}</td>
+                      <td>{{ row.commission | auraMoney:'1.0-0' }}</td>
+                      <td>{{ row.incentive | auraMoney:'1.0-0' }}</td>
+                      <td>{{ row.grossPayout | auraMoney:'1.0-0' }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -297,11 +298,11 @@ type StaffDirectoryRow = ApiRecord & {
               <div class="activity-list compact-scroll">
                 <article *ngFor="let run of commissionRuns()">
                   <strong>{{ run.id }} · {{ run.periodStart }} to {{ run.periodEnd }}</strong>
-                  <span>{{ run.summary?.totalCommission | currency: 'INR':'symbol':'1.0-0' }} commission · {{ run.status }}</span>
+                  <span>{{ run.summary?.totalCommission | auraMoney:'1.0-0' }} commission · {{ run.status }}</span>
                 </article>
                 <article *ngFor="let item of payrollRuns()">
                   <strong>{{ item.id }} · {{ item.periodStart }} to {{ item.periodEnd }}</strong>
-                  <span>{{ item.totals?.grossPayout | currency: 'INR':'symbol':'1.0-0' }} payout · {{ item.status }}</span>
+                  <span>{{ item.totals?.grossPayout | auraMoney:'1.0-0' }} payout · {{ item.status }}</span>
                 </article>
               </div>
             </section>

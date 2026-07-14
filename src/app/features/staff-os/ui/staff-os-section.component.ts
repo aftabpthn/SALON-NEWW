@@ -7,6 +7,7 @@ import { ApiRecord } from '../../../core/api.service';
 import { AppStateService } from '../../../core/state/app-state.service';
 import { StaffOsStore } from '../application/staff-os.store';
 import { StaffOsBranch, StaffOsLeaveMaster, StaffOsRiskScore, StaffOsShiftMaster, StaffOsStaff, StaffOsStaffCategory, StaffOsTask } from '../domain/staff-os.models';
+import { AuraMoneyPipe } from '../../../shared/pipes/aura-money.pipe';
 
 type StaffDetailTab = 'core' | 'contact' | 'emergency' | 'native' | 'incentive' | 'attendance' | 'remarks';
 type StaffIntegrationLink = { label: string; to: string };
@@ -48,7 +49,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 @Component({
   selector: 'app-staff-os-section',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink],
   template: `
     <section
       class="staff-os inner-page-shell"
@@ -328,7 +329,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <div class="row header"><span>Staff</span><span>Basic salary</span><span>Payment</span><span>Payroll</span><span>Action</span></div>
                 <div class="row" *ngFor="let staff of staffDirectoryRows()">
                   <span><strong>{{ staff.fullName }}</strong><small>{{ staff.designation || staff.staffCategoryName || 'Staff' }}</small></span>
-                  <span>{{ salaryAmount(staff) | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+                  <span>{{ salaryAmount(staff) | auraMoney:'1.0-0' }}</span>
                   <span>{{ salaryProfile(staff)['paymentMode'] || 'Not set' }}</span>
                   <span class="badge">{{ salaryProfile(staff)['supportAttendancePayroll'] ? 'Attendance sync' : 'Manual review' }}</span>
                   <span><button type="button" class="row-action" (click)="openSalaryEditor(staff)">{{ salaryAmount(staff) > 0 ? 'Edit Salary' : 'Set Salary' }}</button></span>
@@ -349,7 +350,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
               <section class="workspace-kpi-grid">
                 <article><span>Incentive rules</span><strong>{{ commissionRuleCount() }}</strong></article>
                 <article><span>Performance rows</span><strong>{{ store.performance().rows.length }}</strong></article>
-                <article><span>Tracked revenue</span><strong>{{ store.performance().summary.revenue | currency:'INR':'symbol-narrow':'1.0-0' }}</strong></article>
+                <article><span>Tracked revenue</span><strong>{{ store.performance().summary.revenue | auraMoney:'1.0-0' }}</strong></article>
                 <article><span>Avg score</span><strong>{{ store.performance().summary.avgScore | number:'1.0-0' }}</strong></article>
               </section>
               <div class="workspace-actions">
@@ -362,7 +363,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <div class="row" *ngFor="let row of store.performance().rows">
                   <span>{{ row.staffId }}</span>
                   <span>{{ row.productivityScore | number:'1.0-0' }}</span>
-                  <span>{{ row.revenueGenerated | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+                  <span>{{ row.revenueGenerated | auraMoney:'1.0-0' }}</span>
                   <span>{{ row.utilizationPct | number:'1.0-0' }}%</span>
                 </div>
                 <div *ngIf="!store.performance().rows.length && !store.loading()" class="empty action-empty"><strong>No performance rows yet.</strong><a class="refresh" routerLink="/reports/staff-sales">Open staff sales</a></div>
@@ -401,7 +402,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                 <div class="row" *ngFor="let staff of staffDirectoryRows()">
                   <span><strong>{{ staff.fullName }}</strong><small>{{ staff.designation || staff.staffCategoryName || 'Staff' }}</small></span>
                   <span>{{ staff.loginId || staff.loginEmail || (staff.loginUserId ? 'Login linked' : 'No login') }}</span>
-                  <span>{{ salaryAmount(staff) | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+                  <span>{{ salaryAmount(staff) | auraMoney:'1.0-0' }}</span>
                   <span>{{ staff.mobile || staff.email || 'No contact' }}</span>
                   <span class="badge">{{ staff.status }}</span>
                   <span class="row-links">
@@ -520,7 +521,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                     <td>{{ staff.mobile || '-' }}</td>
                     <td>{{ staff.employeeCode || staff.id }}</td>
                     <td>{{ staff.email || staff.loginEmail || '-' }}</td>
-                    <td>{{ salaryAmount(staff) | currency:'INR':'symbol-narrow':'1.0-0' }}</td>
+                    <td>{{ salaryAmount(staff) | auraMoney:'1.0-0' }}</td>
                     <td>{{ staff.designation || staff.staffCategoryName || staff.department || '-' }}</td>
                     <td><span class="badge" [class.good]="isStaffActive(staff)" [class.warn]="!isStaffActive(staff)">{{ statusLabelForStaff(staff) }}</span></td>
                     <td>{{ displayDate(staff.joiningDate) }}</td>
@@ -704,7 +705,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
 
               <section class="salary-quick-panel full" aria-label="Salary setup shortcut">
                 <div>
-                  <strong>{{ staffForm.get('basicSalary')?.value || 0 | currency:'INR':'symbol-narrow':'1.0-0' }} basic salary</strong>
+                  <strong>{{ staffForm.get('basicSalary')?.value || 0 | auraMoney:'1.0-0' }} basic salary</strong>
                 </div>
                 <div class="salary-quick-meta">
                   <article>
@@ -932,7 +933,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
               <section class="incentive-summary full" aria-label="Incentive rule summary">
                 <article>
                   <span>Fixed</span>
-                  <strong>{{ staffForm.get('fixedIncentivePercent')?.value || 0 }}% / {{ (staffForm.get('fixedIncentiveAmount')?.value || 0) | currency:'INR':'symbol-narrow':'1.0-0' }}</strong>
+                  <strong>{{ staffForm.get('fixedIncentivePercent')?.value || 0 }}% / {{ (staffForm.get('fixedIncentiveAmount')?.value || 0) | auraMoney:'1.0-0' }}</strong>
                 </article>
                 <article>
                   <span>Rule builder</span>
@@ -1127,7 +1128,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
               <section class="salary-summary full" aria-label="Salary profile summary">
                 <article>
                   <span>Basic Salary</span>
-                  <strong>{{ (staffForm.get('basicSalary')?.value || 0) | currency:'INR':'symbol-narrow':'1.0-0' }}</strong>
+                  <strong>{{ (staffForm.get('basicSalary')?.value || 0) | auraMoney:'1.0-0' }}</strong>
                 </article>
                 <article>
                   <span>Payment</span>
@@ -2027,7 +2028,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
         </section>
         <div class="split">
           <article>
-            <strong>{{ store.performance().summary.revenue | currency:'INR':'symbol-narrow':'1.0-0' }}</strong>
+            <strong>{{ store.performance().summary.revenue | auraMoney:'1.0-0' }}</strong>
             <span>Tracked revenue</span>
           </article>
           <article>
@@ -2040,7 +2041,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
           <div class="row" *ngFor="let row of store.performance().rows">
             <span>{{ row.staffId }}</span>
             <span>{{ row.productivityScore | number:'1.0-0' }}</span>
-            <span>{{ row.revenueGenerated | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+            <span>{{ row.revenueGenerated | auraMoney:'1.0-0' }}</span>
             <span>{{ row.utilizationPct | number:'1.0-0' }}%</span>
           </div>
           <div *ngIf="!store.performance().rows.length && !store.loading()" class="empty action-empty">
@@ -2089,7 +2090,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                   <strong>{{ staff.fullName }}</strong>
                   <small>{{ staff.employeeCode || staff.designation || staff.department || staff.id }}</small>
                 </td>
-                <td>{{ salaryAmount(staff) | currency:'INR':'symbol-narrow':'1.0-0' }}</td>
+                <td>{{ salaryAmount(staff) | auraMoney:'1.0-0' }}</td>
                 <td>{{ salaryProfile(staff)['paymentMode'] || 'Not set' }}</td>
                 <td>{{ salaryProfile(staff)['supportAttendancePayroll'] ? 'Attendance sync' : 'Manual review' }}</td>
                 <td><span class="badge">{{ staff.status }}</span></td>

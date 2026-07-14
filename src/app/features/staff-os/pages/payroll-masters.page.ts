@@ -5,6 +5,7 @@ import { Observable, catchError, finalize, forkJoin, of } from 'rxjs';
 import { ApiRecord } from '../../../core/api.service';
 import { StaffOsApi } from '../data/staff-os.api';
 import { StaffOsAllowanceDeduction, StaffOsBranch, StaffOsFinePenalty, StaffOsPayrollSalaryStructure, StaffOsStaff } from '../domain/staff-os.models';
+import { AuraMoneyPipe } from '../../../shared/pipes/aura-money.pipe';
 
 type PayrollDefinitionKind = 'fine' | 'allowance';
 type FinePenaltyRuleType = NonNullable<StaffOsFinePenalty['ruleType']>;
@@ -23,7 +24,7 @@ type PenaltyPreviewRow = {
 @Component({
   selector: 'app-staff-payroll-definition',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [AuraMoneyPipe, CommonModule, RouterLink],
   template: `
     <section class="definition-page">
       <header class="topbar">
@@ -54,7 +55,7 @@ type PenaltyPreviewRow = {
             <button type="button" class="row" *ngFor="let item of visibleRows()" [class.active]="selectedId() === item.id" (click)="select(item)">
               <strong>{{ rowName(item) }}</strong>
               <span>{{ item.hide ? 'Yes' : 'No' }}</span>
-              <span *ngIf="kind === 'fine'">{{ rowAmount(item) | currency:'INR':'symbol':'1.0-0' }}</span>
+              <span *ngIf="kind === 'fine'">{{ rowAmount(item) | auraMoney:'1.0-0' }}</span>
             </button>
           </div>
         </aside>
@@ -130,7 +131,7 @@ type PenaltyPreviewRow = {
         <div class="metric-strip">
           <article><span>Staff impacted</span><strong>{{ penaltySummary().staff }}</strong></article>
           <article><span>Rule breaks</span><strong>{{ penaltySummary().breaks }}</strong></article>
-          <article><span>Salary deduction</span><strong>{{ penaltySummary().amount | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+          <article><span>Salary deduction</span><strong>{{ penaltySummary().amount | auraMoney:'1.0-0' }}</strong></article>
         </div>
         <div *ngIf="penaltyLoading()" class="state">Loading rule breaks...</div>
         <div *ngIf="penaltyError()" class="state error">{{ penaltyError() }}</div>
@@ -140,7 +141,7 @@ type PenaltyPreviewRow = {
             <strong>{{ row.staffName }}</strong>
             <span>{{ row.ruleName }}</span>
             <span>{{ row.breakCount }}</span>
-            <span>{{ row.amount | currency:'INR':'symbol':'1.0-0' }}</span>
+            <span>{{ row.amount | auraMoney:'1.0-0' }}</span>
             <span>{{ row.evidence }}</span>
           </div>
           <div class="preview-row empty" *ngIf="!penaltyPreviewRows().length">

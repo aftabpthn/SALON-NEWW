@@ -1,13 +1,14 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-offline-readiness',
   standalone: true,
-  imports: [CommonModule, DatePipe, RouterLink, StateComponent],
+  imports: [AuraDatePipe, CommonModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -42,7 +43,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <thead><tr><th>Resource</th><th>Device</th><th>Version</th><th>Created</th></tr></thead>
             <tbody>
               <tr *ngFor="let snapshot of snapshots()">
-                <td>{{ snapshot.resource }}</td><td>{{ snapshot.deviceId }}</td><td>{{ snapshot.version }}</td><td>{{ snapshot.createdAt | date: 'short' }}</td>
+                <td>{{ snapshot.resource }}</td><td>{{ snapshot.deviceId }}</td><td>{{ snapshot.version }}</td><td>{{ snapshot.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!snapshots().length"><td colspan="4">No cache snapshots yet.</td></tr>
             </tbody>

@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError } from 'rxjs';
@@ -8,11 +8,13 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-membership-360',
   standalone: true,
-  imports: [CommonModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero compact-hero inner-page-header">
@@ -52,7 +54,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>Days left</span><strong>{{ membershipProfile().daysLeft ?? '-' }}</strong></div>
               <div><span>Auto-renew</span><strong>{{ membershipProfile().autoRenew ? 'On' : 'Off' }}</strong></div>
               <div><span>Credits</span><strong>{{ membershipProfile().creditsRemaining || 0 }} / {{ membershipProfile().planCredits || 0 }}</strong></div>
-              <div><span>Price</span><strong>{{ membershipProfile().price | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Price</span><strong>{{ membershipProfile().price | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Plan type</span><strong>{{ label(wallet().activeMembership?.planType || wallet().memberships?.[0]?.planType || currentPlan().benefitRules?.planType) }}</strong></div>
               <div><span>Business label</span><strong>{{ wallet().businessLabel || wallet().memberships?.[0]?.businessLabel || '-' }}</strong></div>
             </div>
@@ -74,7 +76,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="section-title"><h2>Current plan</h2></div>
             <div class="detail-grid">
               <div><span>Plan</span><strong>{{ currentPlan().name || '-' }}</strong></div>
-              <div><span>Price</span><strong>{{ currentPlan().price | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Price</span><strong>{{ currentPlan().price | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Service discount</span><strong>{{ currentPlan().discountPercent || membershipProfile().discountPercent || 0 }}%</strong></div>
               <div><span>Product discount</span><strong>{{ currentPlan().productDiscountPercent || membershipProfile().productDiscountPercent || 0 }}%</strong></div>
               <div><span>Validity</span><strong>{{ currentPlan().validityDays || '-' }} days</strong></div>
@@ -85,7 +87,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <section class="panel inner-page-card">
             <div class="section-title"><h2>Wallet snapshot</h2></div>
             <div class="detail-grid" *ngIf="wallet(); else noWallet">
-              <div><span>Wallet balance</span><strong>{{ wallet().walletBalance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Wallet balance</span><strong>{{ wallet().walletBalance | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Service credits</span><strong>{{ wallet().serviceCredits?.remaining || 0 }} left</strong></div>
               <div><span>Credits used</span><strong>{{ wallet().serviceCredits?.used || 0 }}</strong></div>
               <div><span>Active packages</span><strong>{{ wallet().packageSummary?.activeCount || 0 }}</strong></div>
@@ -109,11 +111,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div class="timeline-dot" [ngClass]="eventTone(event)"></div>
               <div>
                 <strong>{{ event.label || label(event.action) }}</strong>
-                <span>{{ event.createdAt | date: 'medium' }} · {{ event.source }}</span>
+                <span>{{ event.createdAt | auraDate:'date' }} · {{ event.source }}</span>
                 <small>{{ event.note || event.invoiceId || event.actor?.label || 'Audit-backed membership activity' }}</small>
                 <a *ngIf="event.invoiceRoute" [routerLink]="event.invoiceRoute">Open invoice {{ event.invoiceId }}</a>
               </div>
-              <b *ngIf="event.paidAmount || event.amount">{{ (event.paidAmount || event.amount) | currency: 'INR':'symbol':'1.0-0' }}</b>
+              <b *ngIf="event.paidAmount || event.amount">{{ (event.paidAmount || event.amount) | auraMoney:'1.0-0' }}</b>
             </article>
           </div>
           <ng-template #noTimeline>
@@ -129,10 +131,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <thead><tr><th>When</th><th>Action</th><th>Mode</th><th>Paid</th><th>Invoice</th><th>Actor</th></tr></thead>
                 <tbody>
                   <tr *ngFor="let payment of paymentHistory()">
-                    <td>{{ payment.createdAt | date: 'short' }}</td>
+                    <td>{{ payment.createdAt | auraDate:'date' }}</td>
                     <td>{{ label(payment.action) }}</td>
                     <td>{{ payment.paymentMode || '-' }}</td>
-                    <td>{{ payment.paidAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ payment.paidAmount | auraMoney:'1.0-0' }}</td>
                     <td><a *ngIf="payment.invoiceId; else noInvoice" [routerLink]="['/billing/invoices', payment.invoiceId]">{{ payment.invoiceId }}</a><ng-template #noInvoice>-</ng-template></td>
                     <td>{{ payment.actorUserId || payment.actorRole || 'System' }}</td>
                   </tr>
@@ -146,7 +148,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="quick-grid" *ngIf="invoiceLinks().length; else noInvoices">
               <article class="action-card" *ngFor="let invoice of invoiceLinks()">
                 <strong>{{ invoice.invoiceId }}</strong>
-                <span>{{ invoice.amount | currency: 'INR':'symbol':'1.0-0' }} · Discount {{ invoice.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span>{{ invoice.amount | auraMoney:'1.0-0' }} · Discount {{ invoice.discountAmount | auraMoney:'1.0-0' }}</span>
                 <a [routerLink]="invoice.route">Open invoice detail</a>
               </article>
             </div>
@@ -192,7 +194,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="quick-grid" *ngIf="auditTrail().length; else noAudit">
               <article class="action-card" *ngFor="let audit of auditTrail()">
                 <strong>{{ label(audit.action) }}</strong>
-                <span>{{ audit.createdAt | date: 'short' }} · {{ audit.actor?.label || audit.actorUserId || 'System' }}</span>
+                <span>{{ audit.createdAt | auraDate:'date' }} · {{ audit.actor?.label || audit.actorUserId || 'System' }}</span>
                 <small *ngIf="audit.riskFlags?.length">{{ audit.riskFlags.length }} risk flag{{ audit.riskFlags.length === 1 ? '' : 's' }}</small>
               </article>
             </div>
@@ -221,7 +223,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="stats-grid inner-stats-grid" *ngIf="metrics() as metric">
           <article class="metric-card"><span>Sold clients</span><strong>{{ metric.soldClients || 0 }}</strong></article>
           <article class="metric-card"><span>Active</span><strong>{{ metric.active || 0 }}</strong></article>
-          <article class="metric-card"><span>Revenue</span><strong>{{ (metric.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Revenue</span><strong>{{ (metric.revenue || 0) | auraMoney:'1.0-0' }}</strong></article>
           <article class="metric-card"><span>Renewal risk</span><strong>{{ metric.renewalRisk || 0 }}</strong></article>
         </section>
 
@@ -230,7 +232,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="section-title"><h2>Plan details</h2></div>
             <div class="detail-grid">
               <div><span>Code</span><strong>{{ planData.code || '-' }}</strong></div>
-              <div><span>Price</span><strong>{{ planData.price | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Price</span><strong>{{ planData.price | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Service discount</span><strong>{{ planData.discountPercent }}%</strong></div>
               <div><span>Product discount</span><strong>{{ planData.productDiscountPercent || 0 }}%</strong></div>
               <div><span>Validity</span><strong>{{ planData.validityDays }} days</strong></div>
@@ -257,7 +259,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><span class="badge">{{ membership.status }}</span></td>
                   <td>{{ membership.creditsRemaining || 0 }} / {{ membership.planCredits || 0 }}</td>
                   <td>{{ membership.validityDate || '-' }}</td>
-                  <td>{{ membership.price | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ membership.price | auraMoney:'1.0-0' }}</td>
                   <td><a [routerLink]="['/memberships', membership.id]">Open</a></td>
                 </tr>
               </tbody>
@@ -270,7 +272,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="quick-grid" *ngIf="wallets().length; else noWalletSnapshots">
             <article class="action-card" *ngFor="let wallet of wallets()">
               <strong>{{ wallet.clientName || wallet.clientId }}</strong>
-              <span>{{ wallet.activePlanName || 'No active benefits' }} · Wallet {{ wallet.walletBalance | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <span>{{ wallet.activePlanName || 'No active benefits' }} · Wallet {{ wallet.walletBalance | auraMoney:'1.0-0' }}</span>
               <span>Credits {{ wallet.serviceCredits?.remaining || 0 }} left / {{ wallet.serviceCredits?.used || 0 }} used · Product {{ wallet.productDiscount || wallet.productDiscountPercent || 0 }}%</span>
               <span>Packages {{ wallet.packageSummary?.activeCount || 0 }} · Expiry {{ wallet.expiryDate || '-' }} · Auto-renew {{ wallet.autoRenew ? 'On' : 'Off' }} · Family {{ wallet.familySharing?.status || 'not_shared' }}</span>
               <span>{{ fairUsageLabel(wallet) }} · {{ corporateLabel(wallet) }} · {{ tierLabel(wallet) }}</span>
@@ -290,7 +292,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="quick-grid">
               <article class="action-card" *ngFor="let row of ledger()">
                 <strong>{{ row.action }}</strong>
-                <span>{{ row.createdAt | date: 'short' }} · {{ (row.paidAmount || row.amount) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span>{{ row.createdAt | auraDate:'date' }} · {{ (row.paidAmount || row.amount) | auraMoney:'1.0-0' }}</span>
                 <span>{{ row.note || row.invoiceId || row.membershipId }}</span>
               </article>
             </div>
@@ -300,8 +302,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="quick-grid">
               <article class="action-card" *ngFor="let snapshot of snapshots()">
                 <strong>{{ snapshot.invoiceId }}</strong>
-                <span>Discount {{ snapshot.discountAmount | currency: 'INR':'symbol':'1.0-0' }} · Invoice {{ snapshot.invoiceTotal | currency: 'INR':'symbol':'1.0-0' }}</span>
-                <span>{{ snapshot.createdAt | date: 'short' }}</span>
+                <span>Discount {{ snapshot.discountAmount | auraMoney:'1.0-0' }} · Invoice {{ snapshot.invoiceTotal | auraMoney:'1.0-0' }}</span>
+                <span>{{ snapshot.createdAt | auraDate:'date' }}</span>
               </article>
             </div>
           </section>

@@ -1,16 +1,18 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_due';
 
 @Component({
   selector: 'app-appointment-deposit-report',
   standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, StateComponent],
   styles: [`
     .settlement-notice { margin: 0 0 12px; padding: 10px 14px; border: 1px solid #E7DDD6; border-radius: 12px; background: #FAF8F6; color: #4B1238; }
     .follow-up-cell { display: grid; gap: 4px; min-width: 150px; }
@@ -55,10 +57,10 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
 
       <section class="metrics-grid inner-stats-grid">
         <article class="metric-card"><span>Links</span><strong>{{ filteredRows().length }}</strong><small>{{ settlementFilterLabel() }}</small></article>
-        <article class="metric-card"><span>Total advance</span><strong>{{ (stats().totalAmount || 0) | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article class="metric-card"><span>Advance adjusted</span><strong>{{ filteredAdvanceAdjustedTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article class="metric-card"><span>Counter paid</span><strong>{{ filteredCounterPaidTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article class="metric-card"><span>Counter due</span><strong>{{ filteredCounterDueTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Total advance</span><strong>{{ (stats().totalAmount || 0) | auraMoney:'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Advance adjusted</span><strong>{{ filteredAdvanceAdjustedTotal() | auraMoney:'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Counter paid</span><strong>{{ filteredCounterPaidTotal() | auraMoney:'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Counter due</span><strong>{{ filteredCounterDueTotal() | auraMoney:'1.0-0' }}</strong></article>
       </section>
 
       <section class="panel">
@@ -89,12 +91,12 @@ type SettlementFilter = 'all' | 'advance_adjusted' | 'counter_due' | 'adjusted_d
               <tr *ngFor="let row of filteredRows()">
                 <td><strong>{{ row.clientName || row.clientId }}</strong><small>{{ row.clientPhone }}</small></td>
                 <td>{{ row.serviceNames || row.serviceIds?.join(', ') || '-' }}</td>
-                <td><span>{{ row.appointmentStartAt | date:'medium' }}</span><small>{{ row.appointmentStatus }}</small></td>
-                <td>{{ row.amount | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ (row.advanceAdjusted || 0) | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ (row.counterPaid || 0) | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td><span>{{ row.appointmentStartAt | auraDate:'date' }}</span><small>{{ row.appointmentStatus }}</small></td>
+                <td>{{ row.amount | auraMoney:'1.0-0' }}</td>
+                <td>{{ (row.advanceAdjusted || 0) | auraMoney:'1.0-0' }}</td>
+                <td>{{ (row.counterPaid || 0) | auraMoney:'1.0-0' }}</td>
                 <td>
-                  <strong>{{ rowCounterDue(row) | currency:'INR':'symbol':'1.0-0' }}</strong>
+                  <strong>{{ rowCounterDue(row) | auraMoney:'1.0-0' }}</strong>
                   <small *ngIf="rowCounterDue(row) > 0">counter due</small>
                 </td>
                 <td>

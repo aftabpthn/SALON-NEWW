@@ -1,10 +1,12 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ClientReportConfig = {
   key: string;
@@ -91,7 +93,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
   selector: 'app-client-report-detail',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="client-report-detail inner-page-shell">
       <div class="report-back-row">
@@ -187,7 +189,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
             <span>{{ card.label }}</span>
             <strong>
               <ng-container *ngIf="card.currency; else plainValue">
-                {{ numeric(card.value) | currency: 'INR':'symbol':'1.0-0' }}
+                {{ numeric(card.value) | auraMoney:'1.0-0' }}
               </ng-container>
               <ng-template #plainValue>{{ card.value }}</ng-template>
             </strong>
@@ -225,11 +227,11 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
                     <td><strong>{{ clientName(row) }}</strong></td>
                     <td>{{ text(row['phone'], '-') }}</td>
                     <td>{{ numeric(row['totalVisits']) }}</td>
-                    <td>{{ row['lastVisitAt'] | date: 'dd-MMM-yyyy' }}</td>
-                    <td>{{ numeric(row['totalRevenue']) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ numeric(row['averageBill']) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ numeric(row['paidAmount']) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ numeric(row['pendingDue']) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row['lastVisitAt'] | auraDate:'date' }}</td>
+                    <td>{{ numeric(row['totalRevenue']) | auraMoney:'1.0-0' }}</td>
+                    <td>{{ numeric(row['averageBill']) | auraMoney:'1.0-0' }}</td>
+                    <td>{{ numeric(row['paidAmount']) | auraMoney:'1.0-0' }}</td>
+                    <td>{{ numeric(row['pendingDue']) | auraMoney:'1.0-0' }}</td>
                     <td><span class="status-pill" [class.member]="row['membershipStatus'] === 'Member'">{{ text(row['membershipStatus'], 'Non-member') }}</span></td>
                     <td>{{ text(row['lastStaffName'], 'Unassigned') }}</td>
                     <td>{{ text(row['lastServiceName'], '-') }}</td>
@@ -244,7 +246,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
               <a class="report-row four clickable" *ngFor="let row of rows(); trackBy: trackRow" [routerLink]="clientLink(row)">
                 <span class="client-line"><strong>{{ clientName(row) }}</strong><small>{{ text(row['phone'] || row['email'], 'Client profile') }}</small></span>
                 <span>{{ numeric(row['rfmScore']) }}</span>
-                <span>{{ numeric(row['monetary']) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span>{{ numeric(row['monetary']) | auraMoney:'1.0-0' }}</span>
                 <span>{{ text(row['segment'], '-') }}</span>
               </a>
             </div>
@@ -254,7 +256,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
               <a class="report-row four clickable" *ngFor="let row of rows(); trackBy: trackRow" [routerLink]="clientLink(row)">
                 <span class="client-line"><strong>{{ clientName(row) }}</strong><small>{{ text(row['segment'], 'Recovery queue') }}</small></span>
                 <span>{{ numeric(row['daysSinceLastVisit']) }}</span>
-                <span>{{ numeric(row['monetary']) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span>{{ numeric(row['monetary']) | auraMoney:'1.0-0' }}</span>
                 <span>{{ text(row['suggestedAction'], 'Follow up') }}</span>
               </a>
             </div>
@@ -273,7 +275,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
               <a class="report-row four clickable" *ngFor="let row of rows(); trackBy: trackRow" [routerLink]="clientLink(row)">
                 <span class="client-line"><strong>{{ clientName(row) }}</strong><small>{{ text(row['phone'] || row['email'], 'Client profile') }}</small></span>
                 <span>{{ titleText(row['type']) }}</span>
-                <span>{{ row['nextDate'] | date: 'mediumDate' }}</span>
+                <span>{{ row['nextDate'] | auraDate:'date' }}</span>
                 <span>{{ numeric(row['daysUntil']) }}</span>
               </a>
             </div>
@@ -283,7 +285,7 @@ const CLIENT_REPORT_CONFIG: Record<string, ClientReportConfig> = {
               <div class="report-row four" *ngFor="let row of rows(); trackBy: trackRow">
                 <span class="client-line"><strong>{{ text(row['serviceName'], 'Service') }}</strong><small>{{ text(row['category'], 'Service report') }}</small></span>
                 <span>{{ numeric(row['clientCount']) }}</span>
-                <span>{{ numeric(row['revenue']) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span>{{ numeric(row['revenue']) | auraMoney:'1.0-0' }}</span>
                 <span>{{ numeric(row['visitCount']) }}</span>
               </div>
             </div>

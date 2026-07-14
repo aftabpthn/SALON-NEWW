@@ -1,14 +1,15 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-compliance-audit',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, CommonModule, ReactiveFormsModule, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -56,7 +57,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <div class="section-title"><h2>Login history</h2></div>
           <div class="rank-list">
             <article *ngFor="let login of summary()?.buckets?.loginHistory || []">
-              <div><strong>{{ login.actorUserId || 'unknown' }}</strong><span>{{ login.actorRole }} · {{ login.createdAt | date: 'short' }}</span></div>
+              <div><strong>{{ login.actorUserId || 'unknown' }}</strong><span>{{ login.actorRole }} · {{ login.createdAt | auraDate:'date' }}</span></div>
               <span class="badge">{{ login.ipAddress || 'local' }}</span>
             </article>
           </div>
@@ -74,7 +75,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <td>{{ log.actorRole }} · {{ log.actorUserId }}</td>
                 <td>{{ log.targetType }} {{ log.targetId }}</td>
                 <td><span class="badge">{{ log.severity }}</span></td>
-                <td>{{ log.createdAt | date: 'short' }}</td>
+                <td>{{ log.createdAt | auraDate:'date' }}</td>
               </tr>
             </tbody>
           </table>

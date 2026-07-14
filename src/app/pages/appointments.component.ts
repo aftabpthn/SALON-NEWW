@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -7,6 +7,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
 import { APPOINTMENT_SLOT_MINUTE_OPTIONS, normalizeAppointmentSlotMinutes } from '../core/appointment-toolbar.service';
 import { appointmentConflictBlocks, serviceTotalMinutes } from '../shared/appointment-capacity';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type CalendarView = 'day' | 'week' | 'month' | 'timeline' | 'resource' | 'queue' | 'waitlist';
 type GuardLevel = 'success' | 'warning' | 'danger';
@@ -94,7 +95,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
 @Component({
   selector: 'app-appointments',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="appointment-shell">
       <section class="date-strip-panel" *ngIf="viewMode() !== 'day'">
@@ -180,7 +181,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
               [class.selected]="slot.startAt === form.value.startAt && slot.staffId === form.value.staffId"
               (click)="applySmartSlot(slot)"
             >
-              <strong>{{ slot.startAt | date: 'h:mm a' }}</strong>
+              <strong>{{ slot.startAt | auraDate:'time' }}</strong>
               <span>{{ slot.staffName }} · {{ slot.resource }}</span>
               <small>{{ slot.reason }}</small>
               <b>{{ slot.score }} score</b>
@@ -194,7 +195,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <div>
               <h3>Today risk radar</h3>
             </div>
-            <small>{{ selectedDate() | date: 'MMM d' }}</small>
+            <small>{{ selectedDate() | auraDate:'date' }}</small>
           </div>
           <div class="ops-pulse-grid">
             <button type="button" *ngFor="let insight of operationInsights()" [class]="insight.tone" (click)="focusInsight(insight)">
@@ -404,8 +405,8 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <div class="week-board">
           <div class="week-day" *ngFor="let day of weekDays(); trackBy: trackDateValue">
             <div class="week-head">
-              <strong>{{ day | date: 'EEE' }}</strong>
-              <span>{{ day | date: 'MMM d' }}</span>
+              <strong>{{ day | auraDate:'date' }}</strong>
+              <span>{{ day | auraDate:'date' }}</span>
             </div>
             <button type="button" class="week-booking" *ngFor="let appointment of appointmentsForDate(day); trackBy: trackAppointment" (click)="openAppointment(appointment)">
               <strong>{{ timeRange(appointment) }}</strong>
@@ -431,7 +432,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             [style.--heat]="day.heat"
             (click)="setSelectedDate(toDateInput(day.date)); viewMode.set('day')"
           >
-            <span>{{ day.date | date: 'd' }}</span>
+            <span>{{ day.date | auraDate:'date' }}</span>
             <strong>{{ day.count }}</strong>
             <small>{{ currency(day.revenue) }}</small>
           </button>
@@ -806,7 +807,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <header>
           <div>
             <h3>Remove Blocked Time</h3>
-            <p>{{ blockTimeStaffName() }} · {{ blockTimeDate() | date: 'dd-MM-yyyy' }}</p>
+            <p>{{ blockTimeStaffName() }} · {{ blockTimeDate() | auraDate:'date' }}</p>
           </div>
           <button type="button" class="ghost-button mini" (click)="closeBlockTimeDrawer()">Close</button>
         </header>
@@ -852,7 +853,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
         <div class="drawer-body">
           <div class="detail-grid">
             <div><span>Status</span><strong>{{ label(selected.status) }}</strong></div>
-            <div><span>Time</span><strong>{{ selected.startAt | date: 'MMM d, h:mm a' }}</strong></div>
+            <div><span>Time</span><strong>{{ selected.startAt | auraDate:'dateTime' }}</strong></div>
             <div><span>Staff</span><strong>{{ staffName(selected.staffId) }}</strong></div>
             <div><span>Chair / room</span><strong>{{ selected.chair || selected.room || 'Not assigned' }}</strong></div>
             <div><span>Source</span><strong>{{ selected.sourceChannel || selected.source || 'front-desk' }}</strong></div>
@@ -935,7 +936,7 @@ const VIEW_OPTIONS: { id: CalendarView; label: string }[] = [
             <div class="audit-list" *ngIf="!auditLoading(); else auditBusy">
               <div *ngFor="let event of appointmentAudit()">
                 <strong>{{ auditActionLabel(event) }}</strong>
-                <small>{{ auditTimestamp(event) | date: 'MMM d, h:mm a' }}</small>
+                <small>{{ auditTimestamp(event) | auraDate:'dateTime' }}</small>
                 <span>{{ auditDetails(event) }}</span>
               </div>
               <div class="empty-mini" *ngIf="!appointmentAudit().length">No audit events yet</div>

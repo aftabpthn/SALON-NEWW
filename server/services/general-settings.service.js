@@ -1,6 +1,7 @@
 import { db } from "../db.js";
 import { tenantService } from "./tenant.service.js";
 import { badRequest } from "../utils/app-error.js";
+import { realtimeService } from "./realtime.service.js";
 
 const SETTING_PREFIX = "general.settings";
 
@@ -11,11 +12,11 @@ const DEFAULT_SETTINGS = {
     fastPosEnabled: true
   },
   localization: {
-    country: "United States",
+    country: "India",
     language: "English",
     timezone: "Asia/Kolkata",
-    currency: "USD",
-    locale: "en-US"
+    currency: "INR",
+    locale: "en-IN"
   },
   branchBehavior: {
     rememberLastBranch: true,
@@ -23,10 +24,10 @@ const DEFAULT_SETTINGS = {
     allowBranchSwitch: true
   },
   dateTime: {
-    dateFormat: "MM/DD/YYYY",
+    dateFormat: "DD/MM/YYYY",
     timeFormat: "12h",
     businessDayStartHour: 0,
-    weekStartsOn: "Sunday"
+    weekStartsOn: "Monday"
   },
   interface: {
     compactMode: false,
@@ -67,6 +68,18 @@ function branchIdFrom(input = {}, access = {}) {
 
 function settingKey(branchId) {
   return `${SETTING_PREFIX}.${branchId || "all"}`;
+}
+
+function readSavedSettings(tenantId, branchId) {
+  const row = db.prepare("SELECT value FROM settings WHERE tenantId = @tenantId AND key = @key").get({ tenantId, key: settingKey(branchId) });
+  return parseJson(row?.value, null);
+}
+
+function mergeSettings(base = {}, override = {}) {
+  return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((section) => [
+    section,
+    { ...(base[section] || {}), ...(override[section] || {}) }
+  ]));
 }
 
 function boolValue(value, fallback) {
@@ -140,12 +153,14 @@ export const generalSettingsService = {
   get(query = {}, access = {}) {
     const tenantId = tenantIdFrom(access);
     const branchId = branchIdFrom(query, access);
-    const key = settingKey(branchId);
-    const row = db.prepare("SELECT value FROM settings WHERE tenantId = @tenantId AND key = @key").get({ tenantId, key });
-    const saved = parseJson(row?.value, null);
+    const tenantSaved = readSavedSettings(tenantId, "");
+    const branchSaved = branchId ? readSavedSettings(tenantId, branchId) : null;
+    const tenantSettings = tenantSaved?.settings || tenantSaved || DEFAULT_SETTINGS;
+    const branchSettings = branchSaved?.settings || branchSaved || {};
+    const saved = branchSaved || tenantSaved;
     return {
       branchId,
-      settings: normalizeSettings(saved?.settings || saved || DEFAULT_SETTINGS),
+      settings: normalizeSettings(mergeSettings(tenantSettings, branchSettings)),
       audit: normalizeAudit(saved?.audit)
     };
   },
@@ -177,6 +192,34 @@ export const generalSettingsService = {
       createdAt: now,
       updatedAt: now
     });
+    realtimeService.broadcast("settings.general.updated", { branchId, audit }, {
+      tenantId,
+      branchId,
+      channel: branchId ? `branch:${branchId}` : `tenant:${tenantId}`
+    });
     return { branchId, settings, audit };
+  },
+
+  ownerNotificationsEnabled(access = {}, branchId = "") {
+    return this.get({ branchId }, access).settings.defaults.ownerNotifications;
+  },
+
+  ownerNotificationsEnabledForTenant(tenantId, branchId = "") {
+    const tenantSaved = readSavedSettings(tenantId, "");
+    const branchSaved = branchId ? readSavedSettings(tenantId, branchId) : null;
+    const tenantSettings = tenantSaved?.settings || tenantSaved || DEFAULT_SETTINGS;
+    const branchSettings = branchSaved?.settings || branchSaved || {};
+    return normalizeSettings(mergeSettings(tenantSettings, branchSettings)).defaults.ownerNotifications;
+  },
+
+  staffWorkspacePreferences(access = {}) {
+    const { settings } = this.get({}, access);
+    return {
+      workspace: { workspaceName: settings.workspace.workspaceName },
+      localization: { timezone: settings.localization.timezone, locale: settings.localization.locale },
+      dateTime: settings.dateTime,
+      interface: { compactMode: settings.interface.compactMode },
+      defaults: { staffHints: settings.defaults.staffHints }
+    };
   }
 };

@@ -7,6 +7,7 @@ import { jobQueueService } from "./job-queue.service.js";
 import { realtimeService } from "./realtime.service.js";
 import { securityService } from "./security.service.js";
 import { tenantService } from "./tenant.service.js";
+import { generalSettingsService } from "./general-settings.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -952,6 +953,7 @@ export class InvoiceNotificationService {
 
   ownerMessages(ctx) {
     if (!ctx.profile.invoiceOwnerEnabled) return [];
+    if (!generalSettingsService.ownerNotificationsEnabled(ctx.access, ctx.branchId)) return [];
     const channels = new Set(ctx.profile.ownerChannels || []);
     const tenant = db.prepare("SELECT * FROM tenants WHERE id = ?").get(ctx.access.tenantId) || {};
     const users = db.prepare("SELECT * FROM tenant_users WHERE tenantId = ? AND status != 'inactive'").all(ctx.access.tenantId);

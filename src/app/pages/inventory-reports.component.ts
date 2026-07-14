@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,11 +6,12 @@ import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-inventory-reports',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack inventory-enterprise-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -36,11 +37,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <ng-container *ngIf="activeTab() === 'summary'">
         <section class="report-kpis inner-stats-grid" *ngIf="report()?.metrics as metrics">
-          <article class="metric-card teal"><span>Stock value</span><strong>{{ metrics.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card amber"><span>COGS</span><strong>{{ metrics.cogs | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card blue"><span>Purchase spend</span><strong>{{ metrics.purchaseSpend | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card red"><span>Dead stock</span><strong>{{ metrics.deadStockValue | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card purple"><span>Expiry risk</span><strong>{{ metrics.expiryRiskValue | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card teal"><span>Stock value</span><strong>{{ metrics.stockValue | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card amber"><span>COGS</span><strong>{{ metrics.cogs | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card blue"><span>Purchase spend</span><strong>{{ metrics.purchaseSpend | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card red"><span>Dead stock</span><strong>{{ metrics.deadStockValue | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card purple"><span>Expiry risk</span><strong>{{ metrics.expiryRiskValue | auraMoney:'1.0-0' }}</strong></article>
         </section>
       </ng-container>
 
@@ -90,16 +91,16 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <article class="metric-card teal"><span>Total Product</span><strong>{{ summary.totalProduct || 0 }}</strong></article>
           <article class="metric-card blue"><span>Total Sales Count</span><strong>{{ summary.totalSalesCount || 0 }}</strong></article>
           <article class="metric-card amber"><span>Total In Hand</span><strong>{{ summary.totalInHand || 0 }}</strong></article>
-          <article class="metric-card teal"><span>Revenue</span><strong>{{ summary.revenue | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card amber"><span>COGS</span><strong>{{ summary.cogs | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card blue"><span>Gross Margin</span><strong>{{ summary.grossMargin | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card teal"><span>Revenue</span><strong>{{ summary.revenue | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card amber"><span>COGS</span><strong>{{ summary.cogs | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card blue"><span>Gross Margin</span><strong>{{ summary.grossMargin | auraMoney:'1.0-0' }}</strong></article>
           <article class="metric-card red"><span>Negative Stock</span><strong>{{ summary.negativeStockCount || 0 }}</strong></article>
           <article class="metric-card purple"><span>Reorder</span><strong>{{ summary.reorderCount || 0 }}</strong></article>
         </section>
 
         <div class="movement-strip">
           <article *ngFor="let row of productInOutReport()?.movementBreakdown || []">
-            <span>{{ row.type }}</span><strong>{{ row.quantity || 0 }}</strong><small>{{ row.amount | currency:'INR':'symbol':'1.0-0' }}</small>
+            <span>{{ row.type }}</span><strong>{{ row.quantity || 0 }}</strong><small>{{ row.amount | auraMoney:'1.0-0' }}</small>
           </article>
         </div>
 
@@ -116,8 +117,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tr *ngFor="let row of productInOutRows()">
                 <td><strong>{{ row.product }}</strong><small>{{ row.category || 'Retail' }} · {{ row.brand || 'No brand' }}</small></td>
                 <td>{{ row.barcode || row.sku || '-' }}</td>
-                <td>{{ row.costPrice | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ row.sellPrice | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ row.costPrice | auraMoney:'1.0-0' }}</td>
+                <td>{{ row.sellPrice | auraMoney:'1.0-0' }}</td>
                 <td>{{ row.salesCount || 0 }}</td>
                 <td>{{ row.newStock || 0 }}</td>
                 <td>{{ row.adjustment || 0 }}</td>
@@ -128,9 +129,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ row.returnIn || 0 }}</td>
                 <td>{{ row.wasteExpiryOut || 0 }}</td>
                 <td>{{ row.closingStock || 0 }}</td>
-                <td>{{ row.revenue | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ row.cogs | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ row.grossMargin | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ row.revenue | auraMoney:'1.0-0' }}</td>
+                <td>{{ row.cogs | auraMoney:'1.0-0' }}</td>
+                <td>{{ row.grossMargin | auraMoney:'1.0-0' }}</td>
                 <td>{{ row.marginPercent || 0 }}%</td>
                 <td>{{ row.stockStatus }}</td>
                 <td>{{ row.reorderQty || 0 }}</td>
@@ -162,7 +163,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title inner-action-bar"><div><h2>Cash locked in shelves</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.deadStock || []">
-            <span>{{ row.name }}</span><strong>{{ row.value | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <span>{{ row.name }}</span><strong>{{ row.value | auraMoney:'1.0-0' }}</strong>
           </article>
           <p class="muted" *ngIf="!(report()?.deadStock || []).length">No dead stock signal.</p>
         </section>
@@ -172,7 +173,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title inner-action-bar"><div><h2>Batch risk</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.expiring || []">
-            <span>{{ row.productName }} · {{ row.daysToExpiry }} days</span><strong>{{ row.value | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <span>{{ row.productName }} · {{ row.daysToExpiry }} days</span><strong>{{ row.value | auraMoney:'1.0-0' }}</strong>
           </article>
           <p class="muted" *ngIf="!(report()?.expiring || []).length">No expiry risk in selected scope.</p>
         </section>
@@ -182,7 +183,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title inner-action-bar"><div><h2>PO value by supplier</h2></div></div>
           <article class="report-row" *ngFor="let row of report()?.supplierSpend || []">
-            <span>{{ row.name }} · {{ row.openPoItems }} open</span><strong>{{ row.spend | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <span>{{ row.name }} · {{ row.openPoItems }} open</span><strong>{{ row.spend | auraMoney:'1.0-0' }}</strong>
           </article>
           <p class="muted" *ngIf="!(report()?.supplierSpend || []).length">No supplier purchase spend yet.</p>
         </section>

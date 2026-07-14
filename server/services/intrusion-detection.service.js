@@ -2,6 +2,7 @@ import { db } from "../db.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { securityBlocklistService } from "./security-blocklist.service.js";
 import { securityService } from "./security.service.js";
+import { generalSettingsService } from "./general-settings.service.js";
 
 const ADMIN_ROLES = new Set(["owner", "admin", "superAdmin"]);
 const NOTIFY_ROLES = new Set(["owner", "admin", "superAdmin"]);
@@ -266,6 +267,8 @@ export class IntrusionDetectionService {
   enqueueOwnerNotifications(alert) {
     try {
       if (!alert || !["critical", "warning"].includes(alert.severity)) return;
+      const policyAccess = { tenantId: alert.tenantId, branchId: alert.branchId || "", branchIds: alert.branchId ? [alert.branchId] : [], role: "system" };
+      if (!generalSettingsService.ownerNotificationsEnabled(policyAccess, alert.branchId || "")) return;
       const users = repositories.tenantUsers
         .list({ limit: 1000 }, { tenantId: alert.tenantId })
         .filter((user) => NOTIFY_ROLES.has(user.role) && user.status !== "inactive");

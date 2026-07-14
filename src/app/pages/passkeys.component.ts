@@ -2,12 +2,13 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PasskeyInfo, WebauthnApiService } from '../core/webauthn-api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 /** Passkey (WebAuthn) management page (ADD-ONLY, route: /passkeys). */
 @Component({
   standalone: true,
   selector: 'app-passkeys',
-  imports: [CommonModule, FormsModule],
+  imports: [AuraDatePipe, CommonModule, FormsModule],
   template: `
     <div class="pk-wrap">
       <header class="pk-head">
@@ -37,7 +38,7 @@ import { PasskeyInfo, WebauthnApiService } from '../core/webauthn-api.service';
           <div class="pk-row-ico">🔐</div>
           <div class="pk-info">
             <strong>{{ p.label }}</strong>
-            <small>Added {{ p.createdAt | date:'short' }}<span *ngIf="p.lastUsedAt"> · last used {{ p.lastUsedAt | date:'short' }}</span></small>
+            <small>Added {{ p.createdAt | auraDate:'date' }}<span *ngIf="p.lastUsedAt"> · last used {{ p.lastUsedAt | auraDate:'date' }}</span></small>
           </div>
         </div>
       </section>

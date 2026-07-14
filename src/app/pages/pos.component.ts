@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, effect, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -7,6 +7,8 @@ import { ApiRecord, ApiService } from '../core/api.service';
 import { PosActiveBillingDraft, PosHeldInvoiceDraft, PosMembershipPlan, PosPaymentMode, PosSettingsService, PosTipPreset } from '../core/pos-settings.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ItemDiscountType = 'amount' | 'percent';
 type ItemDiscountSource = 'none' | 'manual' | 'membership';
@@ -116,7 +118,7 @@ type PackageClientNotice = {
 @Component({
   selector: 'app-pos',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero pos-command-hero inner-page-header">
@@ -156,12 +158,12 @@ type PackageClientNotice = {
         </article>
         <article class="client-crm-tile">
           <span>E-wallet Amt</span>
-          <strong>{{ Number(client.walletBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ Number(client.walletBalance || 0) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article class="client-crm-tile">
           <span>Unpaid Amt</span>
           <strong [class.due-amount]="Number(client.unpaidBalance || 0) > 0">
-            {{ Number(client.unpaidBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}
+            {{ Number(client.unpaidBalance || 0) | auraMoney:'1.0-0' }}
           </strong>
         </article>
         <ng-container *ngIf="selectedClientMembership() as membership; else noClientMembershipSnapshot">
@@ -242,8 +244,8 @@ type PackageClientNotice = {
                   <small>{{ clientResultMeta(client) }}</small>
                   <span class="client-badges">
                     <span class="client-badge good" *ngIf="clientMembershipBadge(client)">{{ clientMembershipBadge(client) }}</span>
-                    <span class="client-badge wallet" *ngIf="Number(client.walletBalance || 0) > 0">Wallet {{ Number(client.walletBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
-                    <span class="client-badge due" *ngIf="Number(client.unpaidBalance || 0) > 0">Due {{ Number(client.unpaidBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                    <span class="client-badge wallet" *ngIf="Number(client.walletBalance || 0) > 0">Wallet {{ Number(client.walletBalance || 0) | auraMoney:'1.0-0' }}</span>
+                    <span class="client-badge due" *ngIf="Number(client.unpaidBalance || 0) > 0">Due {{ Number(client.unpaidBalance || 0) | auraMoney:'1.0-0' }}</span>
                     <span class="client-badge warning" *ngIf="possibleDuplicateClient(client)">Duplicate?</span>
                   </span>
                 </span>
@@ -396,7 +398,7 @@ type PackageClientNotice = {
               <select formControlName="appointmentId">
                 <option value="">Walk-in / no appointment</option>
                 <option *ngFor="let appointment of billableAppointments()" [value]="appointment.id">
-                  {{ clientName(appointment.clientId) }} Â· {{ appointment.startAt | date: 'short' }}
+                  {{ clientName(appointment.clientId) }} Â· {{ appointment.startAt | auraDate:'date' }}
                 </option>
               </select>
             </label>
@@ -662,15 +664,15 @@ type PackageClientNotice = {
                         />
                       </div>
                       <small *ngIf="lineDiscountAmount(item) > 0">
-                        {{ lineDiscountSourceLabel(item) }} {{ lineDiscountAmount(item) | currency: 'INR':'symbol':'1.0-0' }}
+                        {{ lineDiscountSourceLabel(item) }} {{ lineDiscountAmount(item) | auraMoney:'1.0-0' }}
                       </small>
                     </div>
                   </td>
                   <td>{{ item.gstRate }}%</td>
                   <td class="line-total-cell">
-                    <strong>{{ lineTotal(item) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                    <strong>{{ lineTotal(item) | auraMoney:'1.0-0' }}</strong>
                     <small *ngIf="lineDiscountAmount(item) > 0">
-                      Gross {{ lineGross(item) | currency: 'INR':'symbol':'1.0-0' }}
+                      Gross {{ lineGross(item) | auraMoney:'1.0-0' }}
                     </small>
                   </td>
                   <td><button class="ghost-button mini" type="button" (click)="removeItem(index)">Remove</button></td>
@@ -756,7 +758,7 @@ type PackageClientNotice = {
               <article class="benefit-mapping-line" *ngFor="let line of redeemableServiceLines()">
                 <div>
                   <strong>{{ line.serviceName }}</strong>
-                  <small>{{ line.staffName || 'Unassigned staff' }} Â· {{ line.finalAmount | currency: 'INR':'symbol':'1.0-0' }}</small>
+                  <small>{{ line.staffName || 'Unassigned staff' }} Â· {{ line.finalAmount | auraMoney:'1.0-0' }}</small>
                 </div>
                 <label class="field compact-field">
                   <span>Credits</span>
@@ -810,31 +812,31 @@ type PackageClientNotice = {
                   <strong>{{ tip.staffName }}</strong>
                   <span>Invoice tip</span>
                 </div>
-                <strong>{{ tip.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ tip.amount | auraMoney:'1.0-0' }}</strong>
                 <button class="ghost-button mini" type="button" (click)="removeTip(index)">Remove</button>
               </article>
             </div>
           </section>
 
           <div class="summary-lines">
-            <div><span>Subtotal</span><strong>{{ subtotal | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Manual discount</span><strong>{{ manualDiscountAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div *ngIf="membershipAutoDiscount > 0"><span>{{ membershipAutoDiscountLabel }}</span><strong>{{ membershipAutoDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div *ngIf="membershipCreditAdjustmentAmount() > 0"><span>Membership credit redeem</span><strong>{{ membershipCreditAdjustmentAmount() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Coupon discount</span><strong>{{ couponDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>GST</span><strong>{{ gst | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Staff tips</span><strong>{{ tipTotal | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div *ngIf="appliedBookingAdvanceAmount() > 0"><span>Booking advance applied</span><strong>{{ appliedBookingAdvanceAmount() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div class="total"><span>Total</span><strong>{{ total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Paid now</span><strong>{{ paidTotal | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div [class.total]="balanceDue > 0"><span>Balance due</span><strong>{{ balanceDue | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Subtotal</span><strong>{{ subtotal | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Manual discount</span><strong>{{ manualDiscountAmount | auraMoney:'1.0-0' }}</strong></div>
+            <div *ngIf="membershipAutoDiscount > 0"><span>{{ membershipAutoDiscountLabel }}</span><strong>{{ membershipAutoDiscount | auraMoney:'1.0-0' }}</strong></div>
+            <div *ngIf="membershipCreditAdjustmentAmount() > 0"><span>Membership credit redeem</span><strong>{{ membershipCreditAdjustmentAmount() | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Coupon discount</span><strong>{{ couponDiscount | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>GST</span><strong>{{ gst | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Staff tips</span><strong>{{ tipTotal | auraMoney:'1.0-0' }}</strong></div>
+            <div *ngIf="appliedBookingAdvanceAmount() > 0"><span>Booking advance applied</span><strong>{{ appliedBookingAdvanceAmount() | auraMoney:'1.0-0' }}</strong></div>
+            <div class="total"><span>Total</span><strong>{{ total | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Paid now</span><strong>{{ paidTotal | auraMoney:'1.0-0' }}</strong></div>
+            <div [class.total]="balanceDue > 0"><span>Balance due</span><strong>{{ balanceDue | auraMoney:'1.0-0' }}</strong></div>
           </div>
 
           <section class="unpaid-receive-box" *ngIf="bookingAdvanceInfo() as advance">
             <div class="unpaid-receive-copy">
-              <strong>{{ bookingAdvancePaidAmount() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ bookingAdvancePaidAmount() | auraMoney:'1.0-0' }}</strong>
               <small *ngIf="hasBookingAdvanceSuggestion">Advance is available. Apply it to include it in this invoice.</small>
-              <small *ngIf="appliedBookingAdvanceAmount() > 0">Advance is included. Collect remaining {{ bookingAdvanceRemainingSuggestion | currency: 'INR':'symbol':'1.0-0' }}.</small>
+              <small *ngIf="appliedBookingAdvanceAmount() > 0">Advance is included. Collect remaining {{ bookingAdvanceRemainingSuggestion | auraMoney:'1.0-0' }}.</small>
               <small *ngIf="advance['status'] === 'pending'">Advance link is created; payment is still pending.</small>
             </div>
             <div class="client-search-actions">
@@ -883,7 +885,7 @@ type PackageClientNotice = {
           </div>
           <section class="unpaid-receive-box round-off-box" *ngIf="roundOffDueAmount > 0">
             <div class="unpaid-receive-copy">
-              <strong>{{ roundOffDueAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ roundOffDueAmount | auraMoney:'1.0-0' }}</strong>
               <small *ngIf="roundOffPreviewLabel()">{{ roundOffPreviewLabel() }}</small>
             </div>
             <div class="client-search-actions round-off-actions">
@@ -891,13 +893,13 @@ type PackageClientNotice = {
                 Keep unpaid
               </button>
               <button class="primary-button" type="button" (click)="applyBalanceRoundOff()" [disabled]="!canApplyRoundOff()">
-                Round off {{ roundOffDueAmount | currency: 'INR':'symbol':'1.0-0' }}
+                Round off {{ roundOffDueAmount | auraMoney:'1.0-0' }}
               </button>
             </div>
           </section>
           <section class="unpaid-receive-box" *ngIf="selectedClientUnpaidBalance > 0">
             <div class="unpaid-receive-copy">
-              <strong>{{ selectedClientUnpaidBalance | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ selectedClientUnpaidBalance | auraMoney:'1.0-0' }}</strong>
             </div>
             <label class="field">
               <span>Amount</span>
@@ -927,9 +929,9 @@ type PackageClientNotice = {
             </button>
           </section>
           <p class="inline-hint" *ngIf="unpaidReceiveMessage()">{{ unpaidReceiveMessage() }}</p>
-          <p class="inline-hint" *ngIf="overPaid > 0 && !walletCreditRequested()">Extra {{ overPaid | currency: 'INR':'symbol':'1.0-0' }} received. Click Wallet to add extra amount to client wallet.</p>
-          <p class="inline-hint wallet-status" *ngIf="walletCreditRequested() && overPaid > 0">After invoice save, {{ overPaid | currency: 'INR':'symbol':'1.0-0' }} will be credited to this client's wallet.</p>
-          <p class="inline-hint" *ngIf="selectedClient() as client">Wallet balance: {{ Number(client.walletBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}</p>
+          <p class="inline-hint" *ngIf="overPaid > 0 && !walletCreditRequested()">Extra {{ overPaid | auraMoney:'1.0-0' }} received. Click Wallet to add extra amount to client wallet.</p>
+          <p class="inline-hint wallet-status" *ngIf="walletCreditRequested() && overPaid > 0">After invoice save, {{ overPaid | auraMoney:'1.0-0' }} will be credited to this client's wallet.</p>
+          <p class="inline-hint" *ngIf="selectedClient() as client">Wallet balance: {{ Number(client.walletBalance || 0) | auraMoney:'1.0-0' }}</p>
 
           <section class="settlement-preview-bar" *ngIf="items().length">
             <div class="settlement-preview-copy">
@@ -938,19 +940,19 @@ type PackageClientNotice = {
             <div class="settlement-preview-metrics">
               <article>
                 <span>Advance adjusted</span>
-                <strong>{{ settlementPreviewAdvance | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ settlementPreviewAdvance | auraMoney:'1.0-0' }}</strong>
               </article>
               <article>
                 <span>Counter payment</span>
-                <strong>{{ settlementPreviewCounterCollected | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ settlementPreviewCounterCollected | auraMoney:'1.0-0' }}</strong>
               </article>
               <article [class.is-due]="settlementPreviewDueAfterSave > 0">
                 <span>Due after save</span>
-                <strong>{{ settlementPreviewDueAfterSave | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ settlementPreviewDueAfterSave | auraMoney:'1.0-0' }}</strong>
               </article>
               <article *ngIf="settlementPreviewWalletCredit > 0">
                 <span>Wallet credit</span>
-                <strong>{{ settlementPreviewWalletCredit | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ settlementPreviewWalletCredit | auraMoney:'1.0-0' }}</strong>
               </article>
             </div>
           </section>
@@ -964,10 +966,10 @@ type PackageClientNotice = {
             <p>Status: <strong>{{ invoice.status }}</strong></p>
             <section class="generated-settlement-card" *ngIf="generatedInvoiceSettlement() as settlement">
               <div class="generated-settlement-lines">
-                <div><span>Advance adjusted</span><strong>{{ settlement.advance | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Counter paid</span><strong>{{ settlement.counter | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div [class.total]="settlement.due > 0"><span>Counter due</span><strong>{{ settlement.due | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div *ngIf="settlement.walletCredit > 0"><span>Wallet credit</span><strong>{{ settlement.walletCredit | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                <div><span>Advance adjusted</span><strong>{{ settlement.advance | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Counter paid</span><strong>{{ settlement.counter | auraMoney:'1.0-0' }}</strong></div>
+                <div [class.total]="settlement.due > 0"><span>Counter due</span><strong>{{ settlement.due | auraMoney:'1.0-0' }}</strong></div>
+                <div *ngIf="settlement.walletCredit > 0"><span>Wallet credit</span><strong>{{ settlement.walletCredit | auraMoney:'1.0-0' }}</strong></div>
               </div>
               <div class="generated-benefit-card" *ngIf="generatedInvoiceBenefitRedeem() as benefitRedeem">
                 <div class="generated-settlement-lines">

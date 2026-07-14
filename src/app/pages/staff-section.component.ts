@@ -1,17 +1,19 @@
-import { CommonModule, CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'schedule' | 'attendance';
 
 @Component({
   selector: 'app-staff-section',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DecimalPipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, DecimalPipe, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero compact-hero">
@@ -56,11 +58,11 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
         </article>
         <article class="metric-card amber">
           <span>Revenue</span>
-          <strong>{{ (data.metrics?.totalRevenue || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ (data.metrics?.totalRevenue || 0) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article class="metric-card green">
           <span>Commission</span>
-          <strong>{{ (data.metrics?.totalCommission || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ (data.metrics?.totalCommission || 0) | auraMoney:'1.0-0' }}</strong>
           <small>{{ data.commission?.entries?.length || 0 }} lines</small>
         </article>
         <article class="metric-card blue">
@@ -117,7 +119,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
             </article>
             <article>
               <span>Target recovery</span>
-              <strong>{{ aiTargetGapTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ aiTargetGapTotal() | auraMoney:'1.0-0' }}</strong>
             </article>
             <article>
               <span>Low utilization</span>
@@ -167,7 +169,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
                   <td><strong>#{{ i + 1 }}</strong></td>
                   <td><strong>{{ person.name }}</strong><small>{{ person.role }}</small></td>
                   <td>{{ person.performanceScore | number: '1.0-1' }}</td>
-                  <td>{{ person.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ person.revenue | auraMoney:'1.0-0' }}</td>
                   <td>{{ person.bookings }}</td>
                   <td>{{ person.serviceEfficiency | number: '1.0-1' }}%</td>
                   <td>{{ person.attendanceScore | number: '1.0-1' }}%</td>
@@ -191,8 +193,8 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
                 <span>{{ row.reason }}</span>
               </div>
               <div class="right">
-                <strong>{{ row.incentive | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                <small>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }} commission</small>
+                <strong>{{ row.incentive | auraMoney:'1.0-0' }}</strong>
+                <small>{{ row.commission | auraMoney:'1.0-0' }} commission</small>
               </div>
             </article>
             <article *ngIf="!incentiveRows().length"><strong>No incentive rows</strong><span>Run staff performance for this period.</span></article>
@@ -214,10 +216,10 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
                   <td><strong>{{ row.name }}</strong><small>{{ row.role }}</small></td>
                   <td>{{ row.presentDays }}</td>
                   <td>{{ row.minutesWorked }}</td>
-                  <td>{{ row.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.incentive | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ row.grossPayout | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ row.revenue | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.commission | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.incentive | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ row.grossPayout | auraMoney:'1.0-0' }}</strong></td>
                   <td><a class="ghost-button mini" [routerLink]="['/staff', row.staffId || row.id]">360</a></td>
                 </tr>
               </tbody>
@@ -230,10 +232,10 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
                   <td><strong>{{ row.staffName || staffName(row.staffId) }}</strong></td>
                   <td>{{ row.itemName || 'Service line' }}</td>
                   <td>{{ row.itemType || 'service' }}</td>
-                  <td>{{ row.lineAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.lineAmount | auraMoney:'1.0-0' }}</td>
                   <td>{{ row.percent || 0 }}%</td>
-                  <td><strong>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
-                  <td>{{ row.createdAt | date: 'mediumDate' }}</td>
+                  <td><strong>{{ row.commission | auraMoney:'1.0-0' }}</strong></td>
+                  <td>{{ row.createdAt | auraDate:'date' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -243,8 +245,8 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
                 <tr *ngFor="let row of payrollTaskRows()">
                   <td><strong>{{ row.type }}</strong></td>
                   <td>{{ row.lines }}</td>
-                  <td>{{ row.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ row.revenue | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ row.commission | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ row.topStaff || '—' }}</td>
                 </tr>
               </tbody>
@@ -311,7 +313,7 @@ type StaffSection = 'directory' | 'performance' | 'incentives' | 'payroll' | 'sc
                   <td>{{ leaveBalanceFor(person) }}</td>
                   <td>{{ weeklyOffs(person).length || 0 }}</td>
                   <td>{{ lateDaysFor(person) }}</td>
-                  <td>{{ penaltyFor(person) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ penaltyFor(person) | auraMoney:'1.0-0' }}</td>
                   <td>{{ revisedLeaveBalanceFor(person) }}</td>
                   <td>{{ attendanceComment(person) }}</td>
                 </tr>

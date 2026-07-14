@@ -1,13 +1,14 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-growth-rank-bot',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="page-stack">
       <div class="rank-hero">
@@ -172,7 +173,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="audit-list" *ngIf="filteredAudits().length">
             <button class="audit-row" type="button" *ngFor="let audit of filteredAudits()" [class.active]="selectedAudit()?.id === audit.id" (click)="selectAudit(audit)">
               <strong>{{ audit.businessName }}</strong>
-              <span>{{ audit.market || audit.industry }} · {{ audit.createdAt | date: 'mediumDate' }}</span>
+              <span>{{ audit.market || audit.industry }} · {{ audit.createdAt | auraDate:'date' }}</span>
               <small>{{ audit.score }} score · {{ audit.status }}</small>
               <span class="row-actions">
                 <em (click)="startEdit(audit); $event.stopPropagation()">Edit</em>
@@ -391,7 +392,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article *ngFor="let chat of audit.workspace?.copilotChats || []">
               <strong>{{ chat.question }}</strong>
               <p>{{ chat.answer }}</p>
-              <small>{{ chat.confidence || 0 }} confidence · {{ chat.provider || 'saved' }} · {{ chat.createdAt | date: 'short' }}</small>
+              <small>{{ chat.confidence || 0 }} confidence · {{ chat.provider || 'saved' }} · {{ chat.createdAt | auraDate:'date' }}</small>
             </article>
           </div>
         </section>

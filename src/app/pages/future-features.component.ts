@@ -1,10 +1,12 @@
-﻿import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+﻿import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type WorkflowOption = {
   type: string;
@@ -19,7 +21,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
 @Component({
   selector: 'app-future-features',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterModule, CurrencyPipe, DatePipe, DecimalPipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterModule, DecimalPipe, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack future-command-page">
       <div class="future-hero">
@@ -48,7 +50,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
         <aura-kpi-card tone="neutral" target="/kpi-details/future-features/innovation-runs"><span>Innovation runs</span><strong>{{ metrics.innovationRuns || 0 }}</strong></aura-kpi-card>
         <aura-kpi-card tone="neutral" target="/kpi-details/future-features/no-show-risk"><span>No-show risk</span><strong>{{ metrics.noShowRisk || 0 }}</strong></aura-kpi-card>
         <aura-kpi-card tone="neutral" target="/kpi-details/future-features/demand-index"><span>Demand index</span><strong>{{ metrics.demandIndex || 0 }}</strong></aura-kpi-card>
-        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></aura-kpi-card>
+        <aura-kpi-card tone="neutral" target="/kpi-details/future-features/pricing-upside"><span>Pricing upside</span><strong>{{ (metrics.pricingOpportunity || 0) | auraMoney:'1.0-0' }}</strong></aura-kpi-card>
       </div>
 
       <div class="future-workspace">
@@ -204,7 +206,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
             <div class="rank-list">
               <article *ngFor="let item of advisor.priorities">
                 <div><strong>{{ item.area }}</strong><span>{{ item.action }}</span></div>
-                <strong>{{ item.impact | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ item.impact | auraMoney:'1.0-0' }}</strong>
               </article>
             </div>
           </ng-container>
@@ -215,11 +217,11 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
           <div class="rank-list">
             <article *ngFor="let session of summary()?.voiceSessions || []">
               <div><strong>{{ session.channel }}</strong><span>{{ session.status }} · {{ session.branchId || 'all branches' }}</span></div>
-              <small>{{ session.createdAt | date: 'short' }}</small>
+              <small>{{ session.createdAt | auraDate:'date' }}</small>
             </article>
             <article *ngFor="let session of summary()?.kioskSessions || []">
               <div><strong>{{ session.mode }}</strong><span>{{ session.status }} · {{ session.branchId }}</span></div>
-              <small>{{ session.createdAt | date: 'short' }}</small>
+              <small>{{ session.createdAt | auraDate:'date' }}</small>
             </article>
           </div>
         </section>
@@ -236,7 +238,7 @@ type FutureFeatureViewKey = 'overview' | 'sources' | 'runner' | 'actions' | 'wor
                 <td>{{ run.confidence | number: '1.0-2' }}</td>
                 <td><span class="badge">{{ run.status }}</span></td>
                 <td>{{ run.actions?.length || 0 }}</td>
-                <td>{{ run.createdAt | date: 'short' }}</td>
+                <td>{{ run.createdAt | auraDate:'date' }}</td>
               </tr>
             </tbody>
           </table>

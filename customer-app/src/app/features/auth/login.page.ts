@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnDestroy, OnInit, QueryList, ViewChildren } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 import { IonButton, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline } from "ionicons/icons";
@@ -13,7 +13,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonIcon, IonInput, IonItem, IonList],
+  imports: [FormsModule, IonButton, IonContent, IonIcon, IonInput, IonItem, IonList],
   template: `
     <ion-content>
       <main class="auth-shell">
@@ -27,7 +27,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
             <span>Rewards</span>
             <span>Fast OTP</span>
           </div>
-          <a class="staff-switch" routerLink="/staff/login">Staff? Open staff login</a>
+          <a class="staff-switch" [href]="staffAppUrl">Staff? Open staff login</a>
 
           @if (notice) {
             <p class="notice-text">{{ notice }}</p>
@@ -930,6 +930,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
   `]
 })
 export class LoginPage implements OnInit, OnDestroy {
+  readonly staffAppUrl = environment.staffAppUrl;
   readonly appleLoginEnabled = APPLE_LOGIN_ENABLED;
   readonly countryOptions = [
     { code: "+91", label: "India +91" }

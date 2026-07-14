@@ -772,3 +772,48 @@ export class StaffSalesReportService {
 }
 
 export const staffSalesReportService = new StaffSalesReportService();
+
+// Additive raw attribution feed for self-scoped staff reporting. Existing report
+// behavior remains unchanged; callers decide how to aggregate and normalize money.
+export function attributedSalesItems({ sales = [], invoices = [], appointments = [], staff = [] } = {}) {
+  const staffById = new Map(staff.map((row) => [String(row.id), row]));
+  const invoicesById = new Map(invoices.map((row) => [String(row.id), row]));
+  const appointmentsById = new Map(appointments.map((row) => [String(row.id), row]));
+  const staffMap = new Map();
+  const itemRows = [];
+  const coveredInvoices = new Set();
+
+  for (const sale of sales) {
+    const invoice = invoicesById.get(String(sale.invoiceId || '')) || null;
+    const appointment = appointmentsById.get(String(sale.appointmentId || invoice?.appointmentId || '')) || null;
+    const items = readArray(sale.items || sale.lineItems || sale.lines || sale.cartItems);
+    addDocumentItems({
+      source: sale,
+      sourceType: "sale",
+      items,
+      staffMap,
+      itemRows,
+      staffById,
+      invoicesById,
+      appointmentsById
+    });
+    if (invoice?.id) coveredInvoices.add(String(invoice.id));
+  }
+
+  for (const invoice of invoices) {
+    if (coveredInvoices.has(String(invoice.id))) continue;
+    const items = readArray(invoice.lineItems || invoice.items || invoice.lines);
+    addDocumentItems({
+      source: invoice,
+      sourceType: "invoice",
+      items,
+      staffMap,
+      itemRows,
+      staffById,
+      invoicesById,
+      appointmentsById
+    });
+  }
+
+  return itemRows;
+}

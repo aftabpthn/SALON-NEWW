@@ -1,14 +1,16 @@
-import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-product-360',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, DecimalPipe, RouterLink, StateComponent],
   template: `
     <section class="page-stack product-360-page inner-page-shell">
       <div class="module-hero compact-hero inner-page-header">
@@ -26,8 +28,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <ng-container *ngIf="product() as item">
         <section class="product-kpis inner-stats-grid">
           <article class="metric-card teal"><span>Current stock</span><strong>{{ item.stock || 0 }}</strong><small>Reorder at {{ item.lowStockThreshold || 0 }}</small></article>
-          <article class="metric-card amber"><span>Stock value</span><strong>{{ stockValue(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card blue"><span>Gross margin</span><strong>{{ margin(item) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ marginPercent(item) | number: '1.0-0' }}% on sale price</small></article>
+          <article class="metric-card amber"><span>Stock value</span><strong>{{ stockValue(item) | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card blue"><span>Gross margin</span><strong>{{ margin(item) | auraMoney:'1.0-0' }}</strong><small>{{ marginPercent(item) | number: '1.0-0' }}% on sale price</small></article>
           <article class="metric-card red"><span>Expiry risk</span><strong>{{ expiringBatches().length }}</strong><small>{{ nearestExpiry(item.id) }}</small></article>
         </section>
 
@@ -41,8 +43,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>GST</span><strong>{{ item.gstRate || 0 }}%</strong></div>
               <div><span>Supplier</span><strong>{{ supplierName(item) }}</strong></div>
               <div><span>Branch</span><strong>{{ branchName(item.branchId) }}</strong></div>
-              <div><span>Unit cost</span><strong>{{ (item.unitCost || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Selling price</span><strong>{{ (item.price || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Unit cost</span><strong>{{ (item.unitCost || 0) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Selling price</span><strong>{{ (item.price || 0) | auraMoney:'1.0-0' }}</strong></div>
             </div>
           </section>
 
@@ -53,7 +55,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="recommendation-card" *ngIf="recommendation() as rec; else noRecommendation">
               <strong>{{ rec.recommendedQty || 0 }} units suggested</strong>
               <span>{{ rec.reason || 'Demand or low-stock rule' }} · stockout {{ rec.predictedStockoutDate || 'not projected' }}</span>
-              <small>{{ rec.estimatedCost | currency: 'INR':'symbol':'1.0-0' }} estimated cost · approval required before supplier order</small>
+              <small>{{ rec.estimatedCost | auraMoney:'1.0-0' }} estimated cost · approval required before supplier order</small>
               <a class="primary-button" routerLink="/inventory/purchase-orders">Open purchase order</a>
             </div>
             <ng-template #noRecommendation>
@@ -72,7 +74,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td>{{ branchName(row.branchId) }}</td>
                   <td>{{ row.stock || 0 }}</td>
                   <td>{{ row.lowStockThreshold || 0 }}</td>
-                  <td>{{ stockValue(row) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ stockValue(row) | auraMoney:'1.0-0' }}</td>
                   <td><span class="badge" [class.warn]="isLowStock(row)">{{ isLowStock(row) ? 'low stock' : 'healthy' }}</span></td>
                 </tr>
               </tbody>
@@ -87,7 +89,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <article *ngFor="let batch of productBatches()">
                 <strong>{{ batch.batchNumber || batch.id }}</strong>
                 <span>{{ batch.quantityAvailable || 0 }} left of {{ batch.quantityReceived || 0 }} · expires {{ batch.expiryDate || 'not set' }}</span>
-                <small>{{ supplierNameFromId(batch.supplierId) }} · {{ batch.unitCost | currency: 'INR':'symbol':'1.0-0' }} unit cost</small>
+                <small>{{ supplierNameFromId(batch.supplierId) }} · {{ batch.unitCost | auraMoney:'1.0-0' }} unit cost</small>
               </article>
               <article *ngIf="!productBatches().length"><strong>No batch received yet</strong><span>Purchase receiving will create FIFO batch entries here.</span></article>
             </div>
@@ -105,7 +107,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <article *ngFor="let row of productMovements().slice(0, 8)">
                 <strong>{{ row.type }}</strong>
                 <span>{{ row.quantity }} units · {{ row.reason || row.referenceType || 'movement' }}</span>
-                <small>{{ row.createdAt | date: 'short' }}</small>
+                <small>{{ row.createdAt | auraDate:'date' }}</small>
               </article>
             </div>
           </section>
@@ -114,10 +116,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Service-wise usage and cost</h2></div></div>
           <div class="mini-metrics">
-            <div><span>Purchase rate</span><strong>{{ (item.unitCost || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
+            <div><span>Purchase rate</span><strong>{{ (item.unitCost || 0) | auraMoney:'1.2-2' }}</strong></div>
             <div><span>Used in services</span><strong>{{ consumeReportTotals().serviceCount || 0 }}</strong></div>
             <div><span>Total used</span><strong>{{ consumeReportTotals().totalQuantityText || '0' }}</strong></div>
-            <div><span>Consume value</span><strong>{{ (consumeReportTotals().totalCost || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
+            <div><span>Consume value</span><strong>{{ (consumeReportTotals().totalCost || 0) | auraMoney:'1.2-2' }}</strong></div>
           </div>
           <div class="table-wrap" *ngIf="serviceConsumeRows().length; else noConsumeReport">
             <table>
@@ -127,16 +129,16 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td>{{ row.serviceName || 'Service' }}</td>
                   <td>{{ row.times || 0 }}</td>
                   <td>{{ row.quantityText || '0' }}</td>
-                  <td>{{ (row.cost || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
-                  <td>{{ row.lastUsedAt | date: 'short' }}</td>
+                  <td>{{ (row.cost || 0) | auraMoney:'1.2-2' }}</td>
+                  <td>{{ row.lastUsedAt | auraDate:'date' }}</td>
                 </tr>
               </tbody>
             </table>
             <div class="timeline mini consume-entry-list">
               <article *ngFor="let entry of consumeEntries().slice(0, 6)">
                 <strong>{{ entry.serviceName || 'Service' }} · {{ entry.quantity || 0 }} {{ entry.unit || item.unit || 'pcs' }}</strong>
-                <span>{{ entry.invoiceNumber || entry.draftId }} · {{ entry.clientName || 'Walk-in client' }} · {{ (entry.cost || 0) | currency: 'INR':'symbol':'1.2-2' }}</span>
-                <small>{{ entry.staffName || 'Unassigned' }} · {{ entry.usedAt | date: 'short' }}</small>
+                <span>{{ entry.invoiceNumber || entry.draftId }} · {{ entry.clientName || 'Walk-in client' }} · {{ (entry.cost || 0) | auraMoney:'1.2-2' }}</span>
+                <small>{{ entry.staffName || 'Unassigned' }} · {{ entry.usedAt | auraDate:'date' }}</small>
               </article>
             </div>
           </div>
@@ -160,7 +162,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div><span>Client use</span><strong>{{ backbarSummary()['clientUsedText'] || '0' }}</strong></div>
             <div><span>Waste / adjust</span><strong>{{ backbarSummary()['wastageText'] || '0' }}</strong></div>
             <div><span>Pending approvals</span><strong>{{ backbarSummary()['pendingApprovals'] || 0 }}</strong></div>
-            <div><span>Profit impact</span><strong>{{ (backbarSummary()['actualProfit'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
+            <div><span>Profit impact</span><strong>{{ (backbarSummary()['actualProfit'] || 0) | auraMoney:'1.2-2' }}</strong></div>
           </div>
           <div class="control-ledger-grid">
             <div class="table-wrap inner-table-wrap">
@@ -170,9 +172,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <tr *ngFor="let row of ledgerServiceUsage().slice(0, 8)">
                     <td>{{ row['serviceName'] || 'Service' }}</td>
                     <td>{{ row['totalUsedText'] || '0' }}</td>
-                    <td>{{ (row['productCost'] || row['cost'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
-                    <td>{{ (row['serviceRevenue'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
-                    <td>{{ (row['actualProfit'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</td>
+                    <td>{{ (row['productCost'] || row['cost'] || 0) | auraMoney:'1.2-2' }}</td>
+                    <td>{{ (row['serviceRevenue'] || 0) | auraMoney:'1.2-2' }}</td>
+                    <td>{{ (row['actualProfit'] || 0) | auraMoney:'1.2-2' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -180,7 +182,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="ledger-side">
               <article>
                 <strong>Staff accountability</strong>
-                <span *ngFor="let row of ledgerStaffUsage().slice(0, 4)">{{ row['staffName'] || 'Unassigned' }} · {{ row['totalUsedText'] || '0' }} · {{ (row['cost'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span *ngFor="let row of ledgerStaffUsage().slice(0, 4)">{{ row['staffName'] || 'Unassigned' }} · {{ row['totalUsedText'] || '0' }} · {{ (row['cost'] || 0) | auraMoney:'1.0-0' }}</span>
                 <small *ngIf="!ledgerStaffUsage().length">No staff usage yet</small>
               </article>
               <article>
@@ -190,7 +192,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </article>
               <article>
                 <strong>Waste / exception split</strong>
-                <span *ngFor="let row of ledgerWastageRows().slice(0, 4)">{{ row['usageType'] || 'adjustment' }} · {{ row['totalUsedText'] || '0' }} · {{ (row['cost'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span *ngFor="let row of ledgerWastageRows().slice(0, 4)">{{ row['usageType'] || 'adjustment' }} · {{ row['totalUsedText'] || '0' }} · {{ (row['cost'] || 0) | auraMoney:'1.0-0' }}</span>
                 <small *ngIf="!ledgerWastageRows().length">No waste entries</small>
               </article>
               <article>
@@ -204,7 +206,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <article *ngFor="let event of entityLedger().slice(0, 10)">
               <strong>{{ event['title'] || event['entityType'] }}</strong>
               <span>{{ event['detail'] || event['entityId'] }}</span>
-              <small>{{ event['entityType'] }} · {{ event['eventAt'] | date: 'short' }}</small>
+              <small>{{ event['entityType'] }} · {{ event['eventAt'] | auraDate:'date' }}</small>
             </article>
           </div>
         </section>
@@ -215,7 +217,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div><span>Sealed stock</span><strong>{{ backbarSummary()['sealedStock'] || 0 }}</strong></div>
             <div><span>Open containers</span><strong>{{ backbarSummary()['openContainers'] || 0 }}</strong></div>
             <div><span>Total used</span><strong>{{ backbarSummary()['totalUsedText'] || '0' }}</strong></div>
-            <div><span>Usage value</span><strong>{{ (backbarSummary()['usageCost'] || 0) | currency: 'INR':'symbol':'1.2-2' }}</strong></div>
+            <div><span>Usage value</span><strong>{{ (backbarSummary()['usageCost'] || 0) | auraMoney:'1.2-2' }}</strong></div>
           </div>
           <div class="backbar-container-list" *ngIf="backbarContainers().length; else noBackbarHistory">
             <article *ngFor="let container of backbarContainers()">
@@ -224,13 +226,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <strong>{{ container['containerCode'] || container['id'] }}</strong>
                   <span>{{ container['status'] || 'open' }} · {{ container['usedQuantity'] || 0 }} {{ container['measureUnit'] }} used · {{ container['balanceQuantity'] || 0 }} {{ container['measureUnit'] }} left</span>
                 </div>
-                <small>{{ container['openedAt'] | date: 'short' }}</small>
+                <small>{{ container['openedAt'] | auraDate:'date' }}</small>
               </div>
               <div class="timeline mini" *ngIf="backbarEntries(container).length">
                 <article *ngFor="let entry of backbarEntries(container).slice(0, 8)">
                   <strong>{{ entry['clientName'] || entry['usageType'] || 'Usage' }} · {{ entry['usedQuantity'] || 0 }} {{ entry['unit'] || container['measureUnit'] }}</strong>
                   <span>{{ entry['serviceName'] || entry['reason'] || entry['draftId'] || 'Backbar use' }} · balance {{ entry['balanceAfter'] || 0 }} {{ entry['unit'] || container['measureUnit'] }}</span>
-                  <small>{{ entry['staffName'] || 'Unassigned' }} · {{ entry['usedAt'] | date: 'short' }}</small>
+                  <small>{{ entry['staffName'] || 'Unassigned' }} · {{ entry['usedAt'] | auraDate:'date' }}</small>
                 </article>
               </div>
             </article>
@@ -257,8 +259,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="timeline mini">
               <article *ngFor="let sale of productSales().slice(0, 8)">
                 <strong>{{ sale.invoiceNumber || sale.id }}</strong>
-                <span>{{ sale.clientName || 'Walk-in client' }} · {{ (sale.total || sale.grandTotal || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
-                <small>{{ sale.createdAt | date: 'short' }}</small>
+                <span>{{ sale.clientName || 'Walk-in client' }} · {{ (sale.total || sale.grandTotal || 0) | auraMoney:'1.0-0' }}</span>
+                <small>{{ sale.createdAt | auraDate:'date' }}</small>
               </article>
               <article *ngIf="!productSales().length"><strong>No POS sale found</strong><span>Retail product invoices will appear here.</span></article>
             </div>

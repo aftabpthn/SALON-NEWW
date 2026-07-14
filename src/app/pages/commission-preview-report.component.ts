@@ -1,14 +1,16 @@
-import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-commission-preview-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, DecimalPipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, DecimalPipe, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -44,12 +46,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="metrics-grid inner-stats-grid">
           <article class="metric-card">
             <span>Preview commission</span>
-            <strong>{{ data.totals?.commission || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.commission || 0 | auraMoney:'1.0-0' }}</strong>
             <small>{{ data.totals?.effectiveRate || 0 | number:'1.0-2' }}% effective rate</small>
           </article>
           <article class="metric-card">
             <span>Attributed revenue</span>
-            <strong>{{ data.totals?.revenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.revenue || 0 | auraMoney:'1.0-0' }}</strong>
             <small>{{ data.totals?.itemCount || 0 }} line items</small>
           </article>
           <article class="metric-card">
@@ -58,7 +60,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </article>
           <article class="metric-card">
             <span>Target bonus</span>
-            <strong>{{ data.totals?.targetBonus || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.totals?.targetBonus || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
         </div>
 
@@ -98,11 +100,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of data.staff || []">
                   <td>{{ row.staffName }}</td>
-                  <td>{{ row.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.variableCommission | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.fixedCommission | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.targetBonus | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ row.revenue | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.variableCommission | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.fixedCommission | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.targetBonus | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ row.commission | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ row.effectiveRate | number:'1.0-2' }}%</td>
                   <td>
                     <span class="badge" [class.warning]="row.ruleSource === 'default'">{{ row.ruleName }}</span>
@@ -122,7 +124,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="summary-lines">
               <div *ngFor="let row of data.typeTotals || []">
                 <span>{{ row.itemTypeLabel }} · {{ row.itemCount }} items</span>
-                <strong>{{ row.commission | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ row.commission | auraMoney:'1.0-0' }}</strong>
               </div>
               <div *ngIf="!(data.typeTotals || []).length"><span>No category rows</span><strong>₹0</strong></div>
             </div>
@@ -160,13 +162,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
               </thead>
               <tbody>
                 <tr *ngFor="let item of data.entries || []">
-                  <td>{{ item.date | date:'dd MMM yyyy' }}</td>
+                  <td>{{ item.date | auraDate:'date' }}</td>
                   <td>{{ item.staffName }}</td>
                   <td>{{ item.itemName }}</td>
                   <td>{{ item.itemTypeLabel }}</td>
-                  <td>{{ item.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ item.revenue | auraMoney:'1.0-0' }}</td>
                   <td>{{ item.percent | number:'1.0-2' }}%</td>
-                  <td><strong>{{ item.commission | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td><strong>{{ item.commission | auraMoney:'1.0-0' }}</strong></td>
                   <td>
                     <span class="badge" [class.warning]="item.ruleSource === 'default'">
                       {{ item.ruleSource === 'default' ? 'Default' : item.ruleName }}

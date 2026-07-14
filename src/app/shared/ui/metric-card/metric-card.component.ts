@@ -1,10 +1,10 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
 @Component({
   selector: 'app-metric-card',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe],
+  imports: [CommonModule],
   template: `
     <article class="metric-card aura-card aura-card--type-metric aura-card--hover" [ngClass]="toneClasses">
       <span>{{ label }}</span>

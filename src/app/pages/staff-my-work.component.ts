@@ -6,6 +6,8 @@ import { finalize } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { AuthSessionService } from '../core/auth-session.service';
 import { AppStateService } from '../core/state/app-state.service';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type StaffSelfDashboard = {
   staff: ApiRecord;
@@ -22,7 +24,7 @@ type StaffSelfDashboard = {
 @Component({
   selector: 'app-staff-my-work',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule],
   template: `
     <section class="staff-workspace">
       <section class="page-title">
@@ -63,7 +65,7 @@ type StaffSelfDashboard = {
           <article><span>Live now</span><strong>{{ data.summary.liveAppointments || 0 }}</strong></article>
           <article><span>Today</span><strong>{{ data.summary.todayAppointments || 0 }}</strong></article>
           <article><span>Completed</span><strong>{{ data.summary.completedAppointments || 0 }}</strong></article>
-          <article><span>Sales</span><strong>{{ data.summary.revenue || 0 | currency:'INR':'symbol-narrow':'1.0-0' }}</strong><small>{{ data.summary.salesCount || 0 }} bills</small></article>
+          <article><span>Sales</span><strong>{{ data.summary.revenue || 0 | auraMoney:'1.0-0' }}</strong><small>{{ data.summary.salesCount || 0 }} bills</small></article>
         </section>
 
         <section class="register-panel">
@@ -71,7 +73,7 @@ type StaffSelfDashboard = {
             <div>
               <h2>Assigned appointments</h2>
             </div>
-            <span>{{ data.range.from | date:'mediumDate' }} - {{ data.range.to | date:'mediumDate' }}</span>
+            <span>{{ data.range.from | auraDate:'date' }} - {{ data.range.to | auraDate:'date' }}</span>
           </header>
           <div class="register-scroll" *ngIf="data.appointments.length; else noLive">
             <table>
@@ -80,7 +82,7 @@ type StaffSelfDashboard = {
               </thead>
               <tbody>
                 <tr *ngFor="let booking of data.appointments">
-                  <td><strong>{{ booking.startAt | date:'medium' }}</strong></td>
+                  <td><strong>{{ booking.startAt | auraDate:'date' }}</strong></td>
                   <td>{{ booking.clientName }}</td>
                   <td>{{ serviceText(booking) }}</td>
                   <td>{{ booking.chair || 'No chair' }}</td>
@@ -106,7 +108,7 @@ type StaffSelfDashboard = {
               </thead>
               <tbody>
                 <tr *ngFor="let booking of data.workReport">
-                  <td>{{ booking.startAt | date:'mediumDate' }} {{ booking.startAt | date:'shortTime' }}</td>
+                  <td>{{ booking.startAt | auraDate:'date' }} {{ booking.startAt | auraDate:'time' }}</td>
                   <td><strong>{{ booking.clientName }}</strong></td>
                   <td>{{ serviceText(booking) }}</td>
                   <td><span class="badge">{{ booking.status }}</span></td>
@@ -131,7 +133,7 @@ type StaffSelfDashboard = {
               </thead>
               <tbody>
                 <tr *ngFor="let booking of data.appointments">
-                  <td>{{ booking.startAt | date:'medium' }}</td>
+                  <td>{{ booking.startAt | auraDate:'date' }}</td>
                   <td><strong>{{ booking.clientName }}</strong></td>
                   <td>{{ serviceText(booking) }}</td>
                   <td><span class="badge">{{ booking.status }}</span></td>

@@ -1,8 +1,10 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ColumnDef = {
   key: string;
@@ -15,7 +17,7 @@ type ColumnDef = {
 @Component({
   selector: 'app-inward-revenue-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, StateComponent],
   template: `
     <section class="page-stack inward-revenue-page inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -58,9 +60,9 @@ type ColumnDef = {
         </div>
         <div class="metrics-grid compact-metrics inner-stats-grid">
           <article class="metric-card"><span>Lines</span><strong>{{ previewData.lineCount || 0 }}</strong><small>{{ previewData.rowCount || 0 }} source rows</small></article>
-          <article class="metric-card"><span>Total</span><strong>{{ previewData.summary?.totalAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Received</span><strong>{{ previewData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Unpaid</span><strong>{{ previewData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Total</span><strong>{{ previewData.summary?.totalAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Received</span><strong>{{ previewData.summary?.receivedAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Unpaid</span><strong>{{ previewData.summary?.unpaidAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
         </div>
         <div class="table-wrap compact-table inner-table-wrap">
           <table>
@@ -68,12 +70,12 @@ type ColumnDef = {
             <tbody>
               <tr *ngFor="let row of previewData.sampleRows || []">
                 <td>{{ row.invoiceNo }}</td>
-                <td>{{ row.docDate | date: 'dd MMM yyyy' }}</td>
+                <td>{{ row.docDate | auraDate:'date' }}</td>
                 <td>{{ row.clientName }}</td>
                 <td>{{ row.serviceProduct }}</td>
                 <td>{{ row.operator || 'Unassigned' }}</td>
-                <td class="right">{{ row.itemAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td class="right">{{ row.invoiceTotal | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td class="right">{{ row.itemAmount | auraMoney:'1.0-0' }}</td>
+                <td class="right">{{ row.invoiceTotal | auraMoney:'1.0-0' }}</td>
               </tr>
             </tbody>
           </table>
@@ -135,11 +137,11 @@ type ColumnDef = {
       <ng-container *ngIf="report() as reportData">
         <div class="metrics-grid">
           <article class="metric-card teal"><span>Invoices</span><strong>{{ reportData.summary?.invoiceCount || 0 }}</strong></article>
-          <article class="metric-card"><span>Total business</span><strong>{{ reportData.summary?.totalAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong><small>No duplicate line totals</small></article>
-          <article class="metric-card green"><span>Received</span><strong>{{ reportData.summary?.receivedAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card red"><span>Unpaid</span><strong>{{ reportData.summary?.unpaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card amber"><span>Balance paid</span><strong>{{ reportData.summary?.balancePaidAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card blue"><span>GST</span><strong>{{ reportData.summary?.totalGstAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Total business</span><strong>{{ reportData.summary?.totalAmount || 0 | auraMoney:'1.0-0' }}</strong><small>No duplicate line totals</small></article>
+          <article class="metric-card green"><span>Received</span><strong>{{ reportData.summary?.receivedAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card red"><span>Unpaid</span><strong>{{ reportData.summary?.unpaidAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card amber"><span>Balance paid</span><strong>{{ reportData.summary?.balancePaidAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card blue"><span>GST</span><strong>{{ reportData.summary?.totalGstAmount || 0 | auraMoney:'1.0-0' }}</strong></article>
         </div>
 
         <div class="dashboard-grid">
@@ -150,11 +152,11 @@ type ColumnDef = {
               </div>
             </div>
             <div class="summary-lines">
-              <div><span>Cash</span><strong>{{ reportData.summary?.cashAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Card</span><strong>{{ reportData.summary?.cardAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Online/eWallet</span><strong>{{ reportData.summary?.onlineAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Cheque</span><strong>{{ reportData.summary?.chequeAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Tips</span><strong>{{ reportData.summary?.tipAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Cash</span><strong>{{ reportData.summary?.cashAmount || 0 | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Card</span><strong>{{ reportData.summary?.cardAmount || 0 | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Online/eWallet</span><strong>{{ reportData.summary?.onlineAmount || 0 | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Cheque</span><strong>{{ reportData.summary?.chequeAmount || 0 | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Tips</span><strong>{{ reportData.summary?.tipAmount || 0 | auraMoney:'1.0-0' }}</strong></div>
             </div>
           </section>
 
@@ -182,7 +184,7 @@ type ColumnDef = {
               <article *ngFor="let item of reportData.topOperators || []">
                 <strong>{{ item.key }}</strong>
                 <span>{{ item.count }} lines</span>
-                <b>{{ item.amount | currency: 'INR':'symbol':'1.0-0' }}</b>
+                <b>{{ item.amount | auraMoney:'1.0-0' }}</b>
               </article>
             </div>
           </section>
@@ -192,7 +194,7 @@ type ColumnDef = {
               <article *ngFor="let item of reportData.topServices || []">
                 <strong>{{ item.key }}</strong>
                 <span>{{ item.count }} lines</span>
-                <b>{{ item.amount | currency: 'INR':'symbol':'1.0-0' }}</b>
+                <b>{{ item.amount | auraMoney:'1.0-0' }}</b>
               </article>
             </div>
           </section>
@@ -220,8 +222,8 @@ type ColumnDef = {
                     </button>
                     <ng-template #normalCell>
                       <ng-container [ngSwitch]="column.type">
-                        <span *ngSwitchCase="'currency'">{{ moneyCell(row, column.key) | currency: 'INR':'symbol':'1.0-0' }}</span>
-                        <span *ngSwitchCase="'date'">{{ dateCell(row, column.key) | date: 'dd MMM yyyy' }}</span>
+                        <span *ngSwitchCase="'currency'">{{ moneyCell(row, column.key) | auraMoney:'1.0-0' }}</span>
+                        <span *ngSwitchCase="'date'">{{ dateCell(row, column.key) | auraDate:'date' }}</span>
                         <span *ngSwitchCase="'number'">{{ value(row, column.key) || 0 }}</span>
                         <span *ngSwitchDefault>{{ value(row, column.key) || '-' }}</span>
                       </ng-container>
@@ -242,15 +244,15 @@ type ColumnDef = {
           <div class="section-title inner-action-bar">
             <div>
               <h3>{{ detail.invoice.invoiceNo }}</h3>
-              <small>{{ detail.invoice.clientName }} · {{ detail.invoice.docDate | date: 'dd MMM yyyy' }}</small>
+              <small>{{ detail.invoice.clientName }} · {{ detail.invoice.docDate | auraDate:'date' }}</small>
             </div>
             <button class="ghost-button mini" type="button" (click)="closeInvoice()">Close</button>
           </div>
           <div class="info-grid compact-info">
-            <div><span>Total</span><strong>{{ detail.invoice.totalAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Received</span><strong>{{ detail.invoice.receivedAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Unpaid</span><strong>{{ detail.invoice.unpaidAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Balance paid</span><strong>{{ detail.invoice.balancePaidAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Total</span><strong>{{ detail.invoice.totalAmount | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Received</span><strong>{{ detail.invoice.receivedAmount | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Unpaid</span><strong>{{ detail.invoice.unpaidAmount | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Balance paid</span><strong>{{ detail.invoice.balancePaidAmount | auraMoney:'1.0-0' }}</strong></div>
           </div>
           <div class="detail-list">
             <article *ngFor="let line of detail.lines">
@@ -258,7 +260,7 @@ type ColumnDef = {
                 <strong>{{ line.serviceProduct }}</strong>
                 <span>{{ line.operator || 'Unassigned' }} · Qty {{ line.quantity || 1 }}</span>
               </div>
-              <strong>{{ line.itemAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ line.itemAmount | auraMoney:'1.0-0' }}</strong>
             </article>
           </div>
         </section>

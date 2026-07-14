@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,11 +6,12 @@ import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
 import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/happy-hours-banner.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-booking-portal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, DatePipe, RouterLink, StateComponent, AuraKpiCardComponent, HappyHoursBannerComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent, AuraKpiCardComponent, HappyHoursBannerComponent],
   template: `
     <main class="portal-page inner-page-shell">
       <section class="module-hero inner-page-header">
@@ -170,7 +171,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
         <div class="section-title"><h2>Available slots</h2></div>
         <div class="quick-grid" *ngIf="slots().length; else noSlots">
           <button class="action-card command-card" type="button" *ngFor="let slot of slots()" (click)="selectSlot(slot)" [class.active]="selectedSlot()?.startAt === slot.startAt" [class.hh-slot]="slot.hasHappyHour">
-            <strong>{{ slot.startAt | date: 'EEE, MMM d, h:mm a' }}</strong>
+            <strong>{{ slot.startAt | auraDate:'dateTime' }}</strong>
             <span>{{ slot.staffName }} · {{ slot.chair }} · Score {{ slot.score }}</span>
             <small class="slot-hh-badge" *ngIf="slot.hasHappyHour">Happy Hours rate available</small>
           </button>
@@ -191,7 +192,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
           <article class="review-card" *ngFor="let review of reviews()">
             <strong>{{ (review.rating || 0) | number: '1.1-1' }} / 5 · {{ review.platform }}</strong>
             <span>{{ review.reviewText || 'Verified visit feedback captured.' }}</span>
-            <small>{{ review.reviewer }} · {{ review.createdAt | date: 'mediumDate' }}</small>
+            <small>{{ review.reviewer }} · {{ review.createdAt | auraDate:'date' }}</small>
           </article>
         </div>
       </section>
@@ -199,7 +200,7 @@ import { HappyHoursBannerComponent } from './booking-portal/happy-hours-banner/h
       <section class="panel" *ngIf="appointment() as appt">
         <div class="section-title">
           <div>
-            <h2>Appointment {{ appt.status }} for {{ appt.startAt | date: 'medium' }}</h2>
+            <h2>Appointment {{ appt.status }} for {{ appt.startAt | auraDate:'date' }}</h2>
           </div>
           <span class="badge">{{ appt.onlineStatus }}</span>
         </div>

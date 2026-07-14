@@ -1,15 +1,16 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-lead-management-command-center',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink],
   template: `
     <section class="lead-page">
       <header class="lead-toolbar">
@@ -162,7 +163,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
               <span>{{ column.leads?.length || 0 }}</span>
             </header>
             <button class="lead-card" type="button" *ngFor="let lead of column.leads || []" (click)="openDetail(lead.id)">
-              <div><strong>{{ lead.title }}</strong><small>{{ lead.followUpAt | date:'dd-MM-yyyy HH:mm' }}</small></div>
+              <div><strong>{{ lead.title }}</strong><small>{{ lead.followUpAt | auraDate:'dateTime' }}</small></div>
               <span class="amount">₹{{ lead.quotedAmount || 0 }}</span>
               <small>Name: {{ lead.customerName }}</small>
               <small>Contact: {{ lead.phone }}</small>
@@ -198,7 +199,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
               <span>{{ lead.source || '-' }}</span>
               <span><span class="score-pill" [class.hot]="lead.leadTemperature === 'hot'" [class.warm]="lead.leadTemperature === 'warm'">{{ lead.leadTemperature || 'cold' }} · {{ lead.leadScore || 0 }}</span></span>
               <span><span class="status-pill" [class.hot]="lead.leadTemperature === 'hot'" [class.won]="lead.status === 'won'" [class.lost]="lead.status === 'lost'">{{ lead.status || lead.stageName || 'New' }}</span></span>
-              <span>{{ (lead.createdAt || lead.followUpAt) | date:'MMM dd, yyyy' }}</span>
+              <span>{{ (lead.createdAt || lead.followUpAt) | auraDate:'date' }}</span>
               <span class="chip-list"><small *ngFor="let reason of topReasons(lead)" [class]="'reason-chip ' + (reason.tone || 'neutral')">{{ reason.label }}</small></span>
               <span><strong>{{ nextBestAction(lead).label || 'Review lead' }}</strong><small class="muted">{{ nextBestAction(lead).detail || '-' }}</small></span>
               <span><span [class]="'attention-pill ' + (lead.attentionPriority || 'none')" *ngIf="lead.needsAttention; else noAttention">{{ lead.attentionPriority }}</span><ng-template #noAttention><span class="muted">Clear</span></ng-template></span>
@@ -216,7 +217,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
           <div class="day-band">Follow-up Queue</div>
           <div class="table-row head"><span>Followup Time</span><span>Lead Title</span><span>Lead Price</span><span>Stage</span><span>Staff</span><span>Customer Name</span><span>Customer Email</span><span>Customer Contact</span><span>Action</span></div>
           <div class="table-row" *ngFor="let item of followUps()">
-            <span>{{ item.dueAt | date:'hh:mm a' }}</span>
+            <span>{{ item.dueAt | auraDate:'time' }}</span>
             <span>{{ item.lead?.title || item.leadId }}</span>
             <span>₹{{ item.lead?.quotedAmount || 0 }}</span>
             <span>{{ item.lead?.stageName || '-' }}</span>
@@ -292,9 +293,9 @@ import { ApiRecord, ApiService } from '../core/api.service';
                 <span class="timeline-meta"><small>{{ event.kind }}</small><small>{{ event.status || 'recorded' }}</small></span>
                 <strong>{{ event.title }}</strong>
                 <p>{{ event.body }}</p>
-                <small class="timeline-sub" *ngIf="event.dueAt">Due {{ event.dueAt | date:'MMM dd, yyyy · hh:mm a' }}</small>
+                <small class="timeline-sub" *ngIf="event.dueAt">Due {{ event.dueAt | auraDate:'dateTime' }}</small>
               </div>
-              <time>{{ event.createdAt | date:'MMM dd, yyyy · hh:mm a' }}</time>
+              <time>{{ event.createdAt | auraDate:'dateTime' }}</time>
             </article>
             <p class="empty" *ngIf="!activityRows(item).length">No activity recorded yet.</p>
           </div>
@@ -350,7 +351,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
             </div>
             <dl>
               <dt>Client</dt><dd>{{ businessLinks(item).client?.name || item.lead?.clientId || 'Not linked' }}</dd>
-              <dt>Appointment</dt><dd>{{ businessLinks(item).appointment?.startAt ? (businessLinks(item).appointment?.startAt | date:'MMM dd, yyyy · hh:mm a') : (item.lead?.appointmentId || 'Not booked') }}</dd>
+              <dt>Appointment</dt><dd>{{ businessLinks(item).appointment?.startAt ? (businessLinks(item).appointment?.startAt | auraDate:'dateTime') : (item.lead?.appointmentId || 'Not booked') }}</dd>
               <dt>Invoice</dt><dd>{{ businessLinks(item).invoice?.invoiceNumber || item.lead?.invoiceId || 'Not linked' }}</dd>
               <dt>Revenue</dt><dd>{{ money(item.lead?.convertedAmount || businessLinks(item).invoice?.total || 0) }}</dd>
             </dl>
@@ -397,7 +398,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
             <div class="task-list">
               <article *ngFor="let followUp of item.followUps || []">
                 <strong>{{ followUp.status || 'pending' }}</strong>
-                <span>{{ followUp.dueAt | date:'MMM dd, yyyy · hh:mm a' }}</span>
+                <span>{{ followUp.dueAt | auraDate:'dateTime' }}</span>
                 <p>{{ followUp.note || 'Follow-up scheduled' }}</p>
                 <button class="outline mini" type="button" (click)="completeFollowUp(followUp)" [disabled]="followUp.status === 'done'">Mark done</button>
               </article>

@@ -6,13 +6,14 @@ import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
 
 @Component({
   selector: 'app-inventory-workspace-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack inventory-detail-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -55,7 +56,7 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
                   <td>{{ supplier.phone || '-' }}</td>
                   <td>{{ supplier.email || '-' }}</td>
                   <td>{{ supplierScore(supplier.id) }}</td>
-                  <td>{{ supplierPurchaseValue(supplier.id) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ supplierPurchaseValue(supplier.id) | auraMoney:'1.0-0' }}</td>
                   <td>{{ supplierLastPurchase(supplier.id) }}</td>
                 </tr>
                 <tr *ngIf="!filteredVendorRows().length"><td colspan="8" class="empty-cell">No vendors match these filters.</td></tr>
@@ -100,17 +101,17 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
                 <tr *ngFor="let row of filteredCurrentStockRows()">
                   <td><strong>{{ row.name }}</strong><small>{{ row.code }}</small></td>
                   <td>{{ row.quantity }}</td>
-                  <td>{{ row.stockCost | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.lastPrice | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.stockCost | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.lastPrice | auraMoney:'1.0-0' }}</td>
                   <td>{{ row.businessUnit }}</td>
-                  <td>{{ row.purchasePrice | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.averagePrice | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.purchasePrice | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.averagePrice | auraMoney:'1.0-0' }}</td>
                   <td>{{ row.vendor }}</td>
                 </tr>
                 <tr class="total-row">
                   <td>Total</td>
                   <td>{{ stockReportTotals().quantity }}</td>
-                  <td>{{ stockReportTotals().stockCost | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ stockReportTotals().stockCost | auraMoney:'1.0-0' }}</td>
                   <td colspan="5">{{ filteredCurrentStockRows().length }} row(s)</td>
                 </tr>
               </tbody>
@@ -171,8 +172,8 @@ type InventoryWorkspaceMode = 'vendors' | 'stock' | 'procurement';
                   <td>{{ row.fromCenter }}</td>
                   <td><span class="badge">{{ row.status }}</span></td>
                   <td>{{ row.quantity }}</td>
-                  <td>{{ row.value | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.tax | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.value | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.tax | auraMoney:'1.0-0' }}</td>
                   <td>{{ row.notes }}</td>
                 </tr>
                 <tr *ngIf="!filteredProcurementRows().length">

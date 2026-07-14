@@ -1,9 +1,11 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type AppointmentDetailReport = {
   summary: ApiRecord;
@@ -16,7 +18,7 @@ type AppointmentDetailReport = {
 @Component({
   selector: 'app-appointment-detail-list-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack appointment-report-page inner-page-shell">
       <div class="module-hero report-hero inner-page-header">
@@ -99,7 +101,7 @@ type AppointmentDetailReport = {
 
           <div class="table-meta">
             <span>{{ dateLabel() }} · {{ total() }} appointment row(s)</span>
-            <span>Total price {{ data.summary.appointmentPrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</span>
+            <span>Total price {{ data.summary.appointmentPrice || 0 | auraMoney:'1.0-0' }}</span>
           </div>
 
           <div class="table-wrap inner-table-wrap">
@@ -131,9 +133,9 @@ type AppointmentDetailReport = {
                   <td>{{ row.serviceNames || '-' }}</td>
                   <td>{{ row.staffName || 'Unassigned' }}</td>
                   <td><span class="status-pill" [ngClass]="row.statusGroup">{{ row.status || '-' }}</span></td>
-                  <td>{{ row.appointmentDate ? (row.appointmentDate | date: 'dd-MM-yyyy') : '-' }}</td>
+                  <td>{{ row.appointmentDate ? (row.appointmentDate | auraDate:'date') : '-' }}</td>
                   <td>{{ row.appointmentTime || '-' }}</td>
-                  <td>{{ row.price || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.price || 0 | auraMoney:'1.0-0' }}</td>
                   <td><a class="ghost-button mini" [href]="appointmentHref(row)">Open</a></td>
                 </tr>
                 <tr *ngIf="!rows().length">

@@ -1,13 +1,14 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-security-layer',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="security-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -84,7 +85,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td>{{ log.actorRole }} · {{ log.actorUserId }}</td>
                   <td>{{ log.targetType }} {{ log.targetId }}</td>
                   <td><span class="badge">{{ log.severity }}</span></td>
-                  <td>{{ log.createdAt | date: 'short' }}</td>
+                  <td>{{ log.createdAt | auraDate:'date' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -100,7 +101,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </article>
             <article *ngFor="let backup of backups()">
               <div><strong>{{ backup.type }}</strong><span>{{ backup.fileSizeBytes }} bytes · {{ backup.status }}</span></div>
-              <small>{{ backup.createdAt | date: 'short' }}</small>
+              <small>{{ backup.createdAt | auraDate:'date' }}</small>
             </article>
           </div>
         </section>
@@ -117,7 +118,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ event.path }}</td>
                 <td>{{ event.statusCode }}</td>
                 <td>{{ event.durationMs }}ms</td>
-                <td>{{ event.createdAt | date: 'short' }}</td>
+                <td>{{ event.createdAt | auraDate:'date' }}</td>
               </tr>
             </tbody>
           </table>

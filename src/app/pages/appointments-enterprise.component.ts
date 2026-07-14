@@ -1,5 +1,5 @@
-import { CommonModule, DatePipe } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -8,6 +8,8 @@ import { AppointmentToolbarService, normalizeAppointmentSlotMinutes } from '../c
 import { AppStateService } from '../core/state/app-state.service';
 import { serviceTotalMinutes } from '../shared/appointment-capacity';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type SchedulerDrawer = '' | 'booking' | 'blocked-time' | 'appointment' | 'ai-slots' | 'waitlist' | 'operations';
 type BlockMode = 'add' | 'remove';
@@ -162,6 +164,29 @@ type AppointmentHoverState = {
   y: number;
 };
 
+type RectangleEdges = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>;
+
+export function appointmentPopoverPosition(
+  anchor: RectangleEdges,
+  popover: { width: number; height: number },
+  viewport: { width: number; height: number },
+  gap = 12,
+  margin = 12
+): { x: number; y: number } {
+  const placements = [
+    { available: viewport.width - anchor.right - gap, required: popover.width, x: anchor.right + gap, y: anchor.top },
+    { available: anchor.left - gap, required: popover.width, x: anchor.left - gap - popover.width, y: anchor.top },
+    { available: viewport.height - anchor.bottom - gap, required: popover.height, x: anchor.left, y: anchor.bottom + gap },
+    { available: anchor.top - gap, required: popover.height, x: anchor.left, y: anchor.top - gap - popover.height }
+  ];
+  const placement = placements.find((candidate) => candidate.available >= candidate.required)
+    || placements.reduce((best, candidate) => candidate.available > best.available ? candidate : best);
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
+  return {
+    x: clamp(placement.x, margin, viewport.width - popover.width - margin),
+    y: clamp(placement.y, margin, viewport.height - popover.height - margin)
+  };
+}
 type LaneBlock = {
   id: string;
   staffId: string;
@@ -214,7 +239,7 @@ const STATUS_TONES: Record<string, string> = {
 @Component({
   selector: 'app-appointments-enterprise',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="enterprise-scheduler inner-page-shell" [class.enterprise-scheduler--fullscreen]="calendarFullscreen()">
       <app-state [loading]="loading()" [error]="drawer() ? '' : error()" loadingText="Loading enterprise scheduler"></app-state>
@@ -278,7 +303,7 @@ const STATUS_TONES: Record<string, string> = {
 
         <section class="month-strip-band">
           <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month">&lt;&lt;</button>
-          <strong class="month-range-label">{{ selectedDate() | date: 'MMM yyyy' }}</strong>
+          <strong class="month-range-label">{{ selectedDate() | auraDate:'monthYear' }}</strong>
           <button type="button" (click)="shiftMonth(1)" aria-label="Next month">&gt;&gt;</button>
           <div class="month-strip" aria-label="Month date strip">
             <button
@@ -406,7 +431,6 @@ const STATUS_TONES: Record<string, string> = {
                 (dragend)="clearDrag()"
                 (click)="openAppointment(card.appointment); $event.stopPropagation()"
                 (mouseenter)="showAppointmentDetails(card, $event)"
-                (mousemove)="moveAppointmentDetails($event)"
                 (mouseleave)="hideAppointmentDetails()"
                 (focus)="showAppointmentDetails(card, $event)"
                 (blur)="hideAppointmentDetails()"
@@ -450,7 +474,7 @@ const STATUS_TONES: Record<string, string> = {
                   <div class="timeline-track">
                     <span class="timeline-marker" *ngFor="let slot of timelineScaleSlots(); trackBy: trackSlot" [style.left.%]="timelineLeftForMinute(slot.minute)"></span>
                     <span class="timeline-empty" *ngIf="!row.cards.length">No bookings</span>
-                    <button type="button" class="timeline-appointment" *ngFor="let card of row.cards; trackBy: trackCard" [ngClass]="statusTone(card.status)" [style.left.%]="timelineLeft(card)" [style.width.%]="timelineWidth(card)" (click)="openAppointment(card.appointment)" (mouseenter)="showAppointmentDetails(card, $event)" (mousemove)="moveAppointmentDetails($event)" (mouseleave)="hideAppointmentDetails()" (focus)="showAppointmentDetails(card, $event)" (blur)="hideAppointmentDetails()">
+                    <button type="button" class="timeline-appointment" *ngFor="let card of row.cards; trackBy: trackCard" [ngClass]="statusTone(card.status)" [style.left.%]="timelineLeft(card)" [style.width.%]="timelineWidth(card)" (click)="openAppointment(card.appointment)" (mouseenter)="showAppointmentDetails(card, $event)" (mouseleave)="hideAppointmentDetails()" (focus)="showAppointmentDetails(card, $event)" (blur)="hideAppointmentDetails()">
                       <strong>{{ card.timeLabel }}</strong>
                       <span>{{ card.clientName }}</span>
                       <small>{{ card.serviceLabel }}</small>
@@ -805,7 +829,7 @@ const STATUS_TONES: Record<string, string> = {
         <div *ngIf="blockMode() === 'remove'" class="drawer-stack">
           <div class="remove-row" *ngFor="let block of removableBlocks(); trackBy: trackApiRecord">
             <div>
-              <strong>{{ block.startAt | date: 'shortTime' }} - {{ block.endAt | date: 'shortTime' }}</strong>
+              <strong>{{ block.startAt | auraDate:'time' }} - {{ block.endAt | auraDate:'time' }}</strong>
               <span>{{ block.reason || 'Blocked time' }}</span>
             </div>
             <button class="ghost-button mini danger" type="button" (click)="removeBlockedTime(block.id)">Remove</button>
@@ -819,7 +843,7 @@ const STATUS_TONES: Record<string, string> = {
           <button class="bill-close" type="button" (click)="closeDrawer()">×</button>
           <div>
             <h3>View Bill</h3>
-                <span>{{ appointment.startAt | date: 'shortTime' }} · {{ appointmentBillingLabel(appointment) }}</span>
+                <span>{{ appointment.startAt | auraDate:'time' }} · {{ appointmentBillingLabel(appointment) }}</span>
           </div>
           <button class="ghost-button mini" type="button" (click)="printAppointmentBill()">Print</button>
         </header>
@@ -837,7 +861,7 @@ const STATUS_TONES: Record<string, string> = {
                 <div>
                   <strong>{{ clientName(appointment.clientId) }}</strong>
                   <small>{{ clientPhone(appointment.clientId) || appointment.clientId }}</small>
-                  <b>Ewallet Balance: {{ clientWalletBalance(appointment.clientId) | currency: 'INR':'symbol':'1.0-0' }}</b>
+                  <b>Ewallet Balance: {{ clientWalletBalance(appointment.clientId) | auraMoney:'1.0-0' }}</b>
                 </div>
                 <button class="ghost-button mini" type="button" (click)="openClientHistory(appointment)">View History</button>
               </article>
@@ -872,35 +896,35 @@ const STATUS_TONES: Record<string, string> = {
               <article class="bill-panel appointment-date-panel">
                 <h4>Appointment Date</h4>
                 <div class="bill-status-row">
-                  <strong>{{ appointment.startAt | date: 'dd-MM-yyyy' }}</strong>
+                  <strong>{{ appointment.startAt | auraDate:'date' }}</strong>
                   <select [value]="appointmentActionValue(appointment)" (change)="handleAppointmentAction(appointment, $any($event.target).value)">
                     <option *ngFor="let action of appointmentActionOptions(appointment); trackBy: trackActionOption" [value]="action.value">{{ action.label }}</option>
                   </select>
                 </div>
               </article>
               <article class="bill-panel bill-lines">
-                <div><span>Subtotal</span><strong>{{ appointmentSubtotal(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Actual Price</span><strong>{{ appointmentSubtotal(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Discount</span><strong>{{ appointmentDiscount(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Taxable Amount</span><strong>{{ appointmentTaxable(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>GST</span><strong>{{ appointmentGst(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                <div><span>Subtotal</span><strong>{{ appointmentSubtotal(appointment) | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Actual Price</span><strong>{{ appointmentSubtotal(appointment) | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Discount</span><strong>{{ appointmentDiscount(appointment) | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Taxable Amount</span><strong>{{ appointmentTaxable(appointment) | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>GST</span><strong>{{ appointmentGst(appointment) | auraMoney:'1.0-0' }}</strong></div>
               </article>
               <article class="bill-panel bill-lines total-box">
-                <div><span>Total</span><strong>{{ appointmentTotal(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Paid</span><strong>{{ appointmentPaid(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Due</span><strong>{{ appointmentDue(appointment) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                <div><span>Total</span><strong>{{ appointmentTotal(appointment) | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Paid</span><strong>{{ appointmentPaid(appointment) | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Due</span><strong>{{ appointmentDue(appointment) | auraMoney:'1.0-0' }}</strong></div>
               </article>
             </section>
 
             <section class="bill-main">
               <article class="service-bill-card" *ngFor="let line of appointmentBillLines(appointment); trackBy: trackBillLine">
                 <h4>Service</h4>
-                <p>{{ line.name }}, {{ line.startAt | date: 'shortTime' }}, {{ line.staffName }}</p>
+                <p>{{ line.name }}, {{ line.startAt | auraDate:'time' }}, {{ line.staffName }}</p>
                 <div class="service-chip-row">
                   <span class="chip warm">Qty: {{ line.quantity }}</span>
-                  <span class="chip cool">Price: {{ line.price | currency: 'INR':'symbol':'1.0-0' }}</span>
-                  <span class="chip pink">Discount: {{ line.discount | currency: 'INR':'symbol':'1.0-0' }}</span>
-                  <span class="chip teal">Total: {{ line.total | currency: 'INR':'symbol':'1.0-0' }}</span>
+                  <span class="chip cool">Price: {{ line.price | auraMoney:'1.0-0' }}</span>
+                  <span class="chip pink">Discount: {{ line.discount | auraMoney:'1.0-0' }}</span>
+                  <span class="chip teal">Total: {{ line.total | auraMoney:'1.0-0' }}</span>
                 </div>
               </article>
               <div class="drawer-actions wrap">
@@ -920,13 +944,13 @@ const STATUS_TONES: Record<string, string> = {
           <div class="activity-log-panel">
             <article *ngFor="let event of appointmentActivityLines(appointment); trackBy: trackActivityLine">
               <strong>{{ event.title }}</strong>
-              <span>{{ event.time | date: 'short' }}</span>
+              <span>{{ event.time | auraDate:'date' }}</span>
               <p>{{ event.body }}</p>
             </article>
           </div>
         </ng-template>
       </aside>
-      <div class="appointment-detail-popover" *ngIf="hoveredAppointment() as hover" role="tooltip" [style.left.px]="hover.x" [style.top.px]="hover.y">
+      <div #appointmentDetailPopover class="appointment-detail-popover" *ngIf="hoveredAppointment() as hover" role="tooltip" [style.left.px]="hover.x" [style.top.px]="hover.y">
         <div class="hover-title">
           <strong>{{ hover.card.clientName }}</strong>
           <small>{{ hover.card.timeLabel }}</small>
@@ -1214,7 +1238,7 @@ const STATUS_TONES: Record<string, string> = {
     .appointment-card.red { background: #fecaca !important; border-color: #dc2626 !important; border-left-color: #dc2626 !important; }
     .appointment-card.slate { background: #e2e8f0 !important; border-color: #64748b !important; border-left-color: #64748b !important; }
     .appointment-card:hover, .appointment-card:focus-visible, .timeline-appointment:hover, .timeline-appointment:focus-visible { z-index: 45 !important; }
-    .appointment-detail-popover { position: fixed; z-index: 140; width: min(340px, calc(100vw - 24px)); max-height: min(420px, calc(100vh - 24px)); overflow: auto; display: grid; gap: 8px; padding: 13px 14px; border: 1px solid #e7ded6; border-radius: 14px; background: #fff; color: #1f2933; box-shadow: 0 22px 55px rgba(31,41,51,.22); pointer-events: none; }
+    .appointment-detail-popover { position: fixed; z-index: 140; box-sizing: border-box; width: min(340px, calc(100vw - 24px)); max-height: min(420px, calc(100vh - 24px)); max-height: min(420px, calc(100dvh - 24px)); overflow: auto; display: grid; gap: 8px; padding: 13px 14px; border: 1px solid #e7ded6; border-radius: 14px; background: #fff; color: #1f2933; box-shadow: 0 22px 55px rgba(31,41,51,.22); pointer-events: none; }
     .appointment-detail-popover .hover-title { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding-bottom: 7px; border-bottom: 1px solid #f0e7df; }
     .appointment-detail-popover .hover-title strong { color: #4b1238; font-size: 14px; line-height: 1.2; }
     .appointment-detail-popover .hover-title small { color: #6b7280; font-size: 11px; font-weight: 900; white-space: nowrap; }
@@ -1436,11 +1460,19 @@ const STATUS_TONES: Record<string, string> = {
   `]
 })
 export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
+  @ViewChild('appointmentDetailPopover')
+  private set appointmentDetailPopover(ref: ElementRef<HTMLDivElement> | undefined) {
+    this.appointmentDetailPopoverElement = ref?.nativeElement;
+    if (ref) this.scheduleAppointmentPopoverPosition();
+  }
   private readonly fb = inject(FormBuilder);
   private readonly resizeState = signal<{ appointment: ApiRecord; startY: number; originalEnd: string } | null>(null);
   private handledStaffToggleRequests = 0;
   private timer = 0;
   private noticeTimer = 0;
+  private appointmentPopoverFrame = 0;
+  private appointmentDetailPopoverElement?: HTMLDivElement;
+  private appointmentHoverAnchor: HTMLElement | null = null;
   readonly api = inject(ApiService);
   readonly appointmentToolbar = inject(AppointmentToolbarService);
   readonly state = inject(AppStateService);
@@ -1741,6 +1773,8 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     this.appointmentToolbar.staffPanelOpen.set(false);
     window.clearInterval(this.timer);
     window.clearTimeout(this.noticeTimer);
+    window.cancelAnimationFrame(this.appointmentPopoverFrame);
+    this.appointmentDetailPopoverElement = undefined;
     window.removeEventListener('pointermove', this.onResizeMove);
     window.removeEventListener('pointerup', this.onResizeEnd);
     if (typeof document !== 'undefined') document.body.classList.remove('calendar-fullscreen-active');
@@ -1933,16 +1967,17 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
   }
 
   showAppointmentDetails(card: AppointmentCard, event: MouseEvent | FocusEvent): void {
-    this.hoveredAppointment.set({ card, ...this.appointmentHoverPoint(event) });
-  }
-
-  moveAppointmentDetails(event: MouseEvent): void {
-    const current = this.hoveredAppointment();
-    if (!current) return;
-    this.hoveredAppointment.set({ ...current, ...this.appointmentHoverPoint(event) });
+    this.appointmentHoverAnchor = event.currentTarget as HTMLElement | null;
+    const rect = this.appointmentHoverAnchor?.getBoundingClientRect();
+    this.hoveredAppointment.set({ card, x: rect ? rect.right + 12 : 12, y: rect?.top ?? 12 });
+    this.scheduleAppointmentPopoverPosition();
   }
 
   hideAppointmentDetails(): void {
+    this.appointmentHoverAnchor = null;
+    this.appointmentDetailPopoverElement = undefined;
+    if (typeof window !== 'undefined') window.cancelAnimationFrame(this.appointmentPopoverFrame);
+    this.appointmentPopoverFrame = 0;
     this.hoveredAppointment.set(null);
   }
 
@@ -1964,25 +1999,23 @@ export class AppointmentsEnterpriseComponent implements OnInit, OnDestroy {
     });
   }
 
-  private appointmentHoverPoint(event: MouseEvent | FocusEvent): { x: number; y: number } {
-    const width = 340;
-    const height = 360;
-    let x = 24;
-    let y = 24;
-    if (event instanceof MouseEvent) {
-      x = event.clientX + 16;
-      y = event.clientY + 16;
-    } else {
-      const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
-      if (rect) {
-        x = rect.right + 12;
-        y = rect.top;
-      }
-    }
-    if (typeof window === 'undefined') return { x, y };
-    if (x + width > window.innerWidth - 12) x = Math.max(12, x - width - 32);
-    if (y + height > window.innerHeight - 12) y = Math.max(12, window.innerHeight - height - 12);
-    return { x: Math.max(12, x), y: Math.max(12, y) };
+  private scheduleAppointmentPopoverPosition(): void {
+    if (typeof window === 'undefined') return;
+    window.cancelAnimationFrame(this.appointmentPopoverFrame);
+    this.appointmentPopoverFrame = window.requestAnimationFrame(() => {
+      this.appointmentPopoverFrame = 0;
+      const current = this.hoveredAppointment();
+      const anchor = this.appointmentHoverAnchor;
+      const popover = this.appointmentDetailPopoverElement;
+      if (!current || !anchor || !popover) return;
+      const rect = popover.getBoundingClientRect();
+      const position = appointmentPopoverPosition(
+        anchor.getBoundingClientRect(),
+        { width: rect.width, height: rect.height },
+        { width: window.innerWidth, height: window.innerHeight }
+      );
+      this.hoveredAppointment.set({ ...current, ...position });
+    });
   }
   setSlotMinutes(value: string): void {
     const next = normalizeAppointmentSlotMinutes(value);

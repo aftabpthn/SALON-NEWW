@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type MatrixCell = { key: string; label: string; tone?: 'section' | 'primary' | 'normal' };
 type MatrixColumn = { key: string; label: string; from?: string; to?: string };
@@ -130,7 +131,7 @@ type WalletLedgerRow = ApiRecord & {
 @Component({
   selector: 'app-financial-summary-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="financial-summary-page inner-page-shell">
       <div class="module-hero financial-hero inner-page-header">
@@ -309,9 +310,9 @@ type WalletLedgerRow = ApiRecord & {
                   <td>{{ row.clientPhone || '-' }}</td>
                   <td>{{ row.branchName || '-' }}</td>
                   <td><span class="badge">{{ row.transactionType }}</span></td>
-                  <td class="right">{{ row.creditAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ row.debitAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right"><strong>{{ row.balanceAfter | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td class="right">{{ row.creditAmount | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ row.debitAmount | auraMoney:'1.0-0' }}</td>
+                  <td class="right"><strong>{{ row.balanceAfter | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ row.reason || '-' }}</td>
                   <td>{{ row.referenceLabel || '-' }}</td>
                   <td>{{ row.paymentMode || '-' }}</td>
@@ -355,7 +356,7 @@ type WalletLedgerRow = ApiRecord & {
                   <td><span class="badge">{{ alert['riskLevel'] || 'medium' }}</span></td>
                   <td><strong>{{ alert['alertType'] }}</strong></td>
                   <td>{{ alert['clientName'] || '-' }}</td>
-                  <td class="right">{{ (+alert['amount'] || 0) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td class="right">{{ (+alert['amount'] || 0) | auraMoney:'1.0-0' }}</td>
                   <td>{{ alert['staffUser'] || '-' }}</td>
                   <td>{{ alert['reference'] || '-' }}</td>
                   <td>{{ alert['suggestedAction'] || 'Review wallet ledger' }}</td>
@@ -376,28 +377,28 @@ type WalletLedgerRow = ApiRecord & {
         <div class="summary-strip">
           <article>
             <span>Total Sales</span>
-            <strong>{{ totalFor('totalSales') | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ totalFor('totalSales') | auraMoney:'1.0-0' }}</strong>
             <small>{{ invoiceCount() }} bills</small>
           </article>
           <article>
             <span>Paid</span>
-            <strong>{{ totalFor('paid') | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ totalFor('paid') | auraMoney:'1.0-0' }}</strong>
           </article>
           <article>
             <span>Balance</span>
-            <strong>{{ totalFor('balance') | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ totalFor('balance') | auraMoney:'1.0-0' }}</strong>
           </article>
           <article>
             <span>Taxes</span>
-            <strong>{{ totalFor('taxes') | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ totalFor('taxes') | auraMoney:'1.0-0' }}</strong>
           </article>
           <article>
             <span>Expenses</span>
-            <strong>{{ totalFor('expenses') | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ totalFor('expenses') | auraMoney:'1.0-0' }}</strong>
           </article>
           <article>
             <span>Net Cashflow</span>
-            <strong>{{ netCashflow() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ netCashflow() | auraMoney:'1.0-0' }}</strong>
           </article>
         </div>
 
@@ -453,7 +454,7 @@ type WalletLedgerRow = ApiRecord & {
             <article>
               <span>Pending risk</span>
               <strong>{{ pendingRiskLabel() }}</strong>
-              <small>{{ totalFor('balance') | currency: 'INR':'symbol':'1.0-0' }} balance</small>
+              <small>{{ totalFor('balance') | auraMoney:'1.0-0' }} balance</small>
             </article>
           </div>
         </section>
@@ -546,17 +547,17 @@ type WalletLedgerRow = ApiRecord & {
 
           <div class="daily-sheet-kpis">
             <article><span>Total bills</span><strong>{{ dailySheetSummary().totalBills }}</strong></article>
-            <article><span>Bill average</span><strong>{{ dailySheetSummary().billAverage | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Gross sale</span><strong>{{ dailySheetSummary().grossSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Net sale</span><strong>{{ dailySheetSummary().netSale | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Total received</span><strong>{{ dailySheetSummary().totalReceived | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Pending / unpaid</span><strong>{{ dailySheetSummary().pendingUnpaid | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Discount</span><strong>{{ dailySheetSummary().discount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Coupon discount</span><strong>{{ dailySheetSummary().couponDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Membership discount</span><strong>{{ dailySheetSummary().membershipDiscount | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>GST / tax</span><strong>{{ dailySheetSummary().gstTax | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Expenses</span><strong>{{ dailySheetSummary().expenses | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Staff tips</span><strong>{{ dailySheetSummary().staffTips | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Bill average</span><strong>{{ dailySheetSummary().billAverage | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Gross sale</span><strong>{{ dailySheetSummary().grossSale | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Net sale</span><strong>{{ dailySheetSummary().netSale | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Total received</span><strong>{{ dailySheetSummary().totalReceived | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Pending / unpaid</span><strong>{{ dailySheetSummary().pendingUnpaid | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Discount</span><strong>{{ dailySheetSummary().discount | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Coupon discount</span><strong>{{ dailySheetSummary().couponDiscount | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Membership discount</span><strong>{{ dailySheetSummary().membershipDiscount | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>GST / tax</span><strong>{{ dailySheetSummary().gstTax | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Expenses</span><strong>{{ dailySheetSummary().expenses | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Staff tips</span><strong>{{ dailySheetSummary().staffTips | auraMoney:'1.0-0' }}</strong></article>
           </div>
 
           <div class="daily-sheet-grid">
@@ -643,11 +644,11 @@ type WalletLedgerRow = ApiRecord & {
           </div>
 
           <div class="daily-sheet-kpis">
-            <article><span>Best revenue day</span><strong>{{ dailyRevenueKpis()['bestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['bestRevenueValue'] | currency: 'INR':'symbol':'1.0-0' }}</small></article>
-            <article><span>Lowest revenue day</span><strong>{{ dailyRevenueKpis()['lowestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['lowestRevenueValue'] | currency: 'INR':'symbol':'1.0-0' }}</small></article>
-            <article><span>Average daily sale</span><strong>{{ dailyRevenueKpis()['averageDailySale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Best revenue day</span><strong>{{ dailyRevenueKpis()['bestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['bestRevenueValue'] | auraMoney:'1.0-0' }}</small></article>
+            <article><span>Lowest revenue day</span><strong>{{ dailyRevenueKpis()['lowestRevenueDay'] }}</strong><small>{{ dailyRevenueKpis()['lowestRevenueValue'] | auraMoney:'1.0-0' }}</small></article>
+            <article><span>Average daily sale</span><strong>{{ dailyRevenueKpis()['averageDailySale'] | auraMoney:'1.0-0' }}</strong></article>
             <article><span>Growth vs previous period</span><strong>{{ dailyRevenueKpis()['growthRate'] | number:'1.1-1' }}%</strong><small>{{ dailyRevenueKpis()['growthLabel'] }}</small></article>
-            <article><span>Pending due trend</span><strong>{{ dailyRevenueKpis()['pendingDueTrend'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ dailyRevenueKpis()['pendingDueLabel'] }}</small></article>
+            <article><span>Pending due trend</span><strong>{{ dailyRevenueKpis()['pendingDueTrend'] | auraMoney:'1.0-0' }}</strong><small>{{ dailyRevenueKpis()['pendingDueLabel'] }}</small></article>
             <article><span>Discount leakage %</span><strong>{{ dailyRevenueKpis()['discountLeakageRate'] | number:'1.1-1' }}%</strong></article>
             <article><span>Collection rate %</span><strong>{{ dailyRevenueKpis()['collectionRate'] | number:'1.1-1' }}%</strong></article>
           </div>
@@ -706,7 +707,7 @@ type WalletLedgerRow = ApiRecord & {
               <div class="aging-chart">
                 <article *ngFor="let bucket of pendingDueAgingChart()">
                   <span>{{ bucket['label'] }}</span>
-                  <strong>{{ bucket['amount'] | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong>{{ bucket['amount'] | auraMoney:'1.0-0' }}</strong>
                   <small>{{ bucket['count'] }} invoice(s)</small>
                 </article>
               </div>
@@ -844,10 +845,10 @@ type WalletLedgerRow = ApiRecord & {
           <div class="daily-sheet-kpis">
             <article><span>Member clients count</span><strong>{{ memberSalesSummary()['memberClients'] }}</strong><small>{{ memberSalesSummary()['memberVisits'] }} visits</small></article>
             <article><span>Non-member clients count</span><strong>{{ memberSalesSummary()['nonMemberClients'] }}</strong><small>{{ memberSalesSummary()['nonMemberVisits'] }} visits</small></article>
-            <article><span>Member revenue</span><strong>{{ memberSalesSummary()['memberRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ memberSalesSummary()['memberRevenueShare'] | number:'1.1-1' }}% share</small></article>
-            <article><span>Non-member revenue</span><strong>{{ memberSalesSummary()['nonMemberRevenue'] | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ memberSalesSummary()['nonMemberRevenueShare'] | number:'1.1-1' }}% share</small></article>
-            <article><span>Paid amount</span><strong>{{ memberSalesSummary()['paidAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Pending amount</span><strong>{{ memberSalesSummary()['pendingAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Member revenue</span><strong>{{ memberSalesSummary()['memberRevenue'] | auraMoney:'1.0-0' }}</strong><small>{{ memberSalesSummary()['memberRevenueShare'] | number:'1.1-1' }}% share</small></article>
+            <article><span>Non-member revenue</span><strong>{{ memberSalesSummary()['nonMemberRevenue'] | auraMoney:'1.0-0' }}</strong><small>{{ memberSalesSummary()['nonMemberRevenueShare'] | number:'1.1-1' }}% share</small></article>
+            <article><span>Paid amount</span><strong>{{ memberSalesSummary()['paidAmount'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Pending amount</span><strong>{{ memberSalesSummary()['pendingAmount'] | auraMoney:'1.0-0' }}</strong></article>
             <article><span>Collection rate %</span><strong>{{ memberSalesSummary()['collectionRate'] | number:'1.1-1' }}%</strong></article>
           </div>
 
@@ -996,16 +997,16 @@ type WalletLedgerRow = ApiRecord & {
 
           <div class="daily-sheet-kpis sales-tax-kpis">
             <article><span>Total bills</span><strong>{{ salesTaxSummary()['totalBills'] }}</strong></article>
-            <article><span>Gross sale</span><strong>{{ salesTaxSummary()['grossSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Net sale</span><strong>{{ salesTaxSummary()['netSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Taxable amount</span><strong>{{ salesTaxSummary()['taxableAmount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Total GST</span><strong>{{ salesTaxSummary()['totalGst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>CGST</span><strong>{{ salesTaxSummary()['cgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>SGST</span><strong>{{ salesTaxSummary()['sgst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>IGST</span><strong>{{ salesTaxSummary()['igst'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Coupon discount</span><strong>{{ salesTaxSummary()['couponDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Membership discount</span><strong>{{ salesTaxSummary()['membershipDiscount'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-            <article><span>Tax-exempt sale</span><strong>{{ salesTaxSummary()['taxExemptSale'] | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+            <article><span>Gross sale</span><strong>{{ salesTaxSummary()['grossSale'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Net sale</span><strong>{{ salesTaxSummary()['netSale'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Taxable amount</span><strong>{{ salesTaxSummary()['taxableAmount'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Total GST</span><strong>{{ salesTaxSummary()['totalGst'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>CGST</span><strong>{{ salesTaxSummary()['cgst'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>SGST</span><strong>{{ salesTaxSummary()['sgst'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>IGST</span><strong>{{ salesTaxSummary()['igst'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Coupon discount</span><strong>{{ salesTaxSummary()['couponDiscount'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Membership discount</span><strong>{{ salesTaxSummary()['membershipDiscount'] | auraMoney:'1.0-0' }}</strong></article>
+            <article><span>Tax-exempt sale</span><strong>{{ salesTaxSummary()['taxExemptSale'] | auraMoney:'1.0-0' }}</strong></article>
             <article><span>GST mismatch count</span><strong>{{ salesTaxSummary()['gstMismatchCount'] }}</strong></article>
           </div>
 

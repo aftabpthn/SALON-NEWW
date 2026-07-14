@@ -1,8 +1,10 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiRecord, ApiService } from '../core/api.service';
+import { ApiRecord } from '../core/api.service';
+import { GeneralSettingsService } from '../core/general-settings.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type GeneralSettingsState = {
   workspace: {
@@ -52,11 +54,11 @@ const DEFAULT_SETTINGS: GeneralSettingsState = {
     fastPosEnabled: true
   },
   localization: {
-    country: 'United States',
+    country: 'India',
     language: 'English',
     timezone: 'Asia/Kolkata',
-    currency: 'USD',
-    locale: 'en-US'
+    currency: 'INR',
+    locale: 'en-IN'
   },
   branchBehavior: {
     rememberLastBranch: true,
@@ -64,10 +66,10 @@ const DEFAULT_SETTINGS: GeneralSettingsState = {
     allowBranchSwitch: true
   },
   dateTime: {
-    dateFormat: 'MM/DD/YYYY',
+    dateFormat: 'DD/MM/YYYY',
     timeFormat: '12h',
     businessDayStartHour: 0,
-    weekStartsOn: 'Sunday'
+    weekStartsOn: 'Monday'
   },
   interface: {
     compactMode: false,
@@ -118,7 +120,7 @@ function stringValue(value: unknown, fallback: string): string {
 @Component({
   selector: 'app-general-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink],
   template: `
     <section class="general-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
@@ -162,12 +164,12 @@ function stringValue(value: unknown, fallback: string): string {
 
         <p class="state success" *ngIf="message()">{{ message() }}</p>
         <p class="state danger" *ngIf="error()">{{ error() }}</p>
-        <p class="phase-note">Next phase will connect dashboard landing, branch selector, app shell, reports and default notification behavior to this saved policy.</p>
+        <p class="phase-note">This policy is active across landing, branch selection, app shell, reports, notifications and staff guidance.</p>
 
         <section class="audit-strip">
           <strong>Audit info</strong>
           <span>Last changed by: {{ audit.lastChangedBy || 'Not saved yet' }}</span>
-          <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
+          <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | auraDate:'date') : 'Not saved yet' }}</span>
         </section>
 
         <section class="settings-grid inner-form-grid">
@@ -465,7 +467,7 @@ export class GeneralSettingsComponent implements OnInit {
   message = signal('');
   error = signal('');
 
-  constructor(private readonly api: ApiService) {}
+  constructor(private readonly generalSettings: GeneralSettingsService) {}
 
   ngOnInit(): void {
     this.load();
@@ -474,7 +476,7 @@ export class GeneralSettingsComponent implements OnInit {
   load(): void {
     this.error.set('');
     this.message.set('');
-    this.api.list<{ settings?: ApiRecord; audit?: ApiRecord }>('settings/general').subscribe({
+    this.generalSettings.load(true).subscribe({
       next: (res) => {
         this.settings = this.normalize(res.settings || {});
         this.audit = this.normalizeAudit(res.audit || {});
@@ -495,7 +497,7 @@ export class GeneralSettingsComponent implements OnInit {
     this.error.set('');
     this.message.set('');
     const settings = this.normalize(this.settings);
-    this.api.put<{ settings?: ApiRecord; audit?: ApiRecord }>('settings/general', { settings }).subscribe({
+    this.generalSettings.save(settings).subscribe({
       next: (res) => {
         this.settings = this.normalize(res.settings || settings);
         this.audit = this.normalizeAudit(res.audit || {});

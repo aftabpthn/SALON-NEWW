@@ -1,17 +1,19 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
 
 @Component({
   selector: 'app-inventory-scanner',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack inventory-enterprise-page scanner-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -105,8 +107,8 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
                 <td>{{ branchName(product.branchId) }}</td>
                 <td>{{ product.stock || 0 }}</td>
                 <td>{{ product.lowStockThreshold || 0 }}</td>
-                <td>{{ (product.price || 0) | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ (product.unitCost || 0) | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ (product.price || 0) | auraMoney:'1.0-0' }}</td>
+                <td>{{ (product.unitCost || 0) | auraMoney:'1.0-0' }}</td>
                 <td><span class="scanner-chip">{{ currentWorkflowLabel() }}</span></td>
               </tr>
               <tr *ngIf="!matchedProduct()"><td colspan="9" class="empty-cell">Scan a product to start. Matched stock, price, cost, reorder level and branch will appear here.</td></tr>
@@ -119,7 +121,7 @@ type ScannerAction = 'lookup' | 'receive' | 'count' | 'waste' | 'transfer';
             <thead><tr><th>Time</th><th>Code</th><th>Workflow</th><th>Product</th><th>Status</th><th>Result</th></tr></thead>
             <tbody>
               <tr *ngFor="let row of scans()">
-                <td>{{ row.createdAt | date:'shortTime' }}</td>
+                <td>{{ row.createdAt | auraDate:'time' }}</td>
                 <td><strong>{{ row.code }}</strong></td>
                 <td>{{ row.scanType }}</td>
                 <td>{{ row.productName || row.matchedProductId || '-' }}</td>

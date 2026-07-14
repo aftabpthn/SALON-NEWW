@@ -1,13 +1,14 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-staff',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <section class="panel report-section inner-page-card">
@@ -32,9 +33,9 @@ import { Subscription } from 'rxjs';
               <tr *ngFor="let s of leaderboard()">
                 <td><strong>{{ s.name }}</strong></td>
                 <td>{{ s.bookings }}</td>
-                <td>{{ s.revenue | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ s.productSales | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ s.commission | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ s.revenue | auraMoney:'1.0-0' }}</td>
+                <td>{{ s.productSales | auraMoney:'1.0-0' }}</td>
+                <td>{{ s.commission | auraMoney:'1.0-0' }}</td>
                 <td><span class="util-bar"><span class="util-fill" [style.width.%]="s.utilization"></span></span> {{ s.utilization }}%</td>
                 <td>{{ s.rating }} ⭐</td>
                 <td><span class="badge" [class.badge-red]="s.noShowImpact>5">{{ s.noShowImpact }}</span></td>

@@ -4,6 +4,7 @@ import { repositories } from "../repositories/repository-registry.js";
 import { authService } from "./auth.service.js";
 import { badRequest, unauthorized } from "../utils/app-error.js";
 import { coseToJwk, decodeCbor, parseAuthData } from "../utils/webauthn-cbor.js";
+import { securityEphemeralGrantStore } from "../stores/security-ephemeral-grant.store.js";
 
 /**
  * WebAuthn / Passkeys (ADD-ONLY). Phishing-resistant login on top of TOTP.
@@ -26,17 +27,53 @@ function expectedOrigins() {
   return env.allowedOrigins;
 }
 
-function challengeToken(payload) {
-  return authService.signJwt({ typ: "webauthn_challenge", ...payload, challenge: randomBytes(32).toString("base64url") }, CHALLENGE_TTL);
-}
-function verifyChallenge(token, expectedType) {
-  const p = authService.verifyJwt(token);
-  if (p.typ !== "webauthn_challenge" || p.ceremony !== expectedType) throw unauthorized("Invalid WebAuthn challenge");
-  return p;
-}
-
 export class WebauthnService {
+  constructor({ grantStore = securityEphemeralGrantStore } = {}) {
+    this.grantStore = grantStore;
+  }
+
   scope(access) { return { tenantId: access.tenantId }; }
+
+  issueChallenge(ceremony, bindings, extra = {}) {
+    const challenge = randomBytes(32).toString("base64url");
+    const sessionNonce = randomBytes(32).toString("base64url");
+    const token = authService.signJwt({
+      typ: "webauthn_challenge",
+      ceremony,
+      challenge,
+      sessionNonce,
+      ...bindings,
+      ...extra
+    }, CHALLENGE_TTL);
+    this.grantStore.issue({
+      proof: token,
+      ttlSeconds: CHALLENGE_TTL,
+      type: "webauthn",
+      purpose: ceremony,
+      ...bindings,
+      sessionId: ceremony === "auth" ? sessionNonce : bindings.sessionId,
+      payload: {}
+    });
+    return { token, challenge, sessionNonce };
+  }
+
+  consumeChallenge(token, expectedCeremony, bindings) {
+    const challenge = authService.verifyJwt(token);
+    if (challenge.typ !== "webauthn_challenge" || challenge.ceremony !== expectedCeremony) throw unauthorized("Invalid WebAuthn challenge");
+    const grant = this.grantStore.consume({
+      proof: token,
+      type: "webauthn",
+      purpose: expectedCeremony,
+      subjectId: bindings.subjectId,
+      userId: bindings.userId,
+      staffId: bindings.staffId,
+      tenantId: bindings.tenantId,
+      branchId: bindings.branchId,
+      sessionId: bindings.sessionId
+    });
+    if (!grant) throw unauthorized("WebAuthn challenge is expired or already used");
+    return challenge;
+  }
 
   listCredentials(access) {
     return repositories.encryptedSecrets
@@ -46,17 +83,18 @@ export class WebauthnService {
   }
 
   beginRegistration(access, { label = "Passkey" } = {}) {
-    const token = challengeToken({ ceremony: "register", sub: access.userId, tenantId: access.tenantId, label });
-    const decoded = authService.verifyJwt(token);
+    if (!access.jti) throw unauthorized("WebAuthn registration requires an authenticated session");
+    const bindings = { subjectId: access.userId, userId: access.userId, staffId: access.staffId || "", tenantId: access.tenantId, branchId: access.branchId || "", sessionId: access.jti };
+    const issued = this.issueChallenge("register", bindings, { sub: access.userId, label });
     return {
-      challengeToken: token,
+      challengeToken: issued.token,
       publicKey: {
         rp: { name: "Aura Salon CRM", id: rpId() },
         user: { id: Buffer.from(access.userId).toString("base64url"), name: access.loginId || access.userId, displayName: access.loginId || access.userId },
-        challenge: decoded.challenge,
+        challenge: issued.challenge,
         pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
         timeout: CHALLENGE_TTL * 1000,
-        authenticatorSelection: { userVerification: "preferred" },
+        authenticatorSelection: { userVerification: access.staffId ? "required" : "preferred" },
         attestation: "none"
       }
     };
@@ -64,7 +102,8 @@ export class WebauthnService {
 
   finishRegistration(access, { challengeToken: token, id, rawId, response } = {}) {
     if (!token || !response?.clientDataJSON || !response?.attestationObject) throw badRequest("Missing registration response");
-    const challenge = verifyChallenge(token, "register");
+    const challenge = authService.verifyJwt(token);
+    if (challenge.typ !== "webauthn_challenge" || challenge.ceremony !== "register") throw unauthorized("Invalid WebAuthn challenge");
     if (challenge.sub !== access.userId) throw unauthorized("Challenge does not belong to this user");
 
     const clientData = JSON.parse(Buffer.from(response.clientDataJSON, "base64url").toString("utf8"));
@@ -77,6 +116,15 @@ export class WebauthnService {
     if (!authData.credentialPublicKey) throw badRequest("No credential public key");
     const { jwk, alg } = coseToJwk(authData.credentialPublicKey);
     const credentialId = id || rawId || Buffer.from(authData.credentialId).toString("base64url");
+
+    this.consumeChallenge(token, "register", {
+      subjectId: access.userId,
+      userId: access.userId,
+      staffId: access.staffId || "",
+      tenantId: access.tenantId,
+      branchId: access.branchId || "",
+      sessionId: access.jti || ""
+    });
 
     repositories.encryptedSecrets.create({
       id: makeId("wacred"),
@@ -91,19 +139,21 @@ export class WebauthnService {
   }
 
   beginAuthentication({ tenantId, userId }) {
+    const user = repositories.tenantUsers.getById(userId, { tenantId });
+    if (!user || user.status !== "active") throw unauthorized("Account is no longer active");
     const creds = repositories.encryptedSecrets
       .list({ limit: 100000 }, { tenantId })
       .filter((r) => r.purpose === PURPOSE && r.metadata?.userId === userId);
     if (!creds.length) throw badRequest("No passkeys registered");
-    const token = challengeToken({ ceremony: "auth", sub: userId, tenantId });
-    const decoded = authService.verifyJwt(token);
+    const bindings = { subjectId: userId, userId, staffId: user.staffId || "", tenantId, branchId: "", sessionId: "" };
+    const issued = this.issueChallenge("auth", bindings, { sub: userId });
     return {
-      challengeToken: token,
+      challengeToken: issued.token,
       publicKey: {
-        challenge: decoded.challenge,
+        challenge: issued.challenge,
         rpId: rpId(),
         timeout: CHALLENGE_TTL * 1000,
-        userVerification: "preferred",
+        userVerification: user.staffId ? "required" : "preferred",
         allowCredentials: creds.map((c) => ({ type: "public-key", id: c.metadata.credentialId }))
       }
     };
@@ -111,7 +161,8 @@ export class WebauthnService {
 
   finishAuthentication({ challengeToken: token, id, response } = {}) {
     if (!token || !response?.clientDataJSON || !response?.authenticatorData || !response?.signature) throw badRequest("Missing assertion response");
-    const challenge = verifyChallenge(token, "auth");
+    const challenge = authService.verifyJwt(token);
+    if (challenge.typ !== "webauthn_challenge" || challenge.ceremony !== "auth") throw unauthorized("Invalid WebAuthn challenge");
 
     const clientData = JSON.parse(Buffer.from(response.clientDataJSON, "base64url").toString("utf8"));
     if (clientData.type !== "webauthn.get") throw badRequest("Unexpected ceremony type");
@@ -128,6 +179,9 @@ export class WebauthnService {
     const expectedRpIdHash = createHash("sha256").update(rpId()).digest();
     if (!parsed.rpIdHash.equals(expectedRpIdHash)) throw unauthorized("RP ID hash mismatch");
     if (!parsed.userPresent) throw unauthorized("User presence flag not set");
+    const user = repositories.tenantUsers.getById(challenge.sub, { tenantId: challenge.tenantId });
+    if (!user || user.status !== "active") throw unauthorized("Account is no longer active");
+    if (user.staffId && !parsed.userVerified) throw unauthorized("Staff passkey requires user verification");
 
     const clientDataHash = createHash("sha256").update(Buffer.from(response.clientDataJSON, "base64url")).digest();
     const signedData = Buffer.concat([authData, clientDataHash]);
@@ -147,6 +201,14 @@ export class WebauthnService {
     if (parsed.signCount !== 0 && parsed.signCount <= (record.metadata.signCount || 0)) {
       throw unauthorized("Possible cloned authenticator (sign count regression)");
     }
+    this.consumeChallenge(token, "auth", {
+      subjectId: challenge.subjectId,
+      userId: challenge.userId,
+      staffId: challenge.staffId,
+      tenantId: challenge.tenantId,
+      branchId: challenge.branchId,
+      sessionId: challenge.sessionNonce
+    });
     repositories.encryptedSecrets.update(record.id, {
       metadata: { ...record.metadata, signCount: parsed.signCount, lastUsedAt: now() }
     }, { tenantId: challenge.tenantId });

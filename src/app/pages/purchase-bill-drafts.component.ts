@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
@@ -6,6 +6,8 @@ import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type UploadFile = {
   name: string;
@@ -16,7 +18,7 @@ type UploadFile = {
 @Component({
   selector: 'app-purchase-bill-drafts',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack bill-drafts-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -39,7 +41,7 @@ type UploadFile = {
         <article class="metric-card teal"><span>Drafts</span><strong>{{ draftCounts().draft }}</strong></article>
         <article class="metric-card amber"><span>Open lines</span><strong>{{ draftCounts().openLines }}</strong></article>
         <article class="metric-card blue"><span>Confirm-ready</span><strong>{{ draftCounts().confirmReady }}</strong></article>
-        <article class="metric-card red"><span>Review value</span><strong>{{ draftCounts().draftValue | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card red"><span>Review value</span><strong>{{ draftCounts().draftValue | auraMoney:'1.0-0' }}</strong></article>
         <article class="metric-card violet"><span>New products</span><strong>{{ draftCounts().newProducts }}</strong></article>
         <article class="metric-card dark"><span>Confirmed</span><strong>{{ draftCounts().confirmed }}</strong></article>
       </section>
@@ -112,10 +114,10 @@ type UploadFile = {
             <button type="button" *ngFor="let draft of drafts()" (click)="openDraft(draft.id)" [class.active]="activeDraft()?.id === draft.id">
               <span>
                 <strong>{{ draft.billNo || 'No bill no' }}</strong>
-                <small>{{ draft.supplierName || 'Supplier pending' }} · {{ draft.createdAt | date:'short' }}</small>
+                <small>{{ draft.supplierName || 'Supplier pending' }} · {{ draft.createdAt | auraDate:'date' }}</small>
               </span>
               <span class="right">
-                <strong>{{ draft.totalAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ draft.totalAmount | auraMoney:'1.0-0' }}</strong>
                 <small>{{ draft.status }} · {{ draft.itemCount || 0 }} lines</small>
               </span>
             </button>
@@ -129,7 +131,7 @@ type UploadFile = {
           <article class="command-card primary">
             <span>Selected draft</span>
             <strong>{{ draft.billNo || 'No bill no' }}</strong>
-            <small>{{ draft.supplierName || 'Supplier pending' }} · {{ draft.totalAmount | currency: 'INR':'symbol':'1.0-0' }}</small>
+            <small>{{ draft.supplierName || 'Supplier pending' }} · {{ draft.totalAmount | auraMoney:'1.0-0' }}</small>
           </article>
           <article class="command-card">
             <span>Review gates</span>
@@ -294,7 +296,7 @@ type UploadFile = {
                   </td>
                   <td>
                     <input class="cell-input" type="number" [ngModel]="item.unitCost" (ngModelChange)="item.unitCost = numberValue($event); recalcItem(item)" [disabled]="draft.status !== 'draft'" />
-                    <strong>{{ item.taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                    <strong>{{ item.taxableAmount | auraMoney:'1.0-0' }}</strong>
                   </td>
                   <td>
                     <input class="cell-input" type="number" [ngModel]="item.gstPercent" (ngModelChange)="item.gstPercent = numberValue($event); recalcItem(item)" [disabled]="draft.status !== 'draft'" />
@@ -302,7 +304,7 @@ type UploadFile = {
                       <input type="number" title="CGST" [ngModel]="item.cgstAmount" (ngModelChange)="item.cgstAmount = numberValue($event)" [disabled]="draft.status !== 'draft'" />
                       <input type="number" title="SGST" [ngModel]="item.sgstAmount" (ngModelChange)="item.sgstAmount = numberValue($event)" [disabled]="draft.status !== 'draft'" />
                     </div>
-                    <strong>{{ item.lineTotal | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                    <strong>{{ item.lineTotal | auraMoney:'1.0-0' }}</strong>
                   </td>
                   <td>
                     <input class="cell-input" [ngModel]="item.batchNumber" (ngModelChange)="item.batchNumber = $event" [disabled]="draft.status !== 'draft'" />

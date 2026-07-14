@@ -101,6 +101,7 @@ export function authenticateJwt({ required = true } = {}) {
         branchId: requestedBranchId || payload.branchId || "",
         branchIds: payload.branchIds || [],
         permissions: payload.permissions || [],
+        permissionVersion: Number(payload.permissionVersion || 1),
         requestedBranchId,
         deviceId: payload.deviceId || "",
         jti: payload.jti || "",

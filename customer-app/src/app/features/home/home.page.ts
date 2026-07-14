@@ -4,6 +4,7 @@ import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
+import { environment } from "../../../environments/environment";
 import {
   calendarOutline,
   cameraOutline,
@@ -62,7 +63,7 @@ interface ConsultationChatMessage {
           </div>
           <div class="toolbar-actions">
             @if (!mobileHome()) {
-              <ion-button fill="clear" shape="round" class="staff-toolbar-button" routerLink="/staff/login">Staff?</ion-button>
+              <ion-button fill="clear" shape="round" class="staff-toolbar-button" [href]="staffAppUrl">Staff?</ion-button>
             }
             <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
               <ion-icon name="notifications-outline"></ion-icon>
@@ -1623,6 +1624,7 @@ interface ConsultationChatMessage {
   `]
 })
 export class HomePage implements OnInit {
+  readonly staffAppUrl = environment.staffAppUrl;
   readonly query = signal("");
   readonly activeQuery = signal("");
   readonly categoryFilter = signal("");

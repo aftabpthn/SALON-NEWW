@@ -1,7 +1,9 @@
-const baseUrl = process.env.STAFF_APP_URL || "http://127.0.0.1:4310";
+const baseUrl = process.env.STAFF_APP_URL || "http://127.0.0.1:4320";
 const routes = [
   "/staff/dashboard",
   "/staff/appointments",
+  "/staff/business",
+  "/staff/queue",
   "/staff/tasks",
   "/staff/calendar",
   "/staff/chat",

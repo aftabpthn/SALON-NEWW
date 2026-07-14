@@ -1,14 +1,15 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-profit-intelligence',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="profit-workspace">
       <section class="page-title">
@@ -27,28 +28,28 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="metrics-grid" *ngIf="summary()?.metrics as metrics">
         <article>
           <span>Revenue</span>
-          <strong>{{ paise(metrics.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(metrics.revenuePaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article>
           <span>Product Cost</span>
-          <strong>{{ paise(metrics.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(metrics.productCostPaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article>
           <span>Gross Profit</span>
-          <strong>{{ paise(metrics.grossProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(metrics.grossProfitPaise) | auraMoney:'1.0-0' }}</strong>
           <small>{{ percent(metrics.grossMarginBps) }} gross margin</small>
         </article>
         <article>
           <span>Staff Cost</span>
-          <strong>{{ paise(metrics.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(metrics.staffCostPaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article>
           <span>Operating Expenses</span>
-          <strong>{{ paise(metrics.operatingExpensePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(metrics.operatingExpensePaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article class="net-card">
           <span>Net Profit</span>
-          <strong>{{ paise(metrics.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(metrics.netProfitPaise) | auraMoney:'1.0-0' }}</strong>
           <small>{{ percent(metrics.netMarginBps) }} net margin</small>
         </article>
       </section>
@@ -56,15 +57,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <section class="ceo-grid" *ngIf="summary()?.ceoKpis as kpis">
         <article>
           <span>Today's Revenue</span>
-          <strong>{{ paise(kpis.todayRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(kpis.todayRevenuePaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article>
           <span>Today's Profit</span>
-          <strong>{{ paise(kpis.todayProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(kpis.todayProfitPaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article>
           <span>This Month Profit</span>
-          <strong>{{ paise(kpis.monthProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(kpis.monthProfitPaise) | auraMoney:'1.0-0' }}</strong>
         </article>
         <article>
           <span>Gross / Net Margin</span>
@@ -73,41 +74,41 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <article>
           <span>Top Service</span>
           <strong>{{ kpis.topService?.label }}</strong>
-          <small>{{ paise(kpis.topService?.amountPaise) | currency: 'INR':'symbol':'1.0-0' }} profit</small>
+          <small>{{ paise(kpis.topService?.amountPaise) | auraMoney:'1.0-0' }} profit</small>
         </article>
         <article>
           <span>Top Staff</span>
           <strong>{{ kpis.topStaff?.label }}</strong>
-          <small>{{ paise(kpis.topStaff?.amountPaise) | currency: 'INR':'symbol':'1.0-0' }} profit</small>
+          <small>{{ paise(kpis.topStaff?.amountPaise) | auraMoney:'1.0-0' }} profit</small>
         </article>
         <article>
           <span>Top Branch</span>
           <strong>{{ kpis.topBranch?.label }}</strong>
-          <small>{{ paise(kpis.topBranch?.amountPaise) | currency: 'INR':'symbol':'1.0-0' }} profit</small>
+          <small>{{ paise(kpis.topBranch?.amountPaise) | auraMoney:'1.0-0' }} profit</small>
         </article>
         <article>
           <span>Top Customer</span>
           <strong>{{ kpis.topCustomer?.label }}</strong>
-          <small>{{ paise(kpis.topCustomer?.amountPaise) | currency: 'INR':'symbol':'1.0-0' }} profit</small>
+          <small>{{ paise(kpis.topCustomer?.amountPaise) | auraMoney:'1.0-0' }} profit</small>
         </article>
         <article>
           <span>Highest Expense</span>
           <strong>{{ kpis.highestExpense?.label }}</strong>
-          <small>{{ paise(kpis.highestExpense?.amountPaise) | currency: 'INR':'symbol':'1.0-0' }}</small>
+          <small>{{ paise(kpis.highestExpense?.amountPaise) | auraMoney:'1.0-0' }}</small>
         </article>
         <article>
           <span>Revenue / Employee</span>
-          <strong>{{ paise(kpis.revenuePerEmployeePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(kpis.revenuePerEmployeePaise) | auraMoney:'1.0-0' }}</strong>
           <small>{{ kpis.employeeCount || 0 }} active staff</small>
         </article>
         <article>
           <span>Revenue / Chair</span>
-          <strong>{{ paise(kpis.revenuePerChairPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(kpis.revenuePerChairPaise) | auraMoney:'1.0-0' }}</strong>
           <small>{{ kpis.chairCount || 0 }} active chairs</small>
         </article>
         <article>
           <span>Revenue / Hour</span>
-          <strong>{{ paise(kpis.revenuePerHourPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ paise(kpis.revenuePerHourPaise) | auraMoney:'1.0-0' }}</strong>
           <small>{{ kpis.businessHours || 0 }} business hours</small>
         </article>
       </section>
@@ -139,11 +140,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span>{{ percent(twin.netMarginBps) }} net margin</span>
           </header>
           <div class="twin-metrics">
-            <div><span>Base Revenue</span><strong>{{ paise(twin.baseRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Sim Revenue</span><strong>{{ paise(twin.simulatedRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Base Profit</span><strong>{{ paise(twin.baseNetProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Sim Profit</span><strong>{{ paise(twin.simulatedNetProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div class="delta"><span>Profit Delta</span><strong>{{ paise(twin.profitDeltaPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Base Revenue</span><strong>{{ paise(twin.baseRevenuePaise) | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Sim Revenue</span><strong>{{ paise(twin.simulatedRevenuePaise) | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Base Profit</span><strong>{{ paise(twin.baseNetProfitPaise) | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Sim Profit</span><strong>{{ paise(twin.simulatedNetProfitPaise) | auraMoney:'1.0-0' }}</strong></div>
+            <div class="delta"><span>Profit Delta</span><strong>{{ paise(twin.profitDeltaPaise) | auraMoney:'1.0-0' }}</strong></div>
             <div><span>Gross Margin</span><strong>{{ percent(twin.grossMarginBps) }}</strong></div>
           </div>
         </article>
@@ -157,11 +158,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="rank-list">
             <div>
               <span>Expected profit</span>
-              <strong>{{ paise(twin.recommendedScenario?.simulatedNetProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(twin.recommendedScenario?.simulatedNetProfitPaise) | auraMoney:'1.0-0' }}</strong>
             </div>
             <div>
               <span>Profit lift</span>
-              <strong>{{ paise(twin.recommendedScenario?.profitDeltaPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(twin.recommendedScenario?.profitDeltaPaise) | auraMoney:'1.0-0' }}</strong>
             </div>
           </div>
         </article>
@@ -182,9 +183,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <tr *ngFor="let row of booking.recommendations || []">
                   <td><strong>{{ row.serviceName }}</strong><span>{{ row.restrictionReason || 'Prime slot candidate' }}</span></td>
                   <td>{{ slotLabel(row.slot) }}</td>
-                  <td>{{ paise(row.expectedRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.expectedCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.expectedProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.expectedRevenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.expectedCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.expectedProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ percent(row.marginBps) }}</td>
                   <td>{{ row.peakScore || 0 }}</td>
                   <td><span>{{ row.recommendation }}</span><strong *ngIf="row.suggestedPriceUpliftBps">+{{ percent(row.suggestedPriceUpliftBps) }} peak uplift</strong></td>
@@ -210,9 +211,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of pricing.recommendations || []">
                   <td><strong>{{ row.serviceName }}</strong><span>{{ row.demandVolume || 0 }} sales</span></td>
-                  <td>{{ paise(row.currentPricePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.recommendedPricePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
-                  <td>{{ paise(row.expectedProfitLiftPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.currentPricePaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.recommendedPricePaise) | auraMoney:'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.expectedProfitLiftPaise) | auraMoney:'1.0-0' }}</td>
                   <td>{{ percent(row.currentMarginBps) }}</td>
                   <td>{{ percent(row.projectedMarginBps) }}</td>
                   <td><strong>{{ row.demandRisk }}</strong></td>
@@ -243,9 +244,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td>{{ row.serviceName || row.serviceId || '-' }}</td>
                   <td>{{ row.branchId || '-' }}</td>
                   <td>{{ row.staffName || row.staffId || '-' }}</td>
-                  <td>{{ paise(row.expectedCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.actualCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.variancePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong><span>{{ percent(row.varianceBps) }}</span></td>
+                  <td>{{ paise(row.expectedCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.actualCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.variancePaise) | auraMoney:'1.0-0' }}</strong><span>{{ percent(row.varianceBps) }}</span></td>
                   <td><span>{{ row.recommendation }}</span></td>
                 </tr>
                 <tr *ngIf="!(variance.rows || []).length"><td colspan="9" class="empty-cell">No recipe variance signals yet.</td></tr>
@@ -272,7 +273,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><strong>{{ leak.type }}</strong></td>
                   <td>{{ leak.branchId || '-' }}</td>
                   <td>{{ leak.sourceId || '-' }}</td>
-                  <td><strong>{{ paise(leak.estimatedImpactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td><strong>{{ paise(leak.estimatedImpactPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td><span>{{ leak.message }}</span></td>
                   <td><span>{{ leak.recommendedAction }}</span></td>
                 </tr>
@@ -299,7 +300,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><strong class="severity-pill" [ngClass]="'severity-' + priorityClass(action.priority)">{{ action.priority }}</strong></td>
                   <td><strong>{{ action.title }}</strong><span>{{ action.message }}</span></td>
                   <td>{{ action.sourceType }}<span>{{ action.sourceId || '-' }}</span></td>
-                  <td><strong>{{ paise(action.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td><strong>{{ paise(action.impactPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ action.status }}</td>
                   <td>
                     <div class="action-buttons">
@@ -360,7 +361,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </form>
           <div class="guard-result" *ngIf="governanceDecision() as decision">
             <div><span>Status</span><strong>{{ decision.blocked ? 'Blocked' : decision.requiresApproval ? 'Approval Required' : 'Allowed' }}</strong></div>
-            <div><span>Estimated Profit</span><strong>{{ paise(decision.estimatedProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Estimated Profit</span><strong>{{ paise(decision.estimatedProfitPaise) | auraMoney:'1.0-0' }}</strong></div>
             <div><span>Margin</span><strong>{{ percent(decision.marginBps) }}</strong></div>
             <div><span>Discount</span><strong>{{ percent(decision.discountBps) }}</strong></div>
             <div><span>Rule Triggered</span><strong>{{ decision.ruleTriggered?.title || 'Within policy' }}</strong></div>
@@ -383,7 +384,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><strong>{{ row.sourceType }}</strong><span>{{ row.sourceId || '-' }}</span></td>
                   <td>{{ row.decision }}</td>
                   <td>{{ percent(row.marginBps) }} margin<span>{{ percent(row.discountBps) }} discount</span></td>
-                  <td><strong>{{ paise(row.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td><strong>{{ paise(row.impactPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td><span>{{ row.message }}</span></td>
                 </tr>
                 <tr *ngIf="!(governance.recentDecisions || []).length"><td colspan="5" class="empty-cell">No governance decisions yet.</td></tr>
@@ -419,7 +420,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span>{{ percent(decision.marginBps) }} margin</span>
           </header>
           <div class="guard-result">
-            <div><span>Estimated Profit</span><strong>{{ paise(decision.estimatedProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Estimated Profit</span><strong>{{ paise(decision.estimatedProfitPaise) | auraMoney:'1.0-0' }}</strong></div>
             <div><span>Discount</span><strong>{{ percent(decision.discountBps) }}</strong></div>
             <div><span>Rule Triggered</span><strong>{{ decision.ruleTriggered?.title || 'Within policy' }}</strong></div>
             <div><span>Recommendation</span><strong>{{ decision.recommendedAction }}</strong></div>
@@ -427,7 +428,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="rank-list suggestion-list">
             <div *ngFor="let reason of decision.reasons || []">
               <span>{{ reason.message }}</span>
-              <strong>{{ paise(reason.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(reason.impactPaise) | auraMoney:'1.0-0' }}</strong>
             </div>
           </div>
         </article>
@@ -453,7 +454,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="mini-table">
               <div *ngFor="let reason of copilot.reasons || []">
                 <span>{{ reason.label || reason.type }}</span>
-                <strong>{{ paise(reason.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ paise(reason.impactPaise) | auraMoney:'1.0-0' }}</strong>
                 <small>{{ reason.message }}</small>
               </div>
               <div *ngIf="!(copilot.reasons || []).length" class="empty-row">No major reasons detected.</div>
@@ -461,7 +462,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="rank-list suggestion-list">
               <div *ngFor="let action of copilot.recommendedActions || []">
                 <span>{{ action.title }}</span>
-                <strong>{{ paise(action.impactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ paise(action.impactPaise) | auraMoney:'1.0-0' }}</strong>
               </div>
             </div>
           </div>
@@ -475,10 +476,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <span>{{ report.period?.from }} to {{ report.period?.to }}</span>
           </header>
           <div class="board-metrics">
-            <div><span>Revenue</span><strong>{{ paise(board.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Gross Profit</span><strong>{{ paise(board.grossProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ percent(board.grossMarginBps) }}</small></div>
-            <div><span>Net Profit</span><strong>{{ paise(board.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ percent(board.marginBps) }}</small></div>
-            <div><span>Expected Recovery</span><strong>{{ paise(board.expectedRecoveryProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Revenue</span><strong>{{ paise(board.revenuePaise) | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Gross Profit</span><strong>{{ paise(board.grossProfitPaise) | auraMoney:'1.0-0' }}</strong><small>{{ percent(board.grossMarginBps) }}</small></div>
+            <div><span>Net Profit</span><strong>{{ paise(board.netProfitPaise) | auraMoney:'1.0-0' }}</strong><small>{{ percent(board.marginBps) }}</small></div>
+            <div><span>Expected Recovery</span><strong>{{ paise(board.expectedRecoveryProfitPaise) | auraMoney:'1.0-0' }}</strong></div>
           </div>
           <div class="board-lists">
             <div>
@@ -513,10 +514,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><strong>{{ row.clientName }}</strong><span>{{ row.clientId || 'walk-in' }}</span></td>
                   <td><strong>{{ row.tier }}</strong></td>
                   <td>{{ row.profitScore || 0 }}/100</td>
-                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.profitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
-                  <td>{{ paise(row.discountPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.visits || 0 }}<span>{{ paise(row.avgBillPaise) | currency: 'INR':'symbol':'1.0-0' }} avg bill</span></td>
+                  <td>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.profitPaise) | auraMoney:'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.discountPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.visits || 0 }}<span>{{ paise(row.avgBillPaise) | auraMoney:'1.0-0' }} avg bill</span></td>
                   <td><span>{{ row.recommendation }}</span></td>
                 </tr>
                 <tr *ngIf="!(report.customerProfitScore || []).length"><td colspan="8" class="empty-cell">No customer score signals yet.</td></tr>
@@ -539,11 +540,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <tr *ngFor="let row of report.membershipRisk || []">
                   <td><strong>{{ row.planName }}</strong></td>
                   <td>{{ row.kind || 'membership' }}</td>
-                  <td>{{ paise(row.soldValuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.redeemedValuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.remainingLiabilityPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.projectedCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.riskImpactPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.soldValuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.redeemedValuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.remainingLiabilityPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.projectedCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.riskImpactPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td><strong class="severity-pill" [ngClass]="'severity-' + severityClass(row.severity)">{{ row.severity }}</strong></td>
                   <td><span>{{ row.recommendation }}</span></td>
                 </tr>
@@ -566,22 +567,22 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div>
               <span>Prev period profit</span>
               <strong>{{ percent(analytics.comparisons?.previousPeriod?.profitChangeBps) }}</strong>
-              <small>{{ paise(analytics.comparisons?.previousPeriod?.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }} baseline</small>
+              <small>{{ paise(analytics.comparisons?.previousPeriod?.netProfitPaise) | auraMoney:'1.0-0' }} baseline</small>
             </div>
             <div>
               <span>YoY revenue</span>
               <strong>{{ percent(analytics.comparisons?.previousYear?.revenueChangeBps) }}</strong>
-              <small>{{ paise(analytics.comparisons?.previousYear?.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }} baseline</small>
+              <small>{{ paise(analytics.comparisons?.previousYear?.revenuePaise) | auraMoney:'1.0-0' }} baseline</small>
             </div>
             <div>
               <span>Next month forecast</span>
-              <strong>{{ paise(analytics.forecast?.nextMonthProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(analytics.forecast?.nextMonthProfitPaise) | auraMoney:'1.0-0' }}</strong>
               <small>{{ analytics.forecast?.basis }}</small>
             </div>
             <div>
               <span>Break-even</span>
               <strong>{{ analytics.breakEven?.breakEvenDays || 0 }} days</strong>
-              <small>{{ analytics.breakEven?.status }} - {{ paise(analytics.breakEven?.fixedCostPaise) | currency: 'INR':'symbol':'1.0-0' }} fixed</small>
+              <small>{{ analytics.breakEven?.status }} - {{ paise(analytics.breakEven?.fixedCostPaise) | auraMoney:'1.0-0' }} fixed</small>
             </div>
           </div>
         </article>
@@ -595,8 +596,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="mini-table">
             <div *ngFor="let row of (analytics.profitTrend || []).slice(-7)">
               <span>{{ row.date }}</span>
-              <strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-              <small>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }} revenue</small>
+              <strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong>
+              <small>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }} revenue</small>
             </div>
             <div *ngIf="!(analytics.profitTrend || []).length" class="empty-row">No trend data.</div>
           </div>
@@ -611,7 +612,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="mini-table">
             <div *ngFor="let row of analytics.revenueHeatmap || []">
               <span>{{ row.weekday }} {{ row.hour }}:00</span>
-              <strong>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</strong>
               <small>{{ row.invoiceCount || 0 }} invoices</small>
             </div>
             <div *ngIf="!(analytics.revenueHeatmap || []).length" class="empty-row">No heatmap data.</div>
@@ -646,7 +647,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="rank-list">
             <div *ngFor="let item of report.revenueBreakdown || []">
               <span>{{ item.label }}</span>
-              <strong>{{ paise(item.amountPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(item.amountPaise) | auraMoney:'1.0-0' }}</strong>
             </div>
             <div *ngIf="!(report.revenueBreakdown || []).length" class="empty-row">No revenue rows in this period.</div>
           </div>
@@ -662,7 +663,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="rank-list">
             <div *ngFor="let item of report.expenseBreakdown || []">
               <span>{{ item.category }}</span>
-              <strong>{{ paise(item.amountPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ paise(item.amountPaise) | auraMoney:'1.0-0' }}</strong>
             </div>
             <div *ngIf="!(report.expenseBreakdown || []).length" class="empty-row">No expense rows in this period.</div>
           </div>
@@ -678,8 +679,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="source-grid">
             <div><span>COGS</span><strong>{{ report.sourceHealth?.cogsSource }}</strong></div>
             <div><span>Staff cost</span><strong>{{ report.sourceHealth?.staffCostSource }}</strong></div>
-            <div><span>Collections</span><strong>{{ paise(report.metrics?.collectionsPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-            <div><span>Refunds</span><strong>{{ paise(report.metrics?.refundPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Collections</span><strong>{{ paise(report.metrics?.collectionsPaise) | auraMoney:'1.0-0' }}</strong></div>
+            <div><span>Refunds</span><strong>{{ paise(report.metrics?.refundPaise) | auraMoney:'1.0-0' }}</strong></div>
           </div>
           <div class="warnings" *ngIf="(report.diagnostics?.warnings || []).length">
             <p *ngFor="let warning of report.diagnostics?.warnings">{{ warning }}</p>
@@ -700,10 +701,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of detail.serviceProfit || []">
                   <td><strong>{{ row.serviceName }}</strong><span>{{ row.category }}</span></td>
-                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                 </tr>
                 <tr *ngIf="!(detail.serviceProfit || []).length"><td colspan="5" class="empty-cell">No service profit rows.</td></tr>
               </tbody>
@@ -723,11 +724,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of detail.staffProfit || []">
                   <td><strong>{{ row.staffName }}</strong></td>
-                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
-                  <td>{{ paise(row.avgTicketPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.avgTicketPaise) | auraMoney:'1.0-0' }}</td>
                 </tr>
                 <tr *ngIf="!(detail.staffProfit || []).length"><td colspan="6" class="empty-cell">No staff profit rows.</td></tr>
               </tbody>
@@ -747,11 +748,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of detail.branchProfit || []">
                   <td><strong>{{ row.branchName }}</strong><span>{{ row.invoiceCount }} invoices</span></td>
-                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.operatingExpensePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.operatingExpensePaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                 </tr>
                 <tr *ngIf="!(detail.branchProfit || []).length"><td colspan="6" class="empty-cell">No branch profit rows.</td></tr>
               </tbody>
@@ -771,10 +772,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of detail.categoryProfit || []">
                   <td><strong>{{ row.category }}</strong><span>{{ row.itemCount }} items</span></td>
-                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.staffCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.staffCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ percent(row.netMarginBps) }}</td>
                 </tr>
                 <tr *ngIf="!(detail.categoryProfit || []).length"><td colspan="6" class="empty-cell">No category profit rows.</td></tr>
@@ -796,13 +797,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <thead><tr><th>Customer</th><th>Revenue</th><th>Product Cost</th><th>Discounts</th><th>Profit</th><th>Visits</th><th>Avg Bill</th></tr></thead>
               <tbody>
                 <tr *ngFor="let row of detail.customerProfit || []">
-                  <td><strong>{{ row.clientName }}</strong><span>Lifetime {{ paise(row.lifetimeRevenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</span></td>
-                  <td>{{ paise(row.revenuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.discountPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td><strong>{{ row.clientName }}</strong><span>Lifetime {{ paise(row.lifetimeRevenuePaise) | auraMoney:'1.0-0' }}</span></td>
+                  <td>{{ paise(row.revenuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.discountPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ row.visits || 0 }}</td>
-                  <td>{{ paise(row.avgBillPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ paise(row.avgBillPaise) | auraMoney:'1.0-0' }}</td>
                 </tr>
                 <tr *ngIf="!(detail.customerProfit || []).length"><td colspan="7" class="empty-cell">No customer profit rows.</td></tr>
               </tbody>
@@ -822,11 +823,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of detail.membershipProfit || []">
                   <td><strong>{{ row.planName }}</strong></td>
-                  <td>{{ paise(row.soldValuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.redeemedValuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.remainingLiabilityPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.soldValuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.redeemedValuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.remainingLiabilityPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ row.soldCount || 0 }}</td>
                 </tr>
                 <tr *ngIf="!(detail.membershipProfit || []).length"><td colspan="7" class="empty-cell">No membership profit rows.</td></tr>
@@ -847,11 +848,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of detail.packageProfit || []">
                   <td><strong>{{ row.planName }}</strong></td>
-                  <td>{{ paise(row.soldValuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.redeemedValuePaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.productCostPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ paise(row.remainingLiabilityPaise) | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ paise(row.netProfitPaise) | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td>{{ paise(row.soldValuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.redeemedValuePaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.productCostPaise) | auraMoney:'1.0-0' }}</td>
+                  <td>{{ paise(row.remainingLiabilityPaise) | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ paise(row.netProfitPaise) | auraMoney:'1.0-0' }}</strong></td>
                   <td>{{ row.redeemedCount || 0 }}</td>
                 </tr>
                 <tr *ngIf="!(detail.packageProfit || []).length"><td colspan="7" class="empty-cell">No package profit rows.</td></tr>

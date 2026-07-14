@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,6 +6,8 @@ import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type DraftItem = {
   productId: string;
@@ -43,7 +45,7 @@ type ReceiveItem = {
 @Component({
   selector: 'app-purchase-orders',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack purchase-orders-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -84,7 +86,7 @@ type ReceiveItem = {
         <article class="metric-card teal"><span>AI suggestions</span><strong>{{ suggestions().length }}</strong></article>
         <article class="metric-card amber"><span>Draft PO</span><strong>{{ draftRows().length }}</strong></article>
         <article class="metric-card blue"><span>Approved / sent</span><strong>{{ approvedRows().length }}</strong></article>
-        <article class="metric-card red"><span>Projected spend</span><strong>{{ projectedSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card red"><span>Projected spend</span><strong>{{ projectedSpend() | auraMoney:'1.0-0' }}</strong></article>
       </section>
 
       <div class="po-layout" *ngIf="visiblePurchaseOrderView('entry') || visiblePurchaseOrderView('receive')">
@@ -162,8 +164,8 @@ type ReceiveItem = {
                       <input type="number" [ngModel]="item.unitCost" (ngModelChange)="updateDraftItem(index, { unitCost: toNumber($event) })" [ngModelOptions]="{standalone: true}" placeholder="Rate" />
                       <input type="number" [ngModel]="item.gstPercent" (ngModelChange)="updateDraftItem(index, { gstPercent: toNumber($event) })" [ngModelOptions]="{standalone: true}" placeholder="GST %" />
                     </td>
-                    <td><strong>{{ linePreview(item).taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
-                    <td><strong>{{ linePreview(item).lineTotal | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST {{ linePreview(item).gstAmount | currency: 'INR':'symbol':'1.0-0' }}</small></td>
+                    <td><strong>{{ linePreview(item).taxableAmount | auraMoney:'1.0-0' }}</strong></td>
+                    <td><strong>{{ linePreview(item).lineTotal | auraMoney:'1.0-0' }}</strong><small>GST {{ linePreview(item).gstAmount | auraMoney:'1.0-0' }}</small></td>
                     <td>
                       <input [ngModel]="item.batchNumber" (ngModelChange)="updateDraftItem(index, { batchNumber: $event })" [ngModelOptions]="{standalone: true}" placeholder="Batch" />
                       <input type="date" [ngModel]="item.expiryDate" (ngModelChange)="updateDraftItem(index, { expiryDate: $event })" [ngModelOptions]="{standalone: true}" />
@@ -175,11 +177,11 @@ type ReceiveItem = {
             </div>
 
             <div class="totals-grid full">
-              <span><strong>Subtotal</strong>{{ draftTotals().subtotalAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-              <span><strong>Discount</strong>{{ draftTotals().discountAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-              <span><strong>Taxable</strong>{{ draftTotals().taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-              <span><strong>GST</strong>{{ draftTotals().gstAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-              <span><strong>Total</strong>{{ draftTotals().grandTotal | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <span><strong>Subtotal</strong>{{ draftTotals().subtotalAmount | auraMoney:'1.0-0' }}</span>
+              <span><strong>Discount</strong>{{ draftTotals().discountAmount | auraMoney:'1.0-0' }}</span>
+              <span><strong>Taxable</strong>{{ draftTotals().taxableAmount | auraMoney:'1.0-0' }}</span>
+              <span><strong>GST</strong>{{ draftTotals().gstAmount | auraMoney:'1.0-0' }}</span>
+              <span><strong>Total</strong>{{ draftTotals().grandTotal | auraMoney:'1.0-0' }}</span>
             </div>
 
             <div class="form-actions full">
@@ -253,7 +255,7 @@ type ReceiveItem = {
                 <td>{{ branchName(row.branchId) }}</td>
                 <td>{{ row.predictedStockoutDate || 'watch' }}</td>
                 <td>{{ row.recommendedQty || 0 }}</td>
-                <td>{{ row.estimatedCost | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ row.estimatedCost | auraMoney:'1.0-0' }}</td>
                 <td>{{ row.reason || 'Low stock threshold reached' }}</td>
                 <td><button class="ghost-button mini" type="button" (click)="createDraftFromSuggestion(row)" [disabled]="saving()">Create draft</button></td>
               </tr>
@@ -270,12 +272,12 @@ type ReceiveItem = {
             <thead><tr><th>PO</th><th>Supplier</th><th>Branch</th><th>Items</th><th>Expected</th><th>Total</th><th>Status</th><th>Warnings</th><th>Actions</th></tr></thead>
             <tbody>
               <tr *ngFor="let row of recommendations()">
-                <td><strong>{{ row.poNumber || row.id }}</strong><small>{{ row.createdAt | date: 'short' }}</small></td>
+                <td><strong>{{ row.poNumber || row.id }}</strong><small>{{ row.createdAt | auraDate:'date' }}</small></td>
                 <td>{{ supplierName(row.supplierId) }}<small>{{ row.supplier?.gstin || 'GSTIN pending' }}</small></td>
                 <td>{{ branchName(row.branchId) }}</td>
                 <td>{{ itemCount(row) }} item(s)<small>{{ receivedSummary(row) }}</small></td>
                 <td>{{ row.expectedDeliveryDate || 'Not set' }}</td>
-                <td>{{ (row.grandTotal || row.totalEstimatedCost) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ (row.grandTotal || row.totalEstimatedCost) | auraMoney:'1.0-0' }}</td>
                 <td><span class="badge" [class.warn]="row.status === 'draft'">{{ row.status || 'draft' }}</span></td>
                 <td><span class="pill" *ngIf="warningCount(row)">{{ warningCount(row) }} alert(s)</span><span *ngIf="!warningCount(row)">clear</span></td>
                 <td class="action-cell">
@@ -309,7 +311,7 @@ type ReceiveItem = {
           <div><span>Expected delivery</span><strong>{{ po.expectedDeliveryDate || 'Not set' }}</strong><small>{{ po.deliveryTerms || 'Delivery terms pending' }}</small></div>
           <div><span>Payment terms</span><strong>{{ po.paymentTerms || 'Not set' }}</strong><small>{{ po.approvalNote || 'Approval note pending' }}</small></div>
           <div><span>GRN</span><strong>{{ po.grnNumber || 'Not received' }}</strong><small>{{ po.supplierInvoiceNo || 'Invoice pending' }}</small></div>
-          <div><span>Totals</span><strong>{{ (po.grandTotal || po.totalEstimatedCost) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>GST {{ po.gstAmount | currency: 'INR':'symbol':'1.0-0' }}</small></div>
+          <div><span>Totals</span><strong>{{ (po.grandTotal || po.totalEstimatedCost) | auraMoney:'1.0-0' }}</strong><small>GST {{ po.gstAmount | auraMoney:'1.0-0' }}</small></div>
         </div>
         <div class="warning-box" *ngIf="warningList(po).length">
           <strong>Variance and safety warnings</strong>
@@ -323,18 +325,18 @@ type ReceiveItem = {
                 <td><strong>{{ item.productName || item.productId }}</strong><small>{{ item.hsnSac || 'HSN pending' }}</small></td>
                 <td>{{ item.requestedQty || 0 }} {{ item.unit || 'pcs' }}</td>
                 <td>{{ item.receivedQty || 0 }} {{ item.unit || 'pcs' }}</td>
-                <td>{{ item.mrp | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ item.unitCost | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ item.discountPercent || 0 }}% / {{ item.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ item.gstPercent || 0 }}% / {{ item.gstAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ (item.lineTotal || item.estimatedTotal) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ item.mrp | auraMoney:'1.0-0' }}</td>
+                <td>{{ item.unitCost | auraMoney:'1.0-0' }}</td>
+                <td>{{ item.discountPercent || 0 }}% / {{ item.discountAmount | auraMoney:'1.0-0' }}</td>
+                <td>{{ item.gstPercent || 0 }}% / {{ item.gstAmount | auraMoney:'1.0-0' }}</td>
+                <td>{{ (item.lineTotal || item.estimatedTotal) | auraMoney:'1.0-0' }}</td>
                 <td>{{ item.batchNumber || '-' }}<small>{{ item.expiryDate || 'No expiry' }}</small></td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="history-strip">
-          <span *ngFor="let event of po.statusHistory || []"><strong>{{ event.status }}</strong>{{ event.at | date: 'short' }} {{ event.note }}</span>
+          <span *ngFor="let event of po.statusHistory || []"><strong>{{ event.status }}</strong>{{ event.at | auraDate:'date' }} {{ event.note }}</span>
         </div>
       </section>
 

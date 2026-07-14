@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-07-13T14:26:40.854606+00:00",
+  "nodes": {
+    "src_app_core_staff_app_service_staffappservice": {
+      "code_fingerprint": "5bc10fe14a46277560cafe9c16f1f1a5c2fbfd3323cab532fc93b7e34c09a742",
+      "label": "StaffAppService",
+      "last": "2026-07-13T13:26:57.579695+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-13T13:26:57.579695+00:00",
+          "outcome": "useful",
+          "q": "Implement enterprise overtime with historical immutability, attendance rows, staff dashboard summaries, selected-period payroll, and one calculator across all attendance channels"
+        },
+        {
+          "date": "2026-07-13T12:51:35.326036+00:00",
+          "outcome": "useful",
+          "q": "Implement enterprise overtime for attendance rows, staff dashboard, payroll-period-only usage, historical immutability, and one calculator across all attendance channels"
+        },
+        {
+          "date": "2026-07-13T12:40:05.907284+00:00",
+          "outcome": "useful",
+          "q": "staff app mein usko uske attendance ka yeh bhi aana chaiye kaunse time pe login kiya, kaunse time pe logged out kiya, and overtime ka calculation bhi hona chaiye"
+        }
+      ],
+      "score": 2.995808968,
+      "source_file": "src/app/core/staff-app.service.ts",
+      "status": "preferred",
+      "uses": 3
+    },
+    "src_app_features_staff_staff_attendance_page_staffattendancepage": {
+      "code_fingerprint": "8c726f25a1a811fad1e357f25567e52d695d8e4a10d1c8af5fecdbc692934c2d",
+      "label": "StaffAttendancePage",
+      "last": "2026-07-13T13:26:57.579695+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-13T13:26:57.579695+00:00",
+          "outcome": "useful",
+          "q": "Implement enterprise overtime with historical immutability, attendance rows, staff dashboard summaries, selected-period payroll, and one calculator across all attendance channels"
+        },
+        {
+          "date": "2026-07-13T12:51:35.326036+00:00",
+          "outcome": "useful",
+          "q": "Implement enterprise overtime for attendance rows, staff dashboard, payroll-period-only usage, historical immutability, and one calculator across all attendance channels"
+        },
+        {
+          "date": "2026-07-13T12:40:05.907284+00:00",
+          "outcome": "useful",
+          "q": "staff app mein usko uske attendance ka yeh bhi aana chaiye kaunse time pe login kiya, kaunse time pe logged out kiya, and overtime ka calculation bhi hona chaiye"
+        }
+      ],
+      "score": 2.995808968,
+      "source_file": "src/app/features/staff/staff-attendance.page.ts",
+      "status": "preferred",
+      "uses": 3
+    },
+    "src_app_features_staff_staff_dashboard_page_staffdashboardpage": {
+      "code_fingerprint": "a04d4c7c1ee6685cf080dce5f38b4426cb1d081e45308373a02f2b87f4a25a7c",
+      "label": "StaffDashboardPage",
+      "last": "2026-07-13T13:26:57.579695+00:00",
+      "provenance": [
+        {
+          "date": "2026-07-13T13:26:57.579695+00:00",
+          "outcome": "useful",
+          "q": "Implement enterprise overtime with historical immutability, attendance rows, staff dashboard summaries, selected-period payroll, and one calculator across all attendance channels"
+        },
+        {
+          "date": "2026-07-13T12:51:35.326036+00:00",
+          "outcome": "useful",
+          "q": "Implement enterprise overtime for attendance rows, staff dashboard, payroll-period-only usage, historical immutability, and one calculator across all attendance channels"
+        }
+      ],
+      "score": 1.99751763,
+      "source_file": "src/app/features/staff/staff-dashboard.page.ts",
+      "status": "preferred",
+      "uses": 2
+    }
+  },
+  "version": 1
+}

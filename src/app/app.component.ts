@@ -8,6 +8,7 @@ import { APPOINTMENT_SLOT_MINUTE_OPTIONS, AppointmentToolbarService } from './co
 import { routePermissionForPath } from './core/access-rules';
 import { AuthSessionService } from './core/auth-session.service';
 import { I18nService, LocalePreference } from './core/i18n.service';
+import { GeneralSettingsService } from './core/general-settings.service';
 import { NavigationPrefetchService } from './core/navigation-prefetch.service';
 import { grantsAllow, staticGrantsForRole } from './core/permission.guard';
 import { AppStateService, UserRole } from './core/state/app-state.service';
@@ -140,7 +141,7 @@ type ActiveModuleTabs = {
     </ng-container>
 
     <ng-template #adminShell>
-    <div class="app-shell" [class.sidebar-is-compact]="sidebarUiCompact()">
+    <div class="app-shell" [class.sidebar-is-compact]="sidebarUiCompact()" [class.interface-is-compact]="generalSettings.compactMode()">
       <aside
         class="sidebar enterprise-sidebar inline-app-sidebar"
         [class.sidebar-compact]="sidebarUiCompact()"
@@ -154,7 +155,7 @@ type ActiveModuleTabs = {
           </a>
 
         </div>
-        <div class="sidebar-search-slot" [class.open]="sidebarSearchOpen() || navSearchDraft()">
+        <div class="sidebar-search-slot" *ngIf="generalSettings.commandSearchEnabled()" [class.open]="sidebarSearchOpen() || navSearchDraft()">
           <button
             class="sidebar-search-icon-button"
             type="button"
@@ -226,7 +227,7 @@ type ActiveModuleTabs = {
                 <strong>{{ group.label }}</strong>
                 <small>{{ navLeafCount(group.items) }} {{ i18n.t('shell.modules', 'modules') }}</small>
               </span>
-              <span class="nav-count">{{ navLeafCount(group.items) }}</span>
+              <span class="nav-count" *ngIf="generalSettings.showModuleBadges()">{{ navLeafCount(group.items) }}</span>
             </button>
             <ng-container *ngIf="visibleSidebarItems(group) as sidebarItems">
               <div class="nav-section-items" *ngIf="!sidebarUiCompact() && (navQuery() || isGroupExpanded(group)) && sidebarItems.length">
@@ -311,7 +312,7 @@ type ActiveModuleTabs = {
             >
               <span aria-hidden="true">&larr;</span>
             </button>
-            <h1>Aura Shine OS</h1>
+            <h1>{{ generalSettings.workspaceName() }}</h1>
           </div>
           <div class="topbar-actions">
             <aura-workspace-switcher
@@ -323,7 +324,7 @@ type ActiveModuleTabs = {
               (countryChange)="selectCountry($event)"
               (languageChange)="selectLanguage($event)">
             </aura-workspace-switcher>
-            <a class="dark-button" routerLink="/pos" *ngIf="canAccessPath('/pos')" (mouseenter)="prefetchNavPath('/pos')" (focus)="prefetchNavPath('/pos')">{{ i18n.t('shell.fastPos', 'Fast POS') }}</a>
+            <a class="dark-button" routerLink="/pos" *ngIf="generalSettings.fastPosEnabled() && canAccessPath('/pos')" (mouseenter)="prefetchNavPath('/pos')" (focus)="prefetchNavPath('/pos')">{{ i18n.t('shell.fastPos', 'Fast POS') }}</a>
             <span class="topbar-divider" aria-hidden="true"></span>
             <aura-header-actions></aura-header-actions>
           </div>
@@ -331,6 +332,9 @@ type ActiveModuleTabs = {
         <div class="state error" *ngIf="globalError()">
           {{ globalError() }}
           <button class="ghost-button mini" type="button" (click)="globalError.set('')">{{ i18n.t('shell.dismiss', 'Dismiss') }}</button>
+        </div>
+        <div class="state info" *ngIf="generalSettings.staffHintsEnabled() && state.userRole() === 'staff'">
+          Tip: use command search to quickly open permitted clients, appointments and reports.
         </div>
 
 
@@ -430,7 +434,7 @@ type ActiveModuleTabs = {
           </div>
         </section>
       </main>
-      <aura-command-palette></aura-command-palette>
+      <aura-command-palette *ngIf="generalSettings.commandSearchEnabled()"></aura-command-palette>
       <a class="ai-fab" routerLink="/ai" aria-label="Ask Aura AI assistant" title="Ask Aura AI" (mouseenter)="prefetchNavPath('/ai')" (focus)="prefetchNavPath('/ai')">
         <svg class="ai-fab-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <path fill="currentColor" d="M5 3h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H10l-4.6 3.45A1 1 0 0 1 4 19.6V17a3 3 0 0 1-1-2.24V6a3 3 0 0 1 3-3z"/>
@@ -439,6 +443,19 @@ type ActiveModuleTabs = {
           <circle cx="15.5" cy="10" r="1.25" fill="#7c3aed"/>
         </svg>
       </a>
+      <section class="required-branch-backdrop" *ngIf="branchSelectionRequired()" role="dialog" aria-modal="true" aria-labelledby="required-branch-title">
+        <div class="required-branch-dialog">
+          <span class="eyebrow">Workspace setup</span>
+          <h2 id="required-branch-title">Select a branch to continue</h2>
+          <p>This workspace requires an active branch before operational pages can load.</p>
+          <div class="required-branch-list">
+            <button type="button" *ngFor="let branch of branches()" (click)="selectRequiredBranch(branch.id)">
+              <strong>{{ branch.name || branch.id }}</strong>
+              <small>{{ branch.id }}</small>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
     </ng-template>
     </ng-template>
@@ -452,6 +469,16 @@ type ActiveModuleTabs = {
     .topbar {
       margin-bottom: 0;
     }
+
+    .interface-is-compact .workspace-route-content { font-size: 0.94rem; }
+    .required-branch-backdrop { position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center; padding: 20px; background: rgba(18, 12, 22, .62); backdrop-filter: blur(8px); }
+    .required-branch-dialog { width: min(520px, 100%); max-height: min(680px, 90vh); overflow: auto; padding: 26px; border: 1px solid rgba(75,18,56,.18); border-radius: 22px; background: #fff; box-shadow: 0 30px 90px rgba(15,23,42,.3); }
+    .required-branch-dialog h2 { margin: 8px 0; color: #21151c; }
+    .required-branch-dialog p { color: #667085; }
+    .required-branch-list { display: grid; gap: 8px; margin-top: 18px; }
+    .required-branch-list button { display: grid; gap: 3px; width: 100%; padding: 13px 15px; border: 1px solid #e4d7df; border-radius: 14px; background: #fff8fc; color: #321827; text-align: left; cursor: pointer; }
+    .required-branch-list button:hover, .required-branch-list button:focus-visible { border-color: #6f1d51; background: #fcecf4; outline: none; }
+    .required-branch-list small { color: #7c6a75; }
 
     .topbar-actions {
       margin-right: -8px;
@@ -819,6 +846,11 @@ export class AppComponent implements OnDestroy {
     : this.requiresTotp()
       ? 'Verify & sign in'
       : 'Sign in securely');
+  readonly branchSelectionRequired = computed(() => this.session.isAuthenticated()
+    && this.generalSettings.loaded()
+    && this.generalSettings.requireBranchSelection()
+    && !this.state.selectedBranchId()
+    && this.branches().length > 0);
 
   readonly navSearchDraft = signal('');
   readonly navQuery = signal('');
@@ -947,8 +979,7 @@ export class AppComponent implements OnDestroy {
             { path: '/salon-3d', label: '3D Salon Website', icon: '3D', keywords: 'public website three dimensional salon landing booking' },
             { path: '/book', label: 'Booking Site', icon: 'OB', keywords: 'online booking portal' }
           ]
-        },
-      ]
+        }]
     },
     {
       id: 'pos',
@@ -1476,6 +1507,7 @@ export class AppComponent implements OnDestroy {
     readonly state: AppStateService,
     readonly session: AuthSessionService,
     readonly i18n: I18nService,
+    readonly generalSettings: GeneralSettingsService,
     readonly appointmentToolbar: AppointmentToolbarService,
     private readonly router: Router,
     private readonly prefetcher: NavigationPrefetchService
@@ -1505,12 +1537,20 @@ export class AppComponent implements OnDestroy {
     });
     effect(() => {
       this.state.selectedTenantId();
+      this.state.selectedBranchId();
       this.session.session();
       if (this.session.isAuthenticated()) {
         this.enforceRoutePermission(this.activeRoute());
         this.loadTenants();
         this.loadBranches();
         this.loadLocalizationPreference(this.state.selectedTenantId());
+        this.generalSettings.ensureLoaded().subscribe({
+          next: () => {
+            this.loadBranches();
+            this.applyDefaultLandingPage();
+          },
+          error: () => undefined
+        });
         this.prefetcher.warmHighUseRoutes();
       }
     });
@@ -1620,7 +1660,12 @@ export class AppComponent implements OnDestroy {
         const selectedBranchId = this.state.selectedBranchId();
         const selectedExists = scopedRows.some((branch) => branch.id === selectedBranchId);
         if (scopedRows.length && (!selectedBranchId || !selectedExists)) {
-          this.state.setBranch(scopedRows[0].id);
+          const policy = this.generalSettings.settings().branchBehavior;
+          if (policy.requireBranchSelection && policy.allowBranchSwitch) {
+            if (selectedBranchId) this.state.setBranch('', policy.rememberLastBranch);
+          } else {
+            this.state.setBranch(scopedRows[0].id, policy.rememberLastBranch);
+          }
         }
       },
       error: () => this.branches.set([])
@@ -1658,9 +1703,30 @@ export class AppComponent implements OnDestroy {
   }
 
   selectBranch(branchId: string): void {
+    if (!this.generalSettings.allowBranchSwitch()) return;
     if (branchId === this.state.selectedBranchId()) return;
-    this.state.setBranch(branchId);
+    this.state.setBranch(branchId, this.generalSettings.settings().branchBehavior.rememberLastBranch);
     window.location.reload();
+  }
+
+  selectRequiredBranch(branchId: string): void {
+    if (!branchId) return;
+    this.state.setBranch(branchId, this.generalSettings.settings().branchBehavior.rememberLastBranch);
+    window.location.reload();
+  }
+
+  private applyDefaultLandingPage(): void {
+    const currentPath = this.routePath(this.router.url);
+    if (currentPath !== '/home' && currentPath !== '/') return;
+    const routes: Record<string, string> = {
+      dashboard: '/dashboard',
+      pos: '/pos',
+      appointments: '/appointments',
+      clients: '/clients',
+      reports: '/reports'
+    };
+    const target = routes[this.generalSettings.settings().workspace.defaultLandingPage] || '/dashboard';
+    if (target !== currentPath && this.canAccessPath(target)) this.router.navigateByUrl(target);
   }
 
   selectRole(role: UserRole): void {
@@ -2045,6 +2111,7 @@ export class AppComponent implements OnDestroy {
   }
 
   private canAccessNavItem(item: NavItem): boolean {
+    if (item.path === '/notification-center' && this.ownerNotificationPolicyBlocks()) return false;
     return this.canAccessPermission(item.permission || this.navPermissionForPath(item.path));
   }
 
@@ -2053,7 +2120,12 @@ export class AppComponent implements OnDestroy {
   }
 
   canAccessPath(path: string): boolean {
+    if (this.routePath(path) === '/notification-center' && this.ownerNotificationPolicyBlocks()) return false;
     return this.canAccessPermission(this.navPermissionForPath(path));
+  }
+
+  private ownerNotificationPolicyBlocks(): boolean {
+    return ['owner', 'admin', 'superAdmin'].includes(this.state.userRole()) && !this.generalSettings.ownerNotificationsEnabled();
   }
 
   private canAccessPermission(permission?: string | string[]): boolean {
@@ -2067,6 +2139,10 @@ export class AppComponent implements OnDestroy {
 
   private enforceRoutePermission(url: string): void {
     if (!this.session.isAuthenticated()) return;
+    if (this.routePath(url) === '/notification-center' && this.ownerNotificationPolicyBlocks()) {
+      void this.router.navigateByUrl('/dashboard');
+      return;
+    }
     const permission = this.navPermissionForPath(url);
     if (!this.canAccessPermission(permission)) {
       void this.router.navigateByUrl('/dashboard');

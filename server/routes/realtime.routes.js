@@ -7,6 +7,14 @@ import { validateBody } from "../validators/request-validator.js";
 
 export const realtimeRouter = Router();
 
+realtimeRouter.post(
+  "/realtime/ticket",
+  requirePermission("read", () => "appointments"),
+  asyncHandler((req, res) => {
+    res.status(201).json(realtimeService.issueTicket(req.access, req.body || {}));
+  })
+);
+
 realtimeRouter.get(
   "/realtime/queue",
   requirePermission("read", () => "appointments"),

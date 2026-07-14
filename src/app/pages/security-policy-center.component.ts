@@ -1,14 +1,15 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-security-policy-center',
   standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, StateComponent],
   template: `
     <section class="policy-workspace">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -70,7 +71,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="evidence-export" *ngIf="evidenceExport() as evidence">
           <div>
             <strong>{{ evidence.bundleId }}</strong>
-            <span>{{ evidence.framework?.join(', ') }} · {{ evidence.generatedAt | date: 'short' }}</span>
+            <span>{{ evidence.framework?.join(', ') }} · {{ evidence.generatedAt | auraDate:'date' }}</span>
           </div>
           <pre>{{ evidence | json }}</pre>
         </div>
@@ -126,7 +127,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ device.userId || '-' }}</td>
                 <td>{{ device.ipAddress || '-' }}</td>
                 <td><span class="badge">{{ device.status }}</span></td>
-                <td>{{ device.lastSeenAt | date: 'short' }}</td>
+                <td>{{ device.lastSeenAt | auraDate:'date' }}</td>
                 <td>
                   <button class="ghost-button mini" type="button" (click)="signOutDevice(device)">Sign out device</button>
                   <button class="ghost-button mini" type="button" (click)="signOutAll(device.userId)">Sign out all</button>
@@ -199,7 +200,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ report.reporterName || '-' }}</td>
                 <td>{{ report.severity }}</td>
                 <td>{{ report.status }}</td>
-                <td>{{ report.createdAt | date: 'short' }}</td>
+                <td>{{ report.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!disclosureReports().length"><td colspan="5">No disclosure reports yet.</td></tr>
             </tbody>
@@ -259,7 +260,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td><span class="badge">{{ event.riskLevel }}</span></td>
                 <td>{{ joinList(event.reasons) || '-' }}</td>
                 <td>{{ event.ipAddress || '-' }}</td>
-                <td>{{ event.createdAt | date: 'short' }}</td>
+                <td>{{ event.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!riskEvents().length"><td colspan="5">No risk events yet.</td></tr>
             </tbody>
@@ -287,7 +288,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ approval.summary }}</td>
                 <td><span class="badge">{{ approval.status }}</span></td>
                 <td>{{ approval.requestedBy || '-' }}</td>
-                <td>{{ approval.createdAt | date: 'short' }}</td>
+                <td>{{ approval.createdAt | auraDate:'date' }}</td>
                 <td>
                   <button class="ghost-button mini" type="button" [disabled]="approval.status !== 'pending'" (click)="decideApproval(approval, 'approve')">Approve</button>
                   <button class="ghost-button mini" type="button" [disabled]="approval.status !== 'pending'" (click)="decideApproval(approval, 'reject')">Reject</button>
@@ -385,7 +386,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ device.userId || '-' }}</td>
                 <td>{{ device.ipAddress || '-' }}</td>
                 <td><span class="badge">{{ device.status }}</span></td>
-                <td>{{ device.lastSeenAt | date: 'short' }}</td>
+                <td>{{ device.lastSeenAt | auraDate:'date' }}</td>
                 <td>
                   <button class="ghost-button mini" type="button" (click)="trustDevice(device)">Trust</button>
                   <button class="ghost-button mini" type="button" (click)="revokeDevice(device)">Revoke</button>
@@ -409,7 +410,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ log.oldValue }}</td>
                 <td>{{ log.newValue }}</td>
                 <td>{{ log.userId || '-' }}</td>
-                <td>{{ log.createdAt | date: 'short' }}</td>
+                <td>{{ log.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!fieldLogs().length"><td colspan="6">No field audit records yet.</td></tr>
             </tbody>

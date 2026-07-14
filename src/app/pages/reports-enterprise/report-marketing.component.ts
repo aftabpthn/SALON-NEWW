@@ -1,17 +1,18 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-marketing',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="mkt-metrics inner-stats-grid">
-        <div class="metric-card teal"><span>Campaign Revenue</span><strong>{{ d()?.totalRevenue | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+        <div class="metric-card teal"><span>Campaign Revenue</span><strong>{{ d()?.totalRevenue | auraMoney:'1.0-0' }}</strong></div>
         <div class="metric-card green"><span>Avg Conversion Rate</span><strong>{{ d()?.avgConversion }}%</strong></div>
         <div class="metric-card violet"><span>Campaign ROI</span><strong>{{ d()?.campaignRoi }}%</strong></div>
       </div>
@@ -46,7 +47,7 @@ import { Subscription } from 'rxjs';
                 <td><span class="badge">{{ c.channel }}</span></td>
                 <td>{{ c.sent }}</td>
                 <td>{{ c.conversions }}</td>
-                <td>{{ c.revenue | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ c.revenue | auraMoney:'1.0-0' }}</td>
                 <td><span class="roi-badge">{{ c.roi }}%</span></td>
               </tr>
               <tr *ngIf="campaigns().length===0"><td colspan="6" class="empty-cell">No campaign data found.</td></tr>

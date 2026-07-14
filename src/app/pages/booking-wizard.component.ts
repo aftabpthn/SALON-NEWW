@@ -1,16 +1,18 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 
 @Component({
   selector: 'app-booking-wizard',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack compact-wizard inner-page-shell">
       <div class="module-hero compact-hero inner-page-header">
@@ -48,7 +50,7 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
                 <span>Service</span>
                 <select formControlName="serviceId" (change)="resolveChain()">
                   <option value="">Select service</option>
-                  <option *ngFor="let service of services()" [value]="service.id">{{ service.name }} · {{ service.price | currency:'INR':'symbol':'1.0-0' }}</option>
+                  <option *ngFor="let service of services()" [value]="service.id">{{ service.name }} · {{ service.price | auraMoney:'1.0-0' }}</option>
                 </select>
               </label>
               <div class="summary-card aura-card" *ngIf="resolvedServices().length">
@@ -81,9 +83,9 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
               </div>
               <div class="quick-grid">
                 <button class="action-card command-card" type="button" *ngFor="let slot of slots()" [class.active]="selectedSlot()?.startAt === slot.startAt" (click)="selectSlot(slot)">
-                  <strong>{{ slot.startAt | date:'EEE, MMM d, h:mm a' }}</strong>
+                  <strong>{{ slot.startAt | auraDate:'dateTime' }}</strong>
                   <span>{{ slot.staffName }} · {{ slot.chair }} · Score {{ slot.score }}</span>
-                  <small>Estimated revenue {{ slot.estimatedRevenue | currency:'INR':'symbol':'1.0-0' }}</small>
+                  <small>Estimated revenue {{ slot.estimatedRevenue | auraMoney:'1.0-0' }}</small>
                 </button>
               </div>
               <div class="empty-state" *ngIf="!slots().length && !loading()">
@@ -111,7 +113,7 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
             <div *ngSwitchCase="5" class="confirm-grid">
               <article class="summary-card aura-card">
                 <strong>{{ serviceName(wizardForm.value.serviceId) }}</strong>
-                <small>{{ selectedSlot()?.startAt | date:'medium' }} with {{ selectedSlot()?.staffName || 'auto staff' }}</small>
+                <small>{{ selectedSlot()?.startAt | auraDate:'date' }} with {{ selectedSlot()?.staffName || 'auto staff' }}</small>
                 <small>{{ wizardForm.value.clientName }} · {{ wizardForm.value.phone }}</small>
               </article>
               <article class="summary-card aura-card">
@@ -119,7 +121,7 @@ type WizardStep = 1 | 2 | 3 | 4 | 5;
               </article>
               <article class="summary-card aura-card" *ngIf="createdAppointment() as appointment">
                 <strong>{{ appointment.id }}</strong>
-                <small>{{ appointment.status }} · {{ appointment.startAt | date:'medium' }}</small>
+                <small>{{ appointment.status }} · {{ appointment.startAt | auraDate:'date' }}</small>
               </article>
             </div>
           </ng-container>

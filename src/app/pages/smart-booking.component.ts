@@ -1,16 +1,18 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type SmartBookingViewKey = 'overview' | 'recommend' | 'queue' | 'slots' | 'waitlist' | 'qr';
 
 @Component({
   selector: 'app-smart-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -105,11 +107,11 @@ type SmartBookingViewKey = 'overview' | 'recommend' | 'queue' | 'slots' | 'waitl
             <thead><tr><th>Slot</th><th>Staff</th><th>Chair</th><th>Score</th><th>Revenue</th><th></th></tr></thead>
             <tbody>
               <tr *ngFor="let slot of recommendations()">
-                <td>{{ slot.startAt | date: 'medium' }}</td>
+                <td>{{ slot.startAt | auraDate:'date' }}</td>
                 <td>{{ slot.staffName }}</td>
                 <td>{{ slot.chair }}</td>
                 <td>{{ slot.score }}</td>
-                <td>{{ slot.estimatedRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ slot.estimatedRevenue | auraMoney:'1.0-0' }}</td>
                 <td><button class="ghost-button mini" type="button" (click)="book(slot)">Book</button></td>
               </tr>
             </tbody>

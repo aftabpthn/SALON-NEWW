@@ -1,10 +1,11 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { AuraMoneyPipe } from '../../../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-payment-modal',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe],
+  imports: [AuraMoneyPipe, CommonModule],
   styles: [`
     .billing-panel { display: grid; gap: 14px; border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)); border-radius: var(--aura-card-radius-premium, 14px); background: var(--aura-surface-raised, #fff); padding: 16px; box-shadow: 0 12px 30px rgba(75, 18, 56, 0.07); }
     .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
@@ -23,7 +24,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
       <div class="panel-head"><h3>Payment summary</h3></div>
       <div class="total-card">
         <span>Total due</span>
-        <strong>{{ total | currency:'INR' }}</strong>
+        <strong>{{ total | auraMoney }}</strong>
       </div>
       <div class="payment-actions">
         <button class="checkout" type="button" (click)="checkout.emit()">Checkout</button>

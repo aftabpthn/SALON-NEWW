@@ -34,6 +34,9 @@ coverage/
 customer-app/www/
 customer-app/.angular/
 customer-app/node_modules/
+staff-app/www/
+staff-app/.angular/
+staff-app/node_modules/
 .DS_Store
 Thumbs.db
 .codex-runtime/

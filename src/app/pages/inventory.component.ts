@@ -1,4 +1,4 @@
-﻿import { CommonModule, CurrencyPipe } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,13 +8,14 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
 
 @Component({
   selector: 'app-inventory',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inventory-shell zenoti-inventory-shell inner-page-shell">
       <section class="zenoti-product-page">
@@ -134,8 +135,8 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
                 <td>{{ product.subcategory || product.subCategory || '-' }}</td>
                 <td>{{ productBusinessUnit(product) }}</td>
                 <td>{{ productType(product) }}</td>
-                <td>{{ product.price | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ productMrp(product) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ product.price | auraMoney:'1.0-0' }}</td>
+                <td>{{ productMrp(product) | auraMoney:'1.0-0' }}</td>
                 <td>{{ productAmount(product) }}</td>
                 <td>{{ productVendorName(product) }}</td>
                 <td>{{ productInUse(product) }}</td>

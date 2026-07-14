@@ -6,6 +6,8 @@ import { AppStateService } from '../../../core/state/app-state.service';
 import { grantsAllow, staticGrantsForRole } from '../../../core/permission.guard';
 import { routePermissionForPath } from '../../../core/access-rules';
 import { SidebarStore } from '../../../shell/sidebar/sidebar.store';
+import { GeneralSettingsService } from '../../../core/general-settings.service';
+import { NotificationCenterService } from '../../../core/notification-center.service';
 
 type PanelId = 'notifications' | 'profile' | null;
 
@@ -21,7 +23,7 @@ type PanelId = 'notifications' | 'profile' | null;
   template: `
     <div class="hdr-actions">
       <!-- Notifications -->
-      <div class="hdr-pop" *ngIf="canAccessPath('/notification-center')">
+      <div class="hdr-pop" *ngIf="notificationsVisible() && canAccessPath('/notification-center')">
         <button
           class="hdr-icon-btn"
           type="button"
@@ -30,17 +32,23 @@ type PanelId = 'notifications' | 'profile' | null;
           aria-label="Notifications"
           title="Notifications">
           <span aria-hidden="true">🔔</span>
-          <span class="hdr-dot" aria-hidden="true"></span>
+          <span class="hdr-dot" *ngIf="notifications.unreadCount()" aria-hidden="true"></span>
         </button>
         <div class="hdr-menu hdr-menu-notif" *ngIf="panel() === 'notifications'">
           <div class="hdr-menu-head">
             <strong>Notifications</strong>
             <span class="hdr-pill">Live</span>
           </div>
-          <div class="hdr-notif-empty">
-            <span class="hdr-notif-emoji" aria-hidden="true">✓</span>
-            <strong>You're all caught up</strong>
+          <div class="hdr-notif-list" *ngIf="notifications.recent().length; else notificationEmpty">
+            <article *ngFor="let item of notifications.recent()">
+              <strong>{{ item['title'] || item['type'] || 'Notification' }}</strong>
+              <small>{{ item['message'] || item['body'] || item['status'] }}</small>
+            </article>
           </div>
+          <ng-template #notificationEmpty><div class="hdr-notif-empty">
+            <span class="hdr-notif-emoji" aria-hidden="true">✓</span>
+            <strong>{{ notifications.loading() ? 'Loading notifications...' : "You're all caught up" }}</strong>
+          </div></ng-template>
           <a class="hdr-menu-foot" routerLink="/notification-center" (click)="closeAll()">
             Open Notification Center →
           </a>
@@ -182,6 +190,10 @@ type PanelId = 'notifications' | 'profile' | null;
     }
     .hdr-notif-empty strong { font-size: 0.85rem; color: #1d2740; }
     .hdr-notif-empty small { font-size: 0.74rem; color: #8a93a8; line-height: 1.4; }
+    .hdr-notif-list { display: grid; gap: 5px; max-height: 320px; overflow: auto; }
+    .hdr-notif-list article { display: grid; gap: 3px; padding: 10px; border-radius: 11px; background: #f7f8fd; }
+    .hdr-notif-list strong { color: #1d2740; font-size: .82rem; }
+    .hdr-notif-list small { color: #6f7a90; font-size: .72rem; }
     .hdr-menu-foot, .hdr-menu-links a {
       display: block; text-decoration: none; color: var(--aura-primary, #4B1238);
     }
@@ -253,6 +265,7 @@ export class HeaderActionsComponent {
   readonly displayName = computed(() => this.session.currentUser()?.name?.trim() || 'Aura User');
   readonly email = computed(() => this.session.currentUser()?.email || '');
   readonly roleLabel = computed(() => this.prettyRole(this.state.userRole()));
+  readonly notificationsVisible = computed(() => !['owner', 'admin', 'superAdmin'].includes(this.state.userRole()) || this.generalSettings.ownerNotificationsEnabled());
   readonly initials = computed(() => {
     const name = this.displayName();
     const parts = name.split(/\s+/).filter(Boolean);
@@ -267,6 +280,8 @@ export class HeaderActionsComponent {
   constructor(
     readonly state: AppStateService,
     readonly sidebarStore: SidebarStore,
+    readonly generalSettings: GeneralSettingsService,
+    readonly notifications: NotificationCenterService,
     private readonly session: AuthSessionService,
     private readonly router: Router
   ) {}

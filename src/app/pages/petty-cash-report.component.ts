@@ -1,10 +1,12 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type PettyCashRow = ApiRecord & {
   debit: number;
@@ -15,7 +17,7 @@ type PettyCashRow = ApiRecord & {
 @Component({
   selector: 'app-petty-cash-report',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="petty-report-page inner-page-shell">
       <header class="titlebar inner-page-header">
@@ -33,9 +35,9 @@ type PettyCashRow = ApiRecord & {
 
       <section class="summary-row inner-stats-grid">
         <article><span>Rows</span><strong>{{ rows().length }}</strong></article>
-        <article><span>Total IN</span><strong>{{ totalDebit() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Total OUT</span><strong>{{ totalCredit() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Balance</span><strong>{{ closingBalance() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>Total IN</span><strong>{{ totalDebit() | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Total OUT</span><strong>{{ totalCredit() | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Balance</span><strong>{{ closingBalance() | auraMoney:'1.0-0' }}</strong></article>
       </section>
 
       <section class="report-panel inner-page-card">
@@ -104,15 +106,15 @@ type PettyCashRow = ApiRecord & {
             <tbody>
               <tr *ngFor="let row of rows()">
                 <td>{{ row.branchName || row.branchId }}</td>
-                <td>{{ row.docDate | date: 'mediumDate' }}</td>
+                <td>{{ row.docDate | auraDate:'date' }}</td>
                 <td>{{ row.type }}</td>
                 <td>{{ row.prefix }}</td>
                 <td>{{ row.docNo }}</td>
                 <td>{{ row.particular }}</td>
                 <td>{{ categoryLabel(row.category) }}</td>
-                <td class="right">{{ row.debit | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td class="right">{{ row.credit | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td class="right">{{ row.balance | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td class="right">{{ row.debit | auraMoney:'1.0-0' }}</td>
+                <td class="right">{{ row.credit | auraMoney:'1.0-0' }}</td>
+                <td class="right">{{ row.balance | auraMoney:'1.0-0' }}</td>
                 <td>{{ row.paymode || '-' }}</td>
                 <td>{{ row.chequeNo || '-' }}</td>
                 <td>{{ row.staffName || '-' }}</td>

@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
 import { PosPaymentMode, PosSettingsService } from '../core/pos-settings.service';
 import { DATE_RANGE_PRESETS, DateRangePreset, rangeForPreset, todayKey } from '../shared/date-range-presets';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type TipLedgerRow = {
   id: string;
@@ -75,7 +76,7 @@ type TipsReport = {
 @Component({
   selector: 'app-pos-tips',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -167,14 +168,14 @@ type TipsReport = {
 
       <ng-container *ngIf="!loading()">
         <div class="metrics-grid">
-          <article class="metric-card"><span>Total tips</span><strong>{{ (summary().totalTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ summary().tipCount || 0 }} tips</small></article>
-          <article class="metric-card"><span>Cash tips</span><strong>{{ (summary().cashTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Digital tips</span><strong>{{ (summary().digitalTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Pending payout</span><strong>{{ (summary().pendingPayout || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Paid out tips</span><strong>{{ (summary().paidOutTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Reversed tips</span><strong>{{ (summary().reversedTips || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-          <article class="metric-card"><span>Top tipped staff</span><strong>{{ summary().topTippedStaff || '-' }}</strong><small>{{ (summary().topTippedStaffAmount || 0) | currency: 'INR':'symbol':'1.0-0' }}</small></article>
-          <article class="metric-card"><span>Avg tip / invoice</span><strong>{{ (summary().averageTipPerInvoice || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Total tips</span><strong>{{ (summary().totalTips || 0) | auraMoney:'1.0-0' }}</strong><small>{{ summary().tipCount || 0 }} tips</small></article>
+          <article class="metric-card"><span>Cash tips</span><strong>{{ (summary().cashTips || 0) | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Digital tips</span><strong>{{ (summary().digitalTips || 0) | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Pending payout</span><strong>{{ (summary().pendingPayout || 0) | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Paid out tips</span><strong>{{ (summary().paidOutTips || 0) | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Reversed tips</span><strong>{{ (summary().reversedTips || 0) | auraMoney:'1.0-0' }}</strong></article>
+          <article class="metric-card"><span>Top tipped staff</span><strong>{{ summary().topTippedStaff || '-' }}</strong><small>{{ (summary().topTippedStaffAmount || 0) | auraMoney:'1.0-0' }}</small></article>
+          <article class="metric-card"><span>Avg tip / invoice</span><strong>{{ (summary().averageTipPerInvoice || 0) | auraMoney:'1.0-0' }}</strong></article>
           <article class="metric-card"><span>Tip % of service revenue</span><strong>{{ summary().tipPercentOfServiceRevenue || 0 }}%</strong></article>
           <article class="metric-card"><span>Audit alerts</span><strong>{{ summary().alerts || 0 }}</strong></article>
         </div>
@@ -188,7 +189,7 @@ type TipsReport = {
           <div class="alert-grid">
             <article class="alert-card" *ngFor="let alert of alerts()">
               <strong>{{ alert.alertType }}</strong>
-              <span>{{ alert.clientName }} · {{ alert.staffName }} · {{ alert.amount | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <span>{{ alert.clientName }} · {{ alert.staffName }} · {{ alert.amount | auraMoney:'1.0-0' }}</span>
               <small>{{ alert.riskLevel }} risk · {{ alert.suggestedAction }}</small>
             </article>
           </div>
@@ -244,14 +245,14 @@ type TipsReport = {
                   <td>{{ row.clientPhone }}</td>
                   <td>{{ row.staffName }}</td>
                   <td>{{ row.staffId || '-' }}</td>
-                  <td class="right"><strong>{{ row.amount | currency: 'INR':'symbol':'1.0-0' }}</strong></td>
+                  <td class="right"><strong>{{ row.amount | auraMoney:'1.0-0' }}</strong></td>
                   <td><span class="badge">{{ modeLabel(row.paymentMode) }}</span></td>
                   <td>{{ row.collectedBy }}</td>
                   <td>{{ row.receiverStaff }}</td>
                   <td>{{ row.settlementPaymentId }}</td>
-                  <td class="right">{{ row.invoiceTotal | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ row.paidAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ row.dueAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td class="right">{{ row.invoiceTotal | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ row.paidAmount | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ row.dueAmount | auraMoney:'1.0-0' }}</td>
                   <td><span class="badge" [class.warn]="row.tipStatus === 'pending_payout'" [class.danger]="row.tipStatus === 'reversed'">{{ statusLabel(row.tipStatus) }}</span></td>
                   <td>{{ row.payoutDate || '-' }} <span *ngIf="row.payoutReference">· {{ row.payoutReference }}</span></td>
                   <td>{{ row.branchName }}</td>
@@ -272,7 +273,7 @@ type TipsReport = {
         <section class="panel" *ngIf="selected() as row">
           <div class="section-title">
             <div>
-              <h2>{{ row.clientName }} paid {{ row.amount | currency: 'INR':'symbol':'1.0-0' }}</h2>
+              <h2>{{ row.clientName }} paid {{ row.amount | auraMoney:'1.0-0' }}</h2>
             </div>
             <a class="ghost-button mini" routerLink="/pos/invoices" [queryParams]="{ q: row.invoiceNumber }">Open invoice</a>
           </div>
@@ -312,13 +313,13 @@ type TipsReport = {
                 <tr *ngFor="let staff of staffSummary()">
                   <td><strong>{{ staff.staffName }}</strong><small>{{ staff.staffId }}</small></td>
                   <td>{{ staff.tipCount }}</td>
-                  <td class="right">{{ staff.totalTips | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ staff.cashTips | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ staff.digitalTips | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ staff.pendingPayout | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ staff.paidOut | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ staff.averageTip | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td class="right">{{ staff.serviceRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td class="right">{{ staff.totalTips | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ staff.cashTips | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ staff.digitalTips | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ staff.pendingPayout | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ staff.paidOut | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ staff.averageTip | auraMoney:'1.0-0' }}</td>
+                  <td class="right">{{ staff.serviceRevenue | auraMoney:'1.0-0' }}</td>
                   <td class="right">{{ staff.tipToSalePercent }}%</td>
                   <td><a class="ghost-button mini" routerLink="/staff-os/staff-profile" [queryParams]="{ staffId: staff.staffId }">Staff 360</a></td>
                 </tr>

@@ -20,7 +20,31 @@ export const IDEMPOTENT_REQUIRED = new Set([
   "POST /api/booking-payments/payment-link/create",
   "POST /api/v1/booking-payments/payment-link/create",
   "POST /api/online-booking/confirm",
-  "POST /api/v1/online-booking/confirm"
+  "POST /api/v1/online-booking/confirm",
+  "POST /api/staff-os/attendance/clock-in",
+  "POST /api/v1/staff-os/attendance/clock-in",
+  "POST /api/staff-os/attendance/clock-out",
+  "POST /api/v1/staff-os/attendance/clock-out",
+  "POST /api/staff-os/attendance/break-start",
+  "POST /api/v1/staff-os/attendance/break-start",
+  "POST /api/staff-os/attendance/break-end",
+  "POST /api/v1/staff-os/attendance/break-end",
+  "POST /api/staff-os/attendance/correction",
+  "POST /api/v1/staff-os/attendance/correction",
+  "POST /api/staff-os/tasks",
+  "POST /api/v1/staff-os/tasks",
+  "POST /api/staff-self/chat/messages",
+  "POST /api/v1/staff-self/chat/messages",
+  "POST /api/staff-enterprise/training/assign",
+  "POST /api/v1/staff-enterprise/training/assign",
+  "POST /api/staff-enterprise/approval-request",
+  "POST /api/v1/staff-enterprise/approval-request",
+  "POST /api/staff-enterprise/approve",
+  "POST /api/v1/staff-enterprise/approve",
+  "POST /api/staff-enterprise/reject",
+  "POST /api/v1/staff-enterprise/reject",
+  "POST /api/staff-enterprise/audit-event",
+  "POST /api/v1/staff-enterprise/audit-event"
 ]);
 
 function hashPayload(payload) {
@@ -34,6 +58,7 @@ function ttl() {
 function shouldHandle(req) {
   if (req.method !== "POST") return false;
   if (/\/api\/(health|auth|v1\/health)/.test(req.originalUrl)) return false;
+  if (/\/realtime\/ticket(?:\?|$)/.test(req.originalUrl)) return false;
   return Boolean(req.get("Idempotency-Key"));
 }
 
@@ -55,8 +80,8 @@ export function idempotencyMiddleware(req, res, next) {
   const endpoint = endpointKey(req);
   const requestHash = hashPayload(req.body);
   const existing = db
-    .prepare("SELECT * FROM idempotency_keys WHERE key = ? AND tenantId = ? AND endpoint = ? AND expiresAt > ?")
-    .get(key, tenantId, endpoint, new Date().toISOString());
+    .prepare("SELECT * FROM idempotency_keys WHERE key = @key AND tenantId = @tenantId AND endpoint = @endpoint AND expiresAt > @now")
+    .get({ key, tenantId, endpoint, now: new Date().toISOString() });
 
   if (existing) {
     if (existing.requestHash !== requestHash) {
@@ -87,13 +112,21 @@ export function idempotencyMiddleware(req, res, next) {
     db.prepare(
       `INSERT OR REPLACE INTO idempotency_keys
        (key, tenantId, endpoint, requestHash, responseStatus, responseBody, expiresAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(key, tenantId, endpoint, requestHash, res.statusCode, responseBody || "{}", ttl());
+       VALUES (@key, @tenantId, @endpoint, @requestHash, @responseStatus, @responseBody, @expiresAt)`
+    ).run({ key, tenantId, endpoint, requestHash, responseStatus: res.statusCode, responseBody: responseBody || "{}", expiresAt: ttl() });
   });
 
   next();
 }
 
+export function requireIdempotencyKey(req, res, next) {
+  if (!req.get("Idempotency-Key")) {
+    res.status(400).json({ error: "Idempotency-Key header required", status: 400, requestId: req.requestId });
+    return;
+  }
+  idempotencyMiddleware(req, res, next);
+}
+
 export function cleanupIdempotencyKeys() {
-  return db.prepare("DELETE FROM idempotency_keys WHERE expiresAt < ?").run(new Date().toISOString()).changes || 0;
+  return db.prepare("DELETE FROM idempotency_keys WHERE expiresAt < @now").run({ now: new Date().toISOString() }).changes || 0;
 }

@@ -1,13 +1,14 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-branches',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="branch-charts">
@@ -38,11 +39,11 @@ import { Subscription } from 'rxjs';
               <tr *ngFor="let b of branches(); let i=index">
                 <td><span class="rank-num">{{ i+1 }}</span></td>
                 <td><strong>{{ b.name }}</strong></td>
-                <td>{{ b.revenue | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ b.revenue | auraMoney:'1.0-0' }}</td>
                 <td>{{ b.bookings }}</td>
                 <td><span class="growth-badge positive">{{ b.clientGrowth }}%</span></td>
                 <td>{{ b.staffProductivity }}%</td>
-                <td>{{ b.profitEstimate | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ b.profitEstimate | auraMoney:'1.0-0' }}</td>
               </tr>
               <tr *ngIf="branches().length===0"><td colspan="7" class="empty-cell">No branch data found. Multi-branch may be disabled.</td></tr>
             </tbody>

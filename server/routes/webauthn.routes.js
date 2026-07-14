@@ -9,6 +9,7 @@ import { repositories } from "../repositories/repository-registry.js";
 import { validateBody } from "../validators/request-validator.js";
 import { unauthorized } from "../utils/app-error.js";
 import { persistentFixedWindowRateLimit } from "../middleware/persistent-rate-limit.middleware.js";
+import { publicAuthSession, setAuthRefreshCookie } from "../services/auth-cookie-session.service.js";
 
 // Public passkey login ceremony (no session yet).
 export const webauthnPublicRouter = Router();
@@ -54,7 +55,8 @@ webauthnPublicRouter.post(
       { tenantId: tenant.id, userId: user.id, role: user.role },
       req
     );
-    res.status(201).json(tokens);
+    setAuthRefreshCookie(res, tokens);
+    res.status(201).json(publicAuthSession(tokens));
   })
 );
 

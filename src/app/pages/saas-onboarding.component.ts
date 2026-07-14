@@ -1,16 +1,18 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | 'brand' | 'onboarding' | 'plans';
 
 @Component({
   selector: 'app-saas-onboarding',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="saas-workspace">
       <div class="page-heading">
@@ -34,7 +36,7 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
           </article>
           <article>
             <span>Trial ends</span>
-            <strong>{{ context.tenant?.trialEndsAt | date: 'mediumDate' }}</strong>
+            <strong>{{ context.tenant?.trialEndsAt | auraDate:'date' }}</strong>
             <small>{{ context.plan?.name }} plan</small>
           </article>
           <article>
@@ -49,8 +51,8 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
           </article>
           <article>
             <span>Billing preview</span>
-            <strong>{{ (context.billingPreview?.totalAmount || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>{{ (context.billingPreview?.baseAmount || 0) | currency: 'INR':'symbol':'1.0-0' }} base + {{ (context.billingPreview?.usageAmount || 0) | currency: 'INR':'symbol':'1.0-0' }} usage</small>
+            <strong>{{ (context.billingPreview?.totalAmount || 0) | auraMoney:'1.0-0' }}</strong>
+            <small>{{ (context.billingPreview?.baseAmount || 0) | auraMoney:'1.0-0' }} base + {{ (context.billingPreview?.usageAmount || 0) | auraMoney:'1.0-0' }} usage</small>
           </article>
           <article>
             <span>Tenant health</span>
@@ -104,7 +106,7 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
             <article class="action-card" *ngFor="let row of context.billingPreview?.usageRows || []">
               <strong>{{ row.label }}</strong>
               <span>{{ row.used }} used · {{ row.included }} included · {{ row.overage }} billable</span>
-              <small>{{ row.amount | currency: 'INR':'symbol':'1.0-0' }} usage amount</small>
+              <small>{{ row.amount | auraMoney:'1.0-0' }} usage amount</small>
             </article>
           </div>
         </section>
@@ -123,8 +125,8 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
             </article>
             <article class="action-card">
               <strong>Next invoice estimate</strong>
-              <span>{{ (context.usageBasedBilling?.nextInvoiceEstimate || 0) | currency: 'INR':'symbol':'1.0-0' }}</span>
-              <small>{{ (context.usageBasedBilling?.projectedUsageAmount || 0) | currency: 'INR':'symbol':'1.0-0' }} projected usage</small>
+              <span>{{ (context.usageBasedBilling?.nextInvoiceEstimate || 0) | auraMoney:'1.0-0' }}</span>
+              <small>{{ (context.usageBasedBilling?.projectedUsageAmount || 0) | auraMoney:'1.0-0' }} projected usage</small>
             </article>
           </div>
           <div class="activity-list" *ngIf="context.subscriptionLimits?.rows?.length">
@@ -185,7 +187,7 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
             <label class="field">
               <span>Plan</span>
               <select formControlName="planId">
-                <option *ngFor="let plan of plans()" [value]="plan.id">{{ plan.name }} - {{ plan.priceMonthly | currency: 'INR':'symbol':'1.0-0' }}/mo</option>
+                <option *ngFor="let plan of plans()" [value]="plan.id">{{ plan.name }} - {{ plan.priceMonthly | auraMoney:'1.0-0' }}/mo</option>
               </select>
             </label>
             <label class="field full"><span>Domain</span><input formControlName="domain" placeholder="salon.example.com" /></label>
@@ -224,7 +226,7 @@ type SaasViewKey = 'overview' | 'usage' | 'metering' | 'health' | 'features' | '
         <div class="quick-grid">
           <article class="action-card" *ngFor="let plan of plans()">
             <strong>{{ plan.name }}</strong>
-            <span>{{ plan.priceMonthly | currency: 'INR':'symbol':'1.0-0' }}/month · {{ plan.trialDays }} day trial</span>
+            <span>{{ plan.priceMonthly | auraMoney:'1.0-0' }}/month · {{ plan.trialDays }} day trial</span>
             <small>{{ plan.features?.join(', ') }}</small>
             <button class="ghost-button mini" type="button" (click)="switchPlan(plan.id)">Switch current tenant</button>
           </article>

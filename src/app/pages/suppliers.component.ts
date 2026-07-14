@@ -1,10 +1,12 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type SupplierFilter =
   | 'all'
@@ -60,7 +62,7 @@ interface SupplierCommandRow {
 @Component({
   selector: 'app-suppliers',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack suppliers-page inner-page-shell">
       <section class="zenoti-supplier-header inner-page-header">
@@ -82,11 +84,11 @@ interface SupplierCommandRow {
           </div>
           <div class="zenoti-totals">
             <span>Total <strong>{{ suppliers().length }}</strong></span>
-            <span>Spend <strong>{{ totalSupplierSpend() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
-            <span>Open PO <strong>{{ openPoValue() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Spend <strong>{{ totalSupplierSpend() | auraMoney:'1.0-0' }}</strong></span>
+            <span>Open PO <strong>{{ openPoValue() | auraMoney:'1.0-0' }}</strong></span>
             <span>Risk <strong>{{ qualityRiskSuppliers().length }}</strong></span>
             <span>WhatsApp <strong>{{ pendingWhatsappDrafts() }}</strong></span>
-            <span>Payable <strong>{{ supplierOutstandingTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Payable <strong>{{ supplierOutstandingTotal() | auraMoney:'1.0-0' }}</strong></span>
           </div>
         </div>
         <div class="supplier-filter-row inner-action-bar">
@@ -143,11 +145,11 @@ interface SupplierCommandRow {
                   <small>{{ row.status }} · reliability {{ row.reliabilityScore | number: '1.0-0' }}</small>
                 </td>
                 <td>
-                  <strong>{{ row.purchaseValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong>{{ row.purchaseValue | auraMoney:'1.0-0' }}</strong>
                   <small>{{ row.purchaseValue ? 'Live purchases' : 'No purchase yet' }}</small>
                 </td>
                 <td>
-                  <strong>{{ row.openPoValue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong>{{ row.openPoValue | auraMoney:'1.0-0' }}</strong>
                   <small>{{ row.openPoCount }} open PO · {{ row.poDraftItems.length }} draft items</small>
                 </td>
                 <td>
@@ -171,9 +173,9 @@ interface SupplierCommandRow {
                 </td>
                 <td>
                   <strong>{{ row.poDraftItems.length }} item(s)</strong>
-                  <small>{{ row.poDraftTotal | currency: 'INR':'symbol':'1.0-0' }} · {{ row.expectedDeliveryLabel }}</small>
+                  <small>{{ row.poDraftTotal | auraMoney:'1.0-0' }} · {{ row.expectedDeliveryLabel }}</small>
                 </td>
-                <td>{{ row.lastPurchaseAt ? (row.lastPurchaseAt | date: 'mediumDate') : 'No purchase' }}<small>{{ row.outstandingValue | currency: 'INR':'symbol':'1.0-0' }} payable · {{ row.paymentTerms }}</small></td>
+                <td>{{ row.lastPurchaseAt ? (row.lastPurchaseAt | auraDate:'date') : 'No purchase' }}<small>{{ row.outstandingValue | auraMoney:'1.0-0' }} payable · {{ row.paymentTerms }}</small></td>
                 <td class="supplier-actions">
                   <a class="ghost-button mini" [routerLink]="['/suppliers', row.supplier.id]">360</a>
                   <button class="ghost-button mini" type="button" (click)="createPoForSupplier(row)" [disabled]="saving()">Create PO</button>

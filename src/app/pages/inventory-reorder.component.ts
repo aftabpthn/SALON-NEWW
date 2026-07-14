@@ -1,15 +1,16 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-inventory-reorder',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack separated-inventory-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -33,7 +34,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </div>
           <div class="zenoti-totals">
             <span>Low stock <strong>{{ lowStock().length }}</strong></span>
-            <span>Estimated PO <strong>{{ suggestionValue() | currency:'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Estimated PO <strong>{{ suggestionValue() | auraMoney:'1.0-0' }}</strong></span>
             <span>Critical <strong>{{ criticalSuggestions().length }}</strong></span>
           </div>
         </div>
@@ -66,7 +67,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ row.lowStockThreshold ?? '-' }}</td>
                 <td>{{ row.predictedStockoutDate || 'not projected' }}</td>
                 <td>{{ row.recommendedQty || row.quantity || 0 }} units</td>
-                <td>{{ row.estimatedCost | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ row.estimatedCost | auraMoney:'1.0-0' }}</td>
                 <td><span class="priority-chip" [class.critical]="isCritical(row)">{{ priorityLabel(row) }}</span></td>
                 <td><a class="zenoti-mini-button" routerLink="/inventory/purchase-orders">Create PO</a></td>
               </tr>

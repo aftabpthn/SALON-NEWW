@@ -1,14 +1,15 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-overview',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else overviewSkeleton">
       <div class="overview-grid">
@@ -57,7 +58,7 @@ import { Subscription } from 'rxjs';
         <section class="panel report-section inner-page-card">
           <div class="section-title inner-action-bar"><h3>Today's Performance Summary</h3></div>
           <div class="today-grid inner-stats-grid" *ngIf="todayPerf() as t">
-            <div class="today-card"><span>Revenue</span><strong>{{ t.revenue | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+            <div class="today-card"><span>Revenue</span><strong>{{ t.revenue | auraMoney:'1.0-0' }}</strong></div>
             <div class="today-card"><span>Bookings</span><strong>{{ t.bookings }}</strong></div>
             <div class="today-card"><span>Clients</span><strong>{{ t.clients }}</strong></div>
             <div class="today-card"><span>Avg Rating</span><strong>{{ t.rating }} ⭐</strong></div>

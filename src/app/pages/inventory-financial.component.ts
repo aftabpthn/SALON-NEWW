@@ -1,14 +1,15 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-inventory-financial',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack financial-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -25,10 +26,10 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <div class="state success" *ngIf="success()">{{ success() }}</div>
 
       <section class="financial-kpis inner-stats-grid">
-        <article class="metric-card teal"><span>Cash locked</span><strong>{{ cashLocked() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article class="metric-card amber"><span>COGS</span><strong>{{ cogs() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article class="metric-card red"><span>Dead stock</span><strong>{{ deadStockValue() | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ deadStockProducts().length }} item(s)</small></article>
-        <article class="metric-card blue"><span>Profit potential</span><strong>{{ profitPotential() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card teal"><span>Cash locked</span><strong>{{ cashLocked() | auraMoney:'1.0-0' }}</strong></article>
+        <article class="metric-card amber"><span>COGS</span><strong>{{ cogs() | auraMoney:'1.0-0' }}</strong></article>
+        <article class="metric-card red"><span>Dead stock</span><strong>{{ deadStockValue() | auraMoney:'1.0-0' }}</strong><small>{{ deadStockProducts().length }} item(s)</small></article>
+        <article class="metric-card blue"><span>Profit potential</span><strong>{{ profitPotential() | auraMoney:'1.0-0' }}</strong></article>
       </section>
 
       <div class="financial-grid">
@@ -36,7 +37,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="section-title"><div><h2>Cash stuck on shelves</h2></div></div>
           <article class="finance-row" *ngFor="let product of deadStockProducts()">
             <div><strong>{{ product.name }}</strong><span>{{ product.stock || 0 }} unit(s) · no sale/service usage</span></div>
-            <strong>{{ stockValue(product) | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ stockValue(product) | auraMoney:'1.0-0' }}</strong>
           </article>
           <p class="muted" *ngIf="!deadStockProducts().length">No dead-stock signal right now.</p>
         </section>
@@ -44,8 +45,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel inner-page-card">
           <div class="section-title"><div><h2>Weak-margin products</h2></div></div>
           <article class="finance-row danger" *ngFor="let product of marginLeakageProducts()">
-            <div><strong>{{ product.name }}</strong><span>Price {{ product.price | currency:'INR':'symbol':'1.0-0' }} · cost {{ product.unitCost | currency:'INR':'symbol':'1.0-0' }}</span></div>
-            <strong>{{ productMargin(product) | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <div><strong>{{ product.name }}</strong><span>Price {{ product.price | auraMoney:'1.0-0' }} · cost {{ product.unitCost | auraMoney:'1.0-0' }}</span></div>
+            <strong>{{ productMargin(product) | auraMoney:'1.0-0' }}</strong>
           </article>
           <p class="muted" *ngIf="!marginLeakageProducts().length">No weak margin signal.</p>
         </section>
@@ -60,7 +61,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <tr *ngFor="let row of supplierSpendRows()">
                 <td>{{ row.name }}</td>
                 <td>{{ row.count }}</td>
-                <td>{{ row.spend | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ row.spend | auraMoney:'1.0-0' }}</td>
                 <td>{{ row.lastDate || '-' }}</td>
               </tr>
               <tr *ngIf="!supplierSpendRows().length"><td colspan="4">No supplier purchase movements yet.</td></tr>

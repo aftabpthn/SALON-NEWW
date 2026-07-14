@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 interface ConsumeLine {
   productId: string;
@@ -60,7 +61,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
 @Component({
   selector: 'app-product-consume',
   standalone: true,
-  imports: [CommonModule, FormsModule, InventoryZenotiChromeComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, InventoryZenotiChromeComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -312,7 +313,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
               <div class="risk-row" *ngFor="let row of product360Ledger().slice(0, 5)">
                 <strong>{{ row['title'] || row['entityType'] }}</strong>
                 <span>{{ row['detail'] || row['entityId'] }}</span>
-                <small>{{ row['eventAt'] | date:'short' }}</small>
+                <small>{{ row['eventAt'] | auraDate:'date' }}</small>
               </div>
               <small *ngIf="!product360Ledger().length">No ledger events.</small>
             </article>
@@ -363,7 +364,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
               <span>{{ row['totalUsedText'] || '0' }}</span>
               <span>{{ money(row['cost'] || 0) }}</span>
               <span>{{ row['exceptionCount'] || 0 }}</span>
-              <span>{{ row['lastUsedAt'] | date:'short' }}</span>
+              <span>{{ row['lastUsedAt'] | auraDate:'date' }}</span>
             </div>
           </div>
           <div class="report-side">
@@ -419,7 +420,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             <div class="risk-row" *ngFor="let row of ledgerClientRows().slice(0, 5)">
               <strong>{{ row['clientName'] || 'Walk-in client' }}</strong>
               <span>{{ row['invoiceNumber'] || 'invoice' }} · {{ row['totalUsedText'] || '0' }}</span>
-              <small>{{ money(row['cost'] || 0) }} · last {{ row['lastUsedAt'] | date:'short' }}</small>
+              <small>{{ money(row['cost'] || 0) }} · last {{ row['lastUsedAt'] | auraDate:'date' }}</small>
             </div>
             <small *ngIf="!ledgerClientRows().length">No client rows.</small>
           </article>
@@ -688,7 +689,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
           <article *ngFor="let event of ledgerEvents().slice(0, 8)">
             <strong>{{ event['title'] || event['entityType'] }}</strong>
             <span>{{ event['detail'] || event['entityId'] }}</span>
-            <small>{{ event['entityType'] }} · {{ event['eventAt'] | date:'short' }}</small>
+            <small>{{ event['entityType'] }} · {{ event['eventAt'] | auraDate:'date' }}</small>
           </article>
         </div>
       </section>
@@ -729,7 +730,7 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
               <span>{{ row['totalUsedText'] || '0' }}</span>
               <span>{{ money(row['cost'] || 0) }}</span>
               <span>{{ row['exceptionCount'] || 0 }}</span>
-              <span>{{ row['lastUsedAt'] | date:'short' }}</span>
+              <span>{{ row['lastUsedAt'] | auraDate:'date' }}</span>
             </div>
           </div>
           <ng-template #noStaffAudit>
@@ -739,13 +740,13 @@ const PRODUCT_CONSUME_WASTAGE_OWNER_APPROVAL_PCT = 25;
             <article *ngFor="let entry of auditRecentEntries().slice(0, 6)">
               <strong>{{ entry['staffName'] || 'Unassigned' }} · {{ entry['productName'] || entry['productId'] }}</strong>
               <span>{{ entry['invoiceNumber'] || entry['source'] }} · {{ entry['clientName'] || 'Walk-in client' }} · {{ qty(entry['quantity'], entry['unit']) }} · {{ money(entry['cost'] || 0) }}</span>
-              <small>{{ entry['serviceName'] || 'Service' }} · {{ entry['usedAt'] | date:'short' }}</small>
+              <small>{{ entry['serviceName'] || 'Service' }} · {{ entry['usedAt'] | auraDate:'date' }}</small>
             </article>
             <h4 *ngIf="auditExceptions().length">Exceptions</h4>
             <article class="exception" *ngFor="let entry of auditExceptions().slice(0, 4)">
               <strong>{{ entry['exceptionType'] || entry['source'] }}</strong>
               <span>{{ entry['staffName'] || 'Manager override' }} · {{ entry['productName'] || entry['productId'] }} · {{ entry['reason'] || 'Review required' }}</span>
-              <small>{{ entry['usedAt'] | date:'short' }}</small>
+              <small>{{ entry['usedAt'] | auraDate:'date' }}</small>
             </article>
           </div>
         </div>

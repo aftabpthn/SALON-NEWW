@@ -1,13 +1,15 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-laundry-report',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DatePipe],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink],
   template: `
     <section class="laundry-report-page inner-page-shell">
       <header class="titlebar inner-page-header">
@@ -40,7 +42,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
         </article>
         <article>
           <span>Total Amount</span>
-          <strong>{{ total('totalAmount') | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ total('totalAmount') | auraMoney:'1.0-0' }}</strong>
         </article>
       </section>
 
@@ -71,13 +73,13 @@ import { ApiRecord, ApiService } from '../core/api.service';
             <tbody>
               <tr *ngFor="let entry of filteredEntries()" [class.active]="selectedId() === entry.id">
                 <td>{{ entry.docNo }}</td>
-                <td>{{ entry.docDate | date: 'mediumDate' }}</td>
+                <td>{{ entry.docDate | auraDate:'date' }}</td>
                 <td>{{ entry.laundryAccountName }}</td>
                 <td>{{ entry.regularTotalIn || 0 }}</td>
                 <td>{{ entry.regularTotalOut || 0 }}</td>
                 <td>{{ entry.rewashTotalIn || 0 }}</td>
                 <td>{{ entry.rewashTotalOut || 0 }}</td>
-                <td>{{ entry.totalAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ entry.totalAmount | auraMoney:'1.0-0' }}</td>
                 <td>
                   <button type="button" routerLink="/inventory/laundry-entry" (click)="queueEdit(entry.id)">Edit</button>
                 </td>
@@ -92,7 +94,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
 
       <section class="detail-panel inner-page-card" *ngIf="selectedEntry() as entry">
         <h3>{{ entry.docNo }} - {{ entry.laundryAccountName }}</h3>
-        <p>{{ entry.docDate | date: 'mediumDate' }} <span *ngIf="entry.remarks">- {{ entry.remarks }}</span></p>
+        <p>{{ entry.docDate | auraDate:'date' }} <span *ngIf="entry.remarks">- {{ entry.remarks }}</span></p>
         <div class="table-shell inner-table-wrap">
           <table>
             <thead>
@@ -114,7 +116,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
                 <td>{{ line.regularInQty || 0 }}</td>
                 <td>{{ line.regularOutQty || 0 }}</td>
                 <td>{{ line.rate || 0 }}</td>
-                <td>{{ line.amount | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ line.amount | auraMoney:'1.0-0' }}</td>
                 <td>{{ line.rewashInQty || 0 }}</td>
                 <td>{{ line.rewashOutQty || 0 }}</td>
               </tr>

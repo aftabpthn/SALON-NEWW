@@ -1,12 +1,13 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InvoiceItem } from '../../domain/invoice.model';
+import { AuraMoneyPipe } from '../../../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-invoice-cart',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule],
   styles: [`
     .billing-panel { display: grid; gap: 14px; border: 1px solid var(--aura-border-soft, rgba(75, 18, 56, 0.12)); border-radius: var(--aura-card-radius-premium, 14px); background: var(--aura-surface-raised, #fff); padding: 16px; box-shadow: 0 12px 30px rgba(75, 18, 56, 0.07); }
     .cart-head, .hh-controls, .cart-row, .discount-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -61,7 +62,7 @@ import { InvoiceItem } from '../../domain/invoice.model';
               ₹{{ (item.finalPricePaise || 0) / 100 | number:'1.2-2' }}
               <span class="hh-badge">Happy Hours</span>
             </span>
-            <ng-template #regularPrice>{{ item.quantity * item.unit_price | currency:'INR' }}</ng-template>
+            <ng-template #regularPrice>{{ item.quantity * item.unit_price | auraMoney }}</ng-template>
           </strong>
           <button class="remove-button" type="button" (click)="remove.emit(i)">Remove</button>
         </div>

@@ -1,14 +1,16 @@
-import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-supplier-360',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, DecimalPipe, RouterLink, StateComponent],
   template: `
     <section class="page-stack supplier-360-page inner-page-shell">
       <div class="module-hero compact-hero inner-page-header">
@@ -26,12 +28,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
       <ng-container *ngIf="supplier() as vendor">
         <section class="supplier-kpis inner-stats-grid">
           <article class="metric-card teal"><span>Supplier score</span><strong>{{ supplierScore() | number: '1.0-0' }}</strong></article>
-          <article class="metric-card blue"><span>Total purchase</span><strong>{{ purchaseValue() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ purchaseTransactions().length }} purchase entries</small></article>
+          <article class="metric-card blue"><span>Total purchase</span><strong>{{ purchaseValue() | auraMoney:'1.0-0' }}</strong><small>{{ purchaseTransactions().length }} purchase entries</small></article>
           <article class="metric-card amber"><span>Open PO</span><strong>{{ openPurchaseOrders().length }}</strong><small>{{ pendingRecommendations().length }} reorder signals</small></article>
           <article class="metric-card red"><span>Quality issues</span><strong>{{ qualityIssues().length }}</strong></article>
           <article class="metric-card green"><span>GRN reliability</span><strong>{{ grnReliabilityScore() | number: '1.0-0' }}</strong><small>{{ receivedPurchaseOrders().length }} received PO</small></article>
           <article class="metric-card violet"><span>PO variance</span><strong>{{ poVarianceRows().length }}</strong></article>
-          <article class="metric-card amber"><span>Payable watch</span><strong>{{ outstandingValue() | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ creditDaysOverdue() }} credit day(s) overdue</small></article>
+          <article class="metric-card amber"><span>Payable watch</span><strong>{{ outstandingValue() | auraMoney:'1.0-0' }}</strong><small>{{ creditDaysOverdue() }} credit day(s) overdue</small></article>
           <article class="metric-card blue"><span>WhatsApp log</span><strong>{{ supplierWhatsappLogs().length }}</strong></article>
         </section>
 
@@ -47,7 +49,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
               <div><span>GSTIN</span><strong>{{ vendor.gstin || 'Not captured' }}</strong></div>
               <div><span>Payment terms</span><strong>{{ paymentTerms() }}</strong></div>
               <div><span>Last purchase</span><strong>{{ lastPurchaseDate() }}</strong></div>
-              <div><span>Outstanding</span><strong>{{ outstandingValue() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Outstanding</span><strong>{{ outstandingValue() | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Replacement supplier</span><strong>{{ replacementSupplier() }}</strong></div>
               <div><span>Address</span><strong>{{ vendor.address || 'Not captured' }}</strong></div>
             </div>
@@ -60,7 +62,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
             <div class="mini-metrics tight">
               <div><span>Draft products</span><strong>{{ poDraftItems().length }}</strong></div>
-              <div><span>Draft value</span><strong>{{ poDraftTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Draft value</span><strong>{{ poDraftTotal() | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Expected delivery</span><strong>{{ expectedDeliveryLabel() }}</strong></div>
               <div><span>GST note</span><strong>Invoice required</strong></div>
             </div>
@@ -90,8 +92,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <tr *ngFor="let item of poDraftItems()">
                   <td>{{ item.productName }}</td>
                   <td>{{ item.quantity }}</td>
-                  <td>{{ item.unitCost | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ item.totalCost | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ item.unitCost | auraMoney:'1.0-0' }}</td>
+                  <td>{{ item.totalCost | auraMoney:'1.0-0' }}</td>
                   <td>{{ item.reason }}</td>
                 </tr>
                 <tr *ngIf="!poDraftItems().length"><td colspan="5">No low-stock recommendation for this supplier right now.</td></tr>
@@ -106,7 +108,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="timeline">
               <article *ngFor="let row of pendingRecommendations()">
                 <strong>{{ productName(row.productId || row['product_id']) }}</strong>
-                <span>{{ row.quantity || row.recommendedQty || row.recommended_qty || 0 }} units · {{ (row.estimatedCost || row.estimated_cost || 0) | currency: 'INR':'symbol':'1.0-0' }} · {{ row.status || 'pending approval' }}</span>
+                <span>{{ row.quantity || row.recommendedQty || row.recommended_qty || 0 }} units · {{ (row.estimatedCost || row.estimated_cost || 0) | auraMoney:'1.0-0' }} · {{ row.status || 'pending approval' }}</span>
                 <small>{{ row.recommendationText || row.reason || 'Reorder recommendation' }}</small>
               </article>
               <article *ngIf="!pendingRecommendations().length"><strong>No pending PO</strong><span>Reorder drafts linked to this supplier will appear here.</span></article>
@@ -121,8 +123,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <tbody>
                   <tr *ngFor="let row of priceComparisonRows()">
                     <td>{{ row.productName }}</td>
-                    <td>{{ row.currentCost | currency: 'INR':'symbol':'1.2-2' }}</td>
-                    <td>{{ row.bestSupplierName }} · {{ row.bestCost | currency: 'INR':'symbol':'1.2-2' }}</td>
+                    <td>{{ row.currentCost | auraMoney:'1.2-2' }}</td>
+                    <td>{{ row.bestSupplierName }} · {{ row.bestCost | auraMoney:'1.2-2' }}</td>
                     <td>{{ row.savingPct | number: '1.0-1' }}%</td>
                     <td><span class="badge" [class.warn]="row.savingPct > 0">{{ row.savingPct > 0 ? 'cheaper available' : 'best / stable' }}</span></td>
                   </tr>
@@ -133,7 +135,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="timeline mini price-change-list">
               <article *ngFor="let row of priceChangeRows()">
                 <strong>{{ productName(row.productId) }}</strong>
-                <span>{{ row.previousCost | currency: 'INR':'symbol':'1.0-0' }} to {{ row.latestCost | currency: 'INR':'symbol':'1.0-0' }} · {{ row.changePct | number: '1.0-1' }}%</span>
+                <span>{{ row.previousCost | auraMoney:'1.0-0' }} to {{ row.latestCost | auraMoney:'1.0-0' }} · {{ row.changePct | number: '1.0-1' }}%</span>
                 <small>{{ row.status }}</small>
               </article>
               <article *ngIf="!priceChangeRows().length"><strong>No price change history</strong><span>At least two purchase entries are needed for movement.</span></article>
@@ -160,9 +162,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <tr *ngFor="let po of supplierPurchaseOrders().slice(0, 8)">
                   <td>{{ po.poNumber || po.po_number || po.id }}</td>
                   <td><span class="badge" [class.warn]="poVarianceCount(po) > 0">{{ po.status || 'draft' }}</span></td>
-                  <td>{{ poValue(po) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ poValue(po) | auraMoney:'1.0-0' }}</td>
                   <td>{{ po.grnNumber || po.grn_number || 'Not received' }}</td>
-                  <td>{{ poReceivedDate(po) | date: 'mediumDate' }}</td>
+                  <td>{{ poReceivedDate(po) | auraDate:'date' }}</td>
                   <td>{{ poVarianceCount(po) }} signal(s)</td>
                 </tr>
                 <tr *ngIf="!supplierPurchaseOrders().length"><td colspan="6">No purchase orders linked to this supplier yet.</td></tr>
@@ -174,7 +176,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <section class="panel">
           <div class="section-title"><div><h2>Payable, credit days and last payment</h2></div></div>
           <div class="mini-metrics">
-            <div><span>Estimated payable</span><strong>{{ outstandingValue() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Estimated payable</span><strong>{{ outstandingValue() | auraMoney:'1.0-0' }}</strong></div>
             <div><span>Payment terms</span><strong>{{ paymentTerms() }}</strong></div>
             <div><span>Credit overdue</span><strong>{{ creditDaysOverdue() }}</strong></div>
             <div><span>Last payment</span><strong>{{ lastPaymentDate() }}</strong></div>

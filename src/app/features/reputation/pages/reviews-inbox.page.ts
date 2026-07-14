@@ -6,13 +6,14 @@ import { forkJoin } from 'rxjs';
 import { StateComponent } from '../../../shared/ui/state/state.component';
 import { ReputationApiService } from '../data-access/reputation-api.service';
 import { ReputationReview, ReviewPlatform, ReviewReply, SupportedPlatform } from '../domain/reputation.models';
+import { AuraDatePipe } from '../../../shared/pipes/aura-date.pipe';
 
 type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
 
 @Component({
   selector: 'app-reviews-inbox-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="inbox-page">
       <header class="page-heading">
@@ -102,7 +103,7 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
                 <span>{{ review.platformName }}</span>
                 <span [class]="'sentiment ' + sentimentClass(review)">{{ sentimentLabel(review) }}</span>
                 <span *ngIf="review.topics.length">{{ review.topics.slice(0, 3).join(', ') }}</span>
-                <span>{{ review.createdAt ? (review.createdAt | date: 'mediumDate') : 'Date missing' }}</span>
+                <span>{{ review.createdAt ? (review.createdAt | auraDate:'date') : 'Date missing' }}</span>
               </div>
             </div>
             <div class="status-stack">
@@ -180,7 +181,7 @@ type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
               <div class="reply-history" *ngIf="review.replies?.length">
                 <article *ngFor="let reply of review.replies">
                   <p>{{ reply.replyText }}</p>
-                  <small>{{ reply.approvalStatus }} · {{ reply.createdAt | date: 'medium' }}</small>
+                  <small>{{ reply.approvalStatus }} · {{ reply.createdAt | auraDate:'date' }}</small>
                   <div class="actions-row compact">
                     <button class="ghost-button" type="button" (click)="approveReply(reply)" [disabled]="actionLoading || reply.approvalStatus === 'approved'">Approve</button>
                     <button class="ghost-button" type="button" (click)="postReply(reply)" [disabled]="actionLoading || reply.approvalStatus !== 'approved'">Post</button>

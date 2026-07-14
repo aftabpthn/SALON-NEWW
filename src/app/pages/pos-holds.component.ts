@@ -1,12 +1,14 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.service';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-pos-holds',
   standalone: true,
-  imports: [CommonModule, RouterLink, CurrencyPipe, DatePipe],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, RouterLink],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero inner-page-header">
@@ -21,8 +23,8 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
 
       <div class="metrics-grid inner-stats-grid">
         <article class="metric-card"><span>Held invoices</span><strong>{{ holds().length }}</strong></article>
-        <article class="metric-card"><span>Total value</span><strong>{{ totalHeld() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
-        <article class="metric-card"><span>Due value</span><strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Total value</span><strong>{{ totalHeld() | auraMoney:'1.0-0' }}</strong></article>
+        <article class="metric-card"><span>Due value</span><strong>{{ totalDue() | auraMoney:'1.0-0' }}</strong></article>
       </div>
 
       <section class="panel inner-page-card">
@@ -60,9 +62,9 @@ import { PosHeldInvoiceDraft, PosSettingsService } from '../core/pos-settings.se
                 <td>{{ hold.branchName || hold.branchId || 'Branch' }}</td>
                 <td>{{ hold.staffName || 'Unassigned' }}</td>
                 <td>{{ hold.items.length }}</td>
-                <td class="right">{{ hold.total | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td class="right">{{ hold.balanceDue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ hold.updatedAt | date: 'short' }}</td>
+                <td class="right">{{ hold.total | auraMoney:'1.0-0' }}</td>
+                <td class="right">{{ hold.balanceDue | auraMoney:'1.0-0' }}</td>
+                <td>{{ hold.updatedAt | auraDate:'date' }}</td>
                 <td><button class="ghost-button mini" type="button" (click)="deleteHold(hold.id)">Delete</button></td>
               </tr>
             </tbody>

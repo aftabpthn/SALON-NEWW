@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,6 +8,8 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type PendingPackageReport = {
   summary: ApiRecord;
@@ -20,7 +22,7 @@ type PendingPackageReport = {
 @Component({
   selector: 'app-pending-packages-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack pending-packages-page inner-page-shell">
       <div class="module-hero report-hero inner-page-header">
@@ -78,11 +80,11 @@ type PendingPackageReport = {
           </article>
           <article class="metric-card">
             <span>Services Amount</span>
-            <strong>{{ data.summary.servicesAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary.servicesAmount || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Pending Services Amount</span>
-            <strong>{{ data.summary.pendingServicesAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary.pendingServicesAmount || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Pending Qty</span>
@@ -131,13 +133,13 @@ type PendingPackageReport = {
                   <td>{{ row.contact || '-' }}</td>
                   <td>{{ row.packageName || '-' }}</td>
                   <td>{{ row.serviceName || '-' }}</td>
-                  <td>{{ row.price || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.price || 0 | auraMoney:'1.0-0' }}</td>
                   <td>{{ numberValue(row.totalQty) }}</td>
                   <td>{{ numberValue(row.redeemedQty) }}</td>
                   <td><span class="pending-pill">{{ numberValue(row.pendingQty) }}</span></td>
-                  <td>{{ row.pendingServicesPrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.date ? (row.date | date: 'mediumDate') : '-' }}</td>
-                  <td><span [class.expired]="row.status === 'expired'" [class.expiring]="row.status === 'expiring'">{{ row.expiredOn ? (row.expiredOn | date: 'mediumDate') : '-' }}</span></td>
+                  <td>{{ row.pendingServicesPrice || 0 | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.date ? (row.date | auraDate:'date') : '-' }}</td>
+                  <td><span [class.expired]="row.status === 'expired'" [class.expiring]="row.status === 'expiring'">{{ row.expiredOn ? (row.expiredOn | auraDate:'date') : '-' }}</span></td>
                   <td class="actions-cell">
                     <a class="ghost-button mini" *ngIf="row.clientId" [routerLink]="['/clients', row.clientId]">Client</a>
                     <ng-container *ngIf="canAccessPath('/pos/invoices')">

@@ -1,8 +1,9 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type OtherSettingKey =
   | 'discountMembership'
@@ -118,7 +119,7 @@ const SETTING_ITEMS: OtherSettingItem[] = [
 @Component({
   selector: 'app-other-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink],
   template: `
     <section class="other-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
@@ -174,7 +175,7 @@ const SETTING_ITEMS: OtherSettingItem[] = [
           <div class="audit-box">
             <span>Audit info</span>
             <strong>Last changed by: {{ audit.lastChangedBy || 'Not saved yet' }}</strong>
-            <small>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</small>
+            <small>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | auraDate:'date') : 'Not saved yet' }}</small>
           </div>
         </section>
 

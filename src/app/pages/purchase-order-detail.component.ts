@@ -1,15 +1,17 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-purchase-order-detail',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack po-detail-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -31,11 +33,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="print-header">
           <div>
             <h1>{{ row.poNumber || row.id }}</h1>
-            <p>{{ branchName(row.branchId) }} · {{ row.createdAt | date: 'medium' }}</p>
+            <p>{{ branchName(row.branchId) }} · {{ row.createdAt | auraDate:'date' }}</p>
           </div>
           <div class="status-block">
             <strong>{{ row.status || 'draft' }}</strong>
-            <span>{{ (row.grandTotal || row.totalEstimatedCost) | currency: 'INR':'symbol':'1.0-0' }}</span>
+            <span>{{ (row.grandTotal || row.totalEstimatedCost) | auraMoney:'1.0-0' }}</span>
           </div>
         </div>
 
@@ -71,7 +73,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <article>
             <span>Approval</span>
             <strong>{{ row.approval?.status || row.approvalStatus || 'not_requested' }}</strong>
-            <small>{{ row.approval?.approvedBy || row.approvedBy || 'Approver pending' }} · {{ (row.approval?.approvedAt || row.approvedAt) | date: 'short' }}</small>
+            <small>{{ row.approval?.approvedBy || row.approvedBy || 'Approver pending' }} · {{ (row.approval?.approvedAt || row.approvedAt) | auraDate:'date' }}</small>
           </article>
           <article>
             <span>GRN / invoice</span>
@@ -86,12 +88,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </div>
 
         <div class="totals-grid">
-          <span><strong>Subtotal</strong>{{ row.subtotalAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-          <span><strong>Discount</strong>{{ row.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-          <span><strong>Taxable</strong>{{ row.taxableAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-          <span><strong>GST</strong>{{ row.gstAmount | currency: 'INR':'symbol':'1.0-0' }}</span>
-          <span><strong>Grand total</strong>{{ (row.grandTotal || row.totalEstimatedCost) | currency: 'INR':'symbol':'1.0-0' }}</span>
-          <span><strong>Received value</strong>{{ row.totalReceivedCost | currency: 'INR':'symbol':'1.0-0' }}</span>
+          <span><strong>Subtotal</strong>{{ row.subtotalAmount | auraMoney:'1.0-0' }}</span>
+          <span><strong>Discount</strong>{{ row.discountAmount | auraMoney:'1.0-0' }}</span>
+          <span><strong>Taxable</strong>{{ row.taxableAmount | auraMoney:'1.0-0' }}</span>
+          <span><strong>GST</strong>{{ row.gstAmount | auraMoney:'1.0-0' }}</span>
+          <span><strong>Grand total</strong>{{ (row.grandTotal || row.totalEstimatedCost) | auraMoney:'1.0-0' }}</span>
+          <span><strong>Received value</strong>{{ row.totalReceivedCost | auraMoney:'1.0-0' }}</span>
         </div>
 
         <section class="sub-panel inner-page-card">
@@ -104,12 +106,12 @@ import { StateComponent } from '../shared/ui/state/state.component';
                   <td><strong>{{ item.productName || item.productId }}</strong><small>{{ item.hsnSac || 'HSN pending' }}</small></td>
                   <td>{{ item.requestedQty || 0 }} {{ item.unit || 'pcs' }}</td>
                   <td>{{ item.receivedQty || 0 }} {{ item.unit || 'pcs' }}</td>
-                  <td>{{ item.mrp | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ item.unitCost | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ item.lastPurchase?.rate ? (item.lastPurchase.rate | currency: 'INR':'symbol':'1.0-0') : 'No history' }}<small>{{ item.lastPurchase?.purchasedAt | date: 'short' }}</small></td>
-                  <td>{{ item.discountPercent || 0 }}% / {{ item.discountAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ item.gstPercent || 0 }}% / {{ item.gstAmount | currency: 'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ (item.lineTotal || item.estimatedTotal) | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ item.mrp | auraMoney:'1.0-0' }}</td>
+                  <td>{{ item.unitCost | auraMoney:'1.0-0' }}</td>
+                  <td>{{ item.lastPurchase?.rate ? (item.lastPurchase.rate | auraMoney:'1.0-0') : 'No history' }}<small>{{ item.lastPurchase?.purchasedAt | auraDate:'date' }}</small></td>
+                  <td>{{ item.discountPercent || 0 }}% / {{ item.discountAmount | auraMoney:'1.0-0' }}</td>
+                  <td>{{ item.gstPercent || 0 }}% / {{ item.gstAmount | auraMoney:'1.0-0' }}</td>
+                  <td>{{ (item.lineTotal || item.estimatedTotal) | auraMoney:'1.0-0' }}</td>
                   <td>{{ item.batchNumber || '-' }}<small>{{ item.expiryDate || 'No expiry' }}</small></td>
                 </tr>
               </tbody>
@@ -157,7 +159,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="timeline">
               <div *ngFor="let event of row.statusHistory || []">
                 <strong>{{ event.status }}</strong>
-                <span>{{ event.at | date: 'medium' }}</span>
+                <span>{{ event.at | auraDate:'date' }}</span>
                 <small>{{ event.by || 'system' }} · {{ event.note || 'No note' }}</small>
               </div>
             </div>
@@ -168,7 +170,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <div class="timeline">
               <div *ngFor="let event of row.receiveHistory || []">
                 <strong>{{ event.grnNumber || event.status }}</strong>
-                <span>{{ (event.grnDate || event.at) | date: 'mediumDate' }}</span>
+                <span>{{ (event.grnDate || event.at) | auraDate:'date' }}</span>
                 <small>{{ event.supplierInvoiceNo || 'No invoice' }} · {{ event.receivedBy || 'Receiver pending' }}</small>
               </div>
               <div *ngIf="!(row.receiveHistory || []).length">
@@ -184,7 +186,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="whatsapp-list">
             <article *ngFor="let message of row.whatsappHistory || []">
               <strong>{{ message.status }}</strong>
-              <span>{{ message.phone || 'No phone' }} · {{ message.createdAt | date: 'short' }}</span>
+              <span>{{ message.phone || 'No phone' }} · {{ message.createdAt | auraDate:'date' }}</span>
               <pre>{{ message.message }}</pre>
             </article>
             <article *ngIf="!(row.whatsappHistory || []).length">

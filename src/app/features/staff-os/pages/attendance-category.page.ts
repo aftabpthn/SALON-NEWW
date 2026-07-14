@@ -333,9 +333,9 @@ export class AttendanceCategoryPage implements OnInit {
   private cleanStatusText(value: string): string {
     return String(value || '')
       .replace(/\bQA\s*\d+\b/gi, '')
-      .replace(/\b\d{6,}\b/g, '')
+      .replace(/\b\d{6 }\b/g, '')
       .replace(/\s*[-·]\s*$/g, '')
-      .replace(/\s{2,}/g, ' ')
+      .replace(/\s{2 }/g, ' ')
       .trim();
   }
 

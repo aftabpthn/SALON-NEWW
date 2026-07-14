@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MfaApiService, MfaEnrolment, MfaSession, MfaStatus } from '../core/mfa-api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 /**
  * MFA + session management page (ADD-ONLY feature, route: /mfa-security).
@@ -10,7 +11,7 @@ import { MfaApiService, MfaEnrolment, MfaSession, MfaStatus } from '../core/mfa-
 @Component({
   standalone: true,
   selector: 'app-security-mfa',
-  imports: [CommonModule, FormsModule],
+  imports: [AuraDatePipe, CommonModule, FormsModule],
   template: `
     <div class="mfa-wrap">
       <header class="mfa-head">
@@ -88,7 +89,7 @@ import { MfaApiService, MfaEnrolment, MfaSession, MfaStatus } from '../core/mfa-
             <div class="sess-icon">🖥️</div>
             <div class="sess-info">
               <strong>{{ s.userAgent || 'Unknown device' }} <span class="now" *ngIf="s.current">· this device</span></strong>
-              <small>{{ s.ipAddress || '—' }} · started {{ s.startedAt | date:'short' }} · {{ s.status }}</small>
+              <small>{{ s.ipAddress || '—' }} · started {{ s.startedAt | auraDate:'date' }} · {{ s.status }}</small>
             </div>
             <button class="btn ghost sm" *ngIf="!s.current" (click)="revoke(s.id)" [disabled]="busy()">Revoke</button>
           </div>

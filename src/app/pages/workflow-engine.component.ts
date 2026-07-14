@@ -1,14 +1,15 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-workflow-engine',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, DatePipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, ReactiveFormsModule, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -85,7 +86,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <td>{{ run.audience?.length || 0 }}</td>
                 <td>{{ run.actionResult?.sent || 0 }}</td>
                 <td><span class="badge">{{ run.status }}</span></td>
-                <td>{{ run.createdAt | date: 'short' }}</td>
+                <td>{{ run.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!runs().length"><td colspan="5"><div class="empty-state"><strong>No runs yet</strong><span>Run a workflow to create notification records.</span></div></td></tr>
             </tbody>

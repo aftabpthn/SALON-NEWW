@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./db.js";
 import { ensureHappyHoursInvoiceColumns } from "./migrations/add-happy-hours-to-invoices.js";
+import { ensureSecurityEphemeralGrantsSchema } from "./migrations/create-security-ephemeral-grants.js";
 import "./jobs/flash-sale-monitor.js";
 import "./jobs/demand-snapshot.job.js";
 import "./jobs/offer-auto-sunset.job.js";
@@ -189,7 +190,9 @@ import { staffSalesReportRouter } from "./routes/staff-sales-report.routes.js";
 import { staffManagementRouter } from "./routes/staff-management.routes.js";
 import { staffOsRouter } from "./routes/staff-os.routes.js";
 import { staffEnterpriseRouter } from "./routes/staff-enterprise.routes.js";
+import { staffBusinessRouter } from "./routes/staff-business.routes.js";
 import { staffSelfRouter } from "./routes/staff-self.routes.js";
+import { teamChatRouter } from "./routes/team-chat.routes.js";
 import { superAdminRouter } from "./routes/super-admin.routes.js";
 import { terminalRouter } from "./routes/terminal.routes.js";
 import { whatsappRouter } from "./routes/whatsapp.routes.js";
@@ -274,6 +277,7 @@ export function createApp() {
   ensureInvoicePaymentCollectionSchema();
   ensureBillingCompatibilitySchema();
   ensureHappyHoursInvoiceColumns();
+  ensureSecurityEphemeralGrantsSchema();
   ensureCashDrawerEodSchema();
   ensureGrowthRankBotSchema();
   ensureLegacyRevenueSchema();
@@ -515,7 +519,9 @@ export function createApp() {
   app.use("/api/v1", authenticateJwt(), staffManagementRouter);
   app.use("/api/v1", authenticateJwt(), staffOsRouter);
   app.use("/api/v1", authenticateJwt(), staffEnterpriseRouter);
+  app.use("/api/v1", authenticateJwt(), staffBusinessRouter);
   app.use("/api/v1", authenticateJwt(), staffSelfRouter);
+  app.use("/api/v1", teamChatRouter);
   app.use("/api/v1", authenticateJwt(), enterpriseCommandRouter);
   app.use("/api/v1", authenticateJwt(), engagementRouter);
   app.use("/api/v1", leadManagementRouter);
@@ -529,6 +535,7 @@ export function createApp() {
   app.use("/api/v1", authenticateJwt(), slotReservationRouter);
   app.use("/api/v1", authenticateJwt(), appointmentSafetyRouter);
   app.use("/api/v1", authenticateJwt(), reputationRouter);
+  app.use("/api/v1", generalSettingsRouter);
   app.use("/api/v1", authenticateJwt(), resourceRouter);
   app.use("/api/v1", appointmentSalonistReportRouter);
   app.use("/api/v1", dueRecoveryReportRouter);
@@ -731,6 +738,7 @@ export function createApp() {
   app.use("/api", slotReservationRouter);
   app.use("/api", appointmentSafetyRouter);
   app.use("/api", reputationRouter);
+  app.use("/api", generalSettingsRouter);
   app.use("/api", resourceRouter);
 
   app.use("/api", whatsappWebhookRouter);

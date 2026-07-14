@@ -1,13 +1,14 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-clients',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="client-metrics inner-stats-grid">
@@ -32,7 +33,7 @@ import { Subscription } from 'rxjs';
           <div class="rank-list">
             <article *ngFor="let c of topSpenders(); let i=index">
               <div><small>#{{ i+1 }}</small><strong>{{ c.name }}</strong><span>{{ c.visits }} visits</span></div>
-              <strong>{{ c.spent | currency:'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ c.spent | auraMoney:'1.0-0' }}</strong>
             </article>
           </div>
         </section>

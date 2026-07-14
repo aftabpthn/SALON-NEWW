@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
 
@@ -6,11 +6,13 @@ type AnalyticsViewKey = 'overview' | 'revenue-forecast' | 'heatmap' | 'staff-pro
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-analytics-engine',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, CurrencyPipe, DatePipe, DecimalPipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, DecimalPipe, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -99,7 +101,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div class="metrics-grid" *ngIf="visible('overview')">
           <aura-kpi-card tone="neutral" target="/kpi-details/analytics/14-day-forecast">
             <span>14-day forecast</span>
-            <strong>{{ metrics.revenueForecast.projected14DayRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ metrics.revenueForecast.projected14DayRevenue | auraMoney:'1.0-0' }}</strong>
             <small>{{ metrics.revenueForecast.trendPercent | number: '1.0-1' }}% recent trend</small>
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/analytics/peak-hour">
@@ -119,12 +121,12 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/analytics/average-ltv">
             <span>Average LTV</span>
-            <strong>{{ metrics.lifetimeValue.avgLtv | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>{{ metrics.lifetimeValue.totalLtv | currency: 'INR':'symbol':'1.0-0' }} total</small>
+            <strong>{{ metrics.lifetimeValue.avgLtv | auraMoney:'1.0-0' }}</strong>
+            <small>{{ metrics.lifetimeValue.totalLtv | auraMoney:'1.0-0' }} total</small>
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/analytics/membership-revenue">
             <span>Membership revenue</span>
-            <strong>{{ metrics.membershipPerformance.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ metrics.membershipPerformance.revenue | auraMoney:'1.0-0' }}</strong>
             <small>{{ metrics.membershipPerformance.activeCount }} active</small>
           </aura-kpi-card>
           <aura-kpi-card tone="neutral" target="/kpi-details/analytics/funnel-paid">
@@ -157,9 +159,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
             <div class="section-title"><h2>Revenue forecast</h2></div>
             <div class="chart-bars">
               <div *ngFor="let point of metrics.revenueForecast.forecast14Days">
-                <span>{{ point.date | date: 'MMM d' }}</span>
+                <span>{{ point.date | auraDate:'date' }}</span>
                 <i [style.height.%]="forecastHeight(point.projectedRevenue)"></i>
-                <strong>{{ point.projectedRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                <strong>{{ point.projectedRevenue | auraMoney:'1.0-0' }}</strong>
               </div>
             </div>
           </section>
@@ -184,7 +186,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
           <div class="heatmap-grid">
             <article *ngFor="let cell of metrics.heatmaps.strongestCells" >
               <strong>{{ cell.dayLabel }} {{ cell.hour }}:00</strong>
-              <span>{{ cell.bookings }} bookings · {{ cell.revenue | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <span>{{ cell.bookings }} bookings · {{ cell.revenue | auraMoney:'1.0-0' }}</span>
             </article>
           </div>
         </section>
@@ -199,7 +201,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                   <tr *ngFor="let person of metrics.staffProductivity">
                     <td><strong>{{ person.name }}</strong><small>{{ person.role }}</small></td>
                     <td>{{ person.productivityScore | number: '1.0-1' }}</td>
-                    <td>{{ person.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ person.revenue | auraMoney:'1.0-0' }}</td>
                     <td>{{ person.bookings }}</td>
                     <td>{{ person.completionRate | number: '1.0-1' }}%</td>
                   </tr>
@@ -234,9 +236,9 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <tbody>
                   <tr *ngFor="let client of metrics.lifetimeValue.topClients">
                     <td>{{ client.name }}</td>
-                    <td>{{ client.lifetimeValue | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ client.avgTicket | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ client.projectedAnnualValue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ client.lifetimeValue | auraMoney:'1.0-0' }}</td>
+                    <td>{{ client.avgTicket | auraMoney:'1.0-0' }}</td>
+                    <td>{{ client.projectedAnnualValue | auraMoney:'1.0-0' }}</td>
                     <td>{{ client.loyaltyPoints }}</td>
                   </tr>
                 </tbody>
@@ -263,7 +265,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
               <tbody>
                 <tr *ngFor="let branch of metrics.branchComparison">
                   <td><strong>{{ branch.name }}</strong><small>{{ branch.city }}</small></td>
-                  <td>{{ branch.revenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ branch.revenue | auraMoney:'1.0-0' }}</td>
                   <td>{{ branch.sales }}</td>
                   <td>{{ branch.appointments }}</td>
                   <td>{{ branch.completionRate | number: '1.0-1' }}%</td>
@@ -291,7 +293,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <td>{{ item.periodStart }} to {{ item.periodEnd }}</td>
                 <td>{{ item.branchId || 'All branches' }}</td>
                 <td><span class="badge">{{ item.status }}</span></td>
-                <td>{{ item.createdAt | date: 'short' }}</td>
+                <td>{{ item.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!snapshots().length"><td colspan="5">No analytics snapshots yet.</td></tr>
             </tbody>

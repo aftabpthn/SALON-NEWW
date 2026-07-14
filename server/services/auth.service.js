@@ -158,7 +158,7 @@ export class AuthService {
     return true;
   }
 
-  refresh(refreshToken) {
+  refresh(refreshToken, { fromCookie = false } = {}) {
     ensureTenantUserAccessColumns();
     if (!refreshToken) throw unauthorized("Refresh token is required");
     const tokenHash = hashToken(refreshToken);
@@ -167,6 +167,7 @@ export class AuthService {
     const tenant = repositories.tenants.getById(record.tenantId);
     const user = repositories.tenantUsers.getById(record.userId, { tenantId: record.tenantId });
     if (!tenant || !user) throw unauthorized("Refresh token account no longer exists");
+    if (user.staffId && !fromCookie) throw unauthorized("Staff refresh requires the secure session cookie");
     repositories.authRefreshTokens.update(record.id, { revokedAt: now() }, { tenantId: record.tenantId });
     const branchId = assertLoginBranchScope({ ...user, role: normalizeRole(user.role) }, record.branchId || "");
     return this.issueTokenPair({ tenant, user: { ...user, role: normalizeRole(user.role) }, branchId, deviceId: record.deviceId || "" });

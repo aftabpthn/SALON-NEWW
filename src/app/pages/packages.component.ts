@@ -1,10 +1,11 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type PackageForm = {
   id: string;
@@ -41,7 +42,7 @@ type RedemptionLine = {
 @Component({
   selector: 'app-packages',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack packages-page inner-page-shell">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -100,9 +101,9 @@ type RedemptionLine = {
                   <td>
                     <div class="price-cell">
                       <del *ngIf="packageCostPrice(item) > packageSellingPrice(item)">
-                        {{ packageCostPrice(item) | currency: 'INR':'symbol':'1.0-0' }}
+                        {{ packageCostPrice(item) | auraMoney:'1.0-0' }}
                       </del>
-                      <strong>{{ packageSellingPrice(item) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                      <strong>{{ packageSellingPrice(item) | auraMoney:'1.0-0' }}</strong>
                     </div>
                   </td>
                   <td><span class="status-pill">{{ item.status || 'Active' }}</span></td>
@@ -146,7 +147,7 @@ type RedemptionLine = {
           <select class="drawer-input" [ngModel]="serviceToAdd" (ngModelChange)="addServiceLine($event)">
             <option value="">Select Service</option>
             <option *ngFor="let service of services()" [value]="recordId(service)">
-              {{ serviceName(service) }} (Price: {{ servicePrice(service) | currency: 'INR':'symbol':'1.0-0' }})
+              {{ serviceName(service) }} (Price: {{ servicePrice(service) | auraMoney:'1.0-0' }})
             </option>
           </select>
 

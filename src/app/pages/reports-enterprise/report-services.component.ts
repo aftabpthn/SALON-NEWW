@@ -1,13 +1,14 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import { BaseChartComponent } from './base-chart.component';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-services',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, BaseChartComponent],
+  imports: [AuraMoneyPipe, CommonModule, BaseChartComponent],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="service-metrics inner-stats-grid">
@@ -46,8 +47,8 @@ import { Subscription } from 'rxjs';
                 <tr *ngFor="let s of services()">
                   <td><strong>{{ s.name }}</strong></td>
                   <td>{{ s.bookings }}</td>
-                  <td>{{ s.revenue | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ s.avgPrice | currency:'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ s.revenue | auraMoney:'1.0-0' }}</td>
+                  <td>{{ s.avgPrice | auraMoney:'1.0-0' }}</td>
                   <td>{{ s.growth }}%</td>
                   <td><span class="trend-indicator" [class.trend-up]="s.growth>0" [class.trend-down]="s.growth<0">{{ s.growth>0 ? '↑' : '↓' }}</span></td>
                 </tr>

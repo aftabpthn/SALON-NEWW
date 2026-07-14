@@ -1,10 +1,11 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type StaffModuleLink = {
   label: string;
@@ -23,7 +24,7 @@ type StaffModuleGroup = {
 @Component({
   selector: 'app-staff-connected-modules',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack connected-modules-page">
       <section class="connected-hero">
@@ -60,7 +61,7 @@ type StaffModuleGroup = {
           </article>
           <article>
             <span>Sales</span>
-            <strong>{{ summary.metrics.totalRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ summary.metrics.totalRevenue | auraMoney:'1.0-0' }}</strong>
           </article>
           <article>
             <span>Payroll rows</span>
@@ -68,12 +69,12 @@ type StaffModuleGroup = {
           </article>
           <article>
             <span>Commission</span>
-            <strong>{{ summary.metrics.totalCommission | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ summary.metrics.totalCommission | auraMoney:'1.0-0' }}</strong>
             <small>{{ countFor('commission') }} lines</small>
           </article>
           <article>
             <span>Incentives</span>
-            <strong>{{ summary.metrics.totalIncentives | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ summary.metrics.totalIncentives | auraMoney:'1.0-0' }}</strong>
             <small>{{ countFor('incentives') }} rows</small>
           </article>
         </section>

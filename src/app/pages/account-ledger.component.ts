@@ -1,9 +1,10 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type LedgerAccount = ApiRecord & {
   id: string;
@@ -44,7 +45,7 @@ type LedgerResponse = {
 @Component({
   selector: 'app-account-ledger',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="ledger-shell inner-page-shell">
       <div class="ledger-titlebar inner-page-header">
@@ -117,13 +118,13 @@ type LedgerResponse = {
             <tbody>
               <tr *ngFor="let row of data.entries">
                 <td>{{ row.branch || 'HO' }}</td>
-                <td>{{ row.docDate | date:'dd/MM/yyyy' }}</td>
+                <td>{{ row.docDate | auraDate:'date' }}</td>
                 <td>{{ row.type }}</td>
                 <td>{{ row.prefix }}</td>
                 <td>{{ row.docNo }}</td>
                 <td>{{ row.sno }}</td>
                 <td>{{ row.billNumber }}</td>
-                <td>{{ row.billDate ? (row.billDate | date:'dd/MM/yyyy') : '' }}</td>
+                <td>{{ row.billDate ? (row.billDate | auraDate:'date') : '' }}</td>
                 <td>{{ row.particular }}</td>
                 <td class="num">{{ row.debit | number:'1.2-2' }}</td>
                 <td class="num">{{ row.credit | number:'1.2-2' }}</td>

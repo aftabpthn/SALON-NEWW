@@ -1,15 +1,16 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-inventory-fifo',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack fifo-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -29,7 +30,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <div class="zenoti-totals">
             <span>Expiring soon <strong>{{ expiringSoon().length }}</strong></span>
             <span>No expiry <strong>{{ noExpiry().length }}</strong></span>
-            <span>Batch value <strong>{{ batchValue() | currency:'INR':'symbol':'1.0-0' }}</strong></span>
+            <span>Batch value <strong>{{ batchValue() | auraMoney:'1.0-0' }}</strong></span>
             <span>Waste risk <strong>{{ wasteRiskCount() }}</strong></span>
           </div>
         </div>
@@ -59,8 +60,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ supplierName(batch.supplierId) }}</td>
                 <td>{{ batch.quantityAvailable || 0 }}</td>
                 <td>{{ batch.quantityReceived || 0 }}</td>
-                <td>{{ batch.unitCost | currency:'INR':'symbol':'1.0-0' }}</td>
-                <td>{{ batchRowValue(batch) | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ batch.unitCost | auraMoney:'1.0-0' }}</td>
+                <td>{{ batchRowValue(batch) | auraMoney:'1.0-0' }}</td>
                 <td>{{ batch.expiryDate || 'No expiry' }}<small *ngIf="batch.expiryDate">{{ daysUntil(batch.expiryDate) }} day(s)</small></td>
                 <td><span class="fifo-chip" [class.warn]="isExpiring(batch)" [class.danger]="isExpired(batch)">{{ fifoStatus(batch) }}</span></td>
                 <td><a class="zenoti-mini-button" [routerLink]="['/inventory/products', batch.productId]">Product 360</a></td>

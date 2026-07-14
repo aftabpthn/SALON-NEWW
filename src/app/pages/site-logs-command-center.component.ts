@@ -1,12 +1,13 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-site-logs-command-center',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe],
+  imports: [AuraDatePipe, CommonModule, FormsModule],
   template: `
     <section class="site-logs-page">
       <header class="page-head">
@@ -71,7 +72,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
             <strong>{{ riskAlerts().length }}</strong>
           </header>
           <button class="risk-row" type="button" *ngFor="let alert of riskAlerts()" (click)="openDetail(alert)">
-            <span>{{ alert.createdAt | date:'dd-MM-yyyy HH:mm:ss' }}</span>
+            <span>{{ alert.createdAt | auraDate:'dateTime' }}</span>
             <strong>{{ alert.activity }}</strong>
             <small>{{ alert.riskFlags?.join(', ') || alert.severity }}</small>
           </button>
@@ -87,7 +88,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
           </header>
           <ol>
             <li *ngFor="let item of timeline()">
-              <span>{{ item.createdAt | date:'HH:mm' }}</span>
+              <span>{{ item.createdAt | auraDate:'time' }}</span>
               <div>
                 <strong>{{ item.updatedBy }}</strong>
                 <small>{{ item.activity }}</small>
@@ -129,7 +130,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
             </thead>
             <tbody>
               <tr *ngFor="let log of rows()">
-                <td><strong>{{ log.createdAt | date:'dd-MM-yyyy HH:mm:ss' }}</strong></td>
+                <td><strong>{{ log.createdAt | auraDate:'dateTime' }}</strong></td>
                 <td>{{ log.updatedBy }}</td>
                 <td>
                   <strong>{{ log.activity }}</strong>
@@ -157,7 +158,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
           <button type="button" (click)="selected.set(null)">Close</button>
         </header>
         <dl>
-          <div><dt>Date & Time</dt><dd>{{ selected()?.createdAt | date:'dd-MM-yyyy HH:mm:ss' }}</dd></div>
+          <div><dt>Date & Time</dt><dd>{{ selected()?.createdAt | auraDate:'dateTime' }}</dd></div>
           <div><dt>Updated By</dt><dd>{{ selected()?.updatedBy }}</dd></div>
           <div><dt>Activity</dt><dd>{{ selected()?.activity }}</dd></div>
           <div><dt>IP / Device</dt><dd>{{ selected()?.ipAddress || '-' }}<br />{{ selected()?.userAgent || '-' }}</dd></div>
@@ -176,7 +177,7 @@ import { ApiRecord, ApiService } from '../core/api.service';
           <h3>Entity Timeline</h3>
           <ol class="drawer-timeline">
             <li *ngFor="let item of detailTimeline()">
-              <strong>{{ item.createdAt | date:'dd-MM-yyyy HH:mm' }}</strong>
+              <strong>{{ item.createdAt | auraDate:'dateTime' }}</strong>
               <span>{{ item.activity }}</span>
             </li>
           </ol>

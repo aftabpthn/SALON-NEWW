@@ -22,6 +22,7 @@ const BRANCH_SCOPE_EXCLUDED_PREFIXES = new Set([
 export class ApiService {
   readonly selectedBranchId = this.appState.selectedBranchId;
   private readonly readCache = new Map<string, ReadCacheEntry<unknown>>();
+  private refreshReportsOnOpen = true;
 
   constructor(
     private readonly http: HttpClient,
@@ -30,12 +31,15 @@ export class ApiService {
   ) {}
 
   list<T = ApiRecord[]>(resource: string, params: ApiRecord = {}): Observable<T> {
-    const scopedParams = this.withBranchScope(resource, params);
+    const effectiveParams = this.refreshReportsOnOpen && this.isReportResource(resource) ? { ...params, noCache: true } : params;
+    const scopedParams = this.withBranchScope(resource, effectiveParams);
     return this.cachedRead(resource, scopedParams, (headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, { headers, params: this.toParams(scopedParams) }), this.timeoutFor(resource));
   }
 
   get<T = ApiRecord>(resource: string, id: string): Observable<T> {
-    return this.cachedRead(`${resource}/${id}`, {}, (headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}/${id}`, { headers }), this.timeoutFor(resource));
+    const path = `${resource}/${id}`;
+    const params = this.refreshReportsOnOpen && this.isReportResource(path) ? { noCache: true } : {};
+    return this.cachedRead(path, params, (headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${path}`, { headers }), this.timeoutFor(resource));
   }
 
   create<T = ApiRecord>(resource: string, payload: ApiRecord): Observable<T> {
@@ -105,8 +109,7 @@ export class ApiService {
       }
       const req = new HttpRequest('POST', `${environment.apiBaseUrl}/${path}`, payload, {
         headers: reqHeaders,
-        reportProgress: true,
-      });
+        reportProgress: true });
       return this.http.request(req).pipe(
         tap((event) => {
           if (event.type === HttpEventType.UploadProgress && event.total) {
@@ -138,8 +141,12 @@ export class ApiService {
 
   report<T = ApiRecord>(path: string, params: ApiRecord = {}): Observable<T> {
     const resource = `reports/${path}`;
-    const scopedParams = this.withBranchScope(resource, params);
+    const scopedParams = this.withBranchScope(resource, this.refreshReportsOnOpen ? { ...params, noCache: true } : params);
     return this.cachedRead(resource, scopedParams, (headers) => this.http.get<ApiEnvelope<T> | T>(`${environment.apiBaseUrl}/${resource}`, { headers, params: this.toParams(scopedParams) }), this.timeoutFor(resource));
+  }
+
+  setReportRefreshPolicy(refreshOnOpen: boolean): void {
+    this.refreshReportsOnOpen = refreshOnOpen;
   }
 
   errorText(error: unknown, fallback = 'Request failed'): string {
@@ -260,6 +267,11 @@ export class ApiService {
 
   private normalizeCacheResource(resource: string): string {
     return resource.replace(/^\/+/, '').split(/[?#]/)[0].replace(/\/+$/, '');
+  }
+
+  private isReportResource(resource: string): boolean {
+    const normalized = this.normalizeCacheResource(resource).toLowerCase();
+    return normalized.split('/').some((segment) => segment === 'report' || segment === 'reports' || segment === 'analytics' || segment.endsWith('-report') || segment.endsWith('-reports') || segment.endsWith('-analytics'));
   }
 
   private stableParams(params: ApiRecord): string {

@@ -1,14 +1,15 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-deployment-ready',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, CommonModule, ReactiveFormsModule, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -64,7 +65,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <td>{{ event.environment }}</td>
                 <td>{{ event.version || 'local' }}</td>
                 <td><span class="badge" [class.success]="event.status === 'ready' || event.status === 'completed' || event.status === 'deployed'">{{ event.status }}</span></td>
-                <td>{{ event.createdAt | date: 'short' }}</td>
+                <td>{{ event.createdAt | auraDate:'date' }}</td>
               </tr>
             </tbody>
           </table>
@@ -76,7 +77,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
         <div class="rank-list">
           <article *ngFor="let backup of backups()">
             <div><strong>{{ backup.type }}</strong><span>{{ backup.fileSizeBytes }} bytes · {{ backup.checksum }}</span></div>
-            <small>{{ backup.createdAt | date: 'short' }}</small>
+            <small>{{ backup.createdAt | auraDate:'date' }}</small>
           </article>
         </div>
       </section>

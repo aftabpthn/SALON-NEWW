@@ -5,11 +5,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-inventory-product-edit',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack product-edit-page inner-page-shell">
       <div class="module-hero compact-hero inner-page-header">
@@ -53,19 +54,19 @@ import { StateComponent } from '../shared/ui/state/state.component';
             </div>
 
             <div class="field-grid" *ngSwitchCase="'price'">
-              <div><span>Sale price</span><strong>{{ item.price | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>MRP</span><strong>{{ productMrp(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Unit cost</span><strong>{{ item.unitCost | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Margin</span><strong>{{ productMargin(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Sale price</span><strong>{{ item.price | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>MRP</span><strong>{{ productMrp(item) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Unit cost</span><strong>{{ item.unitCost | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Margin</span><strong>{{ productMargin(item) | auraMoney:'1.0-0' }}</strong></div>
               <div><span>GST rate</span><strong>{{ item.gstRate || 0 }}%</strong></div>
-              <div><span>Stock value</span><strong>{{ stockValue(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Stock value</span><strong>{{ stockValue(item) | auraMoney:'1.0-0' }}</strong></div>
             </div>
 
             <div class="field-grid" *ngSwitchCase="'vendors'">
               <div><span>Primary vendor</span><strong>{{ productVendorName(item) }}</strong></div>
               <div><span>Vendor score</span><strong>{{ productVendorScore(item) }}</strong></div>
               <div><span>Last purchase</span><strong>{{ productVendorLastPurchase(item) }}</strong></div>
-              <div><span>Purchase value</span><strong>{{ productVendorPurchaseValue(item) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Purchase value</span><strong>{{ productVendorPurchaseValue(item) | auraMoney:'1.0-0' }}</strong></div>
             </div>
 
             <div class="field-grid" *ngSwitchCase="'catalog'">

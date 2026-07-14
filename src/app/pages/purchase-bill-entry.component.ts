@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -10,6 +10,7 @@ import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type PurchaseBillLine = {
   sno: number;
@@ -28,7 +29,7 @@ type PurchaseBillLine = {
 @Component({
   selector: 'app-purchase-bill-entry',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, ReactiveFormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="purchase-entry-page inner-page-shell">
       <div class="top-command inner-page-header">
@@ -162,10 +163,10 @@ type PurchaseBillLine = {
                   <td><input type="number" [ngModel]="line.discountPercent" (ngModelChange)="updateLine(index, { discountPercent: numberValue($event) })" [ngModelOptions]="{ standalone: true }" /></td>
                   <td><input type="number" [ngModel]="line.discountAmount" (ngModelChange)="updateLine(index, { discountAmount: numberValue($event) })" [ngModelOptions]="{ standalone: true }" /></td>
                   <td><input type="checkbox" [ngModel]="line.incTax" (ngModelChange)="updateLine(index, { incTax: $event })" [ngModelOptions]="{ standalone: true }" /></td>
-                  <td>{{ taxableAmount(line) | currency:'INR':'symbol':'1.2-2' }}</td>
+                  <td>{{ taxableAmount(line) | auraMoney:'1.2-2' }}</td>
                   <td><input type="number" [ngModel]="line.gstPercent" (ngModelChange)="updateLine(index, { gstPercent: numberValue($event) })" [ngModelOptions]="{ standalone: true }" /></td>
-                  <td>{{ taxAmount(line) | currency:'INR':'symbol':'1.2-2' }}</td>
-                  <td>{{ lineAmount(line) | currency:'INR':'symbol':'1.2-2' }}</td>
+                  <td>{{ taxAmount(line) | auraMoney:'1.2-2' }}</td>
+                  <td>{{ lineAmount(line) | auraMoney:'1.2-2' }}</td>
                   <td><input [ngModel]="line.remarks" (ngModelChange)="updateLine(index, { remarks: $event })" [ngModelOptions]="{ standalone: true }" /></td>
                 </tr>
               </tbody>
@@ -177,9 +178,9 @@ type PurchaseBillLine = {
         </section>
 
         <section class="totals-strip inner-stats-grid">
-          <article><span>Taxable</span><strong>{{ taxableTotal() | currency:'INR':'symbol':'1.2-2' }}</strong></article>
-          <article><span>GST</span><strong>{{ gstTotal() | currency:'INR':'symbol':'1.2-2' }}</strong></article>
-          <article><span>Total</span><strong>{{ grandTotal() | currency:'INR':'symbol':'1.2-2' }}</strong></article>
+          <article><span>Taxable</span><strong>{{ taxableTotal() | auraMoney:'1.2-2' }}</strong></article>
+          <article><span>GST</span><strong>{{ gstTotal() | auraMoney:'1.2-2' }}</strong></article>
+          <article><span>Total</span><strong>{{ grandTotal() | auraMoney:'1.2-2' }}</strong></article>
           <article><span>Payment</span><strong>{{ headerForm.value.paid ? 'Paid' : 'Unpaid' }}</strong></article>
         </section>
       </form>

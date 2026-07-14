@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { forkJoin, finalize } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type RiskLevel = 'low' | 'medium' | 'high' | 'critical' | string;
 
@@ -184,7 +185,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
 @Component({
   selector: 'app-staff-enterprise',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterModule],
   template: `
     <section class="enterprise-shell">
       <header class="enterprise-header">
@@ -251,8 +252,8 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
           </article>
           <article class="kpi-card green">
             <span>Revenue</span>
-            <strong>{{ kpis().totalRevenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
-            <small>{{ kpis().totalCommission || 0 | currency: 'INR':'symbol':'1.0-0' }} commission</small>
+            <strong>{{ kpis().totalRevenue || 0 | auraMoney:'1.0-0' }}</strong>
+            <small>{{ kpis().totalCommission || 0 | auraMoney:'1.0-0' }} commission</small>
           </article>
           <article class="kpi-card amber">
             <span>Present days</span>
@@ -316,7 +317,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
                 <span>{{ row.estimatedMinutes }} estimated minutes</span>
               </div>
               <div>
-                <strong>{{ row.profitPerMinute | currency: 'INR':'symbol':'1.1-1' }}</strong>
+                <strong>{{ row.profitPerMinute | auraMoney:'1.1-1' }}</strong>
               </div>
               <span class="badge" [ngClass]="riskClass(row.riskLevel)">{{ row.riskLevel }}</span>
             </button>
@@ -338,7 +339,7 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
               </div>
               <div class="mini-metrics">
                 <span><b>{{ twin.performance?.score || 0 | number: '1.0-1' }}</b> Score</span>
-                <span><b>{{ twin.performance?.revenue || 0 | currency: 'INR':'symbol':'1.0-0' }}</b> Revenue</span>
+                <span><b>{{ twin.performance?.revenue || 0 | auraMoney:'1.0-0' }}</b> Revenue</span>
                 <span><b>{{ twin.profile?.skillsKnown || 0 }}</b> Skills</span>
               </div>
               <small>{{ firstText(twin.suggestions) }}</small>
@@ -423,8 +424,8 @@ type StaffEnterpriseFilterKey = 'periodStart' | 'periodEnd' | 'branchId' | 'staf
                 <tbody>
                   <tr *ngFor="let row of payrollFiltered()" (click)="openDetail('Payroll review', row.staffName || row.staffId || 'Payroll row', row.periodStart + ' to ' + row.periodEnd, row)">
                     <td><strong>{{ row.staffName || row.staffId }}</strong></td>
-                    <td>{{ row.grossPay || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
-                    <td>{{ row.commissionAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
+                    <td>{{ row.grossPay || 0 | auraMoney:'1.0-0' }}</td>
+                    <td>{{ row.commissionAmount || 0 | auraMoney:'1.0-0' }}</td>
                     <td><span class="badge" [ngClass]="riskClass(row.complianceRiskLevel)">{{ row.complianceRiskLevel || 'low' }}</span></td>
                   </tr>
                 </tbody>

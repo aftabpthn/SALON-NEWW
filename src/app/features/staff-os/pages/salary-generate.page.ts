@@ -666,9 +666,7 @@ export class SalaryGeneratePage implements OnInit {
     const earnedSalary = Math.round((baseSalary / this.daysInPeriod()) * totalPayableDays);
     const workedHours = Math.max(number(preview?.['workedHours'], 0), attendanceSummary.workedHours || present * shiftHours);
     const requiredHours = Math.max(number(preview?.['requiredHours'], 0), scheduleSummary.requiredHours, present * shiftHours);
-    const explicitOtHours = number(preview?.['overtimeHours'] || preview?.['otHours'] || preview?.['ot_hours'], 0);
-    const autoOtHours = Math.max(attendanceSummary.overtimeHours, workedHours - requiredHours);
-    const otHours = Math.max(0, explicitOtHours, autoOtHours);
+    const otHours = Math.max(0, attendanceSummary.overtimeHours, number(preview?.['overtimeMinutes'] || preview?.['overtime_minutes'], 0) / 60);
     const attendanceDeduction = Math.max(0, baseSalary - earnedSalary);
     const leaveDeduction = Math.round((baseSalary / this.daysInPeriod()) * unpaidLeaveDays);
     const lateFine = late * 50;
@@ -924,7 +922,7 @@ export class SalaryGeneratePage implements OnInit {
     return `${customLabel || labels[ruleType]} ${Math.round((metrics[ruleType] || 0) * 100) / 100}`;
   }
 
-  attendanceSummary(attendanceLogs: ApiRecord[], dailyShiftHours = 0): { presentDays: number; workedHours: number; overtimeHours: number; lateCount: number } {
+  attendanceSummary(attendanceLogs: ApiRecord[], _dailyShiftHours = 0): { presentDays: number; workedHours: number; overtimeHours: number; lateCount: number } {
     const presentDates = new Set<string>();
     let workedHours = 0;
     let overtimeMinutes = 0;
@@ -935,10 +933,7 @@ export class SalaryGeneratePage implements OnInit {
       const durationHours = this.attendanceDurationHours(row);
       workedHours += durationHours;
       const savedOtMinutes = number(row['overtimeMinutes'] || row['overtime_minutes'], 0);
-      const calculatedOtMinutes = dailyShiftHours > 0 && durationHours > dailyShiftHours
-        ? Math.round((durationHours - dailyShiftHours) * 60)
-        : 0;
-      overtimeMinutes += Math.max(savedOtMinutes, calculatedOtMinutes);
+      overtimeMinutes += savedOtMinutes;
       const status = String(row['status'] || row['attendanceStatus'] || row['attendance_status'] || '').toLowerCase();
       if (status.includes('late')) lateCount += 1;
     });

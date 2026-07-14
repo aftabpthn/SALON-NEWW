@@ -1,16 +1,17 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit, OnDestroy, signal } from '@angular/core';
 import { ReportsEnterpriseService, FilterState } from './reports-enterprise.service';
 import { Subscription } from 'rxjs';
+import { AuraMoneyPipe } from '../../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-report-inventory',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe],
+  imports: [AuraMoneyPipe, CommonModule],
   template: `
     <ng-container *ngIf="!loading(); else skeleton">
       <div class="inv-metrics inner-stats-grid">
-        <div class="metric-card teal"><span>Stock Value</span><strong>{{ data()?.stockValue | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+        <div class="metric-card teal"><span>Stock Value</span><strong>{{ data()?.stockValue | auraMoney:'1.0-0' }}</strong></div>
         <div class="metric-card green"><span>Product Profit Margin</span><strong>{{ data()?.profitMargin }}%</strong></div>
       </div>
 
@@ -52,7 +53,7 @@ import { Subscription } from 'rxjs';
               <tr *ngFor="let p of (data()?.products || [])">
                 <td><strong>{{ p.name }}</strong></td>
                 <td>{{ p.stock }}</td><td>{{ p.soldQty }}</td>
-                <td>{{ p.revenue | currency:'INR':'symbol':'1.0-0' }}</td>
+                <td>{{ p.revenue | auraMoney:'1.0-0' }}</td>
                 <td>{{ p.margin }}%</td>
                 <td><span class="badge" [ngClass]="{'badge-green': p.status==='In Stock', 'badge-amber': p.status==='Low Stock', 'badge-red': p.status==='Out of Stock'}">{{ p.status }}</span></td>
               </tr>

@@ -1,15 +1,17 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-membership-self-service',
   standalone: true,
-  imports: [CommonModule, FormsModule, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, StateComponent],
   template: `
     <section class="page-stack self-service-page inner-page-shell">
       <div class="module-hero compact-hero inner-page-header">
@@ -39,7 +41,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
         </article>
         <article class="metric-card">
           <span>Wallet</span>
-          <strong>{{ (data.wallet?.walletBalance || 0) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+          <strong>{{ (data.wallet?.walletBalance || 0) | auraMoney:'1.0-0' }}</strong>
           <small>{{ data.wallet?.walletConnection?.source || 'membership wallet' }}</small>
         </article>
       </section>
@@ -89,7 +91,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <thead><tr><th>When</th><th>Type</th><th>Status</th><th>Reason</th></tr></thead>
             <tbody>
               <tr *ngFor="let request of data.requests || []">
-                <td>{{ request.createdAt | date: 'short' }}</td>
+                <td>{{ request.createdAt | auraDate:'date' }}</td>
                 <td>{{ label(request.requestType) }}</td>
                 <td>{{ request.status }}</td>
                 <td>{{ request.reason || '-' }}</td>

@@ -292,7 +292,7 @@ export class OutgoingFundsReportComponent implements OnInit {
     const explicit = stringValue(entry.billUrl);
     if (explicit) return explicit;
     const text = `${entry.remarks || ''} ${line.remarks || ''}`;
-    const match = /purchase bill\s+(.+?)(?:\s{2,}|$)/i.exec(text);
+    const match = /purchase bill\s+(.+?)(?:\s{2 }|$)/i.exec(text);
     return stringValue(match?.[1]);
   }
 

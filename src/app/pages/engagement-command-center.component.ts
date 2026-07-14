@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -6,6 +6,7 @@ import { finalize, forkJoin } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { environment } from '../../environments/environment';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ChannelFilter = 'all' | 'whatsapp' | 'sms' | 'email' | 'call' | 'review' | 'appointment' | 'system_alert';
 type ComposerMode = 'reply' | 'note';
@@ -63,7 +64,7 @@ interface EngagementDetail extends ApiRecord {
 @Component({
   selector: 'app-engagement-command-center',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, StateComponent],
   template: `
     <section class="engagement-page zenoti-engagement-page">
       <div class="zenoti-page-heading">
@@ -215,7 +216,7 @@ interface EngagementDetail extends ApiRecord {
             <span>Actions</span>
           </div>
           <article class="lead-table-row" *ngFor="let row of leadRows()">
-            <span>{{ row.leadDateTime | date:'short' }}</span>
+            <span>{{ row.leadDateTime | auraDate:'date' }}</span>
             <strong>{{ row.source || 'Unknown' }}</strong>
             <span>{{ row.clientName || 'Lead' }}</span>
             <span>{{ row.phone || '-' }}</span>
@@ -224,7 +225,7 @@ interface EngagementDetail extends ApiRecord {
             <span class="badge">{{ row.status || 'pending' }}</span>
             <span>{{ row.assignedName || row.assignedTo || 'Unassigned' }}</span>
             <span>{{ minutesLabel(row.firstResponseMinutes) }}</span>
-            <span>{{ row.followUpStatus || 'upcoming' }}<br /><small>{{ row.lastFollowUpAt ? (row.lastFollowUpAt | date:'short') : '-' }}</small></span>
+            <span>{{ row.followUpStatus || 'upcoming' }}<br /><small>{{ row.lastFollowUpAt ? (row.lastFollowUpAt | auraDate:'date') : '-' }}</small></span>
             <span>{{ row.wonInvoiceNumber || '-' }}</span>
             <span>{{ reportCurrency(row.convertedRevenue) }}</span>
             <span>{{ row.lostReason || row.lastFollowUpNote || '-' }}</span>
@@ -354,7 +355,7 @@ interface EngagementDetail extends ApiRecord {
                 <div>
                   <div class="timeline-topline">
                     <strong>{{ item.title }}</strong>
-                    <small>{{ item.createdAt | date: 'short' }}</small>
+                    <small>{{ item.createdAt | auraDate:'date' }}</small>
                   </div>
                   <p>{{ item.body }}</p>
                   <div class="chip-row">
@@ -501,7 +502,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
               <p>{{ latestAiSummaryText() }}</p>
               <p class="muted-line" *ngIf="generatedAiSummary()">
-                Generated {{ (generatedAiSummary()?.generatedAt || generatedAiSummary()?.generated_at) | date: 'short' }}
+                Generated {{ (generatedAiSummary()?.generatedAt || generatedAiSummary()?.generated_at) | auraDate:'date' }}
                 · Confidence {{ confidencePercent(generatedAiSummary()?.confidence) }}
               </p>
             </section>
@@ -599,7 +600,7 @@ interface EngagementDetail extends ApiRecord {
               [class.active]="selectedBookingSlot()?.startAt === slot.startAt && selectedBookingSlot()?.staffId === slot.staffId"
               (click)="selectBookingSlot(slot)"
             >
-              <strong>{{ slot.startAt | date: 'EEE, MMM d, h:mm a' }}</strong>
+              <strong>{{ slot.startAt | auraDate:'dateTime' }}</strong>
               <span>{{ slot.staffName || staffName(slot.staffId) }} · {{ slot.chair || slot.room || 'Auto resource' }} · Score {{ slot.score || '-' }}</span>
             </button>
             <div class="empty-state compact" *ngIf="!suggestedBookingSlots().length">
@@ -612,7 +613,7 @@ interface EngagementDetail extends ApiRecord {
         <section class="drawer-section review-box">
           <div class="info-grid">
             <div><strong>{{ bookingServiceName() }}</strong></div>
-            <div><strong>{{ selectedBookingSlot()?.startAt ? (selectedBookingSlot()?.startAt | date:'short') : 'Not selected' }}</strong></div>
+            <div><strong>{{ selectedBookingSlot()?.startAt ? (selectedBookingSlot()?.startAt | auraDate:'date') : 'Not selected' }}</strong></div>
             <div><strong>{{ bookingSlotPreview()?.dueAmountWarning || 'None' }}</strong></div>
             <div><strong>{{ bookingSlotPreview()?.openAppointmentsCount || 0 }}</strong></div>
           </div>
@@ -667,7 +668,7 @@ interface EngagementDetail extends ApiRecord {
               <div><strong>₹{{ opportunity.revenueValue || opportunity.expectedValue || 0 }}</strong></div>
               <div><strong>{{ opportunity.client?.name || opportunity.clientName || opportunity.clientId || '-' }}</strong></div>
               <div><strong>{{ opportunity.assignedStaffName || opportunity.assignedTo || 'Unassigned' }}</strong></div>
-              <div><strong>{{ opportunity.dueAt ? (opportunity.dueAt | date:'short') : '-' }}</strong></div>
+              <div><strong>{{ opportunity.dueAt ? (opportunity.dueAt | auraDate:'date') : '-' }}</strong></div>
             </div>
             <p class="recovery-reason">{{ opportunity.reason || 'Recovery reason not captured.' }}</p>
             <p class="suggested-message">{{ opportunity.suggestedMessage || opportunity.suggestedAction || 'Suggested message will appear after detection.' }}</p>
@@ -762,7 +763,7 @@ interface EngagementDetail extends ApiRecord {
             <p class="suggested-message">{{ signal.suggestedAction || signal.suggested_action || 'Suggested action will appear after detection.' }}</p>
             <div class="risk-evidence">
               <span>{{ riskEvidenceSummary(signal) }}</span>
-              <small>{{ signal.createdAt | date:'short' }}</small>
+              <small>{{ signal.createdAt | auraDate:'date' }}</small>
             </div>
             <div class="risk-footer">
               <span class="badge">{{ signal.status || 'open' }}</span>
@@ -824,7 +825,7 @@ interface EngagementDetail extends ApiRecord {
                 </div>
                 <div class="sla-row-metrics">
                   <span [class]="'priority-pill ' + (item.priority || 'normal')">{{ item.priority || 'normal' }}</span>
-                  <small>Due {{ item.dueAt ? (item.dueAt | date:'short') : '-' }}</small>
+                  <small>Due {{ item.dueAt ? (item.dueAt | auraDate:'date') : '-' }}</small>
                   <small>{{ item.overdueLabel || minutesLabel(item.overdueMinutes) }} overdue</small>
                 </div>
                 <button class="primary-button mini" type="button" (click)="escalateThreadFromSla(item)" [disabled]="slaSaving()">Escalate</button>
@@ -1191,7 +1192,7 @@ interface EngagementDetail extends ApiRecord {
               <div><strong>{{ provider.status || 'inactive' }}</strong></div>
               <div><strong>{{ provider.senderId || '-' }}</strong></div>
               <div><strong>{{ provider.templateNamespace || '-' }}</strong></div>
-              <div><strong>{{ provider.lastVerifiedAt ? (provider.lastVerifiedAt | date:'short') : '-' }}</strong></div>
+              <div><strong>{{ provider.lastVerifiedAt ? (provider.lastVerifiedAt | auraDate:'date') : '-' }}</strong></div>
             </div>
             <p class="suggested-message">{{ provider.note }}</p>
             <div class="composer-footer">
@@ -1231,7 +1232,7 @@ interface EngagementDetail extends ApiRecord {
             <span>Branch</span>
           </div>
           <article class="audit-table-row" *ngFor="let row of visibleAuditRows()">
-            <span>{{ row.createdAt | date:'short' }}</span>
+            <span>{{ row.createdAt | auraDate:'date' }}</span>
             <strong>{{ auditActionLabel(row.action) }}</strong>
             <span>{{ row.actorUserId || 'system' }} · {{ row.actorRole || '-' }}</span>
             <span>{{ row.clientId || '-' }}</span>
@@ -1272,7 +1273,7 @@ interface EngagementDetail extends ApiRecord {
             >
               <div>
                 <strong>{{ review.client?.name || review.reviewerName || review.reviewer || 'Review client' }}</strong>
-                <span>{{ review.platformName || review.platform || 'Review' }} · {{ review.reviewDate | date: 'mediumDate' }}</span>
+                <span>{{ review.platformName || review.platform || 'Review' }} · {{ review.reviewDate | auraDate:'date' }}</span>
               </div>
               <small [class]="'risk-pill ' + (review.riskLevel || 'low')">{{ review.rating || 0 }}/5</small>
               <p>{{ review.reviewText || 'No review text captured.' }}</p>
@@ -1295,7 +1296,7 @@ interface EngagementDetail extends ApiRecord {
               </div>
               <div class="info-grid">
                 <div><strong>{{ review.rating || 0 }} / {{ review.ratingMax || 5 }}</strong></div>
-                <div><strong>{{ review.reviewDate | date: 'mediumDate' }}</strong></div>
+                <div><strong>{{ review.reviewDate | auraDate:'date' }}</strong></div>
                 <div><strong>{{ review.client?.name || review.reviewerName || '-' }}</strong></div>
                 <div><strong>{{ review.serviceStaffLabel || '-' }}</strong></div>
               </div>
@@ -1338,7 +1339,7 @@ interface EngagementDetail extends ApiRecord {
             <h3>{{ clientProfile()?.name || selectedThread()?.displayName || 'Linked client' }}</h3>
             <p *ngIf="generatedAiSummary()">
               Version {{ generatedAiSummary()?.version || 1 }} · Generated
-              {{ (generatedAiSummary()?.generatedAt || generatedAiSummary()?.generated_at) | date: 'medium' }}
+              {{ (generatedAiSummary()?.generatedAt || generatedAiSummary()?.generated_at) | auraDate:'date' }}
               · Confidence {{ confidencePercent(generatedAiSummary()?.confidence) }}
             </p>
             <p *ngIf="!generatedAiSummary()">Deterministic local summary will be used when AI provider is not configured.</p>

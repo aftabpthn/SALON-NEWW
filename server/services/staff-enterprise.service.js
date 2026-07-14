@@ -2,6 +2,7 @@ import { db } from "../db.js";
 import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 import { tenantService } from "./tenant.service.js";
 import { smartStaffService } from "./smart-staff.service.js";
+import { realtimeService } from "./realtime.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
@@ -487,6 +488,7 @@ export class StaffEnterpriseService {
       VALUES
         (@id, @tenantId, @branchId, @staffId, @type, @channel, @title, @body, @status, @payload, @copiedAt, @approvedAt, @createdAt, @updatedAt)
     `).run(row);
+    realtimeService.broadcast("staff-self.notification", { id: row.id, staffId: row.staffId, status: row.status }, { tenantId: row.tenantId, branchId: row.branchId });
     return mapJson(row, ["payload"]);
   }
 

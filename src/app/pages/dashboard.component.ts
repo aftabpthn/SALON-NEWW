@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
@@ -7,11 +7,12 @@ import { AuthSessionService } from '../core/auth-session.service';
 import { staticGrantsForRole } from '../core/permission.guard';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -36,11 +37,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
         <div class="metrics-grid">
           <a class="kpi" routerLink="/kpi-details/dashboard/revenue-today">
             <span class="kpi-l">Revenue today</span>
-            <strong class="kpi-v">{{ data.revenueToday | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong class="kpi-v">{{ data.revenueToday | auraMoney:'1.0-0' }}</strong>
           </a>
           <a class="kpi" routerLink="/kpi-details/dashboard/revenue-this-month">
             <span class="kpi-l">Revenue this month</span>
-            <strong class="kpi-v">{{ data.revenueMonth | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong class="kpi-v">{{ data.revenueMonth | auraMoney:'1.0-0' }}</strong>
           </a>
           <a class="kpi" routerLink="/kpi-details/dashboard/total-bookings">
             <span class="kpi-l">Total bookings</span>
@@ -48,11 +49,11 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </a>
           <a class="kpi" routerLink="/pos/invoices" [queryParams]="{ filter: 'received-due' }" *ngIf="canAccessPath('/pos/invoices')">
             <span class="kpi-l">Received due</span>
-            <strong class="kpi-v" style="color:#C87D4B">{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong class="kpi-v" style="color:#C87D4B">{{ data.receivedDue | auraMoney:'1.0-0' }}</strong>
           </a>
           <a class="kpi" routerLink="/kpi-details/dashboard/pending-payments">
             <span class="kpi-l">Pending payments</span>
-            <strong class="kpi-v" style="color:#dc2626">{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong class="kpi-v" style="color:#dc2626">{{ data.pendingPayments | auraMoney:'1.0-0' }}</strong>
           </a>
           <a class="kpi" routerLink="/clients" *ngIf="canAccessPath('/clients')">
             <span class="kpi-l">New clients</span>
@@ -81,8 +82,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </a>
           <a class="hub-tile" routerLink="/pos" *ngIf="canAccessPath('/pos')">
             <span class="hub-badge">POS</span>
-            <strong>{{ data.receivedDue | currency: 'INR':'symbol':'1.0-0' }} received due</strong>
-            <span class="hub-sub">{{ data.pendingPayments | currency: 'INR':'symbol':'1.0-0' }} still pending</span>
+            <strong>{{ data.receivedDue | auraMoney:'1.0-0' }} received due</strong>
+            <span class="hub-sub">{{ data.pendingPayments | auraMoney:'1.0-0' }} still pending</span>
             <span class="hub-cta">Open POS</span>
           </a>
           <a class="hub-tile" routerLink="/inventory" *ngIf="canAccessPath('/inventory')">
@@ -94,7 +95,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <a class="hub-tile" routerLink="/staff-os/employee-masters" *ngIf="canAccessPath('/staff-os/employee-masters')">
             <span class="hub-badge">TM</span>
             <strong>{{ data.staffPerformance[0]?.name || 'No ranking yet' }}</strong>
-            <span class="hub-sub">{{ (data.staffPerformance[0]?.revenue || 0) | currency: 'INR':'symbol':'1.0-0' }} top revenue</span>
+            <span class="hub-sub">{{ (data.staffPerformance[0]?.revenue || 0) | auraMoney:'1.0-0' }} top revenue</span>
             <span class="hub-cta">Open Staff OS</span>
           </a>
           <a class="hub-tile" routerLink="/customer-360" *ngIf="canAccessPath('/customer-360')">
@@ -110,7 +111,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
           </a>
           <a class="hub-tile" routerLink="/memberships" *ngIf="canAccessPath('/memberships')">
             <span class="hub-badge">MB</span>
-            <strong>{{ data.membershipRevenue | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.membershipRevenue | auraMoney:'1.0-0' }}</strong>
             <span class="hub-cta">Open memberships</span>
           </a>
         </div>

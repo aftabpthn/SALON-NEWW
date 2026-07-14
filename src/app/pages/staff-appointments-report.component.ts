@@ -1,9 +1,10 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type StaffAppointmentsReport = {
   summary: ApiRecord;
@@ -16,7 +17,7 @@ type StaffAppointmentsReport = {
 @Component({
   selector: 'app-staff-appointments-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack staff-appointments-page inner-page-shell">
       <div class="module-hero report-hero inner-page-header">
@@ -61,7 +62,7 @@ type StaffAppointmentsReport = {
           </article>
           <article class="metric-card">
             <span>Appointment Price</span>
-            <strong>{{ data.summary.appointmentPrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary.appointmentPrice || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Active Staff</span>
@@ -115,11 +116,11 @@ type StaffAppointmentsReport = {
                   </td>
                   <td>{{ row.type || 'Employee' }}</td>
                   <td>{{ numberValue(row.appointmentCount) }}</td>
-                  <td>{{ row.appointmentPrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.appointmentPrice || 0 | auraMoney:'1.0-0' }}</td>
                   <td>{{ numberValue(row.completed) }}</td>
                   <td>{{ numberValue(row.cancelled) }}</td>
                   <td>{{ numberValue(row.notCame) }}</td>
-                  <td>{{ row.averagePrice || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.averagePrice || 0 | auraMoney:'1.0-0' }}</td>
                 </tr>
                 <tr *ngIf="!rows().length">
                   <td colspan="8" class="empty-state"><strong>No data found</strong></td>

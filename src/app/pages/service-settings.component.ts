@@ -1,8 +1,9 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ServiceSettingsState = {
   serviceCatalog: {
@@ -126,7 +127,7 @@ function stringValue(value: unknown, fallback: string): string {
 @Component({
   selector: 'app-service-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink],
   template: `
     <section class="service-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
@@ -175,7 +176,7 @@ function stringValue(value: unknown, fallback: string): string {
         <section class="audit-strip">
           <strong>Audit info</strong>
           <span>Last changed by: {{ audit.lastChangedBy || 'Not saved yet' }}</span>
-          <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | date:'medium') : 'Not saved yet' }}</span>
+          <span>Last changed time: {{ audit.lastChangedAt ? (audit.lastChangedAt | auraDate:'date') : 'Not saved yet' }}</span>
         </section>
 
         <section class="settings-grid inner-form-grid">

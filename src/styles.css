@@ -20615,3 +20615,21 @@ body.calendar-fullscreen-active app-appointments-enterprise {
   inset: 0 !important;
   z-index: 10000 !important;
 }
+
+/* General Settings compact policy: shared operational density without page-specific overrides. */
+html[data-compact-mode="true"] .workspace-route-content :where(.inner-page-card, .panel, .form-panel, .settings-card, .card) {
+  padding: 12px !important;
+}
+
+html[data-compact-mode="true"] .workspace-route-content :where(.inner-form-grid, .inner-section-grid, .actions, .button-row, .form-actions) {
+  gap: 8px !important;
+}
+
+html[data-compact-mode="true"] .workspace-route-content :where(input, select, textarea, button, .primary-button, .ghost-button, .dark-button) {
+  min-height: 34px;
+}
+
+html[data-compact-mode="true"] .workspace-route-content :where(th, td) {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}

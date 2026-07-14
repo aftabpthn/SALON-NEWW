@@ -1,9 +1,10 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type LocationSharingOverview = {
   modules: ApiRecord[];
@@ -21,7 +22,7 @@ type LocationSharingOverview = {
 @Component({
   selector: 'app-location-sharing-command-center',
   standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="location-sharing-page">
       <app-state [loading]="loading()" [error]="error()"></app-state>
@@ -198,7 +199,7 @@ type LocationSharingOverview = {
                 <td>{{ branchName(event.sourceBranchId) }}</td>
                 <td>{{ branchName(event.targetBranchId) }}</td>
                 <td><span class="badge">{{ event.status }}</span></td>
-                <td>{{ event.createdAt | date: 'short' }}</td>
+                <td>{{ event.createdAt | auraDate:'date' }}</td>
               </tr>
               <tr *ngIf="!events().length"><td colspan="6">No sharing events yet.</td></tr>
             </tbody>
@@ -216,7 +217,7 @@ type LocationSharingOverview = {
         <div class="audit-list">
           <article *ngFor="let event of events()">
             <strong>{{ event.action }}</strong>
-            <span>{{ event.actorUserId || 'system' }} · {{ labelFor(event.module) }} · {{ event.createdAt | date: 'medium' }}</span>
+            <span>{{ event.actorUserId || 'system' }} · {{ labelFor(event.module) }} · {{ event.createdAt | auraDate:'date' }}</span>
             <small>{{ branchName(event.sourceBranchId) }} → {{ branchName(event.targetBranchId) }} · {{ event.status }}</small>
           </article>
           <article *ngIf="!events().length"><strong>No audit events yet.</strong></article>

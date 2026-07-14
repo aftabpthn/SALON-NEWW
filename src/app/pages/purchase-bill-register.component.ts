@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -6,11 +6,13 @@ import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-purchase-bill-register',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="purchase-register-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -42,9 +44,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
 
       <section class="summary-grid inner-stats-grid">
         <article><span>Bills</span><strong>{{ filteredBills().length }}</strong></article>
-        <article><span>Purchase</span><strong>{{ totalAmount() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Input GST</span><strong>{{ totalGst() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
-        <article><span>Pending payable</span><strong>{{ pendingPayableTotal() | currency:'INR':'symbol':'1.0-0' }}</strong></article>
+        <article><span>Purchase</span><strong>{{ totalAmount() | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Input GST</span><strong>{{ totalGst() | auraMoney:'1.0-0' }}</strong></article>
+        <article><span>Pending payable</span><strong>{{ pendingPayableTotal() | auraMoney:'1.0-0' }}</strong></article>
       </section>
 
       <section class="table-panel report-panel inner-page-card">
@@ -61,9 +63,9 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <tbody>
             <tr *ngFor="let row of gstRegister()">
               <td>{{ row.gstPercent }}%</td>
-              <td>{{ row.taxable | currency:'INR':'symbol':'1.0-0' }}</td>
-              <td>{{ row.tax | currency:'INR':'symbol':'1.0-0' }}</td>
-              <td>{{ row.amount | currency:'INR':'symbol':'1.0-0' }}</td>
+              <td>{{ row.taxable | auraMoney:'1.0-0' }}</td>
+              <td>{{ row.tax | auraMoney:'1.0-0' }}</td>
+              <td>{{ row.amount | auraMoney:'1.0-0' }}</td>
             </tr>
             <tr *ngIf="!gstRegister().length">
               <td colspan="4" class="empty">No GST purchase rows found.</td>
@@ -87,8 +89,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <tr *ngFor="let row of vendorPurchases()">
               <td>{{ row.vendor || 'Vendor not set' }}</td>
               <td>{{ row.bills }}</td>
-              <td>{{ row.purchase | currency:'INR':'symbol':'1.0-0' }}</td>
-              <td>{{ row.payable | currency:'INR':'symbol':'1.0-0' }}</td>
+              <td>{{ row.purchase | auraMoney:'1.0-0' }}</td>
+              <td>{{ row.payable | auraMoney:'1.0-0' }}</td>
             </tr>
             <tr *ngIf="!vendorPurchases().length">
               <td colspan="4" class="empty">No vendor purchase rows found.</td>
@@ -113,8 +115,8 @@ import { StateComponent } from '../shared/ui/state/state.component';
             <tr *ngFor="let bill of pendingPayables()">
               <td>{{ bill.billNo || '-' }}</td>
               <td>{{ bill.supplierName || 'Vendor not set' }}</td>
-              <td>{{ (bill.billDate || bill.createdAt) | date:'yyyy-MM-dd' }}</td>
-              <td>{{ billBalance(bill) | currency:'INR':'symbol':'1.0-0' }}</td>
+              <td>{{ (bill.billDate || bill.createdAt) | auraDate:'date' }}</td>
+              <td>{{ billBalance(bill) | auraMoney:'1.0-0' }}</td>
               <td class="actions"><a routerLink="/transactions/outgoing-funds" [queryParams]="paymentQuery(bill)">Outgoing Entry</a></td>
             </tr>
             <tr *ngIf="!pendingPayables().length">
@@ -144,13 +146,13 @@ import { StateComponent } from '../shared/ui/state/state.component';
           <tbody>
             <tr *ngFor="let bill of filteredBills()">
               <td><strong>{{ bill.billNo || '-' }}</strong></td>
-              <td>{{ (bill.billDate || bill.createdAt) | date:'yyyy-MM-dd' }}</td>
+              <td>{{ (bill.billDate || bill.createdAt) | auraDate:'date' }}</td>
               <td>{{ bill.supplierName || 'Vendor pending' }}</td>
               <td>{{ billStatusLabel(bill) }}</td>
               <td>{{ paymentStatusLabel(bill) }}</td>
-              <td>{{ numberValue(bill.totalAmount) | currency:'INR':'symbol':'1.0-0' }}</td>
+              <td>{{ numberValue(bill.totalAmount) | auraMoney:'1.0-0' }}</td>
               <td>{{ billBalanceLabel(bill) }}</td>
-              <td>{{ billExtraPaid(bill) > 0 ? (billExtraPaid(bill) | currency:'INR':'symbol':'1.0-0') : '-' }}</td>
+              <td>{{ billExtraPaid(bill) > 0 ? (billExtraPaid(bill) | auraMoney:'1.0-0') : '-' }}</td>
               <td class="actions">
                 <a routerLink="/inventory/purchase-bill-drafts">Edit</a>
                 <a *ngIf="billBalance(bill) > 0" routerLink="/transactions/outgoing-funds" [queryParams]="paymentQuery(bill)">Outgoing Entry</a>
@@ -512,7 +514,7 @@ export class PurchaseBillRegisterComponent implements OnInit {
 
   private outgoingPurchaseBillNo(entry: ApiRecord): string {
     const text = this.outgoingPaymentText(entry);
-    const match = /purchase bill\s+(.+?)(?:\s+against\s+purchase bill|\s{2,}|$)/i.exec(text);
+    const match = /purchase bill\s+(.+?)(?:\s+against\s+purchase bill|\s{2 }|$)/i.exec(text);
     const extracted = stringValue(match?.[1]);
     if (extracted) return extracted;
     return stringValue(entry['billUrl']).split(/against\s+purchase bill/i)[0].trim();

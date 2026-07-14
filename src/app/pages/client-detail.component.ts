@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import { routePermissionForPath } from '../core/access-rules';
 import { AppStateService } from '../core/state/app-state.service';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type ClientBeautyProfileForm = {
   allergiesText: string;
@@ -136,7 +137,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
   selector: 'app-client-detail',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="client360-toolbar inner-action-bar">
@@ -209,7 +210,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             </div>
             <div class="client360-health-stat">
               <span>Total spend</span>
-              <strong>{{ totalBilled() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+              <strong>{{ totalBilled() | auraMoney:'1.0-0' }}</strong>
             </div>
             <div class="client360-health-stat">
               <span>Loyalty</span>
@@ -221,16 +222,16 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
         <section class="client-live-metrics">
           <article class="metric-card teal">
             <span>Wallet balance</span>
-            <strong>{{ walletBalance(client) | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ walletBalance(client) | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card red">
             <span>Unpaid balance</span>
-            <strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ totalDue() | auraMoney:'1.0-0' }}</strong>
             <small>{{ dueInvoices().length }} open invoice(s)</small>
           </article>
           <article class="metric-card amber">
             <span>Average bill</span>
-            <strong>{{ averageBill() | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ averageBill() | auraMoney:'1.0-0' }}</strong>
             <small>{{ clientInvoices().length }} saved invoice(s)</small>
           </article>
           <article class="metric-card blue">
@@ -250,18 +251,18 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             </div>
             <div class="client360-summary-cards">
               <div><span>Visits</span><strong>{{ totalVisits() }}</strong></div>
-              <div><span>Service sale</span><strong>{{ serviceSalesTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Product sale</span><strong>{{ productSalesTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Package sale</span><strong>{{ packageSalesTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Membership sale</span><strong>{{ membershipSalesTotal() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Wallet</span><strong>{{ walletBalance(client) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Service sale</span><strong>{{ serviceSalesTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Product sale</span><strong>{{ productSalesTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Package sale</span><strong>{{ packageSalesTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Membership sale</span><strong>{{ membershipSalesTotal() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Wallet</span><strong>{{ walletBalance(client) | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Booked</span><strong>{{ bookedAppointments() }}</strong></div>
               <div><span>Completed</span><strong>{{ completedAppointments() }}</strong></div>
               <div><span>Cancelled</span><strong>{{ cancelledAppointments() }}</strong></div>
               <div><span>Rescheduled</span><strong>{{ rescheduledAppointments() }}</strong></div>
               <div><span>No-show</span><strong>{{ noShowAppointments() }}</strong></div>
-              <div><span>Due</span><strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-              <div><span>Average bill</span><strong>{{ averageBill() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+              <div><span>Due</span><strong>{{ totalDue() | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Average bill</span><strong>{{ averageBill() | auraMoney:'1.0-0' }}</strong></div>
               <div><span>First visit</span><strong>{{ firstVisitLabel(client) }}</strong></div>
               <div><span>Last visit</span><strong>{{ lastVisitLabel() }}</strong></div>
               <div><span>Last service</span><strong>{{ topServiceLabel() }}</strong></div>
@@ -277,8 +278,8 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <span class="badge">{{ totalDue() > 0 ? 'Due pending' : 'Ready' }}</span>
             </div>
             <div class="smart-action-context">
-              <span>Due {{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</span>
-              <span>Wallet {{ walletBalance(client) | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <span>Due {{ totalDue() | auraMoney:'1.0-0' }}</span>
+              <span>Wallet {{ walletBalance(client) | auraMoney:'1.0-0' }}</span>
               <span>{{ latestInvoiceLabel() }}</span>
             </div>
             <div class="client360-action-buttons">
@@ -364,7 +365,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article [class.danger-text]="totalDue() > 0">
                     <strong>Due warning</strong>
-                    <span>{{ dueWarningLabel() }} Â· {{ totalDue() | currency:'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ dueWarningLabel() }} Â· {{ totalDue() | auraMoney:'1.0-0' }}</span>
                   </article>
                   <article>
                     <strong>Inactive / reactivation</strong>
@@ -386,7 +387,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article *ngFor="let invoice of clientInvoices().slice(0, 4); trackBy: trackApiRecord">
                     <strong>{{ invoice.invoiceNumber || invoice.invoice_no || invoice.id }}</strong>
-                    <span>{{ dateLabel(invoice.createdAt || invoice.created_at || invoice.date) }} Â· {{ saleSummary(invoice.saleId || invoice.sale_id || invoice.id) }} Â· {{ invoiceTotal(invoice) | currency:'INR':'symbol':'1.0-0' }} Â· Due {{ invoiceBalance(invoice) | currency:'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ dateLabel(invoice.createdAt || invoice.created_at || invoice.date) }} Â· {{ saleSummary(invoice.saleId || invoice.sale_id || invoice.id) }} Â· {{ invoiceTotal(invoice) | auraMoney:'1.0-0' }} Â· Due {{ invoiceBalance(invoice) | auraMoney:'1.0-0' }}</span>
                   </article>
                   <article *ngIf="!clientInvoices().length">
                     <strong>No invoices yet</strong>
@@ -422,7 +423,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="activity-list compact-history">
                   <article *ngFor="let item of clientWalletTransactions().slice(0, 4); trackBy: trackApiRecord">
                     <strong>{{ item.type || item.reason || 'Wallet entry' }}</strong>
-                    <span>{{ dateLabel(item.createdAt || item.created_at || item.date) }} Â· {{ moneyValue(item.amount) | currency:'INR':'symbol':'1.0-0' }} Â· Balance {{ walletEntryBalance(item) | currency:'INR':'symbol':'1.0-0' }}</span>
+                    <span>{{ dateLabel(item.createdAt || item.created_at || item.date) }} Â· {{ moneyValue(item.amount) | auraMoney:'1.0-0' }} Â· Balance {{ walletEntryBalance(item) | auraMoney:'1.0-0' }}</span>
                   </article>
                   <article *ngIf="!clientWalletTransactions().length">
                     <strong>No wallet activity</strong>
@@ -743,9 +744,9 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                   <span role="cell">{{ dateTimeLabel(invoice.createdAt || invoice.created_at || invoice.date) }}</span>
                   <span role="cell">{{ invoiceSummary(invoice) }}</span>
                   <span role="cell">{{ invoiceStaffLabel(invoice) }}</span>
-                  <span role="cell">{{ invoiceTotal(invoice) | currency: 'INR':'symbol':'1.0-0' }}</span>
-                  <span role="cell">{{ invoicePaid(invoice) | currency: 'INR':'symbol':'1.0-0' }}</span>
-                  <span role="cell" [class.danger-text]="invoiceBalance(invoice) > 0">{{ invoiceBalance(invoice) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                  <span role="cell">{{ invoiceTotal(invoice) | auraMoney:'1.0-0' }}</span>
+                  <span role="cell">{{ invoicePaid(invoice) | auraMoney:'1.0-0' }}</span>
+                  <span role="cell" [class.danger-text]="invoiceBalance(invoice) > 0">{{ invoiceBalance(invoice) | auraMoney:'1.0-0' }}</span>
                   <span role="cell">{{ invoicePaymentMode(invoice) }}</span>
                   <span role="cell"><span class="badge">{{ invoiceStatusLabel(invoice) }}</span></span>
                   <span class="row-actions invoice-row-actions" role="cell">
@@ -780,9 +781,9 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 </div>
                 <div class="product-profile-metrics">
                   <div><span>Qty</span><strong>{{ product.qty }}</strong></div>
-                  <div><span>Gross</span><strong>{{ product.gross | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                  <div><span>Discount</span><strong>{{ product.discount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                  <div><span>Net</span><strong>{{ product.total | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                  <div><span>Gross</span><strong>{{ product.gross | auraMoney:'1.0-0' }}</strong></div>
+                  <div><span>Discount</span><strong>{{ product.discount | auraMoney:'1.0-0' }}</strong></div>
+                  <div><span>Net</span><strong>{{ product.total | auraMoney:'1.0-0' }}</strong></div>
                   <div><span>Staff</span><strong>{{ product.staff }}</strong></div>
                   <div><span>SKU</span><strong>{{ product.sku }}</strong></div>
                 </div>
@@ -842,8 +843,8 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div class="wallet-ledger-row" role="row" *ngFor="let row of filteredClientWalletLedgerRows(); trackBy: trackHistoryRow">
                   <span role="cell">{{ row.date }}</span>
                   <span role="cell"><span class="badge">{{ row.type }}</span></span>
-                  <strong role="cell" [class.danger-text]="row.amount < 0">{{ row.amount | currency: 'INR':'symbol':'1.0-0' }}</strong>
-                  <span role="cell">{{ row.balanceAfter | currency: 'INR':'symbol':'1.0-0' }}</span>
+                  <strong role="cell" [class.danger-text]="row.amount < 0">{{ row.amount | auraMoney:'1.0-0' }}</strong>
+                  <span role="cell">{{ row.balanceAfter | auraMoney:'1.0-0' }}</span>
                   <span role="cell">{{ row.source }}</span>
                   <span role="cell">{{ row.staff }}</span>
                   <span role="cell">{{ row.notes }}</span>
@@ -1046,12 +1047,12 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div><span>Total sessions</span><strong>{{ row.totalSessions }}</strong></div>
                 <div><span>Used sessions</span><strong>{{ row.usedSessions }}</strong></div>
                 <div><span>Balance sessions</span><strong>{{ row.balanceSessions }}</strong></div>
-                <div><span>Package value</span><strong>{{ row.value | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                <div><span>Package value</span><strong>{{ row.value | auraMoney:'1.0-0' }}</strong></div>
               </div>
               <div class="activity-list package-redemptions">
                 <article *ngFor="let redemption of row.redemptions; trackBy: trackHistoryRow">
                   <strong>{{ redemption.service }}</strong>
-                  <span>{{ redemption.date }} Â· {{ redemption.staff }} Â· {{ redemption.amount | currency: 'INR':'symbol':'1.0-0' }} Â· {{ redemption.status }}</span>
+                  <span>{{ redemption.date }} Â· {{ redemption.staff }} Â· {{ redemption.amount | auraMoney:'1.0-0' }} Â· {{ redemption.status }}</span>
                 </article>
                 <article *ngIf="!row.redemptions.length">
                   <strong>No redemptions yet</strong>
@@ -1091,12 +1092,12 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                 <div><span>Credits</span><strong>{{ row.credits }}</strong></div>
                 <div><span>Credits used</span><strong>{{ row.creditsUsed }}</strong></div>
                 <div><span>Credits balance</span><strong>{{ row.creditsBalance }}</strong></div>
-                <div><span>Sale amount</span><strong>{{ row.saleAmount | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                <div><span>Sale amount</span><strong>{{ row.saleAmount | auraMoney:'1.0-0' }}</strong></div>
               </div>
               <div class="activity-list membership-redemptions">
                 <article *ngFor="let redemption of row.redemptions; trackBy: trackHistoryRow">
                   <strong>{{ redemption.service }}</strong>
-                  <span>{{ redemption.date }} Â· {{ redemption.staff }} Â· {{ redemption.amount | currency: 'INR':'symbol':'1.0-0' }} Â· {{ redemption.status }}</span>
+                  <span>{{ redemption.date }} Â· {{ redemption.staff }} Â· {{ redemption.amount | auraMoney:'1.0-0' }} Â· {{ redemption.status }}</span>
                 </article>
                 <article *ngIf="!row.redemptions.length">
                   <strong>No redemptions yet</strong>
@@ -1191,8 +1192,8 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <p>{{ whatsAppFollowUpSummary(client) }}</p>
               <div class="info-grid pos-linked-facts">
                 <div><span>Last visit</span><strong>{{ lastVisitLabel() }}</strong></div>
-                <div><span>Due</span><strong>{{ totalDue() | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
-                <div><span>Wallet</span><strong>{{ walletBalance(client) | currency: 'INR':'symbol':'1.0-0' }}</strong></div>
+                <div><span>Due</span><strong>{{ totalDue() | auraMoney:'1.0-0' }}</strong></div>
+                <div><span>Wallet</span><strong>{{ walletBalance(client) | auraMoney:'1.0-0' }}</strong></div>
                 <div><span>Preferred staff</span><strong>{{ preferredStaffLabel() }}</strong></div>
               </div>
             </aside>
@@ -1313,7 +1314,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
                   <span role="cell">{{ appointmentStaffLabel(appointment) }}</span>
                   <span role="cell"><span class="badge">{{ appointmentStatusLabel(appointment) }}</span></span>
                   <span role="cell">{{ appointmentSourceLabel(appointment) }}</span>
-                  <span role="cell">{{ appointmentAmount(appointment) | currency: 'INR':'symbol':'1.0-0' }}</span>
+                  <span role="cell">{{ appointmentAmount(appointment) | auraMoney:'1.0-0' }}</span>
                   <span role="cell">
                     <button class="ghost-button mini" type="button" (click)="bookAgain(appointment)">Book Again</button>
                   </span>
@@ -1347,7 +1348,7 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
             <div class="activity-list">
               <article *ngFor="let purchase of livePurchaseHistory(client).slice(0, 8); trackBy: trackHistoryRow">
                 <strong>{{ purchase.invoice }}</strong>
-                <span>{{ purchase.amount | currency: 'INR':'symbol':'1.0-0' }}</span>
+                <span>{{ purchase.amount | auraMoney:'1.0-0' }}</span>
               </article>
               <article *ngIf="!livePurchaseHistory(client).length">
                 <strong>No purchases yet</strong>

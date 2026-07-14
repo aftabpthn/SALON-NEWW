@@ -1,4 +1,4 @@
-import { CommonModule, CurrencyPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import { routePermissionForPath } from '../core/access-rules';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { AppStateService } from '../core/state/app-state.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type StaffTab = 'overview' | 'roles' | 'services' | 'slabs' | 'roster' | 'payroll' | 'kyc' | 'reviews' | 'approvals' | 'optimizer';
 type RosterView = 'day' | 'week' | 'month';
@@ -16,7 +17,7 @@ type RosterView = 'day' | 'week' | 'month';
 @Component({
   selector: 'app-staff-profile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack">
       <div class="profile-command-bar">
@@ -61,10 +62,10 @@ type RosterView = 'day' | 'week' | 'month';
         </section>
 
         <div class="metrics-grid">
-          <article class="metric-card teal"><span>Revenue</span><strong>{{ profile.metrics.revenue | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ profile.metrics.bookings }} booking(s)</small></article>
+          <article class="metric-card teal"><span>Revenue</span><strong>{{ profile.metrics.revenue | auraMoney:'1.0-0' }}</strong><small>{{ profile.metrics.bookings }} booking(s)</small></article>
           <article class="metric-card green"><span>Completed</span><strong>{{ profile.metrics.completed }}</strong><small>{{ profile.metrics.cancelled }} cancelled</small></article>
           <article class="metric-card amber"><span>Attendance</span><strong>{{ profile.metrics.attendanceScore || 0 }}%</strong><small>{{ profile.attendance.length }} record(s)</small></article>
-          <article class="metric-card violet"><span>Payroll net</span><strong>{{ profile.metrics.payrollNet | currency: 'INR':'symbol':'1.0-0' }}</strong><small>{{ profile.payrollComponents.length }} payroll row(s)</small></article>
+          <article class="metric-card violet"><span>Payroll net</span><strong>{{ profile.metrics.payrollNet | auraMoney:'1.0-0' }}</strong><small>{{ profile.payrollComponents.length }} payroll row(s)</small></article>
           <article class="metric-card blue"><span>Skill matrix</span><strong>{{ profile.skills.length }}</strong><small>{{ eligibleServiceCount(profile) }} eligible service(s)</small></article>
           <article class="metric-card red"><span>Conflicts</span><strong>{{ profile.conflicts.length }}</strong></article>
         </div>
@@ -87,7 +88,7 @@ type RosterView = 'day' | 'week' | 'month';
           <div class="activity-list compact-list">
             <article *ngFor="let service of assignedServices(profile.staff)">
               <strong>{{ service.name }}</strong>
-              <span>{{ service.category }} · {{ service.durationMinutes }} min · {{ service.price | currency: 'INR':'symbol':'1.0-0' }}</span>
+              <span>{{ service.category }} · {{ service.durationMinutes }} min · {{ service.price | auraMoney:'1.0-0' }}</span>
             </article>
             <article *ngIf="!assignedServices(profile.staff).length"><strong>No service restriction</strong><span>Staff can be considered for any active service unless skill matrix restricts it.</span></article>
           </div>
@@ -133,7 +134,7 @@ type RosterView = 'day' | 'week' | 'month';
               </thead>
               <tbody>
                 <tr *ngFor="let service of services()">
-                  <td><strong>{{ service.name }}</strong><small>{{ service.category }} · base {{ service.durationMinutes }} min · {{ service.price | currency: 'INR':'symbol':'1.0-0' }}</small></td>
+                  <td><strong>{{ service.name }}</strong><small>{{ service.category }} · base {{ service.durationMinutes }} min · {{ service.price | auraMoney:'1.0-0' }}</small></td>
                   <td><input class="matrix-input" type="number" [ngModel]="serviceOverrideValue(service.id, 'shopCost')" (ngModelChange)="setServiceOverride(service.id, 'shopCost', $event)" /></td>
                   <td><input class="matrix-input" type="number" [ngModel]="serviceOverrideValue(service.id, 'labourCost')" (ngModelChange)="setServiceOverride(service.id, 'labourCost', $event)" /></td>
                   <td><input class="matrix-input" type="number" [ngModel]="serviceOverrideValue(service.id, 'commission')" (ngModelChange)="setServiceOverride(service.id, 'commission', $event)" /></td>
@@ -172,7 +173,7 @@ type RosterView = 'day' | 'week' | 'month';
               <thead><tr><th>Revenue range</th><th>Commission</th><th>Mode</th><th></th></tr></thead>
               <tbody>
                 <tr *ngFor="let slab of commissionSlabs(); let i = index">
-                  <td>{{ slab.fromRevenue | currency: 'INR':'symbol':'1.0-0' }} - {{ slab.toRevenue | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ slab.fromRevenue | auraMoney:'1.0-0' }} - {{ slab.toRevenue | auraMoney:'1.0-0' }}</td>
                   <td>{{ slab.commissionPercent }}%</td>
                   <td>{{ commissionSettings.slabMode }}</td>
                   <td><button class="ghost-button mini" type="button" (click)="removeCommissionSlab(i)" [disabled]="saving()">Delete</button></td>
@@ -294,8 +295,8 @@ type RosterView = 'day' | 'week' | 'month';
             <table>
               <thead><tr><th>Type</th><th>Gross/Rule</th><th>Net/Bonus</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                <tr *ngFor="let row of profile.payrollComponents"><td>Payroll</td><td>{{ row.grossPay | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row.netPay | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row.status }}</td><td><button class="ghost-button mini" type="button" (click)="openPayslip(row)">Payslip PDF</button></td></tr>
-                <tr *ngFor="let row of profile.commissionRules"><td>Commission</td><td>{{ row.name }}</td><td>{{ row.targetBonus | currency: 'INR':'symbol':'1.0-0' }}</td><td>{{ row.status }}</td><td></td></tr>
+                <tr *ngFor="let row of profile.payrollComponents"><td>Payroll</td><td>{{ row.grossPay | auraMoney:'1.0-0' }}</td><td>{{ row.netPay | auraMoney:'1.0-0' }}</td><td>{{ row.status }}</td><td><button class="ghost-button mini" type="button" (click)="openPayslip(row)">Payslip PDF</button></td></tr>
+                <tr *ngFor="let row of profile.commissionRules"><td>Commission</td><td>{{ row.name }}</td><td>{{ row.targetBonus | auraMoney:'1.0-0' }}</td><td>{{ row.status }}</td><td></td></tr>
                 <tr *ngIf="!profile.payrollComponents.length && !profile.commissionRules.length"><td colspan="5">No payroll or commission rules saved yet.</td></tr>
               </tbody>
             </table>
@@ -386,7 +387,7 @@ type RosterView = 'day' | 'week' | 'month';
             <article class="action-card"><strong>Best for booking</strong><span>{{ profile.optimizer.bestForBooking }}</span></article>
             <article class="action-card"><strong>Burnout risk</strong><span>{{ profile.optimizer.burnoutRisk }}</span><small>{{ profile.optimizer.workloadBalance }}</small></article>
             <article class="action-card"><strong>Absent recovery</strong><span>{{ profile.optimizer.absentRecoveryPlan }}</span></article>
-            <article class="action-card"><strong>Target recovery</strong><span>{{ profile.optimizer.targetRecovery | currency: 'INR':'symbol':'1.0-0' }}</span></article>
+            <article class="action-card"><strong>Target recovery</strong><span>{{ profile.optimizer.targetRecovery | auraMoney:'1.0-0' }}</span></article>
             <article class="action-card" *ngFor="let item of profile.optimizer.suggestions"><strong>Recommendation</strong><span>{{ item }}</span></article>
           </div>
           <div class="activity-list compact-list">

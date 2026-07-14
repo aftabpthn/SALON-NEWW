@@ -1,9 +1,11 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type ExpiredPackagesReport = {
   summary: ApiRecord;
@@ -16,7 +18,7 @@ type ExpiredPackagesReport = {
 @Component({
   selector: 'app-expired-packages-report',
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack expired-packages-page inner-page-shell">
       <div class="module-hero report-hero inner-page-header">
@@ -57,7 +59,7 @@ type ExpiredPackagesReport = {
           </article>
           <article class="metric-card">
             <span>Packages Amount</span>
-            <strong>{{ data.summary.packagesAmount || 0 | currency: 'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary.packagesAmount || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Total Services</span>
@@ -112,11 +114,11 @@ type ExpiredPackagesReport = {
                   <td><strong>{{ row.clientName || 'Walk-in Client' }}</strong></td>
                   <td>{{ row.contact || '-' }}</td>
                   <td>{{ row.packageName || '-' }}</td>
-                  <td>{{ row.price || 0 | currency: 'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.price || 0 | auraMoney:'1.0-0' }}</td>
                   <td>{{ numberValue(row.totalServices) }}</td>
                   <td><span class="pending-pill">{{ numberValue(row.pendingServices) }}</span></td>
-                  <td>{{ row.date ? (row.date | date: 'dd-MM-yyyy') : '-' }}</td>
-                  <td><span class="expired-date">{{ row.expiredOn ? (row.expiredOn | date: 'dd-MM-yyyy') : '-' }}</span></td>
+                  <td>{{ row.date ? (row.date | auraDate:'date') : '-' }}</td>
+                  <td><span class="expired-date">{{ row.expiredOn ? (row.expiredOn | auraDate:'date') : '-' }}</span></td>
                   <td><a class="ghost-button mini" [href]="clientHref(row)">Open</a></td>
                 </tr>
                 <tr *ngIf="!rows().length">

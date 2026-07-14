@@ -1,13 +1,14 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
 import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-quality-center',
   standalone: true,
-  imports: [CommonModule, DatePipe, StateComponent, AuraKpiCardComponent],
+  imports: [AuraDatePipe, CommonModule, StateComponent, AuraKpiCardComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -51,7 +52,7 @@ import { AuraKpiCardComponent } from '../shared/ui/aura-kpi-card/aura-kpi-card.c
                 <td>{{ run.type }}</td>
                 <td><span class="badge" [class.success]="run.status === 'passed'">{{ run.status }}</span></td>
                 <td>{{ run.result | json }}</td>
-                <td>{{ (run.completedAt || run.createdAt) | date: 'short' }}</td>
+                <td>{{ (run.completedAt || run.createdAt) | auraDate:'date' }}</td>
               </tr>
             </tbody>
           </table>

@@ -1,8 +1,9 @@
-import { CommonModule, CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../core/api.service';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 
 type TaxSettingsState = {
   country: string;
@@ -54,7 +55,7 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
 @Component({
   selector: 'app-tax-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CurrencyPipe, DecimalPipe],
+  imports: [AuraMoneyPipe, CommonModule, FormsModule, RouterLink, DecimalPipe],
   template: `
     <section class="tax-settings-page inner-page-shell">
       <aside class="settings-nav" aria-label="Settings sections">
@@ -221,12 +222,12 @@ const DEFAULT_SETTINGS: TaxSettingsState = {
           <div class="preview-grid">
             <article>
               <span>Sample service</span>
-              <strong>{{ previewServiceTotal() | currency:'INR':'symbol':'1.0-2' }}</strong>
+              <strong>{{ previewServiceTotal() | auraMoney:'1.0-2' }}</strong>
               <small>{{ settings.serviceTaxRate | number:'1.0-2' }}% {{ settings.taxType }} · {{ settings.serviceTaxMode }}</small>
             </article>
             <article>
               <span>Sample product</span>
-              <strong>{{ previewProductTotal() | currency:'INR':'symbol':'1.0-2' }}</strong>
+              <strong>{{ previewProductTotal() | auraMoney:'1.0-2' }}</strong>
               <small>{{ settings.productTaxRate | number:'1.0-2' }}% {{ settings.taxType }} · {{ settings.productTaxMode }}</small>
             </article>
             <article>

@@ -1,15 +1,16 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 type WhatsAppViewKey = 'overview' | 'operations' | 'result' | 'inbox' | 'rules';
 
 @Component({
   selector: 'app-whatsapp-automation',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DatePipe, StateComponent],
+  imports: [AuraDatePipe, CommonModule, ReactiveFormsModule, StateComponent],
   template: `
     <section class="whatsapp-workspace">
       <div class="page-heading">
@@ -84,7 +85,7 @@ type WhatsAppViewKey = 'overview' | 'operations' | 'result' | 'inbox' | 'rules';
               <select formControlName="appointmentId">
                 <option value="">Select appointment</option>
                 <option *ngFor="let appointment of appointments()" [value]="appointment.id">
-                  {{ clientName(appointment.clientId) }} · {{ appointment.startAt | date: 'short' }}
+                  {{ clientName(appointment.clientId) }} · {{ appointment.startAt | auraDate:'date' }}
                 </option>
               </select>
             </label>
@@ -173,7 +174,7 @@ type WhatsAppViewKey = 'overview' | 'operations' | 'result' | 'inbox' | 'rules';
               <div>
                 <strong>{{ handoff.reason }}</strong>
                 <span>{{ handoff.priority }} · {{ handoff.status }}</span>
-                <small>{{ handoff.createdAt | date: 'short' }}</small>
+                <small>{{ handoff.createdAt | auraDate:'date' }}</small>
               </div>
               <button class="ghost-button mini" type="button" (click)="resolveHandoff(handoff.id)" *ngIf="handoff.status !== 'resolved'">Resolve</button>
             </article>

@@ -1,13 +1,15 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiRecord, ApiService } from '../../../core/api.service';
 import { StateComponent } from '../../../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../../../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../../../shared/pipes/aura-date.pipe';
 
 @Component({
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, DatePipe, FormsModule, RouterLink, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -63,25 +65,25 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
           </article>
           <article class="metric-card">
             <span>Gross payroll</span>
-            <strong>{{ data.summary?.grossAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary?.grossAmount || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Deductions</span>
-            <strong>{{ data.summary?.deductionAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary?.deductionAmount || 0 | auraMoney:'1.0-0' }}</strong>
           </article>
           <article class="metric-card">
             <span>Net salary</span>
-            <strong>{{ data.summary?.netAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary?.netAmount || 0 | auraMoney:'1.0-0' }}</strong>
             <small>{{ data.summary?.staffPaid || 0 }} staff covered</small>
           </article>
           <article class="metric-card">
             <span>Paid amount</span>
-            <strong>{{ data.summary?.paidAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary?.paidAmount || 0 | auraMoney:'1.0-0' }}</strong>
             <small>{{ data.summary?.paidRows || 0 }} paid rows</small>
           </article>
           <article class="metric-card warn">
             <span>Pending payout</span>
-            <strong>{{ data.summary?.pendingAmount || 0 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <strong>{{ data.summary?.pendingAmount || 0 | auraMoney:'1.0-0' }}</strong>
             <small>{{ data.summary?.draftRows || 0 }} draft · {{ data.summary?.approvedRows || 0 }} approved</small>
           </article>
         </div>
@@ -122,23 +124,23 @@ import { StateComponent } from '../../../shared/ui/state/state.component';
               <tbody>
                 <tr *ngFor="let row of data.rows || []">
                   <td><strong>{{ row.payrollRunId }}</strong><small>{{ row.payrollItemId }}</small></td>
-                  <td>{{ row.periodStart | date:'dd MMM yyyy' }} - {{ row.periodEnd | date:'dd MMM yyyy' }}</td>
-                  <td>{{ row.generatedDate | date:'dd MMM yyyy' }} <small>{{ row.generatedTime }}</small></td>
+                  <td>{{ row.periodStart | auraDate:'date' }} - {{ row.periodEnd | auraDate:'date' }}</td>
+                  <td>{{ row.generatedDate | auraDate:'date' }} <small>{{ row.generatedTime }}</small></td>
                   <td><strong>{{ row.staffName }}</strong><small>{{ row.staffCode || row.staffId }}</small></td>
                   <td>{{ row.staffContact || '-' }}</td>
                   <td>{{ row.branchName || row.branchId || '-' }}</td>
-                  <td>{{ row.grossAmount | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.deductionAmount | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td><strong>{{ row.netAmount | currency:'INR':'symbol':'1.0-0' }}</strong></td>
-                  <td>{{ row.pf | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.esic | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.tds | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.professionalTax | currency:'INR':'symbol':'1.0-0' }}</td>
-                  <td>{{ row.overtimeAmount | currency:'INR':'symbol':'1.0-0' }} / {{ row.bonusAmount | currency:'INR':'symbol':'1.0-0' }}</td>
+                  <td>{{ row.grossAmount | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.deductionAmount | auraMoney:'1.0-0' }}</td>
+                  <td><strong>{{ row.netAmount | auraMoney:'1.0-0' }}</strong></td>
+                  <td>{{ row.pf | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.esic | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.tds | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.professionalTax | auraMoney:'1.0-0' }}</td>
+                  <td>{{ row.overtimeAmount | auraMoney:'1.0-0' }} / {{ row.bonusAmount | auraMoney:'1.0-0' }}</td>
                   <td>{{ row.paymentMode || '-' }}<small>{{ row.bankName || '' }}</small></td>
                   <td><span class="badge" [class.warn]="row.status !== 'paid'">{{ row.status }}</span></td>
-                  <td>{{ row.approvedAt ? (row.approvedAt | date:'dd MMM yyyy, h:mm a') : '-' }}</td>
-                  <td>{{ row.paidAt ? (row.paidAt | date:'dd MMM yyyy, h:mm a') : '-' }}</td>
+                  <td>{{ row.approvedAt ? (row.approvedAt | auraDate:'dateTime') : '-' }}</td>
+                  <td>{{ row.paidAt ? (row.paidAt | auraDate:'dateTime') : '-' }}</td>
                   <td>{{ row.pendingDays || 0 }}</td>
                   <td class="row-actions">
                     <a class="ghost-button mini" routerLink="/staff-os/staff-profile" [queryParams]="{ staffId: row.staffId }">Staff</a>

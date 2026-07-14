@@ -4,6 +4,7 @@ import { ApiRecord } from '../../../core/api.service';
 import { AppStateService } from '../../../core/state/app-state.service';
 import { I18nService } from '../../../core/i18n.service';
 import { AuthSessionService } from '../../../core/auth-session.service';
+import { GeneralSettingsService } from '../../../core/general-settings.service';
 
 type Panel = 'branch' | 'workspace' | null;
 
@@ -37,7 +38,7 @@ const ROLE_PICKER_ROLES = new Set(['owner', 'superadmin', 'admin']);
     <div class="wsw">
       <!-- Branch -->
       <div class="wsw-pop">
-        <button class="wsw-btn" type="button" [class.is-open]="panel() === 'branch'" (click)="toggle('branch')" title="Switch branch">
+        <button class="wsw-btn" type="button" [class.is-open]="panel() === 'branch'" [disabled]="!generalSettings.allowBranchSwitch()" (click)="toggle('branch')" [title]="generalSettings.allowBranchSwitch() ? 'Switch branch' : 'Branch switching disabled by policy'">
           <span class="wsw-btn-icon" aria-hidden="true">⌂</span>
           <span class="wsw-btn-copy">
             <strong>{{ branchLabel() }}</strong>
@@ -134,6 +135,7 @@ const ROLE_PICKER_ROLES = new Set(['owner', 'superadmin', 'admin']);
       box-shadow: 0 6px 18px rgba(79, 70, 229, 0.16);
       transform: translateY(-1px);
     }
+    .wsw-btn:disabled { cursor: not-allowed; opacity: 0.68; transform: none; box-shadow: none; }
     .wsw-btn-icon {
       width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px;
       font-size: 0.82rem; color: var(--aura-primary, #4B1238); background: rgba(75, 18, 56, 0.12);
@@ -222,13 +224,14 @@ export class WorkspaceSwitcherComponent {
     ROLE_OPTIONS.find((r) => r.value === this.state.userRole())?.label || this.state.userRole()
   );
 
-  constructor(readonly state: AppStateService, readonly i18n: I18nService, private readonly session: AuthSessionService) {}
+  constructor(readonly state: AppStateService, readonly i18n: I18nService, readonly generalSettings: GeneralSettingsService, private readonly session: AuthSessionService) {}
 
   private compactRole(role: string): string {
     return String(role || '').trim().replace(/[\s_-]+/g, '').toLowerCase();
   }
 
   toggle(id: Exclude<Panel, null>): void {
+    if (id === 'branch' && !this.generalSettings.allowBranchSwitch()) return;
     this.panel.set(this.panel() === id ? null : id);
   }
 

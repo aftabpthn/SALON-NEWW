@@ -6,10 +6,11 @@ import { ApiRecord } from '../../../core/api.service';
 import { AppStateService } from '../../../core/state/app-state.service';
 import { StaffOsApi } from '../data/staff-os.api';
 import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } from '../domain/staff-os.models';
+import { AuraMoneyPipe } from '../../../shared/pipes/aura-money.pipe';
 
 @Component({
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [AuraMoneyPipe, CommonModule, RouterLink],
   template: `
     <main class="perf-detail-shell">
       <header class="perf-detail-header">
@@ -37,12 +38,12 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
           </article>
           <article>
             <span>Net contribution</span>
-            <strong>{{ rupees(row.profitability?.netContributionPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</strong>
-            <small>{{ rupees(row.profitability?.revenuePaise) | currency:'INR':'symbol-narrow':'1.0-0' }} revenue</small>
+            <strong>{{ rupees(row.profitability?.netContributionPaise) | auraMoney:'1.0-0' }}</strong>
+            <small>{{ rupees(row.profitability?.revenuePaise) | auraMoney:'1.0-0' }} revenue</small>
           </article>
           <article>
             <span>Product wastage</span>
-            <strong>{{ rupees(row.productUsage?.wastageCostPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</strong>
+            <strong>{{ rupees(row.productUsage?.wastageCostPaise) | auraMoney:'1.0-0' }}</strong>
             <small>{{ row.productUsage?.wastagePct || 0 | number:'1.0-1' }}% variance</small>
           </article>
           <article>
@@ -78,8 +79,8 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
               <div><dt>Delayed</dt><dd>{{ row.serviceTime?.delayed || 0 }}</dd></div>
               <div><dt>Avg over</dt><dd>{{ row.serviceTime?.avgOverMinutes || 0 | number:'1.0-1' }} min</dd></div>
               <div><dt>Allowed</dt><dd>{{ row.serviceTime?.allowedMinutes || 0 }} min</dd></div>
-              <div><dt>Salary loss</dt><dd>{{ rupees(row.serviceTime?.salaryLossPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</dd></div>
-              <div><dt>Hourly cost</dt><dd>{{ rupees(row.serviceTime?.hourlySalaryPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</dd></div>
+              <div><dt>Salary loss</dt><dd>{{ rupees(row.serviceTime?.salaryLossPaise) | auraMoney:'1.0-0' }}</dd></div>
+              <div><dt>Hourly cost</dt><dd>{{ rupees(row.serviceTime?.hourlySalaryPaise) | auraMoney:'1.0-0' }}</dd></div>
               <div><dt>Shift hours</dt><dd>{{ row.serviceTime?.shiftHours || 9 }} hr</dd></div>
               <div><dt>Shift source</dt><dd>{{ row.serviceTime?.shiftSource === 'staff_shift' ? 'Staff shift' : 'Payroll default' }}</dd></div>
               <div><dt>Salary source</dt><dd>{{ row.serviceTime?.salarySource === 'staff_salary_profile' ? 'Staff profile' : 'Missing' }}</dd></div>
@@ -98,9 +99,9 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
             <div class="panel-head"><span>Product usage</span><strong>{{ row.productUsage?.score || 0 | number:'1.0-0' }}</strong></div>
             <dl>
               <div><dt>Drafts</dt><dd>{{ row.productUsage?.drafts || 0 }}</dd></div>
-              <div><dt>Expected</dt><dd>{{ rupees(row.productUsage?.expectedCostPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</dd></div>
-              <div><dt>Actual</dt><dd>{{ rupees(row.productUsage?.actualCostPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</dd></div>
-              <div><dt>Wastage</dt><dd>{{ rupees(row.productUsage?.wastageCostPaise) | currency:'INR':'symbol-narrow':'1.0-0' }}</dd></div>
+              <div><dt>Expected</dt><dd>{{ rupees(row.productUsage?.expectedCostPaise) | auraMoney:'1.0-0' }}</dd></div>
+              <div><dt>Actual</dt><dd>{{ rupees(row.productUsage?.actualCostPaise) | auraMoney:'1.0-0' }}</dd></div>
+              <div><dt>Wastage</dt><dd>{{ rupees(row.productUsage?.wastageCostPaise) | auraMoney:'1.0-0' }}</dd></div>
             </dl>
           </article>
           <article>
@@ -124,7 +125,7 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
               <span>{{ skill['score'] || 0 | number:'1.0-0' }}</span>
               <span>{{ skill['avgOverMinutes'] || 0 | number:'1.0-1' }} min</span>
               <span>{{ skill['delayed'] || 0 }} / {{ skill['completed'] || 0 }}</span>
-              <span>{{ rupees(skill['salaryLossPaise']) | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+              <span>{{ rupees(skill['salaryLossPaise']) | auraMoney:'1.0-0' }}</span>
             </div>
           </div>
         </section>
@@ -138,7 +139,7 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
               <span>{{ service['allowedMinutes'] || 0 }} min</span>
               <span>{{ service['actualMinutes'] || 0 }} min</span>
               <span>{{ service['overMinutes'] || 0 }} min</span>
-              <span>{{ rupees(service['delayCostPaise']) | currency:'INR':'symbol-narrow':'1.0-0' }}<small>{{ service['salarySource'] === 'staff_salary_profile' ? 'Salary linked' : 'Set salary' }}</small></span>
+              <span>{{ rupees(service['delayCostPaise']) | auraMoney:'1.0-0' }}<small>{{ service['salarySource'] === 'staff_salary_profile' ? 'Salary linked' : 'Set salary' }}</small></span>
             </div>
           </div>
         </section>
@@ -183,7 +184,7 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
               <span>{{ product['expectedQty'] || 0 }}</span>
               <span>{{ product['actualQty'] || 0 }}</span>
               <span>{{ product['extraQty'] || 0 }}</span>
-              <span>{{ rupees(product['wastageCostPaise']) | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+              <span>{{ rupees(product['wastageCostPaise']) | auraMoney:'1.0-0' }}</span>
             </div>
           </div>
         </section>
@@ -196,7 +197,7 @@ import { StaffOsPerformanceDetailResponse, StaffOsPerformanceIntelligenceRow } f
           <div class="tr" *ngFor="let day of detail()?.rows || []">
             <span>{{ day.businessDate }}</span>
             <span>{{ day.productivityScore | number:'1.0-0' }}</span>
-            <span>{{ day.revenueGenerated | currency:'INR':'symbol-narrow':'1.0-0' }}</span>
+            <span>{{ day.revenueGenerated | auraMoney:'1.0-0' }}</span>
             <span>{{ day.utilizationPct | number:'1.0-0' }}%</span>
             <span>{{ day.avgRating | number:'1.0-1' }}</span>
           </div>

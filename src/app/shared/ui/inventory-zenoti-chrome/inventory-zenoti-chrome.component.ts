@@ -127,8 +127,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
         justify-content: flex-start;
       }
     }
-  `],
-})
+  `] })
 export class InventoryZenotiChromeComponent {
   @Input() title = 'Manage products';
   @Input() breadcrumb = 'Inventory > Manage Products';
@@ -142,6 +141,5 @@ export class InventoryZenotiChromeComponent {
     { label: 'FIFO Batches', href: '/inventory/fifo' },
     { label: 'Stock Audit', href: '/inventory/stock-audit' },
     { label: 'Scanner', href: '/inventory/scanner' },
-    { label: 'Product Consume', href: '/inventory/product-consume' },
-  ];
+    { label: 'Product Consume', href: '/inventory/product-consume' }];
 }

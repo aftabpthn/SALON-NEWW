@@ -1,13 +1,14 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-security-blocklist',
   standalone: true,
-  imports: [CommonModule, DatePipe, FormsModule, StateComponent],
+  imports: [AuraDatePipe, CommonModule, FormsModule, StateComponent],
   template: `
     <section class="page-stack">
       <div class="module-hero">
@@ -40,7 +41,7 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 <td>{{ block.ipAddress || '-' }}</td>
                 <td>{{ block.userId || '-' }}</td>
                 <td>{{ block.reason }}</td>
-                <td>{{ block.blockedUntil | date: 'short' }}</td>
+                <td>{{ block.blockedUntil | auraDate:'date' }}</td>
                 <td>{{ block.status }}</td>
                 <td><button class="ghost-button mini" type="button" [disabled]="block.status !== 'active'" (click)="unblock(block)">Unblock</button></td>
               </tr>

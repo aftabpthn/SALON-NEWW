@@ -119,9 +119,16 @@ test("staff os core flow is tenant-safe, versioned and operational", async () =>
     assert.equal(approvedSwap.response.status, 200);
     assert.equal(approvedSwap.payload.status, "approved");
 
+    const attendanceSchedule = await api(baseUrl, "/staff-os/schedules", {
+      method: "POST",
+      body: { branchId, staffId: created.payload.id, scheduleDate: "2026-06-10", startTime: "10:00", endTime: "19:00" },
+      branchId
+    });
+    assert.equal(attendanceSchedule.response.status, 201);
+
     const attendance = await api(baseUrl, "/staff-os/attendance/clock-in", {
       method: "POST",
-      body: { branchId, staffId: created.payload.id, businessDate: "2026-06-10", source: "manual" },
+      body: { branchId, staffId: created.payload.id, businessDate: "2026-06-10", clockInAt: "2026-06-10T04:30:00.000Z", source: "manual" },
       branchId
     });
     assert.equal(attendance.response.status, 201);
@@ -129,14 +136,14 @@ test("staff os core flow is tenant-safe, versioned and operational", async () =>
 
     const breakStart = await api(baseUrl, "/staff-os/attendance/break-start", {
       method: "POST",
-      body: { staffId: created.payload.id },
+      body: { staffId: created.payload.id, startedAt: "2026-06-10T06:30:00.000Z" },
       branchId
     });
     assert.equal(breakStart.response.status, 201);
 
     const breakEnd = await api(baseUrl, "/staff-os/attendance/break-end", {
       method: "POST",
-      body: { breakId: breakStart.payload.id },
+      body: { breakId: breakStart.payload.id, endedAt: "2026-06-10T07:00:00.000Z" },
       branchId
     });
     assert.equal(breakEnd.response.status, 200);
@@ -144,12 +151,47 @@ test("staff os core flow is tenant-safe, versioned and operational", async () =>
 
     const clockOut = await api(baseUrl, "/staff-os/attendance/clock-out", {
       method: "POST",
-      body: { staffId: created.payload.id, overtimeMinutes: 45 },
+      body: { staffId: created.payload.id, clockOutAt: "2026-06-10T14:30:00.000Z", overtimeMinutes: 45 },
       branchId
     });
     assert.equal(clockOut.response.status, 200);
     assert.equal(clockOut.payload.status, "clocked_out");
-    assert.equal(clockOut.payload.overtimeMinutes, 45);
+    assert.equal(clockOut.payload.overtimeMinutes, 30);
+    assert.equal(clockOut.payload.totalBreakMinutes, 30);
+    assert.equal(clockOut.payload.totalWorkedMinutes, 570);
+    assert.equal(clockOut.payload.scheduledShiftMinutes, 540);
+
+    const attendanceList = await api(baseUrl, `/staff-os/attendance?staffId=${created.payload.id}&from=2026-06-10&to=2026-06-10`, { branchId });
+    assert.equal(attendanceList.response.status, 200);
+    assert.equal(attendanceList.payload[0].overtimeCalculationStatus, "completed");
+
+    const overtimeSummary = await api(baseUrl, `/staff-os/attendance/overtime-summary?staffId=${created.payload.id}&asOf=2026-06-10`, { branchId });
+    assert.equal(overtimeSummary.response.status, 200);
+    assert.equal(overtimeSummary.payload.todayMinutes, 30);
+    assert.equal(overtimeSummary.payload.weekMinutes, 30);
+    assert.equal(overtimeSummary.payload.last30DaysMinutes, 30);
+    assert.equal(overtimeSummary.payload.lifetimeMinutes, 30);
+
+    const historicalId = `att_historical_${Date.now()}`;
+    db.prepare(`INSERT INTO staff_attendance_logs
+      (id, tenant_id, branch_id, staff_id, business_date, clock_in_at, status, overtime_minutes)
+      VALUES (@id, @tenantId, @branchId, @staffId, @businessDate, @clockInAt, 'clocked_in', @overtimeMinutes)`).run({
+        id: historicalId,
+        tenantId: "tenant_aura",
+        branchId,
+        staffId: created.payload.id,
+        businessDate: "2026-06-09",
+        clockInAt: "2026-06-09T04:30:00.000Z",
+        overtimeMinutes: 17
+      });
+    const historicalClockOut = await api(baseUrl, "/staff-os/attendance/clock-out", {
+      method: "POST",
+      body: { staffId: created.payload.id, attendanceId: historicalId, clockOutAt: "2026-06-09T13:30:00.000Z", overtimeMinutes: 999 },
+      branchId
+    });
+    assert.equal(historicalClockOut.response.status, 200);
+    assert.equal(historicalClockOut.payload.overtimeMinutes, 17);
+    assert.equal(historicalClockOut.payload.overtimeCalculationStatus, "legacy");
 
     const correction = await api(baseUrl, "/staff-os/attendance/correction", {
       method: "POST",

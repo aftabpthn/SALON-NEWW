@@ -1,15 +1,17 @@
-import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule, UntypedFormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { StateComponent } from '../shared/ui/state/state.component';
+import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
+import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
 
 @Component({
   selector: 'app-clients',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, CurrencyPipe, DatePipe, StateComponent],
+  imports: [AuraDatePipe, AuraMoneyPipe, CommonModule, FormsModule, ReactiveFormsModule, RouterLink, StateComponent],
   template: `
     <section class="page-stack inner-page-shell">
       <div class="module-hero client-command-hero inner-page-header">
@@ -223,15 +225,15 @@ import { StateComponent } from '../shared/ui/state/state.component';
                 </td>
                 <td *ngIf="isColumnVisible('contact')">{{ client.phone || client.mobile || '-' }}</td>
                 <td *ngIf="isColumnVisible('gender')">{{ client.gender || '-' }}</td>
-                <td *ngIf="isColumnVisible('birthday')">{{ client.birthday ? (client.birthday | date: 'mediumDate') : '-' }}</td>
-                <td *ngIf="isColumnVisible('anniversary')">{{ client.anniversary ? (client.anniversary | date: 'mediumDate') : '-' }}</td>
+                <td *ngIf="isColumnVisible('birthday')">{{ client.birthday ? (client.birthday | auraDate:'date') : '-' }}</td>
+                <td *ngIf="isColumnVisible('anniversary')">{{ client.anniversary ? (client.anniversary | auraDate:'date') : '-' }}</td>
                 <td *ngIf="isColumnVisible('ewallet')" class="wallet-cell">
-                  <strong>{{ client.walletBalance | currency: 'INR':'symbol':'1.0-0' }}</strong>
+                  <strong>{{ client.walletBalance | auraMoney:'1.0-0' }}</strong>
                   <small *ngIf="walletActivityLabel(client)">{{ walletActivityLabel(client) }}</small>
                 </td>
                 <td *ngIf="isColumnVisible('notes')" class="note-cell" [title]="client.notes || ''">{{ shortText(client.notes) }}</td>
                 <td *ngIf="isColumnVisible('firstVisit')">{{ firstVisitLabel(client) }}</td>
-                <td *ngIf="isColumnVisible('spending')">{{ client.totalSpend | currency: 'INR':'symbol':'1.0-0' }}</td>
+                <td *ngIf="isColumnVisible('spending')">{{ client.totalSpend | auraMoney:'1.0-0' }}</td>
                 <td *ngIf="isColumnVisible('childAge')">{{ client.childAge || '-' }}</td>
                 <td *ngIf="isColumnVisible('assignedDiscount')">{{ assignedDiscount(client) }}</td>
                 <td *ngIf="isColumnVisible('discountValidity')">{{ discountValidity(client) }}</td>
