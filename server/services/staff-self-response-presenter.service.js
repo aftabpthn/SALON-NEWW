@@ -54,14 +54,58 @@ function withoutClientData(result) {
   return withoutFields(result, isPrivateClientField);
 }
 
+function rupeesToPaise(value) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function dashboardMoneyAsPaise(result = {}) {
+  return {
+    ...result,
+    summary: result.summary ? {
+      ...result.summary,
+      revenue: rupeesToPaise(result.summary.revenue),
+      appointmentValue: rupeesToPaise(result.summary.appointmentValue)
+    } : result.summary,
+    sales: Array.isArray(result.sales) ? result.sales.map((sale) => ({
+      ...sale,
+      total: rupeesToPaise(sale.total),
+      commissionTotal: rupeesToPaise(sale.commissionTotal)
+    })) : result.sales
+  };
+}
+
+function enterpriseMoneyAsPaise(result = {}) {
+  const targetProgress = result.home?.targetProgress;
+  return {
+    ...result,
+    home: result.home ? {
+      ...result.home,
+      expectedRevenue: rupeesToPaise(result.home.expectedRevenue),
+      targetProgress: targetProgress ? {
+        ...targetProgress,
+        targetValue: rupeesToPaise(targetProgress.targetValue),
+        achievedValue: rupeesToPaise(targetProgress.achievedValue),
+        remaining: rupeesToPaise(targetProgress.remaining)
+      } : targetProgress
+    } : result.home,
+    performance: result.performance ? { ...result.performance, revenue: rupeesToPaise(result.performance.revenue) } : result.performance,
+    leaderboard: Array.isArray(result.leaderboard) ? result.leaderboard.map((row) => ({ ...row, revenue: rupeesToPaise(row.revenue) })) : result.leaderboard,
+    reports: result.reports ? Object.fromEntries(Object.entries(result.reports).map(([key, report]) => [
+      key,
+      report && typeof report === "object" ? { ...report, revenue: rupeesToPaise(report.revenue) } : report
+    ])) : result.reports
+  };
+}
+
 export class StaffSelfResponsePresenterService {
   dashboard(result, access) {
-    const safeResult = withoutClientData(result);
+    const safeResult = withoutClientData(dashboardMoneyAsPaise(result));
     return hasFinancialAccess(access) ? safeResult : withoutFields(safeResult, isFinancialField);
   }
 
   enterprise(result, access) {
-    const safeResult = withoutClientData(result);
+    const safeResult = withoutClientData(enterpriseMoneyAsPaise(result));
     return hasFinancialAccess(access) ? safeResult : withoutFields(safeResult, isFinancialField);
   }
 
