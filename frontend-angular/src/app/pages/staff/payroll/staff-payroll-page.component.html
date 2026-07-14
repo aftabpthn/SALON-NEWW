@@ -1,0 +1,149 @@
+<section class="payroll-page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Payroll</span>
+      <h1>Employee Payroll</h1>
+    </div>
+    <button type="button" class="back-button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>Back to staff</button>
+  </header>
+
+  <nav class="view-tabs" aria-label="Payroll views">
+    <button *ngFor="let tab of tabs" type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key">
+      <i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}
+    </button>
+  </nav>
+
+  <section class="command-bar" aria-label="Payroll controls">
+    <label><span>Cycle</span><select [(ngModel)]="cycle" disabled><option value="monthly">Monthly</option></select></label>
+    <label><span>Month</span><select [(ngModel)]="month" (ngModelChange)="changePeriod()"><option *ngFor="let label of months; let index = index" [ngValue]="index + 1">{{ label }}</option></select></label>
+    <label><span>Year</span><select [(ngModel)]="year" (ngModelChange)="changePeriod()"><option *ngFor="let option of years" [ngValue]="option">{{ option }}</option></select></label>
+    <label class="employee-filter"><span>Employee</span><select [(ngModel)]="staffId" (ngModelChange)="changePeriod()"><option value="">All employees</option><option *ngFor="let employee of staff" [value]="employee.id">{{ staffLabel(employee) }}</option></select></label>
+    <div class="command-actions">
+      <button type="button" class="icon-button" title="Refresh" aria-label="Refresh payroll" [disabled]="loading" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>
+      <button type="button" class="primary" [disabled]="loading" (click)="runPayroll()"><i class="bi bi-play-fill"></i>{{ action === 'run' ? 'Running...' : 'Run payroll' }}</button>
+    </div>
+  </section>
+
+  <section class="utility-bar">
+    <button type="button" [disabled]="loading" (click)="checkSourceData(true)"><i class="bi bi-calculator"></i>{{ action === 'commissions' ? 'Calculating...' : 'Calculate commissions' }}</button>
+    <button type="button" [disabled]="items.length === 0" (click)="exportCsv()"><i class="bi bi-download"></i>Export</button>
+    <div class="column-control">
+      <button type="button" (click)="columnMenuOpen = !columnMenuOpen"><i class="bi bi-layout-three-columns"></i>Columns</button>
+      <div class="column-menu" *ngIf="columnMenuOpen">
+        <label *ngFor="let column of columns"><input type="checkbox" [checked]="isVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label>
+      </div>
+    </div>
+  </section>
+
+  <section class="progress-strip" aria-label="Payroll progress">
+    <div [class.complete]="currentStep >= 0" [class.current]="currentStep === 0"><span><i class="bi bi-database-check"></i></span><b>Data ready</b></div>
+    <i class="bi bi-chevron-right connector"></i>
+    <div [class.complete]="currentStep >= 1" [class.current]="currentStep === 1"><span><i class="bi bi-calculator-fill"></i></span><b>Calculated</b></div>
+    <i class="bi bi-chevron-right connector"></i>
+    <div [class.complete]="currentStep >= 2" [class.current]="currentStep === 2"><span><i class="bi bi-shield-check"></i></span><b>Reviewed</b></div>
+    <i class="bi bi-chevron-right connector"></i>
+    <div [class.complete]="currentStep >= 3" [class.current]="currentStep >= 3"><span><i class="bi bi-lock-fill"></i></span><b>Finalized</b></div>
+  </section>
+
+  <div class="message error" *ngIf="error"><i class="bi bi-exclamation-circle"></i>{{ error }}</div>
+  <div class="message success" *ngIf="success"><i class="bi bi-check-circle"></i>{{ success }}</div>
+
+  <section class="validation-bar" [class.has-errors]="invalidCount > 0" *ngIf="activeTab !== 'history'">
+    <div>
+      <i class="bi" [ngClass]="invalidCount ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill'"></i>
+      <span *ngIf="items.length === 0">No payroll source data checked</span>
+      <span *ngIf="items.length > 0 && invalidCount === 0">Source data ready<span *ngIf="warningCount"> · {{ warningCount }} warning{{ warningCount === 1 ? '' : 's' }}</span></span>
+      <span *ngIf="invalidCount > 0">{{ invalidCount }} employee{{ invalidCount === 1 ? '' : 's' }} need source-data fixes</span>
+    </div>
+    <button type="button" [disabled]="loading" (click)="checkSourceData(false)"><i class="bi bi-search"></i>Check source data</button>
+  </section>
+
+  <section class="ledger-card" *ngIf="activeTab !== 'history'">
+    <header class="ledger-heading">
+      <div><h2>Payroll cycle ledger</h2><span>{{ months[month - 1] }} {{ year }} · {{ items.length }} employee{{ items.length === 1 ? '' : 's' }}</span></div>
+      <span class="run-status" [class.preview]="!run">{{ run ? statusLabel(run.status) : 'Preview' }}</span>
+    </header>
+
+    <div class="table-scroll" *ngIf="items.length > 0">
+      <table>
+        <thead><tr>
+          <th>Employee</th>
+          <th *ngIf="isVisible('attendance')">Attendance</th>
+          <th *ngIf="isVisible('payrate')">Payrate</th>
+          <th *ngIf="isVisible('commission')">Commission</th>
+          <th *ngIf="isVisible('adjustments')">Adjustments</th>
+          <th *ngIf="isVisible('gross')">Gross pay</th>
+          <th *ngIf="isVisible('net')">Net pay</th>
+          <th *ngIf="isVisible('validation')">Validation</th>
+          <th *ngIf="isVisible('status')">Status</th>
+          <th *ngIf="canPrintPayslips">Payslip</th>
+        </tr></thead>
+        <tbody><tr *ngFor="let item of items">
+          <td><strong>{{ item.staffName }}</strong><small>{{ item.employeeCode || 'No employee code' }}</small></td>
+          <td *ngIf="isVisible('attendance')"><strong>{{ days(item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2) }} days</strong><small>{{ item.workedMinutes }} min · OT {{ item.overtimeMinutes }} min</small></td>
+          <td *ngIf="isVisible('payrate')"><strong>{{ formatMoney(item.payRatePaise) }}</strong><small>{{ item.payRateType ? statusLabel(item.payRateType) : 'Not configured' }}</small></td>
+          <td *ngIf="isVisible('commission')">{{ formatMoney(item.commissionPaise) }}</td>
+          <td *ngIf="isVisible('adjustments')">
+            <div class="adjustment-cell" *ngIf="activeTab === 'detail' && run?.status === 'calculated'; else adjustmentValue">
+              <label><span>₹</span><input type="number" step="0.01" [(ngModel)]="adjustmentInputs[item.staffId]" placeholder="Amount" aria-label="Adjustment amount" /></label>
+              <input type="text" maxlength="500" [(ngModel)]="noteInputs[item.staffId]" placeholder="Note" aria-label="Adjustment note" />
+            </div>
+            <ng-template #adjustmentValue>{{ formatMoney(item.adjustmentPaise) }}</ng-template>
+          </td>
+          <td *ngIf="isVisible('gross')">{{ formatMoney(item.grossPaise) }}</td>
+          <td *ngIf="isVisible('net')"><strong class="net-pay">{{ formatMoney(item.netPaise) }}</strong><small *ngIf="item.deductionsPaise">− {{ formatMoney(item.deductionsPaise) }}</small></td>
+          <td *ngIf="isVisible('validation')">
+            <span class="validation-pill error" *ngIf="item.validationErrors.length"><i class="bi bi-x-circle-fill"></i>{{ item.validationErrors.length }} error{{ item.validationErrors.length === 1 ? '' : 's' }}</span>
+            <span class="validation-pill warning" *ngIf="!item.validationErrors.length && item.validationWarnings.length"><i class="bi bi-exclamation-circle-fill"></i>{{ item.validationWarnings.length }} warning{{ item.validationWarnings.length === 1 ? '' : 's' }}</span>
+            <span class="validation-pill valid" *ngIf="!item.validationErrors.length && !item.validationWarnings.length"><i class="bi bi-check-circle-fill"></i>Ready</span>
+            <small class="validation-copy" *ngIf="item.validationErrors[0]">{{ item.validationErrors[0] }}</small>
+            <small class="validation-copy" *ngIf="!item.validationErrors.length && item.validationWarnings[0]">{{ item.validationWarnings[0] }}</small>
+          </td>
+          <td *ngIf="isVisible('status')"><span class="status-pill">{{ statusLabel(item.status) }}</span></td>
+          <td *ngIf="canPrintPayslips"><button type="button" (click)="printPayslip(item)"><i class="bi bi-printer"></i>Print</button></td>
+        </tr></tbody>
+        <tfoot><tr>
+          <td><strong>Cycle total</strong></td>
+          <td *ngIf="isVisible('attendance')"></td><td *ngIf="isVisible('payrate')"></td><td *ngIf="isVisible('commission')"></td><td *ngIf="isVisible('adjustments')"></td>
+          <td *ngIf="isVisible('gross')"><strong>{{ formatMoney(grossTotal) }}</strong></td>
+          <td *ngIf="isVisible('net')"><strong class="net-pay">{{ formatMoney(netTotal) }}</strong><small *ngIf="deductionTotal">Deductions {{ formatMoney(deductionTotal) }}</small></td>
+          <td *ngIf="isVisible('validation')">{{ invalidCount ? invalidCount + ' blocked' : 'Ready' }}</td><td *ngIf="isVisible('status')"></td><td *ngIf="canPrintPayslips"></td>
+        </tr></tfoot>
+      </table>
+    </div>
+
+    <div class="empty-state" *ngIf="items.length === 0 && !loading">
+      <span><i class="bi bi-wallet2"></i></span><h3>No payroll data yet</h3><button type="button" (click)="checkSourceData(false)">Check source data</button>
+    </div>
+    <div class="empty-state" *ngIf="loading && items.length === 0"><span class="spinner"><i class="bi bi-arrow-clockwise"></i></span><h3>Loading payroll</h3></div>
+  </section>
+
+  <section class="history-card" *ngIf="activeTab === 'history'">
+    <header><div><h2>Payroll history</h2><span>Saved monthly runs</span></div><button type="button" class="icon-button" (click)="loadHistory()" title="Refresh history"><i class="bi bi-arrow-clockwise"></i></button></header>
+    <button type="button" class="history-row" *ngFor="let savedRun of history" (click)="openHistoryRun(savedRun)">
+      <span><strong>{{ formatDate(savedRun.periodStart) }} – {{ formatDate(savedRun.periodEnd) }}</strong><small>{{ savedRun.staffCount }} employees</small></span>
+      <span><strong>{{ formatMoney(savedRun.netPaise) }}</strong><small>{{ savedRun.invalidCount }} validation errors</small></span>
+      <span class="status-pill">{{ statusLabel(savedRun.status) }}</span><i class="bi bi-chevron-right"></i>
+    </button>
+    <div class="empty-state compact" *ngIf="history.length === 0"><span><i class="bi bi-clock-history"></i></span><h3>No payroll history yet</h3></div>
+  </section>
+
+  <section class="calculation-log" *ngIf="run && activeTab !== 'history'">
+    <button type="button" (click)="logOpen = !logOpen"><span><i class="bi bi-journal-text"></i>Calculation log</span><i class="bi" [ngClass]="logOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i></button>
+    <div *ngIf="logOpen">
+      <p *ngFor="let event of events"><span>{{ statusLabel(event.eventType.replace('payroll.', '')) }}</span><time>{{ formatDate(event.createdAt) }}</time></p>
+      <p *ngIf="events.length === 0"><span>No log entries</span></p>
+    </div>
+  </section>
+
+  <footer class="action-footer" *ngIf="activeTab !== 'history'">
+    <button type="button" (click)="backToStaff()">Cancel</button>
+    <div class="payout-fields" *ngIf="run?.status === 'finalized'">
+      <label>Method<select [(ngModel)]="payoutMethod"><option value="">Select</option><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
+      <label *ngIf="payoutMethod !== 'cash'">Reference<input maxlength="160" [(ngModel)]="payoutReference" /></label>
+    </div>
+    <span *ngIf="run?.status !== 'finalized'"></span>
+    <button type="button" [disabled]="!canSaveDraft" (click)="saveDraft()"><i class="bi bi-save"></i>{{ action === 'save' ? 'Saving...' : 'Save draft' }}</button>
+    <button type="button" class="primary" [disabled]="!canAdvance" (click)="advanceWorkflow()"><i class="bi" [ngClass]="workflowIcon"></i>{{ workflowLabel }}</button>
+  </footer>
+</section>

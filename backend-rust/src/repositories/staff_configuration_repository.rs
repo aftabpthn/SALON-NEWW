@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveTime};
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};
 
@@ -52,6 +52,60 @@ pub struct LeavePolicyRecord {
     pub active: bool,
 }
 
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffCategoryRecord {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub designation: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftTemplateRecord {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub shift1_start: NaiveTime,
+    pub shift1_end: NaiveTime,
+    pub shift2_start: Option<NaiveTime>,
+    pub shift2_end: Option<NaiveTime>,
+    pub break_minutes: i32,
+    pub weekly_off_days: Vec<i16>,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceRuleRecord {
+    pub grace_minutes: i32,
+    pub half_day_after_minutes: i32,
+    pub absent_after_minutes: i32,
+    pub overtime_after_minutes: i32,
+    pub early_leave_grace_minutes: i32,
+    pub deduct_breaks: bool,
+    pub minimum_overtime_minutes: i32,
+    pub overtime_rounding_minutes: i32,
+    pub maximum_overtime_minutes: i32,
+    pub active: bool,
+    pub version: i32,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LeavePolicyOverviewRecord {
+    pub id: String,
+    pub staff_id: String,
+    pub staff_name: String,
+    pub employee_code: Option<String>,
+    pub name: String,
+    pub leave_type: String,
+    pub annual_days: i32,
+    pub active: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct CatalogAssignmentInput {
     pub item_type: String,
@@ -82,6 +136,49 @@ pub struct LeavePolicyInput {
     pub leave_type: String,
     pub annual_days: i32,
     pub active: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct StaffCategoryInput {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub designation: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ShiftTemplateInput {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub shift1_start: NaiveTime,
+    pub shift1_end: NaiveTime,
+    pub shift2_start: Option<NaiveTime>,
+    pub shift2_end: Option<NaiveTime>,
+    pub break_minutes: i32,
+    pub weekly_off_days: Vec<i16>,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AttendanceRuleInput {
+    pub grace_minutes: i32,
+    pub half_day_after_minutes: i32,
+    pub absent_after_minutes: i32,
+    pub overtime_after_minutes: i32,
+    pub early_leave_grace_minutes: i32,
+    pub deduct_breaks: bool,
+    pub minimum_overtime_minutes: i32,
+    pub overtime_rounding_minutes: i32,
+    pub maximum_overtime_minutes: i32,
+    pub active: bool,
+}
+
+pub struct ReplaceStaffMastersInput {
+    pub categories: Vec<StaffCategoryInput>,
+    pub shift_templates: Vec<ShiftTemplateInput>,
+    pub attendance_rule: AttendanceRuleInput,
 }
 
 pub struct ReplaceConfigurationInput {
@@ -172,6 +269,202 @@ pub async fn list_leave_policies(
 ) -> Result<Vec<LeavePolicyRecord>, sqlx::Error> {
     sqlx::query_as("SELECT id,name,leave_type,annual_days,active FROM staff_leave_policies WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 ORDER BY created_at,id")
         .bind(tenant_id).bind(branch_id).bind(staff_id).fetch_all(db).await
+}
+
+pub async fn list_staff_categories(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<StaffCategoryRecord>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id,code,name,designation,active FROM staff_categories WHERE tenant_id=$1 AND branch_id=$2 ORDER BY active DESC,name,id",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn list_shift_templates(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<ShiftTemplateRecord>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id,code,name,shift1_start,shift1_end,shift2_start,shift2_end,break_minutes,weekly_off_days,active FROM staff_shift_templates WHERE tenant_id=$1 AND branch_id=$2 ORDER BY active DESC,name,id",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn get_attendance_rule(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Option<AttendanceRuleRecord>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT grace_minutes,half_day_after_minutes,absent_after_minutes,overtime_after_minutes,early_leave_grace_minutes,deduct_breaks,minimum_overtime_minutes,overtime_rounding_minutes,maximum_overtime_minutes,active,version FROM staff_attendance_rules WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn list_leave_policy_overview(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<LeavePolicyOverviewRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT p.id,p.staff_id,
+               TRIM(CONCAT_WS(' ',s.first_name,NULLIF(s.last_name,''))) AS staff_name,
+               s.employee_code,p.name,p.leave_type,p.annual_days,p.active
+        FROM staff_leave_policies p
+        JOIN staff s ON s.tenant_id=p.tenant_id AND s.branch_id=p.branch_id AND s.id=p.staff_id
+        WHERE p.tenant_id=$1 AND p.branch_id=$2
+        ORDER BY s.first_name,s.last_name,p.leave_type,p.name
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn master_id_belongs_to_scope(
+    db: &PgPool,
+    table: &str,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<bool, sqlx::Error> {
+    let table = match table {
+        "category" => "staff_categories",
+        "shift" => "staff_shift_templates",
+        _ => return Ok(false),
+    };
+    let sql = format!(
+        "SELECT EXISTS(SELECT 1 FROM {table} WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=true)"
+    );
+    sqlx::query_scalar(&sql)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(id)
+        .fetch_one(db)
+        .await
+}
+
+pub async fn save_staff_masters(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    input: ReplaceStaffMastersInput,
+) -> Result<(), sqlx::Error> {
+    let mut tx = db.begin().await?;
+    for category in input.categories {
+        if category.id.is_empty() {
+            sqlx::query(
+                r#"
+                INSERT INTO staff_categories(tenant_id,branch_id,code,name,designation,active)
+                VALUES($1,$2,$3,$4,$5,$6)
+                ON CONFLICT (tenant_id,branch_id,code)
+                DO UPDATE SET name=EXCLUDED.name,designation=EXCLUDED.designation,
+                              active=EXCLUDED.active,updated_at=NOW()
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(category.code)
+            .bind(category.name)
+            .bind(category.designation)
+            .bind(category.active)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE staff_categories SET code=$4,name=$5,designation=$6,active=$7,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+            )
+            .bind(tenant_id).bind(branch_id).bind(category.id).bind(category.code)
+            .bind(category.name).bind(category.designation).bind(category.active)
+            .execute(&mut *tx).await?;
+        }
+    }
+    for shift in input.shift_templates {
+        if shift.id.is_empty() {
+            sqlx::query(
+                r#"
+                INSERT INTO staff_shift_templates(
+                  tenant_id,branch_id,code,name,shift1_start,shift1_end,shift2_start,shift2_end,
+                  break_minutes,weekly_off_days,active
+                ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                ON CONFLICT (tenant_id,branch_id,code)
+                DO UPDATE SET name=EXCLUDED.name,shift1_start=EXCLUDED.shift1_start,
+                              shift1_end=EXCLUDED.shift1_end,shift2_start=EXCLUDED.shift2_start,
+                              shift2_end=EXCLUDED.shift2_end,break_minutes=EXCLUDED.break_minutes,
+                              weekly_off_days=EXCLUDED.weekly_off_days,active=EXCLUDED.active,updated_at=NOW()
+                "#,
+            )
+            .bind(tenant_id).bind(branch_id).bind(shift.code).bind(shift.name)
+            .bind(shift.shift1_start).bind(shift.shift1_end).bind(shift.shift2_start)
+            .bind(shift.shift2_end).bind(shift.break_minutes).bind(shift.weekly_off_days)
+            .bind(shift.active).execute(&mut *tx).await?;
+        } else {
+            sqlx::query(
+                r#"
+                UPDATE staff_shift_templates
+                SET code=$4,name=$5,shift1_start=$6,shift1_end=$7,shift2_start=$8,shift2_end=$9,
+                    break_minutes=$10,weekly_off_days=$11,active=$12,updated_at=NOW()
+                WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(shift.id)
+            .bind(shift.code)
+            .bind(shift.name)
+            .bind(shift.shift1_start)
+            .bind(shift.shift1_end)
+            .bind(shift.shift2_start)
+            .bind(shift.shift2_end)
+            .bind(shift.break_minutes)
+            .bind(shift.weekly_off_days)
+            .bind(shift.active)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    let rule = input.attendance_rule;
+    sqlx::query(
+        r#"
+        INSERT INTO staff_attendance_rules(
+          tenant_id,branch_id,grace_minutes,half_day_after_minutes,absent_after_minutes,
+          overtime_after_minutes,early_leave_grace_minutes,deduct_breaks,minimum_overtime_minutes,
+          overtime_rounding_minutes,maximum_overtime_minutes,active
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT (tenant_id,branch_id)
+        DO UPDATE SET grace_minutes=EXCLUDED.grace_minutes,
+                      half_day_after_minutes=EXCLUDED.half_day_after_minutes,
+                      absent_after_minutes=EXCLUDED.absent_after_minutes,
+                      overtime_after_minutes=EXCLUDED.overtime_after_minutes,
+                      early_leave_grace_minutes=EXCLUDED.early_leave_grace_minutes,
+                      deduct_breaks=EXCLUDED.deduct_breaks,
+                      minimum_overtime_minutes=EXCLUDED.minimum_overtime_minutes,
+                      overtime_rounding_minutes=EXCLUDED.overtime_rounding_minutes,
+                      maximum_overtime_minutes=EXCLUDED.maximum_overtime_minutes,
+                      active=EXCLUDED.active,version=staff_attendance_rules.version+1,updated_at=NOW()
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(rule.grace_minutes)
+    .bind(rule.half_day_after_minutes).bind(rule.absent_after_minutes)
+    .bind(rule.overtime_after_minutes).bind(rule.early_leave_grace_minutes)
+    .bind(rule.deduct_breaks).bind(rule.minimum_overtime_minutes)
+    .bind(rule.overtime_rounding_minutes).bind(rule.maximum_overtime_minutes)
+    .bind(rule.active).execute(&mut *tx).await?;
+    tx.commit().await
 }
 
 pub async fn role_ids_belong_to_tenant(

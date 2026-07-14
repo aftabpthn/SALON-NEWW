@@ -1,0 +1,88 @@
+<main class="attendance-page">
+  <header class="page-header">
+    <div><span class="section-label">Employee</span><h1>Employee Attendance Summary</h1></div>
+  </header>
+
+  <section class="filter-bar" aria-label="Attendance summary filters">
+    <label>Cycle<select [(ngModel)]="cycle" (ngModelChange)="loadSummary()"><option value="monthly">Monthly</option></select></label>
+    <label>Month<select [(ngModel)]="month" (ngModelChange)="loadSummary()"><option *ngFor="let name of months; let index = index" [ngValue]="index + 1">{{ name }}</option></select></label>
+    <label>Year<select [(ngModel)]="year" (ngModelChange)="loadSummary()"><option *ngFor="let item of years" [ngValue]="item">{{ item }}</option></select></label>
+    <label class="employee-filter">Employee<select [(ngModel)]="staffId" (ngModelChange)="loadSummary()"><option value="">All employees</option><option *ngFor="let staff of staffOptions" [value]="staff.id">{{ staff.name }}</option></select></label>
+    <button type="button" (click)="loadSummary()" [disabled]="loading"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh</button>
+    <span class="toolbar-spacer"></span>
+    <button class="recalculate" type="button" (click)="recalculate()" [disabled]="loading || recalculating"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>{{ recalculating ? 'Recalculating…' : 'Recalculate' }}</button>
+    <button type="button" (click)="exportCsv()" [disabled]="!rows.length"><i class="bi bi-download" aria-hidden="true"></i>Export CSV</button>
+    <button type="button" (click)="printPdf()" [disabled]="!rows.length"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Export PDF</button>
+    <div class="column-control">
+      <button type="button" (click)="columnMenuOpen = !columnMenuOpen" [attr.aria-expanded]="columnMenuOpen"><i class="bi bi-layout-three-columns" aria-hidden="true"></i>Columns</button>
+      <div class="column-menu" *ngIf="columnMenuOpen"><label *ngFor="let column of columns"><input type="checkbox" [checked]="isVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label></div>
+    </div>
+  </section>
+
+  <aside class="calculation-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Attendance summary is calculated from saved schedules and attendance records.</aside>
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <section class="summary-card">
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th class="sticky-name" *ngIf="isVisible('name')">Name <i class="bi bi-arrow-up" aria-hidden="true"></i><small>Click name to view details</small></th>
+          <th class="sticky-code" *ngIf="isVisible('code')">Code</th>
+          <th *ngIf="isVisible('salary')">Salary</th><th *ngIf="isVisible('workingDays')">Working Days</th>
+          <th *ngIf="isVisible('leaveBalance')">Leave Balance</th><th *ngIf="isVisible('specialLeaveBalance')">Special Leave Balance</th>
+          <th *ngIf="isVisible('leaveAvailed')">Leave Availed</th><th *ngIf="isVisible('specialLeaveAvailed')">Special Leave Availed</th>
+          <th *ngIf="isVisible('penalty')">Penalty</th><th *ngIf="isVisible('leavesAccrued')">Leaves Accrued</th>
+          <th *ngIf="isVisible('weeklyOffAdjustment')">Weekly Off Adjustment</th><th *ngIf="isVisible('specialLeaveAdjustment')">Special Leave Adjustment</th>
+          <th *ngIf="isVisible('revisedLeaveBalance')">Revised Leave Balance</th><th *ngIf="isVisible('revisedSpecialLeaveBalance')">Revised Special Leave Balance</th>
+          <th *ngIf="isVisible('comments')">Comments</th>
+        </tr></thead>
+        <tbody>
+          <tr *ngFor="let row of rows">
+            <td class="sticky-name" *ngIf="isVisible('name')"><button class="name-link" type="button" (click)="openDetails(row)">{{ row.name }}</button></td>
+            <td class="sticky-code" *ngIf="isVisible('code')">{{ row.employeeCode || '—' }}</td>
+            <td *ngIf="isVisible('salary')">{{ money(row.salaryPaise) }}</td><td *ngIf="isVisible('workingDays')">{{ row.workingDays }}</td>
+            <td *ngIf="isVisible('leaveBalance')">{{ row.leaveBalance }}</td><td *ngIf="isVisible('specialLeaveBalance')">{{ row.specialLeaveBalance }}</td>
+            <td *ngIf="isVisible('leaveAvailed')">{{ row.leaveAvailed }}</td><td *ngIf="isVisible('specialLeaveAvailed')">{{ row.specialLeaveAvailed }}</td>
+            <td *ngIf="isVisible('penalty')">{{ money(row.penaltyPaise) }}</td><td *ngIf="isVisible('leavesAccrued')">{{ row.leavesAccrued }}</td>
+            <td *ngIf="isVisible('weeklyOffAdjustment')"><input class="number-input" type="number" min="-31" max="31" step="0.5" [(ngModel)]="row.weeklyOffAdjustment" /></td>
+            <td *ngIf="isVisible('specialLeaveAdjustment')"><input class="number-input" type="number" min="-31" max="31" step="0.5" [(ngModel)]="row.specialLeaveAdjustment" /></td>
+            <td *ngIf="isVisible('revisedLeaveBalance')">{{ row.revisedLeaveBalance }}</td><td *ngIf="isVisible('revisedSpecialLeaveBalance')">{{ row.revisedSpecialLeaveBalance }}</td>
+            <td *ngIf="isVisible('comments')"><input class="comment-input" maxlength="500" [(ngModel)]="row.comments" /></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin" aria-hidden="true"></i>Loading attendance…</div>
+      <div class="empty-state" *ngIf="!loading && !rows.length"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><strong>No attendance records yet</strong><span>There are no attendance records for the selected filters.</span><button type="button" (click)="loadSummary()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh attendance</button></div>
+    </div>
+  </section>
+
+  <footer class="action-bar"><button type="button" (click)="loadSummary()" [disabled]="loading || saving">Cancel</button><button class="primary" type="button" (click)="save()" [disabled]="!rows.length || saving">{{ saving ? 'Saving…' : 'Save summary' }}</button></footer>
+</main>
+
+<div class="drawer-backdrop" *ngIf="selectedRow" (click)="closeDetails()"></div>
+<aside class="detail-drawer" *ngIf="selectedRow" role="dialog" aria-modal="true" aria-label="Attendance details">
+  <header><div><span class="section-label">Attendance details</span><h2>{{ selectedRow.name }}</h2><small>{{ months[month - 1] }} {{ year }}</small></div><button type="button" aria-label="Close attendance details" (click)="closeDetails()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+  <div class="detail-body">
+    <section class="correction-card" *ngIf="correctionDetail && correctionForm as form">
+      <div class="correction-heading"><strong>Correct {{ displayDate(correctionDetail.businessDate) }}</strong><button type="button" (click)="cancelCorrection()">Cancel</button></div>
+      <div class="correction-grid">
+        <label>Check-in<input type="datetime-local" [(ngModel)]="form.clockInAt" /></label>
+        <label>Check-out<input type="datetime-local" [(ngModel)]="form.clockOutAt" /></label>
+        <label>Status<select [(ngModel)]="form.manualStatus"><option value="">Automatic</option><option value="present">Present</option><option value="absent">Absent</option><option value="half_day">Half day</option><option value="leave">Leave</option><option value="special_leave">Special leave</option><option value="weekly_off">Weekly off</option></select></label>
+        <label>Penalty (₹)<input type="number" min="0" step="0.01" [(ngModel)]="form.penaltyRupees" /></label>
+        <label class="wide">Comments<input maxlength="500" [(ngModel)]="form.comments" /></label>
+        <label class="wide">Correction reason<input maxlength="300" [(ngModel)]="form.correctionReason" /></label>
+      </div>
+      <div class="break-heading"><strong>Breaks</strong><button type="button" (click)="addBreak()">Add break</button></div>
+      <div class="break-row" *ngFor="let item of form.breaks; let index = index">
+        <label>Start<input type="datetime-local" [(ngModel)]="item.startedAt" /></label><label>End<input type="datetime-local" [(ngModel)]="item.endedAt" /></label><label>Comments<input maxlength="200" [(ngModel)]="item.comments" /></label><button type="button" (click)="removeBreak(index)">Remove</button>
+      </div>
+      <button class="primary save-correction" type="button" [disabled]="correctionSaving" (click)="saveCorrection()">{{ correctionSaving ? 'Saving…' : 'Save correction' }}</button>
+    </section>
+    <div class="detail-head"><span>Day</span><span>In</span><span>Out</span><span>Worked</span><span>Break</span><span>Late</span><span>Early</span><span>OT</span><span>Status</span><span></span></div>
+    <div class="detail-row" *ngFor="let detail of details"><span>{{ displayDate(detail.businessDate) }}</span><span>{{ displayTime(detail.clockInAt) }}</span><span>{{ displayTime(detail.clockOutAt) }}</span><span>{{ hours(detail.workedMinutes) }}</span><span>{{ hours(detail.breakMinutes) }}</span><span>{{ hours(detail.lateMinutes) }}</span><span>{{ hours(detail.earlyLeaveMinutes) }}</span><span>{{ hours(detail.overtimeMinutes) }}</span><span class="detail-status">{{ statusLabel(detail) }}</span><button type="button" (click)="editAttendance(detail)">Edit</button><small *ngIf="detail.comments || detail.correctionReason">{{ detail.comments }}<b *ngIf="detail.correctionReason">Correction: {{ detail.correctionReason }}</b></small></div>
+    <div class="loading-state compact" *ngIf="detailLoading">Loading details…</div>
+    <div class="empty-state compact" *ngIf="!detailLoading && !details.length"><i class="bi bi-calendar3" aria-hidden="true"></i><strong>No daily records yet</strong></div>
+  </div>
+  <footer><button type="button" (click)="closeDetails()">Close</button></footer>
+</aside>

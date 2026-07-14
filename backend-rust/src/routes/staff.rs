@@ -1,24 +1,30 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
+    body::{Body, Bytes},
+    extract::{DefaultBodyLimit, Path, Query, State},
+    http::{header, HeaderMap, HeaderValue, Response},
     routing::{get, post},
-    Json, Router,
+    Extension, Json, Router,
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::{
+        auth_repository::{self, AuthAuditInput},
         staff_configuration_repository::{
-            CatalogAssignmentInput, CommissionRuleInput, LeavePolicyInput, PayRateInput,
-            ReplaceConfigurationInput,
+            AttendanceRuleInput, CatalogAssignmentInput, CommissionRuleInput, LeavePolicyInput,
+            PayRateInput, ReplaceConfigurationInput, ReplaceStaffMastersInput, ShiftTemplateInput,
+            StaffCategoryInput,
+        },
+        staff_hr_repository::{
+            self, BulkStaffInput, SaveStaffDocument, StaffDocumentRecord, StaffHistoryRecord,
         },
         staff_repository::{self, CreateStaff, StaffProfileRecord, StaffRecord, UpdateStaff},
     },
     routes::context::tenant_branch,
-    services::staff_service,
+    services::{auth_service::AuthClaims, staff_service},
     state::AppState,
 };
 
@@ -26,14 +32,46 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/staff", get(list_staff).post(create_staff))
         .route("/staff/list", get(list_staff_page))
+        .route("/staff/bulk-imports", post(import_staff_bulk))
+        .route("/staff/files/:file_id", get(get_staff_file))
+        .route(
+            "/staff/:id/files",
+            post(upload_staff_file).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+        .route(
+            "/staff/masters",
+            get(get_staff_masters).put(update_staff_masters),
+        )
+        .route(
+            "/staff/auth-roles",
+            get(list_auth_roles).post(create_auth_role),
+        )
+        .route(
+            "/staff/auth-roles/:role_id",
+            axum::routing::put(update_auth_role),
+        )
         .route(
             "/staff/:id/profile",
             get(get_staff_profile).patch(update_staff_profile),
         )
         .route(
+            "/staff/:id/documents",
+            get(list_staff_documents).post(create_staff_document),
+        )
+        .route(
+            "/staff/:id/documents/:document_id",
+            axum::routing::patch(update_staff_document),
+        )
+        .route("/staff/:id/hr-history", get(list_staff_history))
+        .route(
             "/staff/:id/configuration",
             get(get_staff_configuration).put(update_staff_configuration),
         )
+        .route(
+            "/staff/:id/branch-access",
+            get(get_staff_branch_access).put(update_staff_branch_access),
+        )
+        .route("/staff/:id/login", post(provision_staff_login))
         .route("/staff/:id/password", post(set_staff_password))
         .route("/staff/:id/terminate", post(terminate_staff))
         .route("/staff/:id", get(get_staff).patch(update_staff))
@@ -101,6 +139,8 @@ pub struct StaffResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaffProfileWriteRequest {
+    pub category_id: Option<String>,
+    pub shift_template_id: Option<String>,
     pub designation: Option<String>,
     pub company_name: Option<String>,
     pub mandatory_break_minutes: Option<i32>,
@@ -112,12 +152,30 @@ pub struct StaffProfileWriteRequest {
     pub tenure_start_date: Option<NaiveDate>,
     pub booking_interval_minutes: Option<i32>,
     pub restrict_booking_to_returning_guests: Option<bool>,
+    pub photo_url: Option<String>,
+    pub date_of_birth: Option<NaiveDate>,
+    pub joining_date: Option<NaiveDate>,
+    pub gender: Option<String>,
+    pub employment_type: Option<String>,
+    pub department: Option<String>,
+    pub reporting_manager_id: Option<String>,
+    pub address_line1: Option<String>,
+    pub address_line2: Option<String>,
+    pub city: Option<String>,
+    pub state_name: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    pub emergency_contact_name: Option<String>,
+    pub emergency_contact_relationship: Option<String>,
+    pub emergency_contact_phone: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaffProfileResponse {
     pub staff: StaffResponse,
+    pub category_id: Option<String>,
+    pub shift_template_id: Option<String>,
     pub designation: String,
     pub company_name: String,
     pub mandatory_break_minutes: Option<i32>,
@@ -129,13 +187,145 @@ pub struct StaffProfileResponse {
     pub tenure_start_date: Option<NaiveDate>,
     pub booking_interval_minutes: Option<i32>,
     pub restrict_booking_to_returning_guests: bool,
+    pub photo_url: String,
+    pub date_of_birth: Option<NaiveDate>,
+    pub joining_date: Option<NaiveDate>,
+    pub gender: String,
+    pub employment_type: String,
+    pub department: String,
+    pub reporting_manager_id: Option<String>,
+    pub address_line1: String,
+    pub address_line2: String,
+    pub city: String,
+    pub state_name: String,
+    pub postal_code: String,
+    pub country: String,
+    pub emergency_contact_name: String,
+    pub emergency_contact_relationship: String,
+    pub emergency_contact_phone: String,
     pub linked_login: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffDocumentWriteRequest {
+    pub document_type: String,
+    pub document_name: String,
+    pub document_url: String,
+    pub verification_status: Option<String>,
+    pub expiry_date: Option<NaiveDate>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffFileUploadQuery {
+    pub kind: String,
+    pub file_name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffFileUploadResponse {
+    pub file_id: String,
+    pub file_url: String,
+    pub file_name: String,
+    pub content_type: String,
+    pub byte_size: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBulkImportRequest {
+    pub batch_id: String,
+    pub rows: Vec<StaffBulkImportRowRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBulkImportRowRequest {
+    pub employee_code: String,
+    pub first_name: String,
+    pub last_name: Option<String>,
+    pub email: Option<String>,
+    pub mobile_phone: Option<String>,
+    pub job_title: Option<String>,
+    pub active: Option<bool>,
+    pub photo_url: Option<String>,
+    pub date_of_birth: Option<NaiveDate>,
+    pub joining_date: Option<NaiveDate>,
+    pub gender: Option<String>,
+    pub employment_type: Option<String>,
+    pub department: Option<String>,
+    pub reporting_manager_id: Option<String>,
+    pub category_id: Option<String>,
+    pub shift_template_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffMastersWriteRequest {
+    #[serde(default)]
+    pub categories: Vec<StaffCategoryRequest>,
+    #[serde(default)]
+    pub shift_templates: Vec<ShiftTemplateRequest>,
+    pub attendance_rule: AttendanceRuleRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffCategoryRequest {
+    pub id: Option<String>,
+    pub code: String,
+    pub name: String,
+    pub designation: Option<String>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftTemplateRequest {
+    pub id: Option<String>,
+    pub code: String,
+    pub name: String,
+    pub shift1_start: NaiveTime,
+    pub shift1_end: NaiveTime,
+    pub shift2_start: Option<NaiveTime>,
+    pub shift2_end: Option<NaiveTime>,
+    pub break_minutes: Option<i32>,
+    #[serde(default)]
+    pub weekly_off_days: Vec<i16>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceRuleRequest {
+    pub grace_minutes: Option<i32>,
+    pub half_day_after_minutes: Option<i32>,
+    pub absent_after_minutes: Option<i32>,
+    pub overtime_after_minutes: Option<i32>,
+    pub early_leave_grace_minutes: Option<i32>,
+    pub deduct_breaks: Option<bool>,
+    pub minimum_overtime_minutes: Option<i32>,
+    pub overtime_rounding_minutes: Option<i32>,
+    pub maximum_overtime_minutes: Option<i32>,
+    pub active: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaffPasswordRequest {
     pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffLoginProvisionRequest {
+    pub login_id: String,
+    pub email: String,
+    pub initial_password: String,
+    pub role_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -157,6 +347,33 @@ pub struct StaffConfigurationWriteRequest {
     pub pay_rates: Vec<PayRateRequest>,
     #[serde(default)]
     pub leave_policies: Vec<LeavePolicyRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBranchAccessWriteRequest {
+    #[serde(default)]
+    pub assignments: Vec<StaffBranchAccessAssignmentRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBranchAccessAssignmentRequest {
+    pub branch_id: String,
+    pub role_id: Option<String>,
+    pub access_type: Option<String>,
+    pub valid_from: Option<NaiveDate>,
+    pub valid_until: Option<NaiveDate>,
+    pub is_default: Option<bool>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthRoleWriteRequest {
+    pub name: String,
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,6 +480,102 @@ async fn list_staff_page(
     })))
 }
 
+async fn get_staff_masters(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<staff_service::StaffMastersData> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let masters = staff_service::load_masters(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(masters)))
+}
+
+async fn update_staff_masters(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffMastersWriteRequest>,
+) -> ApiResult<staff_service::StaffMastersData> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let category_count = payload.categories.len();
+    let shift_count = payload.shift_templates.len();
+    let masters = staff_service::save_masters(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        ReplaceStaffMastersInput {
+            categories: payload
+                .categories
+                .into_iter()
+                .map(|item| StaffCategoryInput {
+                    id: item.id.unwrap_or_default().trim().to_string(),
+                    code: item.code.trim().to_lowercase(),
+                    name: item.name.trim().to_string(),
+                    designation: item.designation.unwrap_or_default().trim().to_string(),
+                    active: item.active.unwrap_or(true),
+                })
+                .collect(),
+            shift_templates: payload
+                .shift_templates
+                .into_iter()
+                .map(|item| ShiftTemplateInput {
+                    id: item.id.unwrap_or_default().trim().to_string(),
+                    code: item.code.trim().to_lowercase(),
+                    name: item.name.trim().to_string(),
+                    shift1_start: item.shift1_start,
+                    shift1_end: item.shift1_end,
+                    shift2_start: item.shift2_start,
+                    shift2_end: item.shift2_end,
+                    break_minutes: item.break_minutes.unwrap_or(0),
+                    weekly_off_days: item.weekly_off_days,
+                    active: item.active.unwrap_or(true),
+                })
+                .collect(),
+            attendance_rule: AttendanceRuleInput {
+                grace_minutes: payload.attendance_rule.grace_minutes.unwrap_or(0),
+                half_day_after_minutes: payload.attendance_rule.half_day_after_minutes.unwrap_or(0),
+                absent_after_minutes: payload.attendance_rule.absent_after_minutes.unwrap_or(0),
+                overtime_after_minutes: payload.attendance_rule.overtime_after_minutes.unwrap_or(0),
+                early_leave_grace_minutes: payload
+                    .attendance_rule
+                    .early_leave_grace_minutes
+                    .unwrap_or(0),
+                deduct_breaks: payload.attendance_rule.deduct_breaks.unwrap_or(true),
+                minimum_overtime_minutes: payload
+                    .attendance_rule
+                    .minimum_overtime_minutes
+                    .unwrap_or(0),
+                overtime_rounding_minutes: payload
+                    .attendance_rule
+                    .overtime_rounding_minutes
+                    .unwrap_or(0),
+                maximum_overtime_minutes: payload
+                    .attendance_rule
+                    .maximum_overtime_minutes
+                    .unwrap_or(0),
+                active: payload.attendance_rule.active.unwrap_or(true),
+            },
+        },
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.masters.updated",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "categories": category_count, "shiftTemplates": shift_count }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(masters)))
+}
+
 async fn get_staff(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -360,7 +673,8 @@ async fn get_staff_profile(
     let profile = staff_repository::get_profile(&state.db, &tenant_id, &branch_id, &id)
         .await
         .map_err(|_| AppError::internal("failed to load staff profile"))?;
-    let linked_login = staff_service::has_linked_login(&state.db, &tenant_id, &staff.email).await?;
+    let linked_login =
+        staff_service::has_linked_login(&state.db, &tenant_id, staff.user_id.as_deref()).await?;
 
     Ok(Json(ApiResponse::ok(profile_response(
         staff,
@@ -371,6 +685,7 @@ async fn get_staff_profile(
 
 async fn update_staff_profile(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<StaffProfileWriteRequest>,
@@ -395,6 +710,32 @@ async fn update_staff_profile(
         payload.booking_interval_minutes.map(i64::from),
         "bookingIntervalMinutes",
     )?;
+    staff_service::validate_master_assignment(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        "category",
+        payload.category_id.as_deref(),
+    )
+    .await?;
+
+    validate_hr_profile(&payload, &id)?;
+    let reporting_manager_id = normalized(payload.reporting_manager_id.as_deref());
+    if let Some(manager_id) = reporting_manager_id {
+        staff_repository::get(&state.db, &tenant_id, &branch_id, manager_id)
+            .await
+            .map_err(|_| AppError::internal("failed to validate reporting manager"))?
+            .filter(|manager| manager.active)
+            .ok_or_else(|| AppError::validation("invalid reportingManagerId"))?;
+    }
+    staff_service::validate_master_assignment(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        "shift",
+        payload.shift_template_id.as_deref(),
+    )
+    .await?;
 
     let work_tasks = payload
         .work_tasks
@@ -413,6 +754,16 @@ async fn update_staff_profile(
             staff_id: &id,
             tenant_id: &tenant_id,
             branch_id: &branch_id,
+            category_id: payload
+                .category_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+            shift_template_id: payload
+                .shift_template_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
             designation: payload.designation.as_deref().unwrap_or("").trim(),
             company_name: payload.company_name.as_deref().unwrap_or("").trim(),
             mandatory_break_minutes: payload.mandatory_break_minutes,
@@ -426,17 +777,351 @@ async fn update_staff_profile(
             restrict_booking_to_returning_guests: payload
                 .restrict_booking_to_returning_guests
                 .unwrap_or(false),
+            photo_url: normalized(payload.photo_url.as_deref()).unwrap_or(""),
+            date_of_birth: payload.date_of_birth,
+            joining_date: payload.joining_date,
+            gender: normalized(payload.gender.as_deref()).unwrap_or(""),
+            employment_type: normalized(payload.employment_type.as_deref()).unwrap_or(""),
+            department: normalized(payload.department.as_deref()).unwrap_or(""),
+            reporting_manager_id,
+            address_line1: normalized(payload.address_line1.as_deref()).unwrap_or(""),
+            address_line2: normalized(payload.address_line2.as_deref()).unwrap_or(""),
+            city: normalized(payload.city.as_deref()).unwrap_or(""),
+            state_name: normalized(payload.state_name.as_deref()).unwrap_or(""),
+            postal_code: normalized(payload.postal_code.as_deref()).unwrap_or(""),
+            country: normalized(payload.country.as_deref()).unwrap_or(""),
+            emergency_contact_name: normalized(payload.emergency_contact_name.as_deref())
+                .unwrap_or(""),
+            emergency_contact_relationship: normalized(
+                payload.emergency_contact_relationship.as_deref(),
+            )
+            .unwrap_or(""),
+            emergency_contact_phone: normalized(payload.emergency_contact_phone.as_deref())
+                .unwrap_or(""),
         },
     )
     .await
     .map_err(|_| AppError::internal("failed to save staff profile"))?;
-    let linked_login = staff_service::has_linked_login(&state.db, &tenant_id, &staff.email).await?;
+    let linked_login =
+        staff_service::has_linked_login(&state.db, &tenant_id, staff.user_id.as_deref()).await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.hr_profile.updated",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "staffId": id }),
+        },
+    )
+    .await;
 
     Ok(Json(ApiResponse::ok(profile_response(
         staff,
         Some(profile),
         linked_login,
     ))))
+}
+
+async fn list_staff_documents(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<StaffDocumentRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ensure_staff_scope(&state, &tenant_id, &branch_id, &id).await?;
+    let rows = staff_hr_repository::list_documents(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff documents"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn upload_staff_file(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(staff_id): Path<String>,
+    Query(query): Query<StaffFileUploadQuery>,
+    bytes: Bytes,
+) -> ApiResult<StaffFileUploadResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ensure_staff_scope(&state, &tenant_id, &branch_id, &staff_id).await?;
+    let kind = query.kind.trim().to_lowercase();
+    let file_name = query.file_name.trim();
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    let allowed = matches!(
+        content_type.as_str(),
+        "image/jpeg"
+            | "image/png"
+            | "image/webp"
+            | "application/pdf"
+            | "application/msword"
+            | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    if !matches!(kind.as_str(), "photo" | "document")
+        || file_name.is_empty()
+        || file_name.chars().count() > 180
+        || file_name.chars().any(char::is_control)
+        || bytes.is_empty()
+        || bytes.len() > 5 * 1024 * 1024
+        || !allowed
+        || kind == "photo" && !content_type.starts_with("image/")
+    {
+        return Err(AppError::validation("invalid staff file"));
+    }
+    let row = staff_hr_repository::save_file(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &kind,
+        file_name,
+        &content_type,
+        bytes.to_vec(),
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to upload staff file"))?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.file.uploaded",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "staffId": staff_id, "fileId": row.id, "kind": kind }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(StaffFileUploadResponse {
+        file_url: format!("/staff/files/{}", row.id),
+        file_id: row.id,
+        file_name: row.file_name,
+        content_type: row.content_type,
+        byte_size: row.byte_size,
+    })))
+}
+
+async fn get_staff_file(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(file_id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_hr_repository::get_file(&state.db, &tenant_id, &branch_id, &file_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff file"))?
+        .ok_or_else(|| AppError::not_found("staff file was not found"))?;
+    let safe_name = row
+        .file_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    Response::builder()
+        .header(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(&row.content_type)
+                .map_err(|_| AppError::internal("invalid stored file type"))?,
+        )
+        .header(header::CACHE_CONTROL, "private, max-age=300")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("inline; filename=\"{safe_name}\""),
+        )
+        .body(Body::from(row.content))
+        .map_err(|_| AppError::internal("failed to stream staff file"))
+}
+
+async fn create_staff_document(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<StaffDocumentWriteRequest>,
+) -> ApiResult<StaffDocumentRecord> {
+    save_staff_document(state, claims, headers, id, None, payload).await
+}
+
+async fn update_staff_document(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((id, document_id)): Path<(String, String)>,
+    Json(payload): Json<StaffDocumentWriteRequest>,
+) -> ApiResult<StaffDocumentRecord> {
+    save_staff_document(state, claims, headers, id, Some(document_id), payload).await
+}
+
+async fn save_staff_document(
+    state: AppState,
+    claims: AuthClaims,
+    headers: HeaderMap,
+    staff_id: String,
+    document_id: Option<String>,
+    payload: StaffDocumentWriteRequest,
+) -> ApiResult<StaffDocumentRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ensure_staff_scope(&state, &tenant_id, &branch_id, &staff_id).await?;
+    let document_type = payload.document_type.trim();
+    let document_name = payload.document_name.trim();
+    let document_url = payload.document_url.trim();
+    let verification_status = payload
+        .verification_status
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("pending");
+    let notes = payload.notes.as_deref().unwrap_or("").trim();
+    if document_type.is_empty()
+        || document_type.chars().count() > 80
+        || document_name.is_empty()
+        || document_name.chars().count() > 180
+        || document_url.len() > 2048
+        || !(document_url.starts_with("https://") || document_url.starts_with('/'))
+        || !matches!(verification_status, "pending" | "verified" | "rejected")
+        || notes.chars().count() > 1000
+    {
+        return Err(AppError::validation("invalid staff document"));
+    }
+    let row = staff_hr_repository::save_document(
+        &state.db,
+        SaveStaffDocument {
+            id: document_id.as_deref(),
+            tenant_id: &tenant_id,
+            branch_id: &branch_id,
+            staff_id: &staff_id,
+            document_type,
+            document_name,
+            document_url,
+            verification_status,
+            expiry_date: payload.expiry_date,
+            notes,
+            created_by: &claims.sub,
+        },
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save staff document"))?
+    .ok_or_else(|| AppError::not_found("staff document was not found"))?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: if document_id.is_some() {
+                "staff.document.updated"
+            } else {
+                "staff.document.created"
+            },
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "staffId": staff_id, "documentId": row.id }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_staff_history(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<StaffHistoryRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ensure_staff_scope(&state, &tenant_id, &branch_id, &id).await?;
+    let rows = staff_hr_repository::list_history(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff history"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn import_staff_bulk(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffBulkImportRequest>,
+) -> ApiResult<staff_hr_repository::BulkImportResult> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = payload
+        .rows
+        .into_iter()
+        .map(|row| BulkStaffInput {
+            employee_code: row.employee_code.trim().to_string(),
+            first_name: row.first_name.trim().to_string(),
+            last_name: trimmed(row.last_name),
+            email: trimmed(row.email).map(|value| value.to_ascii_lowercase()),
+            mobile_phone: trimmed(row.mobile_phone),
+            job_title: trimmed(row.job_title),
+            active: row.active,
+            photo_url: trimmed(row.photo_url),
+            date_of_birth: row.date_of_birth,
+            joining_date: row.joining_date,
+            gender: trimmed(row.gender).map(|value| value.to_ascii_lowercase()),
+            employment_type: trimmed(row.employment_type).map(|value| value.to_ascii_lowercase()),
+            department: trimmed(row.department),
+            reporting_manager_id: trimmed(row.reporting_manager_id),
+            category_id: trimmed(row.category_id),
+            shift_template_id: trimmed(row.shift_template_id),
+        })
+        .collect::<Vec<_>>();
+    let result = staff_service::apply_bulk_import(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        payload.batch_id.trim(),
+        &claims.sub,
+        &rows,
+    )
+    .await?;
+    let staff_ids = result.staff_ids.clone();
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.bulk_import.completed",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({
+                "batchId": result.batch_key,
+                "staffIds": staff_ids,
+                "totalRows": result.total_rows,
+                "createdRows": result.created_rows,
+                "updatedRows": result.updated_rows
+            }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(result)))
 }
 
 async fn get_staff_configuration(
@@ -514,12 +1199,205 @@ async fn update_staff_configuration(
     Ok(Json(ApiResponse::ok(configuration)))
 }
 
+async fn get_staff_branch_access(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<staff_service::StaffBranchAccessData> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let access = staff_service::load_branch_access(&state.db, &tenant_id, &branch_id, &id).await?;
+    Ok(Json(ApiResponse::ok(access)))
+}
+
+async fn provision_staff_login(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<StaffLoginProvisionRequest>,
+) -> ApiResult<staff_service::StaffBranchAccessData> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let login_id = payload.login_id.trim().to_string();
+    let access = staff_service::provision_login(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        staff_service::StaffLoginProvision {
+            login_id: payload.login_id,
+            email: payload.email,
+            initial_password: payload.initial_password,
+            role_id: payload.role_id,
+        },
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: Some(&login_id),
+            event_type: "staff.login.provisioned",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "staffId": id, "mustChangePassword": true }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(access)))
+}
+
+async fn update_staff_branch_access(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<StaffBranchAccessWriteRequest>,
+) -> ApiResult<staff_service::StaffBranchAccessData> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let assignment_count = payload.assignments.len();
+    let access = staff_service::save_branch_access(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        payload
+            .assignments
+            .into_iter()
+            .map(|assignment| staff_service::BranchAccessAssignment {
+                branch_id: assignment.branch_id,
+                role_id: assignment.role_id,
+                access_type: assignment.access_type.unwrap_or_else(|| "permanent".into()),
+                valid_from: assignment.valid_from,
+                valid_until: assignment.valid_until,
+                is_default: assignment.is_default.unwrap_or(false),
+                active: assignment.active.unwrap_or(false),
+            })
+            .collect(),
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.branch_access.updated",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "staffId": id, "assignments": assignment_count }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(access)))
+}
+
+async fn list_auth_roles(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<staff_service::AuthRoleManagementData> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let roles = staff_service::load_auth_roles(&state.db, &tenant_id).await?;
+    Ok(Json(ApiResponse::ok(roles)))
+}
+
+async fn create_auth_role(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<AuthRoleWriteRequest>,
+) -> ApiResult<staff_service::AuthRoleManagementData> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let role_name = payload.name.clone();
+    let roles =
+        staff_service::create_auth_role(&state.db, &tenant_id, payload.name, payload.permissions)
+            .await?;
+    audit_auth_role_change(
+        &state, &claims, &tenant_id, &branch_id, "created", None, role_name,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(roles)))
+}
+
+async fn update_auth_role(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(role_id): Path<String>,
+    Json(payload): Json<AuthRoleWriteRequest>,
+) -> ApiResult<staff_service::AuthRoleManagementData> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let role_name = payload.name.clone();
+    let roles = staff_service::update_auth_role(
+        &state.db,
+        &tenant_id,
+        &role_id,
+        payload.name,
+        payload.permissions,
+    )
+    .await?;
+    audit_auth_role_change(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        "updated",
+        Some(role_id),
+        role_name,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(roles)))
+}
+
+async fn audit_auth_role_change(
+    state: &AppState,
+    claims: &AuthClaims,
+    tenant_id: &str,
+    branch_id: &str,
+    action: &str,
+    role_id: Option<String>,
+    role_name: String,
+) {
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(branch_id),
+            identity: None,
+            event_type: "auth.role.changed",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "action": action, "roleId": role_id, "roleName": role_name }),
+        },
+    )
+    .await;
+}
+
 async fn set_staff_password(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<StaffPasswordRequest>,
 ) -> ApiResult<StaffPasswordResponse> {
+    require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     staff_service::set_password(
         &state.db,
@@ -529,6 +1407,22 @@ async fn set_staff_password(
         payload.new_password.trim(),
     )
     .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.password.reset",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({ "staffId": id, "mustChangePassword": true }),
+        },
+    )
+    .await;
     Ok(Json(ApiResponse::ok(StaffPasswordResponse {
         password_updated: true,
     })))
@@ -549,6 +1443,35 @@ fn required_text<'a>(value: Option<&'a str>, message: &'static str) -> Result<&'
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::validation(message))
+}
+
+fn require_auth_admin(claims: &AuthClaims) -> Result<(), AppError> {
+    if matches!(claims.role.to_ascii_lowercase().as_str(), "owner" | "admin") {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "only Owner or Admin can manage authentication access",
+        ))
+    }
+}
+
+async fn ensure_staff_scope(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<(), AppError> {
+    staff_repository::get(&state.db, tenant_id, branch_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff"))?
+        .map(|_| ())
+        .ok_or_else(|| AppError::not_found("staff was not found"))
+}
+
+fn trimmed(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn staff_sort_column(value: Option<&str>) -> &'static str {
@@ -581,6 +1504,76 @@ fn ensure_non_negative(value: Option<i64>, field: &'static str) -> Result<(), Ap
     Ok(())
 }
 
+fn normalized(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn validate_hr_profile(payload: &StaffProfileWriteRequest, staff_id: &str) -> Result<(), AppError> {
+    let today = Utc::now().date_naive();
+    if payload.date_of_birth.is_some_and(|date| date > today)
+        || payload.joining_date.is_some_and(|date| date > today)
+    {
+        return Err(AppError::validation(
+            "HR profile dates cannot be in the future",
+        ));
+    }
+    let gender = normalized(payload.gender.as_deref()).unwrap_or("");
+    if !matches!(
+        gender,
+        "" | "female" | "male" | "non_binary" | "prefer_not_to_say"
+    ) {
+        return Err(AppError::validation("invalid gender"));
+    }
+    let employment_type = normalized(payload.employment_type.as_deref()).unwrap_or("");
+    if !matches!(
+        employment_type,
+        "" | "full_time" | "part_time" | "contract" | "intern"
+    ) {
+        return Err(AppError::validation("invalid employmentType"));
+    }
+    if normalized(payload.reporting_manager_id.as_deref()).is_some_and(|id| id == staff_id) {
+        return Err(AppError::validation(
+            "an employee cannot report to themselves",
+        ));
+    }
+    if let Some(url) = normalized(payload.photo_url.as_deref()) {
+        if url.len() > 2048 || !(url.starts_with("https://") || url.starts_with('/')) {
+            return Err(AppError::validation(
+                "photoUrl must be HTTPS or an app-relative URL",
+            ));
+        }
+    }
+    for (value, field, limit) in [
+        (payload.department.as_deref(), "department", 120),
+        (payload.address_line1.as_deref(), "addressLine1", 200),
+        (payload.address_line2.as_deref(), "addressLine2", 200),
+        (payload.city.as_deref(), "city", 100),
+        (payload.state_name.as_deref(), "stateName", 100),
+        (payload.postal_code.as_deref(), "postalCode", 30),
+        (payload.country.as_deref(), "country", 100),
+        (
+            payload.emergency_contact_name.as_deref(),
+            "emergencyContactName",
+            120,
+        ),
+        (
+            payload.emergency_contact_relationship.as_deref(),
+            "emergencyContactRelationship",
+            80,
+        ),
+        (
+            payload.emergency_contact_phone.as_deref(),
+            "emergencyContactPhone",
+            40,
+        ),
+    ] {
+        if value.is_some_and(|text| text.trim().chars().count() > limit) {
+            return Err(AppError::validation(format!("{field} is too long")));
+        }
+    }
+    Ok(())
+}
+
 fn profile_response(
     staff: StaffRecord,
     profile: Option<StaffProfileRecord>,
@@ -599,6 +1592,12 @@ fn profile_response(
         .unwrap_or_default();
     StaffProfileResponse {
         staff: StaffResponse::from(staff),
+        category_id: profile
+            .as_ref()
+            .and_then(|record| record.category_id.clone()),
+        shift_template_id: profile
+            .as_ref()
+            .and_then(|record| record.shift_template_id.clone()),
         designation: profile
             .as_ref()
             .map(|record| record.designation.clone())
@@ -626,6 +1625,63 @@ fn profile_response(
         restrict_booking_to_returning_guests: profile
             .as_ref()
             .is_some_and(|record| record.restrict_booking_to_returning_guests),
+        photo_url: profile
+            .as_ref()
+            .map(|record| record.photo_url.clone())
+            .unwrap_or_default(),
+        date_of_birth: profile.as_ref().and_then(|record| record.date_of_birth),
+        joining_date: profile.as_ref().and_then(|record| record.joining_date),
+        gender: profile
+            .as_ref()
+            .map(|record| record.gender.clone())
+            .unwrap_or_default(),
+        employment_type: profile
+            .as_ref()
+            .map(|record| record.employment_type.clone())
+            .unwrap_or_default(),
+        department: profile
+            .as_ref()
+            .map(|record| record.department.clone())
+            .unwrap_or_default(),
+        reporting_manager_id: profile
+            .as_ref()
+            .and_then(|record| record.reporting_manager_id.clone()),
+        address_line1: profile
+            .as_ref()
+            .map(|record| record.address_line1.clone())
+            .unwrap_or_default(),
+        address_line2: profile
+            .as_ref()
+            .map(|record| record.address_line2.clone())
+            .unwrap_or_default(),
+        city: profile
+            .as_ref()
+            .map(|record| record.city.clone())
+            .unwrap_or_default(),
+        state_name: profile
+            .as_ref()
+            .map(|record| record.state_name.clone())
+            .unwrap_or_default(),
+        postal_code: profile
+            .as_ref()
+            .map(|record| record.postal_code.clone())
+            .unwrap_or_default(),
+        country: profile
+            .as_ref()
+            .map(|record| record.country.clone())
+            .unwrap_or_default(),
+        emergency_contact_name: profile
+            .as_ref()
+            .map(|record| record.emergency_contact_name.clone())
+            .unwrap_or_default(),
+        emergency_contact_relationship: profile
+            .as_ref()
+            .map(|record| record.emergency_contact_relationship.clone())
+            .unwrap_or_default(),
+        emergency_contact_phone: profile
+            .as_ref()
+            .map(|record| record.emergency_contact_phone.clone())
+            .unwrap_or_default(),
         linked_login,
     }
 }

@@ -1,0 +1,87 @@
+<main class="leave-page">
+  <header class="page-header">
+    <div><span class="section-label">Employee</span><h1>Leave Management</h1></div>
+    <div class="header-actions"><button type="button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>Back to staff</button><button class="primary" type="button" (click)="openCreate()"><i class="bi bi-plus-lg"></i>Request leave</button></div>
+  </header>
+
+  <nav class="tabs" aria-label="Leave management views">
+    <button *ngFor="let tab of tabs" type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key"><i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}</button>
+  </nav>
+
+  <section class="filter-bar" aria-label="Leave filters">
+    <label>Month<select [(ngModel)]="month" (ngModelChange)="reload()"><option *ngFor="let name of months; let index = index" [ngValue]="index + 1">{{ name }}</option></select></label>
+    <label>Year<select [(ngModel)]="year" (ngModelChange)="reload()"><option *ngFor="let item of years" [ngValue]="item">{{ item }}</option></select></label>
+    <label class="employee-filter">Employee<select [(ngModel)]="staffId" (ngModelChange)="reload()"><option value="">All employees</option><option *ngFor="let employee of staff" [value]="employee.id">{{ staffLabel(employee) }}</option></select></label>
+    <label>Status<select [(ngModel)]="status" (ngModelChange)="reload()"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
+    <button type="button" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise"></i>Refresh</button>
+    <span class="filter-spacer"></span>
+    <span class="count-pill pending">{{ pendingCount }} pending</span><span class="count-pill approved">{{ approvedCount }} approved</span>
+    <button type="button" [disabled]="!requests.length" (click)="exportCsv()"><i class="bi bi-download"></i>Export</button>
+  </section>
+
+  <p class="message error" *ngIf="error"><i class="bi bi-exclamation-circle"></i>{{ error }}</p>
+  <p class="message success" *ngIf="success"><i class="bi bi-check-circle"></i>{{ success }}</p>
+
+  <section class="content-card" *ngIf="activeTab === 'requests'">
+    <header class="card-heading"><div><h2>Leave requests</h2><span>{{ months[month - 1] }} {{ year }}</span></div></header>
+    <div class="table-scroll" *ngIf="requests.length">
+      <table><thead><tr><th>Employee</th><th>Leave</th><th>Date range</th><th>Days</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody><tr *ngFor="let row of requests">
+          <td><strong>{{ row.staffName }}</strong><small>{{ row.employeeCode || 'No employee code' }}</small></td>
+          <td><span class="type-pill">{{ label(row.leaveType) }}</span></td>
+          <td><strong>{{ displayDate(row.startDate) }}</strong><small>{{ row.endDate === row.startDate ? 'Single day' : 'to ' + displayDate(row.endDate) }}</small></td>
+          <td>{{ row.days }}</td><td>{{ row.reason || '—' }}</td>
+          <td><span class="status-pill" [ngClass]="row.status">{{ label(row.status) }}</span><small *ngIf="row.reviewNote">{{ row.reviewNote }}</small></td>
+          <td><button type="button" *ngIf="row.status === 'pending'" (click)="openReview(row)">Review<i class="bi bi-chevron-right"></i></button><span *ngIf="row.status !== 'pending'">—</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin"></i>Loading leave requests…</div>
+    <div class="empty-state" *ngIf="!loading && !requests.length"><i class="bi bi-calendar-x"></i><strong>No leave requests yet</strong><button type="button" (click)="openCreate()">Request leave</button></div>
+  </section>
+
+  <section class="content-card" *ngIf="activeTab === 'balances'">
+    <header class="card-heading"><div><h2>Leave balances</h2><span>{{ year }}</span></div></header>
+    <div class="table-scroll" *ngIf="balances.length">
+      <table><thead><tr><th>Employee</th><th>Leave type</th><th>Annual allowance</th><th>Approved</th><th>Pending</th><th>Remaining</th></tr></thead>
+        <tbody><tr *ngFor="let row of balances"><td><strong>{{ row.staffName }}</strong><small>{{ row.employeeCode || 'No employee code' }}</small></td><td><span class="type-pill">{{ label(row.leaveType) }}</span></td><td>{{ row.annualDays }} days</td><td>{{ row.usedDays }} days</td><td>{{ row.pendingDays }} days</td><td><strong class="remaining">{{ row.remainingDays }} days</strong></td></tr></tbody>
+      </table>
+    </div>
+    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin"></i>Loading balances…</div>
+    <div class="empty-state" *ngIf="!loading && !balances.length"><i class="bi bi-bar-chart"></i><strong>No active leave policies</strong><button type="button" (click)="backToStaff()">Open staff configuration</button></div>
+  </section>
+
+  <section class="content-card calendar-card" *ngIf="activeTab === 'calendar'">
+    <header class="card-heading"><div><h2>Leave calendar</h2><span>{{ months[month - 1] }} {{ year }}</span></div></header>
+    <div class="calendar-week"><span *ngFor="let day of weekDays">{{ day }}</span></div>
+    <div class="calendar-grid">
+      <article *ngFor="let day of calendarDays" [class.outside]="!day.inMonth">
+        <b>{{ day.day }}</b>
+        <button type="button" class="calendar-leave" *ngFor="let row of calendarLeaves(day.iso)" [class.pending]="row.status === 'pending'" (click)="row.status === 'pending' && openReview(row)"><span>{{ row.staffName }}</span><small>{{ label(row.leaveType) }}</small></button>
+      </article>
+    </div>
+    <div class="calendar-empty" *ngIf="!loading && !requests.length">No leave entries for this month</div>
+  </section>
+</main>
+
+<div class="drawer-backdrop" *ngIf="createOpen" (click)="closeCreate()"></div>
+<aside class="leave-drawer" *ngIf="createOpen" role="dialog" aria-modal="true" aria-label="Request leave">
+  <header><div><span class="section-label">Leave</span><h2>Request leave</h2></div><button type="button" aria-label="Close request leave" (click)="closeCreate()"><i class="bi bi-x-lg"></i></button></header>
+  <div class="drawer-body">
+    <label>Employee<select [(ngModel)]="form.staffId"><option value="">Select employee</option><option *ngFor="let employee of staff" [value]="employee.id">{{ staffLabel(employee) }}</option></select></label>
+    <label>Leave type<select [(ngModel)]="form.leaveType"><option *ngFor="let type of leaveTypes" [value]="type.value">{{ type.label }}</option></select></label>
+    <label>Date range<as-date-picker ariaLabel="Leave date range" [rangeMode]="true" [(value)]="form.startDate" [(rangeEnd)]="form.endDate"></as-date-picker></label>
+    <label>Reason<textarea maxlength="500" rows="4" [(ngModel)]="form.reason" placeholder="Reason"></textarea></label>
+  </div>
+  <footer><button type="button" (click)="closeCreate()">Cancel</button><button class="primary" type="button" [disabled]="saving" (click)="createRequest()">{{ saving ? 'Saving…' : 'Save request' }}</button></footer>
+</aside>
+
+<div class="drawer-backdrop" *ngIf="selectedRequest" (click)="closeReview()"></div>
+<aside class="leave-drawer" *ngIf="selectedRequest" role="dialog" aria-modal="true" aria-label="Review leave request">
+  <header><div><span class="section-label">Leave review</span><h2>{{ selectedRequest.staffName }}</h2></div><button type="button" aria-label="Close leave review" (click)="closeReview()"><i class="bi bi-x-lg"></i></button></header>
+  <div class="drawer-body review-body">
+    <div class="review-summary"><span>Leave type<strong>{{ label(selectedRequest.leaveType) }}</strong></span><span>Date range<strong>{{ displayDate(selectedRequest.startDate) }} – {{ displayDate(selectedRequest.endDate) }}</strong></span><span>Days<strong>{{ selectedRequest.days }}</strong></span><span>Reason<strong>{{ selectedRequest.reason || '—' }}</strong></span></div>
+    <label>Review note<textarea maxlength="500" rows="4" [(ngModel)]="reviewNote" placeholder="Required for rejection"></textarea></label>
+  </div>
+  <footer><button class="reject" type="button" [disabled]="saving" (click)="decide('reject')"><i class="bi bi-x-circle"></i>Reject</button><button class="primary" type="button" [disabled]="saving" (click)="decide('approve')"><i class="bi bi-check-circle"></i>Approve</button></footer>
+</aside>

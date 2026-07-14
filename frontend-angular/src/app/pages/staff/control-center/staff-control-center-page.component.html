@@ -1,0 +1,91 @@
+<section class="control-page">
+  <header class="page-header">
+    <div><span class="eyebrow">Team</span><h1>Staff control center</h1></div>
+    <div class="header-actions">
+      <button type="button" (click)="openAttendance()"><i class="bi bi-clock-history"></i>Attendance</button>
+      <button type="button" (click)="openLeave()"><i class="bi bi-calendar2-check"></i>Leave</button>
+      <button type="button" (click)="openPayroll()"><i class="bi bi-wallet2"></i>Payroll</button>
+      <button class="back-button" type="button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>Staff</button>
+    </div>
+  </header>
+
+  <section class="command-bar">
+    <label>From<as-date-picker ariaLabel="Staff period start" [(value)]="periodStart"></as-date-picker></label>
+    <label>To<as-date-picker ariaLabel="Staff period end" [(value)]="periodEnd"></as-date-picker></label>
+    <button class="primary" type="button" [disabled]="loading" (click)="refresh()"><i class="bi" [class.bi-arrow-repeat]="!loading" [class.bi-hourglass-split]="loading"></i>{{ loading ? 'Loading…' : 'Refresh' }}</button>
+    <span class="last-loaded" *ngIf="lastLoaded">Updated {{ formatDateTime(lastLoaded) }}</span>
+  </section>
+
+  <p class="message error" *ngIf="error"><i class="bi bi-exclamation-triangle"></i>{{ error }}</p>
+
+  <nav class="view-tabs" aria-label="Staff control center views">
+    <button *ngFor="let tab of tabs" type="button" [class.active]="activeTab === tab.key" (click)="selectTab(tab.key)"><i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}</button>
+  </nav>
+
+  <ng-container *ngIf="activeTab === 'command'">
+    <section class="summary-strip">
+      <div *ngFor="let item of objectEntries(command?.['kpis'])"><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
+      <div *ngIf="objectEntries(command?.['kpis']).length === 0"><span>Command data</span><strong>—</strong></div>
+    </section>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Top staff</h2><span>{{ command?.['topStaff']?.length || 0 }} records</span></div></header>
+        <div class="table-wrap"><table><thead><tr><th>Employee</th><th>Score</th><th>Revenue</th><th>Appointments</th><th>Risk</th></tr></thead><tbody>
+          <tr *ngFor="let row of arrayValue(command?.['topStaff']); trackBy: trackById"><td><strong>{{ staffName(row) }}</strong><small>{{ row['grade'] || '—' }}</small></td><td>{{ text(row['score']) }}</td><td>{{ money(row['revenuePaise']) }}</td><td>{{ text(row['completedAppointments']) }} / {{ text(row['appointmentsCount']) }}</td><td><span class="status" [ngClass]="statusClass(row['burnoutRisk']?.level)">{{ row['burnoutRisk']?.level || '—' }}</span></td></tr>
+        </tbody></table></div><div class="empty" *ngIf="arrayValue(command?.['topStaff']).length === 0">No records yet</div>
+      </section>
+      <section class="data-card"><header><div><h2>Attention queue</h2><span>Real operational signals</span></div></header>
+        <div class="key-list"><div *ngFor="let item of objectEntries(command?.['attentionQueue'])"><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div></div>
+        <div class="empty" *ngIf="objectEntries(command?.['attentionQueue']).length === 0">No records yet</div>
+      </section>
+    </div>
+    <section class="data-card"><header><div><h2>Floor control</h2><span>{{ formatDate(periodEnd) }}</span></div></header>
+      <div class="table-wrap"><table><thead><tr><th>Employee</th><th>Schedule</th><th>Shift</th><th>Attendance</th><th>Late</th><th>Overtime</th><th>Appointments</th></tr></thead><tbody>
+        <tr *ngFor="let row of floor; trackBy: trackById"><td><strong>{{ staffName(row) }}</strong></td><td><span class="status">{{ row['scheduleStatus'] || 'Not set' }}</span></td><td>{{ row['shift1Start'] || '—' }} – {{ row['shift1End'] || '—' }}</td><td>{{ row['attendanceStatus'] || '—' }}</td><td>{{ row['lateMinutes'] || 0 }} min</td><td>{{ row['overtimeMinutes'] || 0 }} min</td><td>{{ row['appointmentCount'] || 0 }}</td></tr>
+      </tbody></table></div><div class="empty" *ngIf="floor.length === 0">No records yet</div>
+    </section>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab === 'workforce'">
+    <section class="summary-strip">
+      <div><span>Pending swaps</span><strong>{{ swaps.length }}</strong></div><div><span>Pending transfers</span><strong>{{ transfers.length }}</strong></div>
+      <div><span>Coverage gaps</span><strong>{{ text(coverage?.['gapCount'] ?? coverage?.['gaps']?.length) }}</strong></div><div><span>Forecast rows</span><strong>{{ manpower?.['rows']?.length || 0 }}</strong></div>
+    </section>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Shift swaps</h2><span>Schedule-safe approvals</span></div></header>
+        <article class="record" *ngFor="let row of swaps; trackBy: trackById"><div><strong>{{ row['fromStaffName'] }} → {{ row['toStaffName'] }}</strong><small>{{ formatDate(row['scheduleDate']) }} · {{ row['reason'] || 'No reason' }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span><div class="row-actions" *ngIf="row['status'] === 'pending'"><button type="button" (click)="decideSwap(row, 'rejected')">Reject</button><button class="primary" type="button" (click)="decideSwap(row, 'approved')">Approve</button></div></article>
+        <div class="empty" *ngIf="swaps.length === 0">No records yet</div>
+      </section>
+      <section class="data-card"><header><div><h2>Branch transfers</h2><span>Permanent and deputation access</span></div></header>
+        <article class="record" *ngFor="let row of transfers; trackBy: trackById"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['sourceBranchName'] }} → {{ row['targetBranchName'] }} · {{ row['transferType'] }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span><div class="row-actions" *ngIf="row['status'] === 'pending'"><button type="button" (click)="decideTransfer(row, 'rejected')">Reject</button><button class="primary" type="button" (click)="decideTransfer(row, 'approved')">Approve</button></div></article>
+        <div class="empty" *ngIf="transfers.length === 0">No records yet</div>
+      </section>
+    </div>
+    <div class="two-column"><section class="data-card"><header><div><h2>Roster coverage</h2></div></header><div class="key-list"><div *ngFor="let item of objectEntries(coverage)"><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div></div><div class="empty" *ngIf="objectEntries(coverage).length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Manpower forecast</h2></div></header><div class="key-list"><div *ngFor="let item of objectEntries(manpower)"><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div></div><div class="empty" *ngIf="objectEntries(manpower).length === 0">No records yet</div></section></div>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab === 'development'">
+    <section class="summary-strip"><div><span>Skill matrix</span><strong>{{ skillMatrix.length }}</strong></div><div><span>Licences</span><strong>{{ licenses.length }}</strong></div><div><span>Reviews</span><strong>{{ reviews.length }}</strong></div><div><span>Coaching goals</span><strong>{{ coachingGoals.length }}</strong></div><div><span>Training tasks</span><strong>{{ training.length }}</strong></div></section>
+    <section class="data-card"><header><div><h2>Skill matrix</h2><span>Roles and service assignments</span></div></header><div class="table-wrap"><table><thead><tr><th>Employee</th><th>Job</th><th>Roles</th><th>Services</th></tr></thead><tbody><tr *ngFor="let row of skillMatrix; trackBy: trackById"><td><strong>{{ staffName(row) }}</strong></td><td>{{ row['jobTitle'] || '—' }}</td><td>{{ row['roles']?.length || 0 }}</td><td>{{ row['services']?.length || 0 }}</td></tr></tbody></table></div><div class="empty" *ngIf="skillMatrix.length === 0">No records yet</div></section>
+    <div class="two-column"><section class="data-card"><header><div><h2>Skill licences</h2><span>Expiry and verification</span></div></header><article class="record" *ngFor="let row of licenses; trackBy: trackById"><div><strong>{{ row['skillName'] }}</strong><small>{{ staffName(row) }} · Expires {{ formatDate(row['expiresOn']) }}</small></div><span class="status" [ngClass]="statusClass(row['verificationStatus'])">{{ row['verificationStatus'] }}</span></article><div class="empty" *ngIf="licenses.length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Performance reviews</h2><span>Evidence-backed review cycle</span></div></header><article class="record" *ngFor="let row of reviews; trackBy: trackById"><div><strong>{{ staffName(row) }}</strong><small>{{ formatDate(row['periodStart']) }} – {{ formatDate(row['periodEnd']) }} · Score {{ text(row['score']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span></article><div class="empty" *ngIf="reviews.length === 0">No records yet</div></section></div>
+    <div class="two-column"><section class="data-card"><header><div><h2>Coaching goals</h2></div></header><article class="record" *ngFor="let row of coachingGoals; trackBy: trackById"><div><strong>{{ row['goalType'] }}</strong><small>{{ staffName(row) }} · Due {{ formatDate(row['dueDate']) }}</small></div><span class="status">{{ row['status'] }}</span></article><div class="empty" *ngIf="coachingGoals.length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Training assignments</h2></div></header><article class="record" *ngFor="let row of training; trackBy: trackById"><div><strong>{{ row['title'] }}</strong><small>{{ staffName(row) }} · {{ formatDateTime(row['dueAt']) }}</small></div><span class="status">{{ row['status'] }}</span></article><div class="empty" *ngIf="training.length === 0">No records yet</div></section></div>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab === 'systems'">
+    <section class="summary-strip"><div><span>Devices</span><strong>{{ devices.length }}</strong></div><div><span>Mappings</span><strong>{{ mappings.length }}</strong></div><div><span>Biometric exceptions</span><strong>{{ biometricExceptions.length }}</strong></div><div><span>Mobile conflicts</span><strong>{{ mobileConflicts.length }}</strong></div></section>
+    <div class="two-column"><section class="data-card"><header><div><h2>Biometric devices</h2><span>Provider health</span></div></header><article class="record" *ngFor="let row of devices; trackBy: trackById"><div><strong>{{ row['deviceName'] }}</strong><small>{{ row['provider'] }} · {{ row['deviceCode'] }}</small></div><span class="status" [ngClass]="statusClass(row['healthStatus'])">{{ row['healthStatus'] }}</span></article><div class="empty" *ngIf="devices.length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Staff mappings</h2></div></header><article class="record" *ngFor="let row of mappings; trackBy: trackById"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['deviceName'] }} · {{ row['externalUserId'] }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span></article><div class="empty" *ngIf="mappings.length === 0">No records yet</div></section></div>
+    <div class="two-column"><section class="data-card"><header><div><h2>Biometric exceptions</h2><span>Rejected and ignored real punches</span></div></header><article class="record" *ngFor="let row of biometricExceptions; trackBy: trackById"><div><strong>{{ row['externalEventId'] }}</strong><small>{{ formatDateTime(row['punchAt']) }} · {{ row['rejectionReason'] || 'State conflict' }}</small></div><span class="status bad">{{ row['status'] }}</span></article><div class="empty" *ngIf="biometricExceptions.length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Mobile sync conflicts</h2></div></header><article class="record" *ngFor="let row of mobileConflicts; trackBy: trackById"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['conflictType'] }} · {{ row['reasonCode'] }}</small></div><span class="status bad">{{ row['status'] }}</span></article><div class="empty" *ngIf="mobileConflicts.length === 0">No records yet</div></section></div>
+  </ng-container>
+
+  <ng-container *ngIf="activeTab === 'governance'">
+    <section class="summary-strip"><div><span>Pending approvals</span><strong>{{ approvals.length }}</strong></div><div><span>Audit events</span><strong>{{ auditRows.length }}</strong></div><div><span>Notifications</span><strong>{{ notifications.length }}</strong></div><div><span>Tip rows</span><strong>{{ tips.length }}</strong></div></section>
+    <div class="two-column"><section class="data-card"><header><div><h2>Approvals</h2></div></header><article class="record" *ngFor="let row of approvals; trackBy: trackById"><div><strong>{{ label(row['requestType'] || 'Approval') }}</strong><small>{{ row['entityType'] }} · {{ formatDateTime(row['createdAt']) }}</small></div><span class="status">{{ row['status'] }}</span><div class="row-actions"><button type="button" (click)="decideApproval(row, 'rejected')">Reject</button><button class="primary" type="button" (click)="decideApproval(row, 'approved')">Approve</button></div></article><div class="empty" *ngIf="approvals.length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Payroll compliance</h2></div></header><div class="key-list"><div *ngFor="let item of objectEntries(compliance)"><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div></div><div class="empty" *ngIf="objectEntries(compliance).length === 0">No records yet</div></section></div>
+    <div class="two-column"><section class="data-card"><header><div><h2>Audit trail</h2></div></header><article class="record" *ngFor="let row of auditRows | slice:0:50; trackBy: trackById"><div><strong>{{ row['eventType'] || row['action'] }}</strong><small>{{ formatDateTime(row['createdAt']) }} · {{ row['actorUserId'] || 'system' }}</small></div><span class="status">{{ row['outcome'] || 'recorded' }}</span></article><div class="empty" *ngIf="auditRows.length === 0">No records yet</div></section>
+      <section class="data-card"><header><div><h2>Notification outbox</h2></div></header><article class="record" *ngFor="let row of notifications | slice:0:50; trackBy: trackById"><div><strong>{{ row['notificationType'] }}</strong><small>{{ row['channel'] }} · {{ row['messagePreview'] || '—' }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span></article><div class="empty" *ngIf="notifications.length === 0">No records yet</div></section></div>
+  </ng-container>
+</section>

@@ -1,18 +1,24 @@
 use std::collections::HashSet;
 
+use chrono::{NaiveDate, Utc};
 use serde::Serialize;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
     repositories::{
         staff_configuration_repository::{
-            self, CatalogOptionRecord, CommissionRuleRecord, LeavePolicyRecord, PayRateRecord,
-            ReplaceConfigurationInput, RoleOptionRecord,
+            self, AttendanceRuleRecord, CatalogOptionRecord, CommissionRuleRecord,
+            LeavePolicyOverviewRecord, LeavePolicyRecord, PayRateRecord, ReplaceConfigurationInput,
+            ReplaceStaffMastersInput, RoleOptionRecord, ShiftTemplateRecord, StaffCategoryRecord,
         },
-        staff_repository::{self, StaffRecord},
+        staff_hr_repository::{self, BulkImportResult, BulkStaffInput},
+        staff_repository::{
+            self, AuthRoleOptionRecord, AuthRoleRecord, BranchRoleAssignmentInput,
+            ProvisionStaffLoginInput, StaffBranchAccessRecord, StaffRecord,
+        },
     },
-    services::auth_service,
+    services::auth_service::{self, TENANT_PERMISSION_CATALOG},
 };
 
 #[derive(Debug, Serialize)]
@@ -23,6 +29,385 @@ pub struct StaffConfigurationData {
     pub commission_rules: Vec<CommissionRuleRecord>,
     pub pay_rates: Vec<PayRateRecord>,
     pub leave_policies: Vec<LeavePolicyRecord>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffMastersData {
+    pub categories: Vec<StaffCategoryRecord>,
+    pub shift_templates: Vec<ShiftTemplateRecord>,
+    pub attendance_rule: Option<AttendanceRuleRecord>,
+    pub leave_policies: Vec<LeavePolicyOverviewRecord>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBranchAccessData {
+    pub linked_login: bool,
+    pub login_id: Option<String>,
+    pub email: Option<String>,
+    pub must_change_password: bool,
+    pub branches: Vec<StaffBranchAccessRecord>,
+    pub roles: Vec<AuthRoleOptionRecord>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthPermissionOption {
+    pub code: &'static str,
+    pub label: &'static str,
+    pub group: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedAuthRole {
+    pub id: String,
+    pub name: String,
+    pub permissions: Vec<String>,
+    pub is_system: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthRoleManagementData {
+    pub roles: Vec<ManagedAuthRole>,
+    pub permission_options: Vec<AuthPermissionOption>,
+}
+
+pub struct BranchAccessAssignment {
+    pub branch_id: String,
+    pub role_id: Option<String>,
+    pub access_type: String,
+    pub valid_from: Option<NaiveDate>,
+    pub valid_until: Option<NaiveDate>,
+    pub is_default: bool,
+    pub active: bool,
+}
+
+pub struct StaffLoginProvision {
+    pub login_id: String,
+    pub email: String,
+    pub initial_password: String,
+    pub role_id: String,
+}
+
+pub async fn load_auth_roles(
+    db: &PgPool,
+    tenant_id: &str,
+) -> Result<AuthRoleManagementData, AppError> {
+    let roles = staff_repository::list_managed_auth_roles(db, tenant_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load authentication roles"))?
+        .into_iter()
+        .map(managed_auth_role)
+        .collect();
+    Ok(AuthRoleManagementData {
+        roles,
+        permission_options: TENANT_PERMISSION_CATALOG
+            .iter()
+            .map(|permission| AuthPermissionOption {
+                code: permission.code,
+                label: permission.label,
+                group: permission.group,
+            })
+            .collect(),
+    })
+}
+
+pub async fn create_auth_role(
+    db: &PgPool,
+    tenant_id: &str,
+    name: String,
+    permissions: Vec<String>,
+) -> Result<AuthRoleManagementData, AppError> {
+    let (name, permissions) = validate_auth_role(name, permissions)?;
+    staff_repository::create_auth_role(db, tenant_id, &name, serde_json::json!(permissions))
+        .await
+        .map_err(role_write_error)?;
+    load_auth_roles(db, tenant_id).await
+}
+
+pub async fn update_auth_role(
+    db: &PgPool,
+    tenant_id: &str,
+    role_id: &str,
+    name: String,
+    permissions: Vec<String>,
+) -> Result<AuthRoleManagementData, AppError> {
+    let role = staff_repository::get_auth_role(db, tenant_id, role_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load authentication role"))?
+        .ok_or_else(|| AppError::not_found("authentication role was not found"))?;
+    if role.is_system {
+        return Err(AppError::forbidden("system roles cannot be edited"));
+    }
+    let (name, permissions) = validate_auth_role(name, permissions)?;
+    staff_repository::update_auth_role(
+        db,
+        tenant_id,
+        role_id,
+        &name,
+        serde_json::json!(permissions),
+    )
+    .await
+    .map_err(role_write_error)?
+    .ok_or_else(|| AppError::not_found("authentication role was not found"))?;
+    load_auth_roles(db, tenant_id).await
+}
+
+fn validate_auth_role(
+    name: String,
+    permissions: Vec<String>,
+) -> Result<(String, Vec<String>), AppError> {
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !(2..=60).contains(&name.chars().count())
+        || !name
+            .chars()
+            .all(|value| value.is_alphanumeric() || matches!(value, ' ' | '-' | '_' | '&'))
+    {
+        return Err(AppError::validation("role name is invalid"));
+    }
+
+    let requested = permissions
+        .iter()
+        .map(|permission| permission.trim())
+        .filter(|permission| !permission.is_empty())
+        .collect::<HashSet<_>>();
+    if requested.is_empty() || requested.len() != permissions.len() {
+        return Err(AppError::validation(
+            "select one or more unique permissions",
+        ));
+    }
+    if requested.iter().any(|permission| {
+        !TENANT_PERMISSION_CATALOG
+            .iter()
+            .any(|allowed| allowed.code == *permission)
+    }) {
+        return Err(AppError::validation("one or more permissions are invalid"));
+    }
+    let permissions = TENANT_PERMISSION_CATALOG
+        .iter()
+        .filter(|permission| requested.contains(permission.code))
+        .map(|permission| permission.code.to_string())
+        .collect();
+    Ok((name, permissions))
+}
+
+fn managed_auth_role(role: AuthRoleRecord) -> ManagedAuthRole {
+    ManagedAuthRole {
+        id: role.id,
+        name: role.name,
+        permissions: role
+            .permissions_json
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|permission| permission.as_str().map(str::to_string))
+            .collect(),
+        is_system: role.is_system,
+    }
+}
+
+fn role_write_error(error: sqlx::Error) -> AppError {
+    if error
+        .as_database_error()
+        .is_some_and(|database_error| database_error.is_unique_violation())
+    {
+        AppError::conflict("a role with this name already exists")
+    } else {
+        AppError::internal("failed to save authentication role")
+    }
+}
+
+pub async fn apply_bulk_import(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    batch_key: &str,
+    requested_by: &str,
+    rows: &[BulkStaffInput],
+) -> Result<BulkImportResult, AppError> {
+    if batch_key.trim().is_empty() || batch_key.len() > 120 {
+        return Err(AppError::validation("invalid batchId"));
+    }
+    if rows.is_empty() || rows.len() > 500 {
+        return Err(AppError::validation("bulk import supports 1 to 500 rows"));
+    }
+    if let Some(existing) =
+        staff_hr_repository::find_bulk_import(db, tenant_id, branch_id, batch_key)
+            .await
+            .map_err(|_| AppError::internal("failed to load bulk import"))?
+    {
+        return Ok(existing);
+    }
+    let mut codes = HashSet::new();
+    for row in rows {
+        validate_bulk_row(row)?;
+        if !codes.insert(row.employee_code.to_ascii_lowercase()) {
+            return Err(AppError::validation("employeeCode values must be unique"));
+        }
+        if staff_hr_repository::employee_code_branch(db, tenant_id, &row.employee_code)
+            .await
+            .map_err(|_| AppError::internal("failed to validate employeeCode"))?
+            .is_some_and(|existing_branch| existing_branch != branch_id)
+        {
+            return Err(AppError::conflict(format!(
+                "employeeCode {} belongs to another branch",
+                row.employee_code
+            )));
+        }
+        validate_master_assignment(
+            db,
+            tenant_id,
+            branch_id,
+            "category",
+            row.category_id.as_deref(),
+        )
+        .await?;
+        validate_master_assignment(
+            db,
+            tenant_id,
+            branch_id,
+            "shift",
+            row.shift_template_id.as_deref(),
+        )
+        .await?;
+        if let Some(manager_id) = row.reporting_manager_id.as_deref() {
+            staff_repository::get(db, tenant_id, branch_id, manager_id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate reporting manager"))?
+                .filter(|manager| manager.active)
+                .ok_or_else(|| AppError::validation("invalid reportingManagerId"))?;
+        }
+    }
+    staff_hr_repository::apply_bulk_import(db, tenant_id, branch_id, batch_key, requested_by, rows)
+        .await
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .is_some_and(|db_error| db_error.is_unique_violation())
+            {
+                AppError::conflict("bulk import conflicts with existing staff data")
+            } else {
+                AppError::internal("failed to apply bulk import")
+            }
+        })
+}
+
+fn validate_bulk_row(row: &BulkStaffInput) -> Result<(), AppError> {
+    let today = Utc::now().date_naive();
+    if row.employee_code.is_empty()
+        || row.employee_code.chars().count() > 80
+        || row.first_name.is_empty()
+        || row.first_name.chars().count() > 120
+        || row
+            .last_name
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 120)
+        || row
+            .department
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 120)
+    {
+        return Err(AppError::validation("invalid bulk staff identity fields"));
+    }
+    if row
+        .email
+        .as_ref()
+        .is_some_and(|value| value.len() > 254 || !value.contains('@'))
+    {
+        return Err(AppError::validation("invalid email in bulk import"));
+    }
+    if row.date_of_birth.is_some_and(|date| date > today)
+        || row.joining_date.is_some_and(|date| date > today)
+    {
+        return Err(AppError::validation(
+            "bulk import dates cannot be in the future",
+        ));
+    }
+    if row.gender.as_deref().is_some_and(|value| {
+        !matches!(
+            value,
+            "female" | "male" | "non_binary" | "prefer_not_to_say"
+        )
+    }) || row
+        .employment_type
+        .as_deref()
+        .is_some_and(|value| !matches!(value, "full_time" | "part_time" | "contract" | "intern"))
+    {
+        return Err(AppError::validation("invalid HR option in bulk import"));
+    }
+    if row.photo_url.as_deref().is_some_and(|url| {
+        url.len() > 2048 || !(url.starts_with("https://") || url.starts_with('/'))
+    }) {
+        return Err(AppError::validation("invalid photoUrl in bulk import"));
+    }
+    Ok(())
+}
+
+pub async fn load_masters(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<StaffMastersData, AppError> {
+    let (categories, shift_templates, attendance_rule, leave_policies) = tokio::try_join!(
+        staff_configuration_repository::list_staff_categories(db, tenant_id, branch_id),
+        staff_configuration_repository::list_shift_templates(db, tenant_id, branch_id),
+        staff_configuration_repository::get_attendance_rule(db, tenant_id, branch_id),
+        staff_configuration_repository::list_leave_policy_overview(db, tenant_id, branch_id),
+    )
+    .map_err(|_| AppError::internal("failed to load staff masters"))?;
+    Ok(StaffMastersData {
+        categories,
+        shift_templates,
+        attendance_rule,
+        leave_policies,
+    })
+}
+
+pub async fn save_masters(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    input: ReplaceStaffMastersInput,
+) -> Result<StaffMastersData, AppError> {
+    validate_masters(&input)?;
+    staff_configuration_repository::save_staff_masters(db, tenant_id, branch_id, input)
+        .await
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .is_some_and(|db_error| db_error.is_unique_violation())
+            {
+                AppError::conflict("staff master code already exists")
+            } else {
+                AppError::internal("failed to save staff masters")
+            }
+        })?;
+    load_masters(db, tenant_id, branch_id).await
+}
+
+pub async fn validate_master_assignment(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    kind: &str,
+    id: Option<&str>,
+) -> Result<(), AppError> {
+    let Some(id) = id.map(str::trim).filter(|id| !id.is_empty()) else {
+        return Ok(());
+    };
+    if staff_configuration_repository::master_id_belongs_to_scope(
+        db, kind, tenant_id, branch_id, id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to validate staff master assignment"))?
+    {
+        Ok(())
+    } else {
+        Err(AppError::validation(format!("invalid {kind} assignment")))
+    }
 }
 
 pub async fn load_configuration(
@@ -47,6 +432,287 @@ pub async fn load_configuration(
         pay_rates,
         leave_policies,
     })
+}
+
+pub async fn load_branch_access(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<StaffBranchAccessData, AppError> {
+    let staff = staff_repository::get(db, tenant_id, branch_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff"))?
+        .ok_or_else(|| AppError::not_found("staff was not found"))?;
+    let (login, branches, roles) = tokio::try_join!(
+        staff_repository::find_staff_login(db, tenant_id, branch_id, staff_id),
+        staff_repository::list_branch_access(db, tenant_id, staff.user_id.as_deref()),
+        staff_repository::list_auth_roles(db, tenant_id),
+    )
+    .map_err(|_| AppError::internal("failed to load employee branch access"))?;
+    Ok(StaffBranchAccessData {
+        linked_login: login.is_some(),
+        login_id: login.as_ref().and_then(|item| item.login_id.clone()),
+        email: login.as_ref().map(|item| item.email.clone()),
+        must_change_password: login.as_ref().is_some_and(|item| item.must_change_password),
+        branches,
+        roles,
+    })
+}
+
+pub async fn provision_login(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    input: StaffLoginProvision,
+) -> Result<StaffBranchAccessData, AppError> {
+    let staff = staff_repository::get(db, tenant_id, branch_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff"))?
+        .ok_or_else(|| AppError::not_found("staff was not found"))?;
+    if !staff.active {
+        return Err(AppError::conflict(
+            "inactive employee cannot receive a login",
+        ));
+    }
+    if staff
+        .user_id
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return Err(AppError::conflict("employee already has a linked login"));
+    }
+
+    let login_id = normalize_login_id(&input.login_id)?;
+    let email = normalize_login_email(&input.email)?;
+    let role_id = input.role_id.trim();
+    if role_id.is_empty() {
+        return Err(AppError::validation("roleId is required"));
+    }
+    if !auth_service::password_meets_policy(&input.initial_password) {
+        return Err(AppError::validation(
+            "initialPassword must contain 12 to 128 characters",
+        ));
+    }
+    let password_hash = auth_service::hash_password(&input.initial_password)
+        .map_err(|_| AppError::internal("failed to secure password"))?;
+    let full_name = [
+        staff.first_name.trim(),
+        staff.middle_name.trim(),
+        staff.last_name.trim(),
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ");
+
+    staff_repository::provision_staff_login(
+        db,
+        &ProvisionStaffLoginInput {
+            tenant_id,
+            branch_id,
+            staff_id,
+            login_id: &login_id,
+            email: &email,
+            password_hash: &password_hash,
+            full_name: &full_name,
+            role_id,
+        },
+    )
+    .await
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|database_error| database_error.is_unique_violation())
+        {
+            AppError::conflict("login ID or email is already in use")
+        } else if matches!(error, sqlx::Error::RowNotFound) {
+            AppError::conflict("employee branch or role is no longer available")
+        } else {
+            AppError::internal("failed to create employee login")
+        }
+    })?;
+    load_branch_access(db, tenant_id, branch_id, staff_id).await
+}
+
+fn normalize_login_id(value: &str) -> Result<String, AppError> {
+    let login_id = value.trim().to_ascii_lowercase();
+    if !(3..=80).contains(&login_id.len())
+        || !login_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err(AppError::validation(
+            "loginId must use 3 to 80 letters, numbers, dots, underscores or hyphens",
+        ));
+    }
+    Ok(login_id)
+}
+
+fn normalize_login_email(value: &str) -> Result<String, AppError> {
+    let email = value.trim().to_ascii_lowercase();
+    let valid = email.len() <= 254
+        && email.split_once('@').is_some_and(|(local, domain)| {
+            !local.is_empty()
+                && !domain.is_empty()
+                && domain.contains('.')
+                && !domain.starts_with('.')
+                && !domain.ends_with('.')
+                && !email.chars().any(char::is_whitespace)
+        });
+    if !valid {
+        return Err(AppError::validation("a valid real email is required"));
+    }
+    Ok(email)
+}
+
+pub async fn save_branch_access(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    assignments: Vec<BranchAccessAssignment>,
+) -> Result<StaffBranchAccessData, AppError> {
+    let staff = staff_repository::get(db, tenant_id, branch_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff"))?
+        .ok_or_else(|| AppError::not_found("staff was not found"))?;
+    let user_id = staff
+        .user_id
+        .as_deref()
+        .filter(|_| staff.active)
+        .ok_or_else(|| AppError::conflict("employee has no active linked login"))?;
+    if !has_linked_login(db, tenant_id, Some(user_id)).await? {
+        return Err(AppError::conflict("employee has no active linked login"));
+    }
+
+    let (branches, roles) = tokio::try_join!(
+        staff_repository::list_branch_access(db, tenant_id, Some(user_id)),
+        staff_repository::list_auth_roles(db, tenant_id),
+    )
+    .map_err(|_| AppError::internal("failed to validate employee branch access"))?;
+    let branch_ids = branches
+        .iter()
+        .map(|branch| branch.branch_id.as_str())
+        .collect::<HashSet<_>>();
+    let role_ids = roles
+        .iter()
+        .map(|role| role.id.as_str())
+        .collect::<HashSet<_>>();
+    let assignments = validate_branch_access(assignments, &branch_ids, &role_ids)?;
+
+    staff_repository::replace_branch_access(db, tenant_id, user_id, &assignments)
+        .await
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .is_some_and(|db_error| db_error.is_unique_violation())
+            {
+                AppError::conflict("default branch access already exists")
+            } else {
+                AppError::internal("failed to save employee branch access")
+            }
+        })?;
+    load_branch_access(db, tenant_id, branch_id, staff_id).await
+}
+
+fn validate_branch_access(
+    assignments: Vec<BranchAccessAssignment>,
+    branch_ids: &HashSet<&str>,
+    role_ids: &HashSet<&str>,
+) -> Result<Vec<BranchRoleAssignmentInput>, AppError> {
+    if assignments.len() > 500 {
+        return Err(AppError::validation(
+            "branch access supports up to 500 assignments",
+        ));
+    }
+
+    let mut seen = HashSet::new();
+    let mut active_count = 0;
+    let mut default_count = 0;
+    let mut normalized = Vec::new();
+    for assignment in assignments {
+        let branch_id = assignment.branch_id.trim();
+        let role_id = assignment
+            .role_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if branch_id.is_empty()
+            || !seen.insert(branch_id.to_string())
+            || !branch_ids.contains(branch_id)
+        {
+            return Err(AppError::validation("one or more branches are invalid"));
+        }
+        if assignment.is_default && !assignment.active {
+            return Err(AppError::validation("default branch must be active"));
+        }
+        if assignment.active {
+            active_count += 1;
+            default_count += usize::from(assignment.is_default);
+        }
+        let Some(role_id) = role_id else {
+            if assignment.active {
+                return Err(AppError::validation("active branch requires a role"));
+            }
+            continue;
+        };
+        if !role_ids.contains(role_id) {
+            return Err(AppError::validation("one or more roles are invalid"));
+        }
+        let access_type = assignment.access_type.trim().to_ascii_lowercase();
+        let (valid_from, valid_until) = match access_type.as_str() {
+            "permanent" => {
+                if assignment.valid_from.is_some() || assignment.valid_until.is_some() {
+                    return Err(AppError::validation(
+                        "permanent access cannot have deputation dates",
+                    ));
+                }
+                (None, None)
+            }
+            "deputation" => {
+                let (Some(valid_from), Some(valid_until)) =
+                    (assignment.valid_from, assignment.valid_until)
+                else {
+                    return Err(AppError::validation(
+                        "deputation requires validFrom and validUntil",
+                    ));
+                };
+                if valid_until < valid_from {
+                    return Err(AppError::validation(
+                        "deputation validUntil must be on or after validFrom",
+                    ));
+                }
+                if assignment.is_default {
+                    return Err(AppError::validation(
+                        "default branch access must be permanent",
+                    ));
+                }
+                (Some(valid_from), Some(valid_until))
+            }
+            _ => {
+                return Err(AppError::validation(
+                    "accessType must be permanent or deputation",
+                ))
+            }
+        };
+        normalized.push(BranchRoleAssignmentInput {
+            branch_id: branch_id.to_string(),
+            role_id: role_id.to_string(),
+            access_type,
+            valid_from,
+            valid_until,
+            is_default: assignment.is_default,
+            active: assignment.active,
+        });
+    }
+    if active_count > 0 && default_count != 1 {
+        return Err(AppError::validation(
+            "exactly one active branch must be default",
+        ));
+    }
+    Ok(normalized)
 }
 
 pub async fn save_configuration(
@@ -166,21 +832,99 @@ fn validate_configuration(input: &ReplaceConfigurationInput) -> Result<(), AppEr
     Ok(())
 }
 
+fn validate_masters(input: &ReplaceStaffMastersInput) -> Result<(), AppError> {
+    if input.categories.len() > 100 || input.shift_templates.len() > 100 {
+        return Err(AppError::validation("staff masters are too large"));
+    }
+    if !all_unique(input.categories.iter().map(|item| item.code.as_str()))
+        || !all_unique(input.shift_templates.iter().map(|item| item.code.as_str()))
+    {
+        return Err(AppError::validation("staff master codes must be unique"));
+    }
+    for category in &input.categories {
+        if !valid_master_code(&category.code)
+            || category.name.trim().is_empty()
+            || category.name.chars().count() > 100
+            || category.designation.chars().count() > 100
+        {
+            return Err(AppError::validation("invalid staff category"));
+        }
+    }
+    for shift in &input.shift_templates {
+        if !valid_master_code(&shift.code)
+            || shift.name.trim().is_empty()
+            || shift.name.chars().count() > 100
+            || shift.shift1_start >= shift.shift1_end
+            || shift.shift2_start.is_some() != shift.shift2_end.is_some()
+            || shift
+                .shift2_start
+                .zip(shift.shift2_end)
+                .is_some_and(|(start, end)| start >= end)
+            || !(0..=480).contains(&shift.break_minutes)
+            || shift
+                .weekly_off_days
+                .iter()
+                .any(|day| !(0..=6).contains(day))
+            || !all_unique(shift.weekly_off_days.iter())
+        {
+            return Err(AppError::validation("invalid shift template"));
+        }
+    }
+    let rule = &input.attendance_rule;
+    let minutes = [
+        rule.grace_minutes,
+        rule.half_day_after_minutes,
+        rule.absent_after_minutes,
+        rule.overtime_after_minutes,
+        rule.early_leave_grace_minutes,
+        rule.minimum_overtime_minutes,
+        rule.maximum_overtime_minutes,
+    ];
+    if minutes.iter().any(|value| !(0..=1440).contains(value))
+        || !matches!(rule.overtime_rounding_minutes, 0 | 5 | 10 | 15 | 30 | 60)
+        || (rule.half_day_after_minutes > 0
+            && rule.absent_after_minutes > 0
+            && rule.absent_after_minutes < rule.half_day_after_minutes)
+    {
+        return Err(AppError::validation("invalid attendance rules"));
+    }
+    Ok(())
+}
+
+fn valid_master_code(value: &str) -> bool {
+    (2..=30).contains(&value.len())
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
+}
+
 fn all_unique<T: Eq + std::hash::Hash>(values: impl Iterator<Item = T>) -> bool {
     let mut seen = HashSet::new();
     values.into_iter().all(|value| seen.insert(value))
 }
 
-pub async fn has_linked_login(db: &PgPool, tenant_id: &str, email: &str) -> Result<bool, AppError> {
-    if email.trim().is_empty() {
+const LINKED_ACTIVE_USER_SQL: &str = r#"
+    SELECT u.id
+    FROM staff s
+    JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+    WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND u.active=TRUE
+    FOR UPDATE OF s, u
+"#;
+
+pub async fn has_linked_login(
+    db: &PgPool,
+    tenant_id: &str,
+    user_id: Option<&str>,
+) -> Result<bool, AppError> {
+    let Some(user_id) = user_id.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(false);
-    }
+    };
 
     sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id=$1 AND LOWER(email)=LOWER($2) AND active=true)",
+        "SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id=$1 AND id=$2 AND active=TRUE)",
     )
     .bind(tenant_id)
-    .bind(email)
+    .bind(user_id)
     .fetch_one(db)
     .await
     .map_err(|_| AppError::internal("failed to load employee login"))
@@ -193,9 +937,9 @@ pub async fn set_password(
     staff_id: &str,
     new_password: &str,
 ) -> Result<(), AppError> {
-    if new_password.len() < 12 {
+    if !auth_service::password_meets_policy(new_password) {
         return Err(AppError::validation(
-            "newPassword must be at least 12 characters",
+            "newPassword must contain 12 to 128 characters",
         ));
     }
 
@@ -205,21 +949,13 @@ pub async fn set_password(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start password update"))?;
-    let email = scoped_staff_email(&mut tx, tenant_id, branch_id, staff_id).await?;
-    let user_id = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM users WHERE tenant_id=$1 AND LOWER(email)=LOWER($2) AND active=true LIMIT 1",
-    )
-    .bind(tenant_id)
-    .bind(&email)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|_| AppError::internal("failed to load employee login"))?
-    .ok_or_else(|| AppError::not_found("employee has no active linked login"))?;
+    let user_id = linked_active_user_id(&mut tx, tenant_id, branch_id, staff_id).await?;
 
     sqlx::query(
-        "UPDATE users SET password_hash=$1, failed_login_count=0, locked_until=NULL, updated_at=NOW() WHERE id=$2",
+        "UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=NULL, failed_login_count=0, locked_until=NULL, updated_at=NOW() WHERE tenant_id=$2 AND id=$3",
     )
     .bind(password_hash)
+    .bind(tenant_id)
     .bind(&user_id)
     .execute(&mut *tx)
     .await
@@ -243,7 +979,7 @@ pub async fn terminate(
         .map_err(|_| AppError::internal("failed to start staff termination"))?;
     let mut staff = sqlx::query_as::<_, StaffRecord>(
         r#"
-        SELECT id, tenant_id, branch_id, employee_code, first_name, middle_name, last_name,
+        SELECT id, tenant_id, branch_id, user_id, employee_code, first_name, middle_name, last_name,
                appointment_display_name, email, mobile_phone, home_phone, work_phone,
                job_title, active, created_at, updated_at
         FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE
@@ -257,23 +993,44 @@ pub async fn terminate(
     .map_err(|_| AppError::internal("failed to load staff"))?
     .ok_or_else(|| AppError::not_found("staff was not found"))?;
 
-    sqlx::query("UPDATE staff SET active=false, updated_at=NOW() WHERE id=$1")
+    sqlx::query(
+        "UPDATE staff SET active=false, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
+    )
         .bind(staff_id)
+        .bind(tenant_id)
+        .bind(branch_id)
         .execute(&mut *tx)
         .await
         .map_err(|_| AppError::internal("failed to terminate staff"))?;
-    if !staff.email.trim().is_empty() {
-        let user_id = sqlx::query_scalar::<_, String>(
-            "UPDATE users SET active=false, updated_at=NOW() WHERE tenant_id=$1 AND LOWER(email)=LOWER($2) RETURNING id",
+    if let Some(user_id) = staff.user_id.as_deref() {
+        sqlx::query(
+            "UPDATE user_branch_roles SET active=FALSE, is_default=FALSE, updated_at=NOW() WHERE tenant_id=$1 AND user_id=$2 AND branch_id=$3 AND active=TRUE",
         )
         .bind(tenant_id)
-        .bind(&staff.email)
-        .fetch_optional(&mut *tx)
+        .bind(user_id)
+        .bind(branch_id)
+        .execute(&mut *tx)
         .await
-        .map_err(|_| AppError::internal("failed to deactivate employee login"))?;
-        if let Some(user_id) = user_id {
-            revoke_user_sessions(&mut tx, tenant_id, &user_id).await?;
+        .map_err(|_| AppError::internal("failed to remove employee branch access"))?;
+        let has_other_branch_access = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM user_branch_roles WHERE tenant_id=$1 AND user_id=$2 AND active=TRUE)",
+        )
+        .bind(tenant_id)
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to validate remaining employee access"))?;
+        if !has_other_branch_access {
+            sqlx::query(
+                "UPDATE users SET active=FALSE, updated_at=NOW() WHERE tenant_id=$1 AND id=$2",
+            )
+            .bind(tenant_id)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| AppError::internal("failed to deactivate employee login"))?;
         }
+        revoke_user_sessions(&mut tx, tenant_id, user_id).await?;
     }
     tx.commit()
         .await
@@ -282,28 +1039,20 @@ pub async fn terminate(
     Ok(staff)
 }
 
-async fn scoped_staff_email(
+async fn linked_active_user_id(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tenant_id: &str,
     branch_id: &str,
     staff_id: &str,
 ) -> Result<String, AppError> {
-    let email =
-        sqlx::query("SELECT email FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
-            .bind(tenant_id)
-            .bind(branch_id)
-            .bind(staff_id)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(|_| AppError::internal("failed to load staff"))?
-            .map(|row| row.get::<String, _>("email"))
-            .ok_or_else(|| AppError::not_found("staff was not found"))?;
-    if email.trim().is_empty() {
-        return Err(AppError::validation(
-            "employee email is required for a login action",
-        ));
-    }
-    Ok(email)
+    sqlx::query_scalar(LINKED_ACTIVE_USER_SQL)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(staff_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to load employee login"))?
+        .ok_or_else(|| AppError::not_found("employee has no active linked login"))
 }
 
 async fn revoke_user_sessions(
@@ -322,10 +1071,20 @@ async fn revoke_user_sessions(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_configuration;
-    use crate::repositories::staff_configuration_repository::{
-        PayRateInput, ReplaceConfigurationInput,
+    use std::collections::HashSet;
+
+    use chrono::{NaiveDate, NaiveTime};
+
+    use super::{
+        normalize_login_email, normalize_login_id, validate_auth_role, validate_branch_access,
+        validate_bulk_row, validate_configuration, validate_masters, BranchAccessAssignment,
+        LINKED_ACTIVE_USER_SQL,
     };
+    use crate::repositories::staff_configuration_repository::{
+        AttendanceRuleInput, PayRateInput, ReplaceConfigurationInput, ReplaceStaffMastersInput,
+        ShiftTemplateInput, StaffCategoryInput,
+    };
+    use crate::repositories::staff_hr_repository::BulkStaffInput;
 
     #[test]
     fn configuration_rejects_negative_pay_rate() {
@@ -342,5 +1101,177 @@ mod tests {
             leave_policies: vec![],
         };
         assert!(validate_configuration(&input).is_err());
+    }
+
+    #[test]
+    fn linked_login_lookup_uses_permanent_user_id() {
+        assert!(LINKED_ACTIVE_USER_SQL.contains("u.id = s.user_id"));
+        assert!(LINKED_ACTIVE_USER_SQL.contains("u.tenant_id = s.tenant_id"));
+        assert!(!LINKED_ACTIVE_USER_SQL
+            .to_ascii_lowercase()
+            .contains("email"));
+    }
+
+    #[test]
+    fn staff_login_identity_requires_safe_real_values() {
+        assert_eq!(
+            normalize_login_id("  Aftab.Staff-1 ").unwrap(),
+            "aftab.staff-1"
+        );
+        assert!(normalize_login_id("bad login").is_err());
+        assert_eq!(
+            normalize_login_email(" AFTAB@EXAMPLE.COM ").unwrap(),
+            "aftab@example.com"
+        );
+        assert!(normalize_login_email("staff.local").is_err());
+    }
+
+    #[test]
+    fn branch_access_requires_one_active_default() {
+        let branches = HashSet::from(["branch_hyd"]);
+        let roles = HashSet::from(["owner"]);
+        let assignment = || BranchAccessAssignment {
+            branch_id: "branch_hyd".into(),
+            role_id: Some("owner".into()),
+            access_type: "permanent".into(),
+            valid_from: None,
+            valid_until: None,
+            is_default: false,
+            active: true,
+        };
+
+        assert!(validate_branch_access(vec![assignment()], &branches, &roles).is_err());
+        let mut valid = assignment();
+        valid.is_default = true;
+        assert!(validate_branch_access(vec![valid], &branches, &roles).is_ok());
+    }
+
+    #[test]
+    fn deputation_requires_a_bounded_non_default_window() {
+        let branches = HashSet::from(["branch_hyd"]);
+        let roles = HashSet::from(["manager"]);
+        let valid_from = NaiveDate::from_ymd_opt(2026, 7, 14).unwrap();
+        let valid_until = NaiveDate::from_ymd_opt(2026, 7, 20).unwrap();
+        let assignment = BranchAccessAssignment {
+            branch_id: "branch_hyd".into(),
+            role_id: Some("manager".into()),
+            access_type: "deputation".into(),
+            valid_from: Some(valid_from),
+            valid_until: Some(valid_until),
+            is_default: false,
+            active: true,
+        };
+        assert!(validate_branch_access(vec![assignment], &branches, &roles).is_err());
+
+        let assignment = BranchAccessAssignment {
+            branch_id: "branch_hyd".into(),
+            role_id: Some("manager".into()),
+            access_type: "deputation".into(),
+            valid_from: Some(valid_from),
+            valid_until: Some(valid_until),
+            is_default: false,
+            active: true,
+        };
+        let permanent = BranchAccessAssignment {
+            branch_id: "branch_home".into(),
+            role_id: Some("manager".into()),
+            access_type: "permanent".into(),
+            valid_from: None,
+            valid_until: None,
+            is_default: true,
+            active: true,
+        };
+        let branches = HashSet::from(["branch_hyd", "branch_home"]);
+        assert!(validate_branch_access(vec![assignment, permanent], &branches, &roles).is_ok());
+    }
+
+    #[test]
+    fn custom_role_rejects_unknown_or_duplicate_permissions() {
+        assert!(validate_auth_role("Regional Lead".into(), vec!["unknown".into()]).is_err());
+        assert!(validate_auth_role(
+            "Regional Lead".into(),
+            vec!["tenant.read".into(), "tenant.read".into()]
+        )
+        .is_err());
+        assert!(validate_auth_role(
+            "Regional Lead".into(),
+            vec!["appointments.read".into(), "clients.manage".into()]
+        )
+        .is_ok());
+        assert!(validate_auth_role(
+            "Client Compliance".into(),
+            vec![
+                "clients.consent.manage".into(),
+                "clients.forms.manage".into(),
+                "clients.merge".into(),
+                "clients.audit.read".into(),
+                "clients.reviews.link".into(),
+                "purchases.approve".into(),
+            ]
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn masters_validate_codes_shifts_and_rule_order() {
+        let mut input = ReplaceStaffMastersInput {
+            categories: vec![StaffCategoryInput {
+                id: String::new(),
+                code: "stylist".into(),
+                name: "Stylist".into(),
+                designation: String::new(),
+                active: true,
+            }],
+            shift_templates: vec![ShiftTemplateInput {
+                id: String::new(),
+                code: "regular".into(),
+                name: "Regular".into(),
+                shift1_start: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+                shift1_end: NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
+                shift2_start: None,
+                shift2_end: None,
+                break_minutes: 30,
+                weekly_off_days: vec![0],
+                active: true,
+            }],
+            attendance_rule: AttendanceRuleInput {
+                grace_minutes: 10,
+                half_day_after_minutes: 120,
+                absent_after_minutes: 240,
+                overtime_after_minutes: 30,
+                early_leave_grace_minutes: 10,
+                deduct_breaks: true,
+                minimum_overtime_minutes: 15,
+                overtime_rounding_minutes: 15,
+                maximum_overtime_minutes: 240,
+                active: true,
+            },
+        };
+        assert!(validate_masters(&input).is_ok());
+        input.attendance_rule.absent_after_minutes = 60;
+        assert!(validate_masters(&input).is_err());
+    }
+
+    #[test]
+    fn bulk_import_rejects_invalid_hr_options_before_writes() {
+        let row = BulkStaffInput {
+            employee_code: "EMP-1".into(),
+            first_name: "Aftab".into(),
+            last_name: None,
+            email: None,
+            mobile_phone: None,
+            job_title: None,
+            active: Some(true),
+            photo_url: None,
+            date_of_birth: None,
+            joining_date: None,
+            gender: Some("unknown".into()),
+            employment_type: None,
+            department: None,
+            reporting_manager_id: None,
+            category_id: None,
+            shift_template_id: None,
+        };
+        assert!(validate_bulk_row(&row).is_err());
     }
 }

@@ -3,6 +3,12 @@
   <header class="page-header">
     <div><span class="section-label">Team</span><h1>Manage employees</h1></div>
     <div class="header-actions">
+      <button class="filter-button payroll-link" type="button" (click)="openControlCenter()"><i class="bi bi-speedometer2"></i>Control center</button>
+      <button class="filter-button payroll-link" type="button" (click)="openMasters()"><i class="bi bi-sliders"></i>Masters</button>
+      <button class="filter-button payroll-link" type="button" (click)="openLeaveManagement()"><i class="bi bi-calendar2-check"></i>Leave</button>
+      <button class="filter-button payroll-link" type="button" (click)="openPayroll()"><i class="bi bi-wallet2"></i>Payroll</button>
+      <button class="filter-button payroll-link" type="button" (click)="bulkFile.click()"><i class="bi bi-file-earmark-arrow-up"></i>Bulk CSV</button>
+      <input #bulkFile class="visually-hidden" type="file" accept=".csv,text/csv" (change)="selectBulkFile($event)" />
       <label class="search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input type="search" [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search employees" aria-label="Search employees" /></label>
       <button class="primary" type="button" (click)="openCreate()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add</button>
     </div>
@@ -42,14 +48,124 @@
       <nav class="employee-tabs" *ngIf="editingId" aria-label="Employee configuration"><button *ngFor="let tab of staffTabs" type="button" [class.active]="activeTab === tab" (click)="setTab(tab)">{{ tab }}</button></nav>
       <form *ngIf="activeTab === 'General'" (ngSubmit)="save()">
         <section class="form-section"><h3>General</h3><div class="form-grid"><label>Current center<input [value]="selectedBranchId || 'Current center'" readonly /></label><label>Employee code<input name="employeeCode" [(ngModel)]="form.employeeCode" /></label><label>First name<input name="firstName" [(ngModel)]="form.firstName" (ngModelChange)="form.firstName = titleCase($event)" /></label><label>Middle name<input name="middleName" [(ngModel)]="form.middleName" (ngModelChange)="form.middleName = titleCase($event)" /></label><label>Last name<input name="lastName" [(ngModel)]="form.lastName" (ngModelChange)="form.lastName = titleCase($event)" /></label><label>Display name<input name="displayName" [(ngModel)]="form.appointmentDisplayName" (ngModelChange)="form.appointmentDisplayName = titleCase($event)" /></label><label>Email<input type="email" name="email" [(ngModel)]="form.email" /></label><label>Mobile phone<input type="tel" name="mobilePhone" [(ngModel)]="form.mobilePhone" /></label><label>Work phone<input type="tel" name="workPhone" [(ngModel)]="form.workPhone" /></label><label>Home phone<input type="tel" name="homePhone" [(ngModel)]="form.homePhone" /></label><label>Job<input name="jobTitle" [(ngModel)]="form.jobTitle" (ngModelChange)="form.jobTitle = titleCase($event)" /></label><label class="checkbox-row" *ngIf="editingId"><input type="checkbox" name="active" [(ngModel)]="form.active" />Active employee</label></div></section>
-        <section class="form-section"><h3>Job & booking</h3><div class="form-grid"><label>Designation<input name="designation" [(ngModel)]="profileForm.designation" (ngModelChange)="profileForm.designation = titleCase($event)" /></label><label>Company<input name="companyName" [(ngModel)]="profileForm.companyName" (ngModelChange)="profileForm.companyName = titleCase($event)" /></label><label>Mandatory break (minutes)<input type="number" min="0" name="mandatoryBreakMinutes" [(ngModel)]="profileForm.mandatoryBreakMinutes" /></label><label>Work tasks<input name="workTasks" [(ngModel)]="profileForm.workTasks" /></label><label>Max work hours<input type="number" min="0" name="maxWorkHours" [(ngModel)]="profileForm.maxWorkHours" /></label><label>Target revenue (₹)<input type="number" min="0" step="0.01" name="targetRevenue" [(ngModel)]="profileForm.targetRevenue" /></label><label>Tenure start date<as-date-picker ariaLabel="Tenure start date" [(value)]="profileForm.tenureStartDate"></as-date-picker></label><label>Booking interval (minutes)<input type="number" min="0" name="bookingIntervalMinutes" [(ngModel)]="profileForm.bookingIntervalMinutes" /></label><label class="checkbox-row wide"><input type="checkbox" name="restrictBooking" [(ngModel)]="profileForm.restrictBookingToReturningGuests" />Allow booking only with returning guests</label></div></section>
+        <section class="form-section"><h3>Job & booking</h3><div class="form-grid"><label>Staff category<select name="categoryId" [(ngModel)]="profileForm.categoryId"><option value="">Not assigned</option><option *ngFor="let item of activeCategories" [value]="item.id">{{ item.name }}</option></select></label><label>Default shift<select name="shiftTemplateId" [(ngModel)]="profileForm.shiftTemplateId"><option value="">Not assigned</option><option *ngFor="let item of activeShiftTemplates" [value]="item.id">{{ item.name }}</option></select></label><label>Designation<input name="designation" [(ngModel)]="profileForm.designation" (ngModelChange)="profileForm.designation = titleCase($event)" /></label><label>Company<input name="companyName" [(ngModel)]="profileForm.companyName" (ngModelChange)="profileForm.companyName = titleCase($event)" /></label><label>Mandatory break (minutes)<input type="number" min="0" name="mandatoryBreakMinutes" [(ngModel)]="profileForm.mandatoryBreakMinutes" /></label><label>Work tasks<input name="workTasks" [(ngModel)]="profileForm.workTasks" /></label><label>Max work hours<input type="number" min="0" name="maxWorkHours" [(ngModel)]="profileForm.maxWorkHours" /></label><label>Target revenue (₹)<input type="number" min="0" step="0.01" name="targetRevenue" [(ngModel)]="profileForm.targetRevenue" /></label><label>Tenure start date<as-date-picker ariaLabel="Tenure start date" [(value)]="profileForm.tenureStartDate"></as-date-picker></label><label>Booking interval (minutes)<input type="number" min="0" name="bookingIntervalMinutes" [(ngModel)]="profileForm.bookingIntervalMinutes" /></label><label class="checkbox-row wide"><input type="checkbox" name="restrictBooking" [(ngModel)]="profileForm.restrictBookingToReturningGuests" />Allow booking only with returning guests</label></div></section>
         <section class="form-section"><h3>Leave</h3><div class="form-grid"><label>Vacation days<input type="number" min="0" name="vacationDays" [(ngModel)]="profileForm.vacationDays" /></label><label>Special leave days<input type="number" min="0" name="specialLeaveDays" [(ngModel)]="profileForm.specialLeaveDays" /></label></div></section>
         <p class="form-error" *ngIf="saveError">{{ saveError }}</p><p class="form-error" *ngIf="profileError">{{ profileError }}</p><p class="form-error" *ngIf="actionError">{{ actionError }}</p>
       </form>
 
+      <section class="form-section hr-profile-panel" *ngIf="activeTab === 'HR Profile'">
+        <h3>Employment & identity</h3>
+        <div class="photo-field">
+          <span class="photo-preview"><img *ngIf="photoPreviewUrl" [src]="photoPreviewUrl" alt="Employee photo" referrerpolicy="no-referrer" /><i *ngIf="!photoPreviewUrl" class="bi bi-person"></i></span>
+          <div class="upload-field"><label>Photo URL<input type="url" [(ngModel)]="profileForm.photoUrl" placeholder="https://" /></label><button type="button" [disabled]="fileUploading" (click)="photoFile.click()"><i class="bi bi-upload"></i>{{ fileUploading ? 'Uploading…' : 'Upload photo' }}</button><input #photoFile class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" (change)="uploadPhoto($event)" /></div>
+        </div>
+        <div class="form-grid">
+          <label>Date of birth<as-date-picker ariaLabel="Date of birth" [(value)]="profileForm.dateOfBirth"></as-date-picker></label>
+          <label>Joining date<as-date-picker ariaLabel="Joining date" [(value)]="profileForm.joiningDate"></as-date-picker></label>
+          <label>Gender<select [(ngModel)]="profileForm.gender"><option value="">Not specified</option><option value="female">Female</option><option value="male">Male</option><option value="non_binary">Non-binary</option><option value="prefer_not_to_say">Prefer not to say</option></select></label>
+          <label>Employment type<select [(ngModel)]="profileForm.employmentType"><option value="">Not specified</option><option value="full_time">Full time</option><option value="part_time">Part time</option><option value="contract">Contract</option><option value="intern">Intern</option></select></label>
+          <label>Department<input [(ngModel)]="profileForm.department" (ngModelChange)="profileForm.department = titleCase($event)" /></label>
+          <label>Reporting manager<select [(ngModel)]="profileForm.reportingManagerId"><option value="">Not assigned</option><option *ngFor="let manager of managerOptions" [value]="manager.id">{{ manager.firstName }} {{ manager.lastName }}</option></select></label>
+        </div>
+        <h3>Address</h3>
+        <div class="form-grid">
+          <label class="wide">Address line 1<input [(ngModel)]="profileForm.addressLine1" (ngModelChange)="profileForm.addressLine1 = titleCase($event)" /></label>
+          <label class="wide">Address line 2<input [(ngModel)]="profileForm.addressLine2" (ngModelChange)="profileForm.addressLine2 = titleCase($event)" /></label>
+          <label>City<input [(ngModel)]="profileForm.city" (ngModelChange)="profileForm.city = titleCase($event)" /></label>
+          <label>State<input [(ngModel)]="profileForm.stateName" (ngModelChange)="profileForm.stateName = titleCase($event)" /></label>
+          <label>Postal code<input [(ngModel)]="profileForm.postalCode" /></label>
+          <label>Country<input [(ngModel)]="profileForm.country" (ngModelChange)="profileForm.country = titleCase($event)" /></label>
+        </div>
+        <h3>Emergency contact</h3>
+        <div class="form-grid">
+          <label>Name<input [(ngModel)]="profileForm.emergencyContactName" (ngModelChange)="profileForm.emergencyContactName = titleCase($event)" /></label>
+          <label>Relationship<input [(ngModel)]="profileForm.emergencyContactRelationship" (ngModelChange)="profileForm.emergencyContactRelationship = titleCase($event)" /></label>
+          <label>Phone<input type="tel" [(ngModel)]="profileForm.emergencyContactPhone" /></label>
+        </div>
+        <p class="form-error" *ngIf="saveError || profileError">{{ saveError || profileError }}</p>
+      </section>
+
+      <section class="configuration-panel documents-panel" *ngIf="activeTab === 'Documents'">
+        <div class="panel-heading"><h3>{{ documentForm.id ? 'Edit document' : 'Add document' }}</h3><button *ngIf="documentForm.id" type="button" (click)="resetDocument()">New document</button></div>
+        <div class="form-grid document-form">
+          <label>Document type<input [(ngModel)]="documentForm.documentType" (ngModelChange)="documentForm.documentType = titleCase($event)" /></label>
+          <label>Document name<input [(ngModel)]="documentForm.documentName" (ngModelChange)="documentForm.documentName = titleCase($event)" /></label>
+          <label class="wide">Secure document URL<input type="url" [(ngModel)]="documentForm.documentUrl" placeholder="https://" /></label>
+          <div class="wide upload-row"><button type="button" [disabled]="fileUploading" (click)="documentFile.click()"><i class="bi bi-upload"></i>{{ fileUploading ? 'Uploading…' : 'Upload file' }}</button><input #documentFile class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx" (change)="uploadDocumentFile($event)" /></div>
+          <label>Verification<select [(ngModel)]="documentForm.verificationStatus"><option value="pending">Pending</option><option value="verified">Verified</option><option value="rejected">Rejected</option></select></label>
+          <label>Expiry date<as-date-picker ariaLabel="Document expiry date" [(value)]="documentForm.expiryDate"></as-date-picker></label>
+          <label class="wide">Notes<textarea rows="2" [(ngModel)]="documentForm.notes"></textarea></label>
+        </div>
+        <div class="panel-actions"><button class="primary" type="button" [disabled]="documentSaving" (click)="saveDocument()">{{ documentSaving ? 'Saving…' : 'Save document' }}</button></div>
+        <p class="form-error" *ngIf="documentError">{{ documentError }}</p>
+        <div class="config-empty" *ngIf="documentsLoading">Loading…</div>
+        <div class="document-row" *ngFor="let document of documents">
+          <span><strong>{{ document.documentName }}</strong><small>{{ document.documentType }}</small></span>
+          <span class="status" [class.inactive]="document.verificationStatus === 'rejected'">{{ document.verificationStatus | titlecase }}</span>
+          <span>{{ formatDate(document.expiryDate) }}</span>
+          <button type="button" (click)="downloadStaffFile(document.documentUrl, document.documentName)">Download</button>
+          <button type="button" (click)="editDocument(document)">Edit</button>
+        </div>
+        <div class="config-empty" *ngIf="!documentsLoading && documents.length === 0">No records yet</div>
+      </section>
+
+      <section class="configuration-panel history-panel" *ngIf="activeTab === 'History'">
+        <div class="config-empty" *ngIf="historyLoading">Loading…</div>
+        <div class="history-row" *ngFor="let entry of history">
+          <span class="history-icon"><i class="bi bi-clock-history"></i></span>
+          <span><strong>{{ entry.eventType }}</strong><small>{{ formatDateTime(entry.createdAt) }}</small></span>
+          <span class="status" [class.inactive]="entry.outcome !== 'success'">{{ entry.outcome | titlecase }}</span>
+        </div>
+        <div class="config-empty" *ngIf="!historyLoading && history.length === 0">No records yet</div>
+        <p class="form-error" *ngIf="historyError">{{ historyError }}</p>
+      </section>
+
       <section class="configuration-panel" *ngIf="activeTab === 'Employee Roles'">
         <div class="assignment-row" *ngFor="let role of configuration.roles"><label><input type="checkbox" [(ngModel)]="role.assigned" />{{ role.name }}</label></div>
         <div class="config-empty" *ngIf="!configurationLoading && configuration.roles.length === 0">No roles yet</div>
+      </section>
+
+      <section class="configuration-panel branch-access-panel" *ngIf="activeTab === 'Branch Access'">
+        <div class="config-empty" *ngIf="branchAccessLoading">Loading…</div>
+        <div class="login-provision-grid" *ngIf="!branchAccessLoading && branchAccessLoaded && !branchAccess.linkedLogin">
+          <label>Login ID<input autocomplete="off" [(ngModel)]="loginProvision.loginId" /></label>
+          <label>Email<input type="email" autocomplete="off" [(ngModel)]="loginProvision.email" /></label>
+          <label>Initial password<input type="password" autocomplete="new-password" [(ngModel)]="loginProvision.initialPassword" /></label>
+          <label>Role<select [(ngModel)]="loginProvision.roleId"><option value="">Select role</option><option *ngFor="let role of branchAccess.roles" [value]="role.id">{{ role.name }}</option></select></label>
+          <label class="wide">Default branch<input [value]="loginDefaultBranch?.branchName || selectedBranchId" readonly /></label>
+          <div class="config-empty wide" *ngIf="branchAccess.roles.length === 0">No roles yet</div>
+        </div>
+        <ng-container *ngIf="!branchAccessLoading && branchAccess.linkedLogin">
+          <div class="login-access-summary"><span><strong>{{ branchAccess.loginId }}</strong><small>{{ branchAccess.email }}</small></span><span class="status" [class.inactive]="!branchAccess.mustChangePassword">{{ branchAccess.mustChangePassword ? 'Password change required' : 'Active login' }}</span></div>
+          <div class="branch-access-toolbar">
+            <label>Region<select [(ngModel)]="branchAccessRegion" (ngModelChange)="setBranchHierarchyFilter('region')"><option value="">All regions</option><option *ngFor="let value of branchAccessRegions" [value]="value">{{ value }}</option></select></label>
+            <label>Zone<select [(ngModel)]="branchAccessZone" (ngModelChange)="setBranchHierarchyFilter('zone')"><option value="">All zones</option><option *ngFor="let value of branchAccessZones" [value]="value">{{ value }}</option></select></label>
+            <label>Cluster<select [(ngModel)]="branchAccessCluster"><option value="">All clusters</option><option *ngFor="let value of branchAccessClusters" [value]="value">{{ value }}</option></select></label>
+            <input type="search" aria-label="Search branch access" placeholder="Search branches" [(ngModel)]="branchAccessSearch" />
+          </div>
+          <div class="branch-access-bulk">
+            <label>Role<select [(ngModel)]="bulkBranchRoleId"><option value="">Select role</option><option *ngFor="let role of branchAccess.roles" [value]="role.id">{{ role.name }}</option></select></label>
+            <label>Access<select [(ngModel)]="bulkBranchAccessType"><option value="permanent">Permanent</option><option value="deputation">Deputation</option></select></label>
+            <label *ngIf="bulkBranchAccessType === 'deputation'">From<as-date-picker ariaLabel="Bulk deputation start date" [(value)]="bulkBranchValidFrom"></as-date-picker></label>
+            <label *ngIf="bulkBranchAccessType === 'deputation'">Until<as-date-picker ariaLabel="Bulk deputation end date" [(value)]="bulkBranchValidUntil"></as-date-picker></label>
+            <button type="button" (click)="applyFilteredBranchAccess()">Assign filtered</button>
+            <button type="button" (click)="clearFilteredBranchAccess()">Clear filtered</button>
+          </div>
+          <div class="branch-access-row" *ngFor="let branch of filteredBranchAccess">
+            <label class="branch-active"><input type="checkbox" [(ngModel)]="branch.active" (ngModelChange)="toggleBranchAccess(branch)" />Active</label>
+            <span class="branch-access-name"><strong>{{ branch.branchName }}</strong><small>{{ branch.regionName || 'Unassigned' }}<ng-container *ngIf="branch.zoneName"> · {{ branch.zoneName }}</ng-container><ng-container *ngIf="branch.clusterName"> · {{ branch.clusterName }}</ng-container></small><small>{{ branch.effective ? 'Effective now' : branch.active ? 'Scheduled or expired' : branch.branchId }}</small></span>
+            <label>Role<select [(ngModel)]="branch.roleId" [disabled]="!branch.active"><option [ngValue]="null">Select role</option><option *ngFor="let role of branchAccess.roles" [value]="role.id">{{ role.name }}</option></select></label>
+            <label>Access<select [(ngModel)]="branch.accessType" [disabled]="!branch.active" (ngModelChange)="setBranchAccessType(branch)"><option value="permanent">Permanent</option><option value="deputation">Deputation</option></select></label>
+            <div class="deputation-dates" *ngIf="branch.accessType === 'deputation'">
+              <label>From<as-date-picker ariaLabel="Deputation start date" [disabled]="!branch.active" [value]="branch.validFrom || ''" (valueChange)="branch.validFrom = $event || null"></as-date-picker></label>
+              <label>Until<as-date-picker ariaLabel="Deputation end date" [disabled]="!branch.active" [value]="branch.validUntil || ''" (valueChange)="branch.validUntil = $event || null"></as-date-picker></label>
+            </div>
+            <label class="branch-default"><input type="radio" name="defaultBranchAccess" [checked]="branch.isDefault" [disabled]="!branch.active" (change)="setDefaultBranchAccess(branch)" />Default</label>
+          </div>
+          <div class="config-empty" *ngIf="filteredBranchAccess.length === 0">No branches found</div>
+          <div class="config-empty" *ngIf="branchAccess.branches.length > 0 && branchAccess.roles.length === 0">No roles yet</div>
+        </ng-container>
+        <p class="form-error" *ngIf="branchAccessError">{{ branchAccessError }}</p>
       </section>
 
       <section class="configuration-panel" *ngIf="activeTab === 'Services' || activeTab === 'Products' || activeTab === 'Memberships' || activeTab === 'Packages'">
@@ -87,9 +203,86 @@
         </div>
         <div class="config-empty" *ngIf="configuration.leavePolicies.length === 0">No leave policies yet</div>
       </section>
-      <p class="form-error" *ngIf="activeTab !== 'General' && configurationError">{{ configurationError }}</p>
+      <p class="form-error" *ngIf="isConfigurationTab() && configurationError">{{ configurationError }}</p>
     </div>
-    <footer><button type="button" (click)="closeDrawer()">{{ detailPage ? 'Back to employees' : 'Cancel' }}</button><button class="primary" type="button" [disabled]="saving || profileLoading || configurationLoading || configurationSaving" (click)="activeTab === 'General' ? save() : saveConfiguration()">{{ saving || configurationSaving ? 'Saving…' : activeTab === 'General' ? 'Save employee' : 'Save configuration' }}</button></footer>
+    <footer><button type="button" (click)="closeDrawer()">{{ detailPage ? 'Back to employees' : 'Cancel' }}</button><button *ngIf="activeTab !== 'Documents' && activeTab !== 'History'" class="primary" type="button" [disabled]="saving || profileLoading || configurationLoading || configurationSaving || branchAccessLoading || branchAccessSaving" (click)="saveCurrentTab()">{{ saving || configurationSaving || branchAccessSaving ? 'Saving…' : isProfileTab() ? 'Save employee' : activeTab === 'Branch Access' ? (branchAccess.linkedLogin ? 'Save branch access' : 'Create login') : 'Save configuration' }}</button></footer>
+  </aside>
+
+  <div class="drawer-backdrop" *ngIf="bulkDrawerOpen" (click)="closeBulkDrawer()"></div>
+  <aside class="staff-drawer bulk-drawer" *ngIf="bulkDrawerOpen" aria-label="Bulk staff import">
+    <header><div><span class="section-label">Employee</span><h2>Bulk staff import</h2></div><button class="icon-button" type="button" aria-label="Close bulk import" (click)="closeBulkDrawer()">×</button></header>
+    <div class="drawer-body">
+      <div class="bulk-summary" *ngIf="bulkRows.length"><span><strong>{{ bulkRows.length }}</strong> validated rows</span><span>{{ bulkFileName }}</span></div>
+      <div class="bulk-result" *ngIf="bulkResult"><i class="bi bi-check-circle"></i><span><strong>Import complete</strong><small>{{ bulkResult.createdRows }} created · {{ bulkResult.updatedRows }} updated</small></span></div>
+      <div class="bulk-table" *ngIf="bulkRows.length">
+        <div class="bulk-table-head"><span>Code</span><span>Name</span><span>Job</span><span>Status</span></div>
+        <div class="bulk-table-row" *ngFor="let row of bulkRows | slice:0:50"><span>{{ row.employeeCode }}</span><span>{{ row.firstName }} {{ row.lastName || '' }}</span><span>{{ row.jobTitle || '—' }}</span><span>{{ row.active === false ? 'Inactive' : 'Active' }}</span></div>
+      </div>
+      <div class="config-empty" *ngIf="bulkRows.length > 50">First 50 of {{ bulkRows.length }} rows shown</div>
+      <p class="form-error" *ngIf="bulkError">{{ bulkError }}</p>
+    </div>
+    <footer><button type="button" (click)="downloadBulkTemplate()">Download template</button><button class="primary" type="button" [disabled]="bulkSaving || bulkRows.length === 0 || !!bulkResult" (click)="applyBulkImport()">{{ bulkSaving ? 'Importing…' : bulkResult ? 'Imported' : 'Import staff' }}</button></footer>
+  </aside>
+
+  <div class="drawer-backdrop" *ngIf="mastersDrawerOpen" (click)="closeMasters()"></div>
+  <aside class="staff-drawer masters-drawer" *ngIf="mastersDrawerOpen" aria-label="Staff masters">
+    <header><div><span class="section-label">Employee</span><h2>Staff masters</h2></div><button class="icon-button" type="button" aria-label="Close staff masters" (click)="closeMasters()">×</button></header>
+    <div class="drawer-body">
+      <nav class="employee-tabs" aria-label="Staff master sections"><button *ngFor="let tab of masterTabs" type="button" [class.active]="masterTab === tab" (click)="masterTab = tab">{{ tab }}</button></nav>
+      <div class="config-empty" *ngIf="mastersLoading">Loading…</div>
+
+      <section class="configuration-panel" *ngIf="!mastersLoading && masterTab === 'Categories'">
+        <div class="panel-heading"><h3>Staff categories</h3><button type="button" (click)="addCategory()">Add category</button></div>
+        <div class="config-grid master-category-grid" *ngFor="let item of masters.categories">
+          <label>Code<input [(ngModel)]="item.code" /></label>
+          <label>Name<input [(ngModel)]="item.name" (ngModelChange)="item.name = titleCase($event)" /></label>
+          <label>Default designation<input [(ngModel)]="item.designation" (ngModelChange)="item.designation = titleCase($event)" /></label>
+          <label class="inline-check"><input type="checkbox" [(ngModel)]="item.active" />Active</label>
+        </div>
+        <div class="config-empty" *ngIf="masters.categories.length === 0">No records yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="!mastersLoading && masterTab === 'Leave Policies'">
+        <div class="panel-heading"><h3>Employee leave policies</h3></div>
+        <div class="master-policy-row" *ngFor="let policy of masters.leavePolicies">
+          <span><strong>{{ policy.staffName }}</strong><small>{{ policy.employeeCode || '—' }}</small></span>
+          <span>{{ policy.name }}</span><span>{{ policy.leaveType | titlecase }}</span><span>{{ policy.annualDays }} days</span>
+          <span class="status" [class.inactive]="!policy.active">{{ policy.active ? 'Active' : 'Inactive' }}</span>
+          <button type="button" (click)="editLeavePolicy(policy.staffId)">Edit</button>
+        </div>
+        <div class="config-empty" *ngIf="masters.leavePolicies.length === 0">No records yet</div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="!mastersLoading && masterTab === 'Attendance Rules' && masters.attendanceRule as rule">
+        <div class="panel-heading"><h3>Attendance rules</h3></div>
+        <div class="form-section master-rule-grid">
+          <label>Late grace (minutes)<input type="number" min="0" [(ngModel)]="rule.graceMinutes" /></label>
+          <label>Half day after (minutes)<input type="number" min="0" [(ngModel)]="rule.halfDayAfterMinutes" /></label>
+          <label>Absent after (minutes)<input type="number" min="0" [(ngModel)]="rule.absentAfterMinutes" /></label>
+          <label>Overtime starts after (minutes)<input type="number" min="0" [(ngModel)]="rule.overtimeAfterMinutes" /></label>
+          <label>Early leave grace (minutes)<input type="number" min="0" [(ngModel)]="rule.earlyLeaveGraceMinutes" /></label>
+          <label>Minimum overtime (minutes)<input type="number" min="0" [(ngModel)]="rule.minimumOvertimeMinutes" /></label>
+          <label>Overtime rounding<select [(ngModel)]="rule.overtimeRoundingMinutes"><option [ngValue]="0">No rounding</option><option [ngValue]="5">5 minutes</option><option [ngValue]="10">10 minutes</option><option [ngValue]="15">15 minutes</option><option [ngValue]="30">30 minutes</option><option [ngValue]="60">60 minutes</option></select></label>
+          <label>Maximum overtime (minutes)<input type="number" min="0" [(ngModel)]="rule.maximumOvertimeMinutes" /></label>
+          <label class="inline-check"><input type="checkbox" [(ngModel)]="rule.deductBreaks" />Deduct recorded breaks</label>
+          <label class="inline-check"><input type="checkbox" [(ngModel)]="rule.active" />Active</label>
+        </div>
+      </section>
+
+      <section class="configuration-panel" *ngIf="!mastersLoading && masterTab === 'Shift Templates'">
+        <div class="panel-heading"><h3>Shift templates</h3><button type="button" (click)="addShiftTemplate()">Add shift</button></div>
+        <div class="config-grid master-shift-grid" *ngFor="let shift of masters.shiftTemplates">
+          <label>Code<input [(ngModel)]="shift.code" /></label><label>Name<input [(ngModel)]="shift.name" (ngModelChange)="shift.name = titleCase($event)" /></label>
+          <label>Shift 1 start<input type="time" [(ngModel)]="shift.shift1Start" /></label><label>Shift 1 end<input type="time" [(ngModel)]="shift.shift1End" /></label>
+          <label>Shift 2 start<input type="time" [(ngModel)]="shift.shift2Start" /></label><label>Shift 2 end<input type="time" [(ngModel)]="shift.shift2End" /></label>
+          <label>Break (minutes)<input type="number" min="0" [(ngModel)]="shift.breakMinutes" /></label><label class="inline-check"><input type="checkbox" [(ngModel)]="shift.active" />Active</label>
+          <div class="weekday-field"><span>Weekly off</span><label *ngFor="let day of weekdays"><input type="checkbox" [checked]="shift.weeklyOffDays.includes(day.value)" (change)="toggleWeeklyOff(shift, day.value, $any($event.target).checked)" />{{ day.label }}</label></div>
+        </div>
+        <div class="config-empty" *ngIf="masters.shiftTemplates.length === 0">No records yet</div>
+      </section>
+      <p class="form-error" *ngIf="mastersError">{{ mastersError }}</p><p class="form-success" *ngIf="mastersSuccess">{{ mastersSuccess }}</p>
+    </div>
+    <footer><button type="button" (click)="closeMasters()">Cancel</button><button class="primary" type="button" [disabled]="mastersSaving || mastersLoading" (click)="saveMasters()">{{ mastersSaving ? 'Saving…' : 'Save masters' }}</button></footer>
   </aside>
 
   <div class="password-backdrop" *ngIf="passwordModalOpen"></div>
