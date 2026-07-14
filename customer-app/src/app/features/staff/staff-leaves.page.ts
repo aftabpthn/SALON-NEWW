@@ -24,7 +24,7 @@ import { StaffAppService, StaffLeave, StaffLeaveBalance } from "../../core/staff
           <div class="panel-title"><h2>Request leave</h2><span>{{ canRequestLeave() ? 'enabled' : 'view only' }}</span></div>
           @if (!canRequestLeave()) { <p class="muted">You can view leave data, but your role cannot submit leave requests.</p> }
           <div class="form-grid"><label>Type<input [(ngModel)]="leaveType" placeholder="casual" /></label><label>From<input [(ngModel)]="leaveStart" type="date" /></label><label>To<input [(ngModel)]="leaveEnd" type="date" /></label><label>Reason<input [(ngModel)]="leaveReason" placeholder="Reason" /></label></div>
-          <button class="link-button" type="button" [disabled]="!canRequestLeave()" (click)="requestLeave()">Send request</button>
+          <button class="link-button" type="button" [disabled]="!canRequestLeave() || submitting()" (click)="requestLeave()">{{ submitting() ? 'Sending...' : 'Send request' }}</button>
         </section>
       }
     </section>`,
@@ -34,6 +34,7 @@ export class StaffLeavesPage implements OnInit {
   readonly leaves = signal<StaffLeave[]>([]);
   readonly balances = signal<StaffLeaveBalance[]>([]);
   readonly loading = signal(false);
+  readonly submitting = signal(false);
   readonly message = signal("");
   leaveType = "casual";
   leaveStart = new Date().toISOString().slice(0, 10);
@@ -61,6 +62,7 @@ export class StaffLeavesPage implements OnInit {
   }
 
   async requestLeave() {
+    if (this.submitting()) return;
     this.message.set("");
     if (!this.canRequestLeave()) {
       this.message.set("You do not have permission to request leave.");
@@ -74,10 +76,21 @@ export class StaffLeavesPage implements OnInit {
       this.message.set("Leave end date cannot be before start date.");
       return;
     }
-    await this.staff.requestLeave({ leaveType: this.leaveType.trim(), startDate: this.leaveStart, endDate: this.leaveEnd, reason: this.leaveReason.trim() });
-    this.leaveReason = "";
-    this.message.set("Leave request sent.");
-    await this.load();
+    this.submitting.set(true);
+    try {
+      const result = await this.staff.requestLeave({ leaveType: this.leaveType.trim(), startDate: this.leaveStart, endDate: this.leaveEnd, reason: this.leaveReason.trim() }) as { queued?: boolean; duplicate?: boolean };
+      this.leaveReason = "";
+      if (result?.queued) {
+        this.message.set("You are offline. Leave request queued and will send after reconnecting.");
+        return;
+      }
+      this.message.set(result?.duplicate ? "This leave request is already pending." : "Leave request sent.");
+      await this.load();
+    } catch {
+      // StaffAppService exposes the API error through staff.error().
+    } finally {
+      this.submitting.set(false);
+    }
   }
 
   canReadLeaves(): boolean {
