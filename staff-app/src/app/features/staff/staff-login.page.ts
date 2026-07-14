@@ -83,11 +83,11 @@ import { StaffAppService } from "../../core/staff-app.service";
     .staff-form { display: grid; gap: 12px; margin-top: 20px; }
     .floating-field { position: relative; min-width: 0; }
     .floating-field > svg { position: absolute; z-index: 2; top: 50%; left: 18px; width: 20px; height: 20px; transform: translateY(-50%); fill: currentColor; color: #64748b; pointer-events: none; transition: color 180ms ease; }
-    .floating-field input { width: 100%; min-height: var(--staff-input-height); border: 1px solid var(--staff-input-border); border-radius: var(--staff-input-radius); padding: 25px 50px 7px; color: var(--staff-input-text); background: var(--staff-input-background); font-size: 16px; font-weight: 500; line-height: 20px; caret-color: var(--staff-input-focus); transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease; }
+    .floating-field input { box-sizing: border-box; width: 100%; height: var(--staff-input-height); min-height: var(--staff-input-height); border: 1px solid var(--staff-input-border); border-radius: var(--staff-input-radius); padding: 24px 50px 5px; color: var(--staff-input-text); background: var(--staff-input-background); font-size: 16px; font-weight: 500; line-height: 20px; caret-color: var(--staff-input-focus); transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease; }
     .floating-field input::placeholder { color: transparent; font-size: 15px; font-weight: 400; transition: color 180ms ease; }
     .floating-field label { position: absolute; z-index: 2; top: 50%; left: 50px; max-width: calc(100% - 106px); overflow: hidden; transform: translateY(-50%); transform-origin: left center; color: var(--staff-input-label); font-size: 14px; font-weight: 600; line-height: 1; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; transition: top 180ms ease, transform 180ms ease, color 180ms ease; }
-    .floating-field input:focus, .floating-field input:not(:placeholder-shown) { padding-top: 25px; padding-bottom: 7px; }
-    .floating-field input:focus + label, .floating-field input:not(:placeholder-shown) + label { top: 8px; transform: translateY(0) scale(.78); }
+    .floating-field input:focus, .floating-field input:not(:placeholder-shown) { padding-top: 24px; padding-bottom: 5px; }
+    .floating-field input:focus + label, .floating-field input:not(:placeholder-shown) + label { top: 7px; transform: none; font-size: 11px; }
     .floating-field input:focus::placeholder { color: var(--staff-input-placeholder); }
     .floating-field:focus-within > svg, .floating-field:focus-within label { color: var(--staff-input-focus); }
     .floating-field input:hover { border-color: #b9d5c2; }
