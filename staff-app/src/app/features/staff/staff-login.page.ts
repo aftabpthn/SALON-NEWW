@@ -83,16 +83,18 @@ import { StaffAppService } from "../../core/staff-app.service";
     .staff-form { display: grid; gap: 12px; margin-top: 20px; }
     .floating-field { position: relative; min-width: 0; }
     .floating-field > svg { position: absolute; z-index: 2; top: 50%; left: 18px; width: 20px; height: 20px; transform: translateY(-50%); fill: currentColor; color: #64748b; pointer-events: none; transition: color 180ms ease; }
-    .floating-field input { width: 100%; min-height: var(--staff-input-height); border: 1px solid var(--staff-input-border); border-radius: var(--staff-input-radius); padding: 23px 50px 9px; color: var(--staff-input-text); background: var(--staff-input-background); font-size: 16px; font-weight: 500; line-height: 1.35; caret-color: var(--staff-input-focus); transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease; }
+    .floating-field input { width: 100%; min-height: var(--staff-input-height); border: 1px solid var(--staff-input-border); border-radius: var(--staff-input-radius); padding: 25px 50px 7px; color: var(--staff-input-text); background: var(--staff-input-background); font-size: 16px; font-weight: 500; line-height: 20px; caret-color: var(--staff-input-focus); transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease; }
     .floating-field input::placeholder { color: transparent; font-size: 15px; font-weight: 400; transition: color 180ms ease; }
     .floating-field label { position: absolute; z-index: 2; top: 50%; left: 50px; max-width: calc(100% - 106px); overflow: hidden; transform: translateY(-50%); transform-origin: left center; color: var(--staff-input-label); font-size: 14px; font-weight: 600; line-height: 1; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; transition: top 180ms ease, transform 180ms ease, color 180ms ease; }
-    .floating-field input:focus, .floating-field input:not(:placeholder-shown) { padding-top: 23px; padding-bottom: 9px; }
-    .floating-field input:focus + label, .floating-field input:not(:placeholder-shown) + label { top: 12px; transform: translateY(0) scale(.82); }
+    .floating-field input:focus, .floating-field input:not(:placeholder-shown) { padding-top: 25px; padding-bottom: 7px; }
+    .floating-field input:focus + label, .floating-field input:not(:placeholder-shown) + label { top: 8px; transform: translateY(0) scale(.78); }
     .floating-field input:focus::placeholder { color: var(--staff-input-placeholder); }
     .floating-field:focus-within > svg, .floating-field:focus-within label { color: var(--staff-input-focus); }
     .floating-field input:hover { border-color: #b9d5c2; }
     .floating-field input:focus { border: 2px solid var(--staff-input-focus); outline: 0; box-shadow: 0 0 0 4px var(--staff-input-focus-ring); background: #fff; }
     .floating-field input:disabled { border-color: var(--staff-input-border); background: var(--staff-input-disabled-background); color: var(--staff-input-disabled-text); cursor: not-allowed; opacity: 1; }
+    .floating-field input:-webkit-autofill { -webkit-text-fill-color: var(--staff-input-text); box-shadow: 0 0 0 1000px var(--staff-input-background) inset; caret-color: var(--staff-input-focus); }
+    .floating-field input:-webkit-autofill:focus { box-shadow: 0 0 0 1000px #fff inset, 0 0 0 4px var(--staff-input-focus-ring); }
     .floating-field input:active { transform: scale(.995); }
     .password-field input { padding-right: 60px; }
     .password-toggle { position: absolute; z-index: 3; top: 0; right: 0; display: grid; place-items: center; width: 56px; min-height: 56px; margin: 0; padding: 0; border: 0; border-radius: 0 var(--staff-input-radius) var(--staff-input-radius) 0; background: transparent; color: #64748b; }
