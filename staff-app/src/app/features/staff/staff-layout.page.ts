@@ -98,7 +98,6 @@ type StaffRecentItem = { label: string; path: string };
         <button type="button" class="drawer-backdrop open" (click)="closeNotifications()" aria-label="Close notifications"></button>
         <aside class="notification-drawer open" role="dialog" aria-modal="true" aria-labelledby="staff-notifications-title" tabindex="-1" #notificationDialog (keydown)="trapFocus($event, notificationDialog)">
           <div class="drawer-title"><strong id="staff-notifications-title">Notifications</strong><button type="button" (click)="closeNotifications()">Close</button></div>
-          @if (os()?.aiCoach?.[0]; as card) { <p class="ai-brief"><b>{{ card.title }}</b><br />{{ card.body }}</p> }
           <div class="notice-list">
             @for (note of os()?.notifications || []; track note.id) {
               <article><strong>{{ note.title }}</strong><small>{{ note.body || note.status }}</small><span>{{ note.status }}</span><button type="button" (click)="markNotification(note.id, note.status === 'read' ? 'unread' : 'read')">{{ note.status === 'read' ? 'Mark unread' : 'Mark read' }}</button></article>
@@ -189,7 +188,6 @@ type StaffRecentItem = { label: string; path: string };
     .command-list strong, .command-list small { display: block; color: var(--staff-text); }
     .command-list small { color: var(--staff-text-secondary); }
      .notification-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(420px, 92vw); box-sizing: border-box; overflow: auto; padding: 14px; background: var(--staff-background); box-shadow: var(--staff-shadow-elevated); overscroll-behavior: contain; animation: shell-drawer-enter var(--staff-motion-standard) var(--staff-motion-ease) both; }
-    .ai-brief { margin: 12px 0; padding: 12px; border: 1px solid var(--staff-border-accent); border-radius: 16px; color: var(--staff-primary-hover); background: var(--staff-primary-light); font-weight: 650; }
     .notice-list { display: grid; gap: 8px; }
     .notice-list article { padding: 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface); }
     .notice-list strong, .notice-list small, .notice-list span { display: block; }
@@ -303,13 +301,11 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "read:staff" },
     { label: "Clients", path: "/staff/clients", iconPath: "M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.7 0-1.1.1 1.1.8 2.1 1.9 2.1 3.4V19h6v-2.5C23 14.2 18.3 13 16 13z", group: "Clients", permission: "read:clients" },
     { label: "Client 360", path: "/staff/client-360", iconPath: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 17.9V17h-2v2.9A8 8 0 0 1 4.1 13H7v-2H4.1A8 8 0 0 1 11 4.1V7h2V4.1A8 8 0 0 1 19.9 11H17v2h2.9A8 8 0 0 1 13 19.9z", group: "Clients", permission: "read:clients" },
-    { label: "AI Coach", path: "/staff/ai-coach", iconPath: "M12 2 9.5 8H3l5.2 3.8L6 18l6-4 6 4-2.2-6.2L21 8h-6.5L12 2z", group: "Intelligence", permission: "read:staff" },
     { label: "Performance", path: "/staff/performance", iconPath: "M3 17h3v4H3v-4zm5-6h3v10H8V11zm5 3h3v7h-3v-7zm5-9h3v16h-3V5z", group: "Intelligence", permission: "read:staff" },
     { label: "Leaderboard", path: "/staff/leaderboard", iconPath: "M7 21h10v-2H7v2zM5 3h14v4a7 7 0 0 1-6 6.9V17h-2v-3.1A7 7 0 0 1 5 7V3zm2 2v2a5 5 0 0 0 10 0V5H7z", group: "Intelligence", permission: "read:staff" },
     { label: "Reports", path: "/staff/reports", iconPath: "M5 3h11l3 3v15H5V3zm10 1.5V7h2.5L15 4.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z", group: "Intelligence", permission: "read:staff" },
     { label: "Notifications", path: "/staff/notifications", iconPath: "M12 22a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 22zm7-6v-5a7 7 0 0 0-14 0v5l-2 2v1h18v-1l-2-2z", group: "Comms", permission: "read:staff" },
     { label: "Chat", path: "/staff/chat", iconPath: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z", group: "Comms", permission: "read:staff" },
-    { label: "Learning", path: "/staff/learning", iconPath: "M12 3 1 8l11 5 9-4.1V16h2V8L12 3zm-6 9v4c0 2 4 4 6 4s6-2 6-4v-4l-6 2.7L6 12z", group: "Growth", permission: "read:staff" },
     { label: "Payroll", path: "/staff/payroll", iconPath: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", group: "Account", anyPermissions: ["read:payroll", "read:finance"] },
     { label: "Leaves", path: "/staff/leaves", iconPath: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z", group: "Account", permission: "read:staff" },
     { label: "Profile", path: "/staff/profile", iconPath: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-6 1.7-6 3.8V20h12v-2.2c0-2.1-2.7-3.8-6-3.8z", group: "Account" },
@@ -320,9 +316,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const text = this.query().trim().toLowerCase();
     const navItems = this.visibleNav().map((item) => ({ ...item }));
     const notices = this.staff.hasPermission("read:staff") ? (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" })) : [];
-    const coach = this.staff.hasPermission("read:staff") ? (this.os()?.aiCoach || []).map((card) => ({ label: card.title, path: "/staff/ai-coach", iconPath: this.iconFor("AI Coach"), group: card.body })) : [];
     const business = this.staff.hasPermission("read:appointments") ? (this.os()?.timeline || []).map((item) => ({ label: item.clientName, path: "/staff/business", iconPath: this.iconFor("Business"), group: item.serviceNames?.join(", ") || "Appointment" })) : [];
-    const all = [...navItems, ...notices, ...coach, ...business];
+    const all = [...navItems, ...notices, ...business];
     if (!text) return all.slice(0, 12);
     return all
       .map((item) => ({ item, score: this.searchScore(item.label, item.group, text) }))

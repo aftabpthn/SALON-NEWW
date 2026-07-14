@@ -254,7 +254,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     return "We could not load your staff workspace. Please retry, or contact your administrator if the issue continues.";
   }
   private moduleError(module: DashboardModule): string {
-    const labels: Record<DashboardModule, string> = { enterprise: "Floor alerts and coaching are unavailable.", today: "Shift, attendance, and tasks are unavailable.", overtime: "Overtime totals are unavailable.", leave: "Leave balance is unavailable.", preferences: "Workspace preferences are unavailable." };
+    const labels: Record<DashboardModule, string> = { enterprise: "Floor alerts are unavailable.", today: "Shift, attendance, and tasks are unavailable.", overtime: "Overtime totals are unavailable.", leave: "Leave balance is unavailable.", preferences: "Workspace preferences are unavailable." };
     return labels[module];
   }
   private scopedKey(suffix: string): string { const user = this.staff.user(); return `auraStaff:${user?.id || user?.staffId || "unknown"}:${user?.branchId || "workspace"}:${suffix}`; }

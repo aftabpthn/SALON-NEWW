@@ -13,7 +13,6 @@ export type DashboardAction = {
 };
 export type DashboardMetric = { label: string; value: string; hint: string; route?: string; progress?: number; progressLabel?: string; explanation?: string };
 export type DashboardAlert = { id: string; title: string; detail: string; route: string; tone: "critical" | "attention" };
-export type DashboardCoachCard = { title: string; body: string; action: string; route: string };
 export type DashboardTool = { id: string; label: string; hint: string; route: string };
 export type DashboardWork = {
   mode: "active" | "upcoming" | "waiting" | "delayed" | "empty";
@@ -35,8 +34,6 @@ export type StaffDashboardViewModel = {
   overview: DashboardMetric[];
   work: DashboardWork;
   alerts: DashboardAlert[];
-  coachIntro: string;
-  coach: DashboardCoachCard[];
   performanceIntro: string;
   performanceRoute?: string;
   performance: DashboardMetric[];
@@ -100,7 +97,6 @@ const TOOLS: readonly RegistryItem<DashboardTool>[] = [
   { item: { id: "calendar", label: "Shift calendar", hint: "Roster and schedule", route: "/staff/calendar" }, permissions: ["read:staff"] },
   { item: { id: "clients", label: "Clients", hint: "Profiles, notes and history", route: "/staff/clients" }, permissions: ["read:clients"] },
   { item: { id: "leave", label: "Leave", hint: "Requests and balances", route: "/staff/leaves" }, permissions: ["read:staff"] },
-  { item: { id: "learning", label: "Learning", hint: "Modules and progress", route: "/staff/learning" }, permissions: ["read:staff"] },
   { item: { id: "chat", label: "Team chat", hint: "Staff conversations", route: "/staff/chat" }, permissions: ["read:staff"] },
   { item: { id: "reports", label: "Reports", hint: "Work summaries", route: "/staff/reports" }, permissions: ["read:staff"] },
   { item: { id: "payroll", label: "Payroll", hint: "Pay statements", route: "/staff/payroll" }, anyPermission: ["read:payroll", "read:finance"] },
@@ -116,11 +112,11 @@ type DashboardRoleProfile = {
 };
 
 const ROLE_PROFILES: readonly DashboardRoleProfile[] = [
-  { aliases: ["frontdesk", "receptionist"], quick: ["appointments", "queue", "tasks", "clients", "attendance"], overview: ["Alerts", "Appointments", "Open tasks", "Completed"], performance: ["Services", "Utilization", "Productivity", "Revenue"], tools: ["clients", "calendar", "chat", "reports", "leave", "learning", "payroll"] },
-  { aliases: ["stylist", "seniorstylist", "therapist", "staff", "staffappuser"], quick: ["attendance", "appointments", "queue", "tasks", "clients"], overview: ["Appointments", "Completed", "Open tasks", "Alerts"], performance: ["Productivity", "Services", "Utilization", "Rating", "Revenue"], tools: ["calendar", "clients", "leave", "learning", "chat", "reports", "payroll"] },
-  { aliases: ["manager", "salonmanager", "staffappmanager"], quick: ["tasks", "appointments", "queue", "clients", "attendance"], overview: ["Alerts", "Open tasks", "Appointments", "Completed"], performance: ["Productivity", "Utilization", "Services", "Revenue", "Rating"], tools: ["reports", "calendar", "clients", "chat", "payroll", "leave", "learning"] },
-  { aliases: ["owner", "admin", "staffappadmin"], quick: ["appointments", "tasks", "queue", "clients", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Productivity", "Utilization", "Services", "Rating"], tools: ["reports", "payroll", "calendar", "clients", "chat", "leave", "learning"] },
-  { aliases: ["cashier", "inventory", "inventorymanager", "cashierinventory"], quick: ["queue", "appointments", "tasks", "clients", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Services", "Utilization", "Productivity", "Rating"], tools: ["reports", "payroll", "clients", "calendar", "chat", "leave", "learning"] }
+  { aliases: ["frontdesk", "receptionist"], quick: ["appointments", "queue", "tasks", "clients", "attendance"], overview: ["Alerts", "Appointments", "Open tasks", "Completed"], performance: ["Services", "Utilization", "Productivity", "Revenue"], tools: ["clients", "calendar", "chat", "reports", "leave", "payroll"] },
+  { aliases: ["stylist", "seniorstylist", "therapist", "staff", "staffappuser"], quick: ["attendance", "appointments", "queue", "tasks", "clients"], overview: ["Appointments", "Completed", "Open tasks", "Alerts"], performance: ["Productivity", "Services", "Utilization", "Rating", "Revenue"], tools: ["calendar", "clients", "leave", "chat", "reports", "payroll"] },
+  { aliases: ["manager", "salonmanager", "staffappmanager"], quick: ["tasks", "appointments", "queue", "clients", "attendance"], overview: ["Alerts", "Open tasks", "Appointments", "Completed"], performance: ["Productivity", "Utilization", "Services", "Revenue", "Rating"], tools: ["reports", "calendar", "clients", "chat", "payroll", "leave"] },
+  { aliases: ["owner", "admin", "staffappadmin"], quick: ["appointments", "tasks", "queue", "clients", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Productivity", "Utilization", "Services", "Rating"], tools: ["reports", "payroll", "calendar", "clients", "chat", "leave"] },
+  { aliases: ["cashier", "inventory", "inventorymanager", "cashierinventory"], quick: ["queue", "appointments", "tasks", "clients", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Services", "Utilization", "Productivity", "Rating"], tools: ["reports", "payroll", "clients", "calendar", "chat", "leave"] }
 ];
 
 const DEFAULT_ROLE_PROFILE: DashboardRoleProfile = {
@@ -370,33 +366,6 @@ export function shouldShowDashboardRecommendation(state: DashboardRecommendation
     && recommendationText !== normalizedRecommendationValue(primary.label);
 }
 
-function coachCards(input: ActionContext, workItem: DashboardWork): DashboardCoachCard[] {
-  if (!input.hasPermission("read:staff")) return [];
-  const cards: DashboardCoachCard[] = [];
-  const add = (card: DashboardCoachCard) => { if (!cards.some((item) => item.route === card.route && item.title === card.title)) cards.push(card); };
-  const canOpenAttendance = ATTENDANCE_PERMISSIONS.some(input.hasPermission);
-  if (input.today?.schedules.length && !input.openAttendance && !input.shiftCompleted && canOpenAttendance) {
-    add({ title: "Attendance required", body: "Your scheduled shift is ready to start.", action: "Open attendance", route: "/staff/attendance" });
-  }
-  if (workItem.mode === "waiting") {
-    add({ title: "Client waiting", body: `${workItem.title} is ready for ${workItem.detail.split(" · ")[0].toLowerCase()}.`, action: "Open appointment", route: "/staff/appointments" });
-  } else if (workItem.mode === "active") {
-    const open = workItem.actions.find((action) => !!action.route);
-    if (open?.route && typeof open.route === "string") add({ title: "Service in progress", body: `${workItem.title}’s ${workItem.detail.toLowerCase()} is currently active.`, action: open.label, route: open.route });
-  } else if (workItem.mode === "delayed") {
-    add({ title: "Appointment needs attention", body: `${workItem.title} is past the scheduled start time.`, action: "Open appointment", route: "/staff/appointments" });
-  } else if (workItem.mode === "upcoming") {
-    add({ title: "Prepare for the next client", body: `${workItem.title} is scheduled for ${workItem.detail.split(" · ")[0].toLowerCase()}.`, action: "Open appointment", route: "/staff/appointments" });
-  }
-  if (input.priorityTask && taskPriority(input.priorityTask, input.now || new Date()) <= 1) {
-    add({ title: "Priority task", body: input.priorityTask.title || "A priority task needs follow-up.", action: "Open tasks", route: "/staff/tasks" });
-  }
-  if (!cards.length && input.dashboard.todayAppointments.length && input.hasPermission("read:appointments")) {
-    add({ title: "Review today’s schedule", body: `${input.dashboard.todayAppointments.length} appointment${input.dashboard.todayAppointments.length === 1 ? " is" : "s are"} connected for today.`, action: "View schedule", route: "/staff/appointments" });
-  }
-  return cards.slice(0, 3);
-}
-
 function quickActionStatus(id: string, input: ActionContext): string | undefined {
   if (id === "appointments") return input.dashboard.summary.todayAppointments ? `${input.dashboard.summary.todayAppointments} today` : "No bookings";
   if (id === "queue") return input.dashboard.summary.liveAppointments ? `${input.dashboard.summary.liveAppointments} live` : "No live services";
@@ -413,7 +382,6 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   const availableTools = orderedTools(input);
   const visibleTools = availableTools.filter((item) => !input.hiddenToolIds?.has(item.id)).slice(0, 6).map((item) => {
     if (item.id === "leave") return { ...item, hint: `${input.leaveBalances.reduce((sum, balance) => sum + Number(balance.balance || 0), 0)} days available` };
-    if (item.id === "learning" && input.enterprise) return { ...item, hint: `Level ${input.enterprise.gamification.level || 0} · ${input.enterprise.gamification.points || 0} points` };
     if (item.id === "reports") return { ...item, hint: `${input.dashboard.summary.completedAppointments} completed today` };
     if (item.id === "calendar" && input.overtime) return { ...item, hint: `${durationLabel(input.overtime.weekMinutes)} overtime this week` };
     return item;
@@ -458,12 +426,10 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     progress: metric.progress === undefined ? undefined : Math.min(100, Math.max(0, Number(metric.progress) || 0))
   }));
   const workItem = work(ctx);
-  const coach = coachCards(ctx, workItem);
   const quickActions = orderByIds(quick, roleProfile(input).quick, (action) => action.id).slice(0, 4);
   return {
     hero: heroModel, quickActions, overview: orderedOverview.slice(0, 4), work: workItem, alerts: activeAlerts,
-    coachIntro: coach.length ? `Prioritized from today’s connected work and attendance records.` : "",
-    coach, performanceIntro: orderedPerformance.length ? "A concise view from connected performance records." : "",
+    performanceIntro: orderedPerformance.length ? "A concise view from connected performance records." : "",
     performanceRoute: input.hasPermission("read:staff") ? "/staff/performance" : undefined,
     performance: orderedPerformance, tools: visibleTools, availableTools
   };

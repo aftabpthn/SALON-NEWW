@@ -73,18 +73,6 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
       </section>
     }
 
-    @if (viewModel.coach.length) {
-      <section class="dashboard-section" aria-labelledby="coach-heading">
-        <div class="section-heading"><div><p class="eyebrow">Actionable guidance</p><h2 id="coach-heading">AI coach</h2></div><a routerLink="/staff/ai-coach">View coach</a></div>
-        <p class="section-intro">{{ viewModel.coachIntro }}</p>
-        <div class="coach-list">
-          @for (card of viewModel.coach; track card.title) {
-            <a class="coach-item" [routerLink]="card.route"><span>{{ $index + 1 }}</span><div><strong>{{ card.title }}</strong><small>{{ card.body }}</small></div><b>{{ card.action }} <i aria-hidden="true">→</i></b></a>
-          }
-        </div>
-      </section>
-    }
-
     @if (viewModel.performance.length) {
       <section class="dashboard-section performance-section" aria-labelledby="performance-heading">
         <div class="section-heading"><div><p class="eyebrow">Your progress</p><h2 id="performance-heading">Performance summary</h2></div>@if (viewModel.performanceRoute; as performanceRoute) { <a [routerLink]="performanceRoute">View details</a> }</div>
@@ -124,7 +112,6 @@ export class StaffDashboardSectionsComponent {
     clients: "M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.8 0-1.2.1 1.3.9 2.2 2 2.2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z",
     calendar: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z",
     leave: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z",
-    learning: "M12 3 1 8l11 5 9-4.1V16h2V8L12 3zm-6 9v4c0 2 4 4 6 4s6-2 6-4v-4l-6 2.7L6 12z",
     chat: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z",
     reports: "M5 3h11l3 3v15H5V3zm3 8h8v2H8v-2zm0 4h8v2H8v-2z",
     payroll: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",

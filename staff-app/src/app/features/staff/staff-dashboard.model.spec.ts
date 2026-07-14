@@ -13,7 +13,6 @@ const today: StaffToday = { date: "2026-07-14", schedules: [{ id: "shift-1", sch
 const enterprise: StaffEnterpriseOs = {
   staff: dashboard.staff,
   home: { greeting: "", todayAppointments: 1, expectedRevenue: 125000, tasks: 1, lateClients: 0, vipClients: 0, birthdayClients: 0, pendingPayments: 0, recentNotifications: 0, targetProgress: { label: "", targetValue: 0, achievedValue: 0, percentage: 0, remaining: 0 } },
-  aiCoach: [{ priority: "high", title: "Review client notes", body: "Prepare before the service.", action: "Open client profile" }, { priority: "medium", title: "Task focus", body: "Finish the follow-up.", action: "Open tasks" }, { priority: "low", title: "Practice", body: "Review your plan.", action: "Review" }, { priority: "low", title: "Extra", body: "Should not show.", action: "Review" }],
   timeline: [], serviceTimers: [], performance: { revenue: 125000, completedServices: 0, avgUtilization: 55, avgRating: 4.8, productivityScore: 72, strengths: [], opportunities: [] }, leaderboard: [], gamification: { points: 40, level: 2, stars: 1, dailyStreak: 1, monthlyStreak: 1, badges: [] }, notifications: [], tasks: [], calendar: [], reports: {}
 };
 
@@ -174,27 +173,6 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.quickActions.find((action) => action.id === "clients")?.status).toBe("Search profiles");
   });
 
-  it("builds at most three coach actions from connected state in operational priority", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"]));
-    expect(vm.coach).toHaveLength(3);
-    expect(vm.coach.map((card) => card.title)).toEqual(["Attendance required", "Prepare for the next client", "Priority task"]);
-    expect(vm.coach.map((card) => card.route)).toEqual(["/staff/attendance", "/staff/appointments", "/staff/tasks"]);
-    expect(vm.coach.every((card) => card.action.length > 0)).toBe(true);
-  });
-
-  it("never invents a missing-booking recommendation and hides coach when nothing is useful", () => {
-    const emptyDashboard = { ...dashboard, summary: { ...dashboard.summary, appointments: 0, todayAppointments: 0 }, todayAppointments: [], appointments: [] };
-    const fillerEnterprise = { ...enterprise, aiCoach: [{ priority: "high", title: "Morning summary", body: "0 appointments.", action: "Open the first booking" }] };
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { dashboard: emptyDashboard, enterprise: fillerEnterprise, today: { ...today, schedules: [], tasks: [] } }));
-    expect(vm.coach).toEqual([]);
-    expect(vm.coachIntro).toBe("");
-  });
-
-  it("does not expose coach routes without the section permission", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"]));
-    expect(vm.coach).toEqual([]);
-  });
-
   it("builds four backed overview metrics or a complete three-metric fallback", () => {
     const complete = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"]));
     const fallback = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"], { enterprise: null }));
@@ -213,9 +191,9 @@ describe("staff dashboard permission-first view model", () => {
   });
 
   it("honors authorized tool customization after permission filtering", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"], { hiddenToolIds: new Set(["chat", "clients"]), toolOrder: ["learning", "calendar"] }));
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"], { hiddenToolIds: new Set(["chat", "clients"]), toolOrder: ["calendar"] }));
     expect(vm.tools.some((tool) => tool.id === "chat" || tool.id === "clients")).toBe(false);
-    expect(vm.tools[0].id).toBe("learning");
+    expect(vm.tools[0].id).toBe("calendar");
     expect(vm.tools.length).toBeLessThanOrEqual(6);
   });
 

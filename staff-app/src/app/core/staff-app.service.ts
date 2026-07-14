@@ -121,7 +121,6 @@ export type StaffEnterpriseOs = {
     recentNotifications: number;
     targetProgress: { label: string; targetValue: number; achievedValue: number; percentage: number; remaining: number };
   };
-  aiCoach: Array<{ priority: string; title: string; body: string; action: string }>;
   timeline: Array<{ id: string; clientId: string; clientName: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number }>;
   serviceTimers: Array<{ appointmentId: string; clientName: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number }>;
   performance: { revenue: number; completedServices: number; avgUtilization: number; avgRating: number; productivityScore: number; strengths: string[]; opportunities: string[] };
@@ -332,8 +331,6 @@ export type StaffClientListItem = {
 
 export type StaffChatThread = { id: string; tenantId: string; branchId: string; title: string; channel: string; messageCount?: number; lastMessageAt?: string };
 export type StaffChatMessage = { id: string; threadId: string; senderStaffId: string; senderName: string; body: string; createdAt: string; readByJson?: string };
-export type StaffLearningModule = { id: string; title: string; description: string; category: string; durationMinutes: number; progressStatus: string; completedAt: string };
-export type StaffLearning = { modules: StaffLearningModule[]; summary: { total: number; completed: number; progress: number } };
 export type StaffWorkspacePreferences = {
   workspace: { workspaceName: string };
   localization: { timezone: string; locale: string };
@@ -654,14 +651,6 @@ export class StaffAppService {
 
   async sendChatMessage(threadId: string, body: string): Promise<StaffChatMessage> {
     return this.post<StaffChatMessage>("/staff-self/chat/messages", { threadId, body });
-  }
-
-  async learning(): Promise<StaffLearning> {
-    return this.get<StaffLearning>("/staff-self/learning");
-  }
-
-  async completeLearningModule(moduleId: string, status: "completed" | "open" = "completed"): Promise<StaffLearning> {
-    return this.patch<StaffLearning>(`/staff-self/learning/${encodeURIComponent(moduleId)}`, { status });
   }
 
   async today(date = staffBusinessDate()): Promise<StaffToday> {
