@@ -59,6 +59,18 @@
   --staff-bottom-clearance: calc(var(--staff-mobile-nav-height) + var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom) + 16px);
   --staff-radius-control: 14px;
   --staff-radius-card: 20px;
+  --staff-input-background: #f7fcf8;
+  --staff-input-border: #d7e9dd;
+  --staff-input-text: #1f2937;
+  --staff-input-placeholder: #8a97a3;
+  --staff-input-label: #475569;
+  --staff-input-disabled-background: #f1f5f3;
+  --staff-input-disabled-text: #94a3b8;
+  --staff-input-focus: #5f9e7a;
+  --staff-input-focus-ring: rgba(95, 158, 122, .16);
+  --staff-input-error-background: #fef2f2;
+  --staff-input-radius: 18px;
+  --staff-input-height: 56px;
   --staff-motion-fast: 180ms;
   --staff-motion-standard: 220ms;
   --staff-motion-ease: cubic-bezier(.2,.8,.2,1);

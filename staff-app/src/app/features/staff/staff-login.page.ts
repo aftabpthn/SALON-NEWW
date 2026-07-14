@@ -28,14 +28,30 @@ import { StaffAppService } from "../../core/staff-app.service";
           }
 
           <form class="staff-form" (ngSubmit)="login($event)">
-            <label for="staff-tenant-id">Tenant ID</label>
-            <input id="staff-tenant-id" [(ngModel)]="tenantId" name="tenantId" placeholder="tenant_aura" autocomplete="organization" />
+            <div class="floating-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v4h1a2 2 0 0 1 2 2v10h-7v-4H8v4H4Zm3-14h2V5H7v2Zm4 0h2V5h-2v2Zm-4 4h2V9H7v2Zm4 0h2V9h-2v2Zm4 2v2h2v-2h-2Zm0 6h2v-2h-2v2Z"></path></svg>
+              <input id="staff-tenant-id" [(ngModel)]="tenantId" name="tenantId" placeholder="tenant_aura" autocomplete="organization" />
+              <label for="staff-tenant-id">Tenant ID</label>
+            </div>
 
-            <label for="staff-login-id">Staff login ID</label>
-            <input id="staff-login-id" [(ngModel)]="loginId" name="loginId" placeholder="isha.staff" autocomplete="username" />
+            <div class="floating-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-5 0-9 2.5-9 5.5V22h18v-2.5C21 16.5 17 14 12 14Z"></path></svg>
+              <input id="staff-login-id" [(ngModel)]="loginId" name="loginId" placeholder="isha.staff" autocomplete="username" />
+              <label for="staff-login-id">Staff login ID</label>
+            </div>
 
-            <label for="staff-password">Password</label>
-            <input id="staff-password" [(ngModel)]="password" name="password" type="password" placeholder="Password" autocomplete="current-password" />
+            <div class="floating-field password-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9h-1V7A4 4 0 0 0 8 7v2H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm3 10.7V19h-2v-1.3a2 2 0 1 1 2 0Z"></path></svg>
+              <input id="staff-password" [(ngModel)]="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Password" autocomplete="current-password" />
+              <label for="staff-password">Password</label>
+              <button class="password-toggle" type="button" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'" [attr.aria-pressed]="showPassword()" (click)="showPassword.set(!showPassword())">
+                @if (showPassword()) {
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3.3 2 18.7 18.7-1.3 1.3-3.3-3.3A11.7 11.7 0 0 1 12 20C5 20 1 12 1 12a20 20 0 0 1 4.1-5.3L2 3.3 3.3 2Zm3.2 6.1A15.6 15.6 0 0 0 3.3 12c1 1.6 4.1 6 8.7 6 1.4 0 2.7-.4 3.8-.9l-2-2a4 4 0 0 1-5-5l-2.3-2Zm5.1-.1L16 12.4V12a4 4 0 0 0-4.4-4Zm.4-4c7 0 11 8 11 8a19.6 19.6 0 0 1-3.4 4.6l-1.4-1.4a16 16 0 0 0 2.5-3.2C19.7 10.4 16.6 6 12 6c-.8 0-1.6.1-2.3.4L8.1 4.8c1.2-.5 2.5-.8 3.9-.8Z"></path></svg>
+                } @else {
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C5 4 1 12 1 12s4 8 11 8 11-8 11-8-4-8-11-8Zm0 14c-4.6 0-7.7-4.4-8.7-6 1-1.6 4.1-6 8.7-6s7.7 4.4 8.7 6c-1 1.6-4.1 6-8.7 6Zm0-10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"></path></svg>
+                }
+              </button>
+            </div>
 
             <button type="submit" [disabled]="staff.loading()">
               @if (staff.loading()) { <ion-spinner name="crescent"></ion-spinner> } @else { Open staff app }
@@ -64,10 +80,25 @@ import { StaffAppService } from "../../core/staff-app.service";
     .eyebrow { position: relative; margin: 0 0 12px; color: var(--staff-primary-hover); font-size: .72rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
     .dark { color: var(--staff-primary); }
     h2 { margin: 0; color: var(--staff-text); font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1; letter-spacing: -.04em; }
-    .staff-form { display: grid; gap: 10px; margin-top: 20px; }
-    label { color: var(--staff-text); font-size: .82rem; font-weight: 700; }
-    input { min-height: 56px; border: 1px solid var(--staff-border); border-radius: 16px; padding: 0 15px; color: var(--staff-text); background: var(--staff-surface-secondary); font: inherit; font-weight: 650; }
-    input:focus { border-color: var(--staff-primary); outline: 3px solid var(--staff-focus-ring); }
+    .staff-form { display: grid; gap: 12px; margin-top: 20px; }
+    .floating-field { position: relative; min-width: 0; }
+    .floating-field > svg { position: absolute; z-index: 2; top: 50%; left: 18px; width: 20px; height: 20px; transform: translateY(-50%); fill: currentColor; color: #64748b; pointer-events: none; transition: color 180ms ease; }
+    .floating-field input { width: 100%; min-height: var(--staff-input-height); border: 1px solid var(--staff-input-border); border-radius: var(--staff-input-radius); padding: 23px 50px 9px; color: var(--staff-input-text); background: var(--staff-input-background); font-size: 16px; font-weight: 500; line-height: 1.35; caret-color: var(--staff-input-focus); transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease; }
+    .floating-field input::placeholder { color: transparent; font-size: 15px; font-weight: 400; transition: color 180ms ease; }
+    .floating-field label { position: absolute; z-index: 2; top: 50%; left: 50px; max-width: calc(100% - 106px); overflow: hidden; transform: translateY(-50%); transform-origin: left center; color: var(--staff-input-label); font-size: 14px; font-weight: 600; line-height: 1; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; transition: top 180ms ease, transform 180ms ease, color 180ms ease; }
+    .floating-field input:focus, .floating-field input:not(:placeholder-shown) { padding-top: 23px; padding-bottom: 9px; }
+    .floating-field input:focus + label, .floating-field input:not(:placeholder-shown) + label { top: 12px; transform: translateY(0) scale(.82); }
+    .floating-field input:focus::placeholder { color: var(--staff-input-placeholder); }
+    .floating-field:focus-within > svg, .floating-field:focus-within label { color: var(--staff-input-focus); }
+    .floating-field input:hover { border-color: #b9d5c2; }
+    .floating-field input:focus { border: 2px solid var(--staff-input-focus); outline: 0; box-shadow: 0 0 0 4px var(--staff-input-focus-ring); background: #fff; }
+    .floating-field input:disabled { border-color: var(--staff-input-border); background: var(--staff-input-disabled-background); color: var(--staff-input-disabled-text); cursor: not-allowed; opacity: 1; }
+    .floating-field input:active { transform: scale(.995); }
+    .password-field input { padding-right: 60px; }
+    .password-toggle { position: absolute; z-index: 3; top: 0; right: 0; display: grid; place-items: center; width: 56px; min-height: 56px; margin: 0; padding: 0; border: 0; border-radius: 0 var(--staff-input-radius) var(--staff-input-radius) 0; background: transparent; color: #64748b; }
+    .password-toggle:hover:not(:disabled), .password-toggle:focus-visible { border: 0; background: transparent; color: var(--staff-input-focus); }
+    .password-toggle:focus-visible { outline: 3px solid var(--staff-input-focus-ring); outline-offset: -5px; }
+    .password-toggle svg { width: 20px; height: 20px; fill: currentColor; }
     button { margin-top: 14px; min-height: 56px; border: 1px solid var(--staff-primary); border-radius: 16px; background: var(--staff-primary); color: var(--staff-on-primary); font-weight: 750; cursor: pointer; }
     button:hover:not(:disabled) { border-color: var(--staff-primary-hover); background: var(--staff-primary-hover); }
     button:disabled { cursor: progress; opacity: .72; }
@@ -77,11 +108,13 @@ import { StaffAppService } from "../../core/staff-app.service";
     .success { border-color: var(--staff-success-border); color: var(--staff-success-text); background: var(--staff-success-surface); }
     .customer-link { display: block; margin-top: 18px; color: var(--staff-primary-hover); font-weight: 700; text-align: center; text-decoration: none; }
     @media (max-width: 820px) { .login-grid { width: calc(100% - 40px); padding: 20px 0; } .staff-card { padding: 20px; } }
+    @media (prefers-reduced-motion: reduce) { .floating-field input, .floating-field label, .floating-field > svg, .floating-field input::placeholder { transition: none; } }
   `]
 })
 export class StaffLoginPage {
   readonly customerAppUrl = environment.customerAppUrl;
   readonly message = signal("");
+  readonly showPassword = signal(false);
   tenantId = "tenant_aura";
   loginId = "";
   password = "";
