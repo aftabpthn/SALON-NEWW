@@ -143,10 +143,17 @@ describe("staff dashboard permission-first view model", () => {
     const financial = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:finance"]));
     expect(restricted.performance.some((metric) => metric.label === "Revenue")).toBe(false);
     expect(restricted.alerts.some((alert) => alert.id === "payments")).toBe(false);
-    expect(financial.performance.some((metric) => metric.label === "Revenue")).toBe(true);
+    expect(restricted.performance.map((metric) => metric.label)).toEqual(["Productivity", "Services", "Utilization"]);
+    expect(financial.performance.map((metric) => metric.label)).toEqual(["Revenue", "Productivity", "Services"]);
     expect(financial.performance).toHaveLength(3);
-    expect(financial.performance.find((metric) => metric.label === "Revenue")?.value.replace(/\s/g, "")).toBe("₹1,250");
+    expect(financial.performance[0]).toMatchObject({ label: "Revenue", value: expect.stringMatching(/₹\s?1,250/), hint: "Today’s sales" });
     expect(financial.availableTools.some((tool) => tool.id === "payroll")).toBe(true);
+  });
+
+  it("formats dashboard summary revenue as integer paise with the shared formatter", () => {
+    const withPaise = { ...dashboard, summary: { ...dashboard.summary, revenue: 125099 } };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:finance"], { dashboard: withPaise }));
+    expect(vm.performance[0].value.replace(/\s/g, "")).toBe("₹1,250.99");
   });
 
   it("supports a custom restricted role using permissions rather than role defaults", () => {
@@ -203,7 +210,7 @@ describe("staff dashboard permission-first view model", () => {
     const vm = buildStaffDashboardViewModel(input(["read:appointments"], { dashboard: emptyDashboard, enterprise: null, today: emptyToday }));
     expect(vm).not.toHaveProperty("empty");
     expect(vm.work.mode).toBe("empty");
-    expect(vm.work).toMatchObject({ eyebrow: "Next client", meta: "Schedule clear", title: "No client waiting right now.", detail: "", scheduleRoute: "/staff/appointments" });
+    expect(vm.work).toMatchObject({ eyebrow: "Next client", meta: "Schedule clear", title: "No client waiting right now.", detail: "", scheduleRoute: "/staff/appointments", scheduleActionLabel: "View Schedule →" });
     expect(vm.overview[0]).toMatchObject({ value: "0", hint: "No bookings" });
   });
 });

@@ -25,6 +25,7 @@ export type DashboardWork = {
   progress?: number;
   queueRoute?: string;
   scheduleRoute?: string;
+  scheduleActionLabel?: string;
   actions: DashboardAction[];
 };
 
@@ -34,7 +35,6 @@ export type StaffDashboardViewModel = {
   overview: DashboardMetric[];
   work: DashboardWork;
   alerts: DashboardAlert[];
-  performanceIntro: string;
   performanceRoute?: string;
   performance: DashboardMetric[];
   tools: DashboardTool[];
@@ -264,7 +264,8 @@ function work(input: ActionContext): DashboardWork {
   return {
     mode: "empty", tone: "neutral", eyebrow: "Next client", title: "No client waiting right now.", detail: "", meta: "Schedule clear", actions: [],
     queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined,
-    scheduleRoute: input.hasPermission("read:appointments") ? "/staff/appointments" : undefined
+    scheduleRoute: input.hasPermission("read:appointments") ? "/staff/appointments" : undefined,
+    scheduleActionLabel: input.hasPermission("read:appointments") ? "View Schedule →" : undefined
   };
 }
 
@@ -418,9 +419,9 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   }
   if (FINANCIAL_PERMISSIONS.some(input.hasPermission)) {
     const value = input.dashboard.summary.revenue;
-    if (Number.isSafeInteger(value) && value >= 0) performance.push({ label: "Revenue", value: formatPaiseInr(value), hint: value ? "Recorded sales" : "No recorded sales", route: "/staff/business" });
+    if (Number.isSafeInteger(value) && value >= 0) performance.push({ label: "Revenue", value: formatPaiseInr(value), hint: "Today’s sales", route: "/staff/business" });
   }
-  const performanceOrder = FINANCIAL_PERMISSIONS.some(input.hasPermission) ? ["Revenue", ...roleProfile(input).performance] : roleProfile(input).performance;
+  const performanceOrder = ["Revenue", "Productivity", "Services", ...roleProfile(input).performance];
   const orderedPerformance = orderByIds(performance, performanceOrder, (metric) => metric.label).slice(0, 3).map((metric) => ({
     ...metric,
     progress: metric.progress === undefined ? undefined : Math.min(100, Math.max(0, Number(metric.progress) || 0))
@@ -429,7 +430,6 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   const quickActions = orderByIds(quick, roleProfile(input).quick, (action) => action.id).slice(0, 4);
   return {
     hero: heroModel, quickActions, overview: orderedOverview.slice(0, 4), work: workItem, alerts: activeAlerts,
-    performanceIntro: orderedPerformance.length ? "A concise view from connected performance records." : "",
     performanceRoute: input.hasPermission("read:staff") ? "/staff/performance" : undefined,
     performance: orderedPerformance, tools: visibleTools, availableTools
   };

@@ -57,7 +57,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
             @if (action.route) { <a class="button" [class.primary]="action.primary" [routerLink]="action.route">{{ action.label }}</a> }
             @else { <button type="button" class="link-button" [class.primary-action]="action.primary" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
           }
-          @if (viewModel.work.mode === 'empty' && viewModel.work.scheduleRoute; as scheduleRoute) { <a class="text-control" [routerLink]="scheduleRoute">View schedule</a> }
+          @if (viewModel.work.mode === 'empty' && viewModel.work.scheduleRoute; as scheduleRoute) { <a class="text-control" [routerLink]="scheduleRoute">{{ viewModel.work.scheduleActionLabel }}</a> }
         </div>
       </article>
     </section>
@@ -76,10 +76,9 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
     @if (viewModel.performance.length) {
       <section class="dashboard-section performance-section" aria-labelledby="performance-heading">
         <div class="section-heading"><div><p class="eyebrow">Your progress</p><h2 id="performance-heading">Performance summary</h2></div>@if (viewModel.performanceRoute; as performanceRoute) { <a [routerLink]="performanceRoute">View details</a> }</div>
-        <p class="section-intro">{{ viewModel.performanceIntro }}</p>
         <div class="performance-grid">
           @for (metric of viewModel.performance; track metric.label) {
-            <article [attr.title]="metric.explanation || null" [attr.aria-label]="metric.explanation ? metric.label + ': ' + metric.value + '. ' + metric.explanation : null"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small>
+            <article [attr.title]="metric.explanation || null" [attr.aria-label]="metric.explanation ? metric.label + ': ' + metric.value + '. ' + metric.explanation : null"><span class="metric-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(metric.label.toLowerCase())"></path></svg>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small>
               @if (metric.progress !== undefined) { <div class="metric-progress" role="progressbar" [attr.aria-label]="metric.progressLabel || metric.label" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="metric.progress"><i [style.width.%]="metric.progress"></i></div> }
             </article>
           }
@@ -89,9 +88,9 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
 
     @if (viewModel.availableTools.length) {
       <section class="dashboard-section more-tools" aria-labelledby="tools-heading">
-        <div class="section-heading"><div><p class="eyebrow">Your tools</p><h2 id="tools-heading">Pinned workspace</h2></div><button type="button" class="text-control" [attr.aria-expanded]="customizerOpen" (click)="customizerToggled.emit()">Customize</button></div>
+        <div class="section-heading"><div><p class="eyebrow">Your tools</p><h2 id="tools-heading">Pinned workspace</h2></div><button type="button" class="text-control customize-control" [attr.aria-expanded]="customizerOpen" (click)="customizerToggled.emit()"><span aria-hidden="true">⚙</span> Customize</button></div>
         @if (viewModel.tools.length) {
-           <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(tool.id)"></path></svg><span><strong>{{ tool.label }}</strong><small>{{ tool.hint }}</small></span></a> }</div>
+           <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route" [attr.title]="tool.label + ' — ' + tool.hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(tool.id)"></path></svg><span><strong>{{ tool.label }}</strong><small>{{ tool.hint }}</small></span></a> }</div>
         } @else { <p class="compact-empty">All optional tools are hidden. Use Customize to restore them.</p> }
         @if (customizerOpen) {
           <div class="tool-customizer" aria-label="Dashboard tool visibility">
@@ -114,6 +113,10 @@ export class StaffDashboardSectionsComponent {
     leave: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z",
     chat: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z",
     reports: "M5 3h11l3 3v15H5V3zm3 8h8v2H8v-2zm0 4h8v2H8v-2z",
+    revenue: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 16.9V17h-2v1.9A8 8 0 0 1 4.1 13H7v-2H4.1A8 8 0 0 1 11 4.1V7h2V4.1A8 8 0 0 1 19.9 11H17v2h2.9A8 8 0 0 1 13 18.9z",
+    productivity: "M4 19h16v2H4v-2zm1-3 4-4 3 3 6-7 1.5 1.3-7.4 8.6-3.1-3.1-2.6 2.6L5 16z",
+    services: "M5 4h14v3H5V4zm0 6h14v3H5v-3zm0 6h10v3H5v-3z",
+    utilization: "M4 19h3V9H4v10zm6 0h3V5h-3v14zm6 0h3V12h-3v7z",
     payroll: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
     settings: "M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7 7 0 0 0 7 6L4.6 5l-2 3.5 2 1.5a8 8 0 0 0 0 3l-2 1.5 2 3.5L7 17a7 7 0 0 0 2.6 1.5L10 21h4l.4-2.5A7 7 0 0 0 17 17l2.4 1 2-3.5-2-1.5zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"
   };
