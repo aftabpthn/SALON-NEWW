@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { StaffDashboard, StaffEnterpriseOs, StaffToday, StaffUser } from "../../core/staff-app.service";
-import { buildStaffDashboardViewModel, DashboardViewModelInput } from "./staff-dashboard.model";
+import { buildStaffDashboardViewModel, DashboardViewModelInput, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 
 const user: StaffUser = { id: "user-1", name: "Mira Sen", loginId: "mira", email: "mira@example.com", role: "custom-specialist", staffId: "staff-1", branchId: "branch-1", branchIds: ["branch-1"], permissions: [] };
 const appointment = { id: "appt-1", clientId: "client-1", clientName: "Anita", clientPhone: "", staffId: "staff-1", branchId: "branch-1", serviceIds: ["service-1"], serviceNames: ["Hair spa"], durationMinutes: 60, value: 120000, startAt: "2026-07-14T12:00:00.000Z", endAt: "2026-07-14T13:00:00.000Z", status: "confirmed", chair: "", source: "", notes: "" };
@@ -36,6 +36,16 @@ describe("staff dashboard permission-first view model", () => {
     expect(allowed.quickActions).toHaveLength(4);
     expect(allowed.quickActions.some((action) => allowed.hero.actions.some((hero) => hero.id === action.id || hero.route === action.route))).toBe(false);
     expect(restricted.quickActions.some((action) => action.id === "attendance")).toBe(false);
+    expect(allowed.hero.actions[1]?.label).toBe("View schedule");
+  });
+
+  it("deduplicates the hero recommendation and lets a partial warning take precedence", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"]));
+    const primary = vm.hero.actions[0];
+    const identity = [primary.id, primary.appointmentId || "", primary.route || "", vm.hero.title].join(":");
+    const recommendation = { identity, text: vm.hero.title, hero: vm.hero, hintsEnabled: true, dismissedIdentity: "", hasPartialWarning: false };
+    expect(shouldShowDashboardRecommendation(recommendation)).toBe(false);
+    expect(shouldShowDashboardRecommendation({ ...recommendation, identity: "distinct", text: "Review preparation", hasPartialWarning: true })).toBe(false);
   });
 
   it("prioritizes and acts on an active service after attendance", () => {
@@ -60,7 +70,7 @@ describe("staff dashboard permission-first view model", () => {
     expect(restricted.alerts.some((alert) => alert.id === "payments")).toBe(false);
     expect(financial.performance.some((metric) => metric.label === "Revenue")).toBe(true);
     expect(financial.performance).toHaveLength(3);
-    expect(financial.performance.find((metric) => metric.label === "Revenue")?.value).toMatch(/^₹/);
+    expect(financial.performance.find((metric) => metric.label === "Revenue")?.value.replace(/\s/g, "")).toBe("₹1,250");
     expect(financial.availableTools.some((tool) => tool.id === "payroll")).toBe(true);
   });
 

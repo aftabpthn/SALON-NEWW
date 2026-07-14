@@ -27,8 +27,8 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="quick-actions-heading">Quick actions</h2></div></div>
         <div class="quick-action-grid">
           @for (action of viewModel.quickActions; track action.id) {
-            @if (action.route) { <a [routerLink]="action.route"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg><span>{{ action.label }}</span></a> }
-            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg><span>{{ pendingLabel(action) }}</span></button> }
+            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span>{{ action.label }}</span></a> }
+            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span>{{ pendingLabel(action) }}</span></button> }
           }
         </div>
       </section>
@@ -46,7 +46,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
 
     <section class="dashboard-section" aria-labelledby="next-work-heading">
         <div class="section-heading"><div><p class="eyebrow">On the floor</p><h2 id="next-work-heading">{{ viewModel.work.mode === 'active' ? 'Current service' : 'Next work' }}</h2></div>@if (viewModel.work.queueRoute; as queueRoute) { <a [routerLink]="queueRoute">Open queue</a> }</div>
-      <article class="next-work-card" [class.active-work]="viewModel.work.mode === 'active'">
+      <article class="next-work-card" [class.active-work]="viewModel.work.mode === 'active'" [class.empty-work]="viewModel.work.mode === 'empty'">
         <div class="work-time"><span>{{ viewModel.work.eyebrow }}</span><b>{{ viewModel.work.meta }}</b></div>
         <div class="work-main"><h3>{{ viewModel.work.title }}</h3><p>{{ viewModel.work.detail }}</p>
           @if (viewModel.work.progress !== undefined) { <div class="timer-track" aria-label="Service progress"><span [style.width.%]="viewModel.work.progress"></span></div> }
@@ -54,7 +54,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <div class="work-actions">
           @if (viewModel.work.clientRoute) { <a class="button" [routerLink]="viewModel.work.clientRoute">Client details</a> }
           @if (viewModel.work.action; as action) { <button type="button" class="link-button primary-action" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
-          @if (viewModel.work.mode === 'empty' && viewModel.work.scheduleRoute; as scheduleRoute) { <a class="button" [routerLink]="scheduleRoute">View schedule</a> }
+          @if (viewModel.work.mode === 'empty' && viewModel.work.scheduleRoute; as scheduleRoute) { <a class="text-control" [routerLink]="scheduleRoute">View schedule</a> }
         </div>
       </article>
     </section>

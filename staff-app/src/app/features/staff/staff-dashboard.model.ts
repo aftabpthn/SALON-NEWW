@@ -39,6 +39,15 @@ export type StaffDashboardViewModel = {
   availableTools: DashboardTool[];
 };
 
+export type DashboardRecommendationState = {
+  identity: string;
+  text: string;
+  hero: StaffDashboardViewModel["hero"];
+  hintsEnabled: boolean;
+  dismissedIdentity: string;
+  hasPartialWarning: boolean;
+};
+
 export type DashboardViewModelInput = {
   user: StaffUser | null;
   dashboard: StaffDashboard;
@@ -215,7 +224,7 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
     title = `${input.openTaskCount} task${input.openTaskCount === 1 ? "" : "s"} to move forward`; detail = openTasks(input)[0]?.title || "Review assigned tasks.";
     actions.push({ id: "tasks", label: "Open tasks", route: "/staff/tasks", primary: true });
   }
-  if (input.hasPermission("read:appointments") && !actions.some((item) => item.route === "/staff/appointments")) actions.push({ id: "appointments", label: "View today", route: "/staff/appointments" });
+  if (input.hasPermission("read:appointments") && !actions.some((item) => item.route === "/staff/appointments")) actions.push({ id: "appointments", label: "View schedule", route: "/staff/appointments" });
   return { eyebrow: input.openAttendance ? "Clocked in" : "Today", title, detail, shift: shiftText, actions: actions.slice(0, 2) };
 }
 
@@ -238,6 +247,21 @@ function sameAction(left: DashboardAction, right: DashboardAction): boolean {
   if (!left.route || !right.route) return false;
   const routeKey = (route: string | readonly string[]) => Array.isArray(route) ? route.join("/") : route;
   return routeKey(left.route) === routeKey(right.route);
+}
+
+function normalizedRecommendationValue(value: string): string {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function shouldShowDashboardRecommendation(state: DashboardRecommendationState): boolean {
+  if (!state.identity || !state.hintsEnabled || state.dismissedIdentity === state.identity || state.hasPartialWarning) return false;
+  const primary = state.hero.actions.find((action) => action.primary) || state.hero.actions[0];
+  if (!primary) return true;
+  const actionIdentity = [primary.id, primary.appointmentId || "", primary.route || "", state.hero.title || ""].join(":");
+  const recommendationText = normalizedRecommendationValue(state.text);
+  return state.identity !== actionIdentity
+    && recommendationText !== normalizedRecommendationValue(state.hero.title)
+    && recommendationText !== normalizedRecommendationValue(primary.label);
 }
 
 function actionableCoachCard(card: StaffEnterpriseOs["aiCoach"][number]): boolean {
@@ -282,8 +306,9 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     );
   }
   if (FINANCIAL_PERMISSIONS.some(input.hasPermission)) {
-    const value = Number(input.enterprise?.home.expectedRevenue || input.dashboard.summary.revenue || 0);
-    if (value > 0) {
+    const value = [input.enterprise?.home.expectedRevenue, input.dashboard.summary.revenue]
+      .find((candidate): candidate is number => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0);
+    if (value !== undefined) {
       const revenue = { label: "Revenue", value: formatPaiseInr(value), hint: "Connected sales and bookings", route: "/staff/business" };
       if (performance.length >= 3) performance.splice(2, 1, revenue); else performance.push(revenue);
     }

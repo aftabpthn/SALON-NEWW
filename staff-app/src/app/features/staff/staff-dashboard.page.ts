@@ -2,7 +2,7 @@ import { Component, HostListener, OnDestroy, OnInit, computed, signal } from "@a
 import { Router } from "@angular/router";
 import { IonSpinner } from "@ionic/angular/standalone";
 import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
-import { DashboardAction, buildStaffDashboardViewModel } from "./staff-dashboard.model";
+import { DashboardAction, buildStaffDashboardViewModel, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 import { StaffDashboardSectionsComponent } from "./staff-dashboard-sections.component";
 
 type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferences";
@@ -98,7 +98,15 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   readonly recommendationText = computed(() => this.viewModel()?.hero.title || "Review today’s priorities");
   readonly showTip = computed(() => {
     const identity = this.recommendationIdentity();
-    return !!identity && this.preferences()?.defaults.staffHints !== false && this.dismissedRecommendation() !== identity;
+    const vm = this.viewModel();
+    return !!vm && shouldShowDashboardRecommendation({
+      identity,
+      text: this.recommendationText(),
+      hero: vm.hero,
+      hintsEnabled: this.preferences()?.defaults.staffHints !== false,
+      dismissedIdentity: this.dismissedRecommendation(),
+      hasPartialWarning: this.optionalErrors().length > 0
+    });
   });
 
   private loadGeneration = 0;
@@ -125,7 +133,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     this.initialLoading.set(!hasData);
     this.refreshing.set(hasData);
     this.blockingError.set("");
-    this.optionalErrors.set([]);
+    if (!hasData) this.optionalErrors.set([]);
     try {
       const dashboard = await this.staff.dashboard();
       if (generation !== this.loadGeneration) return;
