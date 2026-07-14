@@ -36,7 +36,8 @@ import { PaiseInrPipe } from "../../core/paise-inr.pipe";
             <button class="button" type="button" (click)="quickRange(0)">Today</button>
             <button class="button" type="button" (click)="quickRange(6)">7 days</button>
             <button class="button" type="button" (click)="quickRange(29)">30 days</button>
-            <button class="button" type="button" (click)="exportCsv()">Export CSV</button>
+            <button class="button" type="button" [disabled]="!dashboard()" (click)="exportCsv()">Export CSV</button>
+            <button class="button" type="button" [disabled]="!dashboard()" (click)="exportPdf()">Export PDF</button>
           </div>
         </section>
       }
@@ -169,6 +170,15 @@ export class StaffReportsPage implements OnInit {
     link.click();
     URL.revokeObjectURL(url);
     this.message.set("Report CSV exported.");
+  }
+
+  exportPdf() {
+    if (!this.canExportReports()) {
+      this.message.set("You do not have permission to export reports.");
+      return;
+    }
+    if (!this.dashboard()) return;
+    window.print();
   }
 
   private dateOffset(daysBack: number): string {

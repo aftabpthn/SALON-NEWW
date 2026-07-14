@@ -87,7 +87,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
             <button class="button" type="button" [disabled]="!activeFilterCount()" (click)="clearFilters()">Clear filters</button>
             @if (activeFilterCount()) { <span class="badge">{{ activeFilterCount() }} active {{ activeFilterCount() === 1 ? 'filter' : 'filters' }}</span> }
             <button class="button" type="button" [disabled]="exporting() || !business()?.pagination?.totalItems" (click)="exportCsv()">{{ exporting() ? 'Exporting…' : 'Export CSV' }}</button>
-            <button class="button" type="button" [disabled]="!business()?.pagination?.totalItems" (click)="printReport()">Print / PDF</button>
+            <button class="button" type="button" [disabled]="!business()?.pagination?.totalItems" (click)="printReport()">Export PDF</button>
           </div>
         </section>
       }
