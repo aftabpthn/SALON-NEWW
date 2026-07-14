@@ -1,9 +1,8 @@
 import { DatePipe } from "@angular/common";
 import { Component, computed, OnInit, signal } from "@angular/core";
-import { FormsModule } from "@angular/forms";
 import { RouterLink } from "@angular/router";
 import { IonSpinner } from "@ionic/angular/standalone";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffAppointment, StaffClient360, StaffDashboard } from "../../core/staff-app.service";
+import { isQueuedMutation, MutationResult, StaffAppService, StaffAppointment, StaffDashboard } from "../../core/staff-app.service";
 import { businessDate } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 
@@ -24,10 +23,10 @@ function istDateKey(value: string | Date): string {
 
 @Component({
   standalone: true,
-  imports: [PaiseInrPipe, DatePipe, FormsModule, RouterLink, IonSpinner],
+  imports: [PaiseInrPipe, DatePipe, RouterLink, IonSpinner],
   template: `
     <section class="page">
-      <header class="page-head"><div><p class="eyebrow">Appointments</p><h1>Appointments</h1><p>Assigned bookings with service actions and Client 360 links.</p></div></header>
+      <header class="page-head"><div><p class="eyebrow">Appointments</p><h1>Appointments</h1><p>Assigned bookings with service actions.</p></div></header>
       @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading appointments...</section> }
       @if (message()) { <section class="notice success">{{ message() }}</section> }
       @if (localError()) { <section class="notice">{{ localError() }}</section> }
@@ -60,7 +59,7 @@ function istDateKey(value: string | Date): string {
               <details class="appointment-list-item">
                 <summary>
                   <div class="appointment-list-copy">
-                  <strong>{{ item.clientName || 'Walk-in client' }}</strong>
+                  <strong>Assigned appointment</strong>
                     <span>{{ item.serviceNames.join(', ') || 'Service not mapped' }}</span>
                   @if (isValidDate(item.startAt) && isValidDate(item.endAt)) {
                   <small>{{ item.startAt | date:'mediumDate' }} · {{ item.startAt | date:'shortTime' }} - {{ item.endAt | date:'shortTime' }} · {{ item.durationMinutes || 0 }} min</small>
@@ -76,8 +75,6 @@ function istDateKey(value: string | Date): string {
                   @if (staff.canStartServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="startService(item.id)">Start</button> }
                   @if (staff.canCompleteServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="completeService(item.id)">Complete</button> }
                   <button class="link-button" type="button" (click)="openAppointment(item)">Details</button>
-                  @if (item.clientId) { <button class="link-button" type="button" (click)="openClientPreview(item.clientId)">Preview</button> }
-                  @if (item.clientId) { <a class="button" [routerLink]="['/staff/client-360', item.clientId]">Client 360</a> }
                   </div>
                 </div>
               </details>
@@ -92,21 +89,9 @@ function istDateKey(value: string | Date): string {
         <button class="detail-backdrop" type="button" (click)="closeDrawers()" aria-label="Close details"></button>
         <aside class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="appointment-detail-title" tabindex="-1">
           <div class="panel-title"><h2 id="appointment-detail-title">Appointment detail</h2><button class="link-button" type="button" (click)="closeDrawers()">Close</button></div>
-          <section class="grid two compact-grid"><article class="kpi"><span>Client</span><strong>{{ item.clientName || 'Walk-in' }}</strong></article><article class="kpi"><span>Status</span><strong>{{ item.status }}</strong></article></section>
-          <div class="list"><div class="row"><strong>Time</strong><span>{{ item.startAt | date:'short' }} - {{ item.endAt | date:'shortTime' }}</span></div><div class="row"><strong>Services</strong><span>{{ item.serviceNames.join(', ') || '-' }}</span></div><div class="row"><strong>Duration</strong><span>{{ item.durationMinutes || 0 }} min</span></div><div class="row"><strong>Chair</strong><span>{{ item.chair || '-' }}</span></div><div class="row"><strong>Phone</strong><span>{{ item.clientPhone || '-' }}</span></div></div>
-          <div class="form-grid drawer-form"><label>Status<input [(ngModel)]="editStatus" /></label><label>Chair<input [(ngModel)]="editChair" /></label><label>Start ISO<input [(ngModel)]="editStartAt" /></label><label>End ISO<input [(ngModel)]="editEndAt" /></label><label>Services CSV<input [(ngModel)]="editServiceIds" /></label><label>Notes<input [(ngModel)]="editNotes" /></label></div>
-          <div class="row-actions drawer-actions">@if (staff.canStartServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="startService(item.id)">Start</button> } @if (staff.canCompleteServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="completeService(item.id)">Complete</button> } @if (item.clientId) { <button class="link-button" type="button" (click)="openClientPreview(item.clientId)">Client preview</button><a class="button primary" [routerLink]="['/staff/client-360', item.clientId]">Full Client 360</a> }</div>
-          <button class="button primary" type="button" [disabled]="isPending(item.id)" (click)="saveAppointment(item.id)">{{ isPending(item.id) ? 'Saving...' : 'Save changes' }}</button>
-        </aside>
-      }
-
-      @if (selectedClient(); as client) {
-        <button class="detail-backdrop" type="button" (click)="closeClientPreview()" aria-label="Close client preview"></button>
-        <aside class="detail-drawer client-preview" role="dialog" aria-modal="true" aria-labelledby="client-preview-title" tabindex="-1">
-          <div class="panel-title"><h2 id="client-preview-title">Client preview</h2><button class="link-button" type="button" (click)="closeClientPreview()">Close</button></div>
-          <section class="grid two compact-grid"><article class="kpi"><span>Retention</span><strong>{{ client.retentionScore }}%</strong></article><article class="kpi"><span>Visits</span><strong>{{ client.visitFrequency }}</strong></article></section>
-          <div class="list"><div class="row"><strong>Name</strong><span>{{ client.profile.name }}</span></div><div class="row"><strong>Phone</strong><span>{{ client.profile.phone || '-' }}</span></div><div class="row"><strong>Outstanding</strong><span>{{ client.outstandingBalance | paiseInr }}</span></div></div>
-          @for (tip of client.aiRecommendations; track tip) { <p class="insight">{{ tip }}</p> }
+          <section class="grid two compact-grid"><article class="kpi"><span>Work item</span><strong>Assigned appointment</strong></article><article class="kpi"><span>Status</span><strong>{{ item.status }}</strong></article></section>
+          <div class="list"><div class="row"><strong>Time</strong><span>{{ item.startAt | date:'short' }} - {{ item.endAt | date:'shortTime' }}</span></div><div class="row"><strong>Services</strong><span>{{ item.serviceNames.join(', ') || '-' }}</span></div><div class="row"><strong>Duration</strong><span>{{ item.durationMinutes || 0 }} min</span></div><div class="row"><strong>Chair</strong><span>{{ item.chair || '-' }}</span></div></div>
+          <div class="row-actions drawer-actions">@if (staff.canStartServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="startService(item.id)">Start</button> } @if (staff.canCompleteServiceStatus(item.status)) { <button class="link-button" type="button" [disabled]="isPending(item.id)" (click)="completeService(item.id)">Complete</button> }</div>
         </aside>
       }
     </section>
@@ -164,15 +149,7 @@ export class StaffAppointmentsPage implements OnInit {
   readonly localError = signal("");
   readonly pendingAppointmentId = signal("");
   readonly selectedAppointment = signal<StaffAppointment | null>(null);
-  readonly selectedClient = signal<StaffClient360 | null>(null);
-  editNotes = "";
-  editChair = "";
-  editStatus = "";
-  editStartAt = "";
-  editEndAt = "";
-  editServiceIds = "";
   private loadGeneration = 0;
-  private clientGeneration = 0;
 
   constructor(readonly staff: StaffAppService) {}
 
@@ -197,16 +174,11 @@ export class StaffAppointmentsPage implements OnInit {
   }
 
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["read:finance", "read:sales", "read:payments", "read:invoices"]); }
-  canUpdateAppointments(): boolean { return this.staff.hasAnyPermission(["update:appointments", "write:appointments"]); }
-
   async startService(appointmentId: string) { await this.mutateAppointment(appointmentId, () => this.staff.startService(appointmentId), "Service started."); }
   async completeService(appointmentId: string) { await this.mutateAppointment(appointmentId, () => this.staff.completeService(appointmentId), "Service completed."); }
 
-  openAppointment(item: StaffAppointment) { this.editNotes = item.notes || ""; this.editChair = item.chair || ""; this.editStatus = item.status || ""; this.editStartAt = item.startAt || ""; this.editEndAt = item.endAt || ""; this.editServiceIds = (item.serviceIds || []).join(", "); this.selectedAppointment.set(item); }
-  closeDrawers() { this.selectedAppointment.set(null); this.selectedClient.set(null); }
-  closeClientPreview() { this.selectedClient.set(null); }
-  async openClientPreview(clientId: string) { const generation = ++this.clientGeneration; this.selectedAppointment.set(null); this.selectedClient.set(null); const client = await this.staff.client360(clientId); if (generation === this.clientGeneration) this.selectedClient.set(client); }
-  async saveAppointment(appointmentId: string) { await this.mutateAppointment(appointmentId, () => this.staff.updateAppointment(appointmentId, { notes: this.editNotes, chair: this.editChair, status: this.editStatus, startAt: this.editStartAt, endAt: this.editEndAt, serviceIds: this.editServiceIds.split(",").map((item) => item.trim()).filter(Boolean) }), "Appointment updated."); }
+  openAppointment(item: StaffAppointment) { this.selectedAppointment.set(item); }
+  closeDrawers() { this.selectedAppointment.set(null); }
   isPending(appointmentId: string): boolean { return this.pendingAppointmentId() === appointmentId; }
 
   private statusOf(item: StaffAppointment): string { return String(item.status || "").toLowerCase(); }

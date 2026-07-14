@@ -14,7 +14,7 @@ import { businessDate } from "../../core/business-date";
 import { formatPaiseInr } from "../../core/paise-inr.pipe";
 
 type BusinessPreset = "today" | "1m" | "3m" | "6m" | "1y" | "custom";
-type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string };
+type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
 
 @Component({
   standalone: true,
@@ -51,7 +51,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
             <div class="search-field">
               <label for="business-search">Search</label>
               <div class="search-control">
-                <input id="business-search" type="search" autocomplete="off" role="combobox" aria-controls="business-search-suggestions" [attr.aria-expanded]="showSearchSuggestions() && searchSuggestions().length > 0" [ngModel]="search()" (ngModelChange)="search.set($event)" (focus)="showSearchSuggestions.set(true)" (blur)="closeSearchSuggestions()" (keydown.enter)="apply()" placeholder="Client, service or invoice" />
+                <input id="business-search" type="search" autocomplete="off" role="combobox" aria-controls="business-search-suggestions" [attr.aria-expanded]="showSearchSuggestions() && searchSuggestions().length > 0" [ngModel]="search()" (ngModelChange)="search.set($event)" (focus)="showSearchSuggestions.set(true)" (blur)="closeSearchSuggestions()" (keydown.enter)="apply()" placeholder="Service or invoice" />
                 @if (showSearchSuggestions() && searchSuggestions().length) {
                   <div id="business-search-suggestions" class="search-suggestions" role="listbox">
                     @for (suggestion of searchSuggestions(); track suggestion.type + suggestion.value) {
@@ -93,7 +93,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
       @if (canReadBusiness() && business(); as data) {
         <section class="grid four business-kpi-grid">
           <article class="kpi"><span>Appointments</span><strong>{{ data.summary.appointments }}</strong></article>
-          <article class="kpi"><span>Clients</span><strong>{{ data.performance.uniqueClients }}</strong></article>
+          <article class="kpi"><span>Services</span><strong>{{ data.summary.completedServices }}</strong></article>
           @if (data.billingVisible) {
             <article class="kpi"><span>My revenue</span><strong>{{ formatMoney(data.performance.attributedAfterDiscountPaise) }}</strong></article>
             <article class="kpi"><span>Avg bill</span><strong>{{ formatMoney(data.performance.averageBillPaise) }}</strong></article>
@@ -237,7 +237,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
                   </summary>
                   <div class="appointment-expanded">
                     <div class="row-main">
-                     <strong>{{ item.clientName }}</strong>
+                     <strong>Assigned appointment</strong>
                      <small>{{ item.chair || 'No chair' }}</small>
                     <small>{{ formatMinutes(liveElapsed(item)) }} worked · {{ formatMinutes(item.durationMinutes) }} scheduled · {{ item.timer.timeSource === 'actual' ? 'Actual' : 'Estimated' }}</small>
                     @if (item.timer.startedAt) { <small>Actual start {{ item.timer.startedAt | date:'shortTime':'+0530' }} @if (item.timer.completedAt) { · End {{ item.timer.completedAt | date:'shortTime':'+0530' }} }</small> }
@@ -296,7 +296,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
           <aside id="business-appointment-drawer" class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="business-appointment-title" tabindex="-1">
             <div class="panel-title"><h2 id="business-appointment-title">Appointment detail</h2><button class="link-button" type="button" (click)="closeDrawers()">Close</button></div>
             <section class="grid two compact-grid">
-              <article class="kpi"><span>Client</span><strong>{{ item.clientName || 'Walk-in' }}</strong></article>
+              <article class="kpi"><span>Work item</span><strong>Assigned appointment</strong></article>
               <article class="kpi"><span>Status</span><strong>{{ item.status }}</strong></article>
               <article class="kpi"><span>Worked</span><strong>{{ formatMinutes(liveElapsed(item)) }}</strong><small>{{ item.timer.timeSource }}</small></article>
               <article class="kpi"><span>Scheduled</span><strong>{{ formatMinutes(item.durationMinutes) }}</strong><small>{{ item.timer.overrunMinutes }} min overrun</small></article>
@@ -305,8 +305,6 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
               <div class="row"><strong>Time</strong><span>{{ item.startAt | date:'short':'+0530' }} – {{ item.endAt | date:'shortTime':'+0530' }}</span></div>
               <div class="row"><strong>Services</strong><span>{{ item.serviceNames.join(', ') || '-' }}</span></div>
               <div class="row"><strong>Chair</strong><span>{{ item.chair || '-' }}</span></div>
-              <div class="row"><strong>Phone</strong><span>{{ item.clientPhone || '-' }}</span></div>
-              <div class="row"><strong>Notes</strong><span>{{ item.notes || '-' }}</span></div>
             </div>
           </aside>
         </div>
@@ -323,6 +321,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
                 <article class="kpi"><span>Invoice</span><strong>{{ invoice.invoiceNumber || invoice.id }}</strong><small>{{ invoice.status }}</small></article>
                 <article class="kpi"><span>Total</span><strong>{{ formatMoney(invoice.totals.totalPaise) }}</strong><small>{{ formatMoney(invoice.totals.duePaise) }} due</small></article>
               </section>
+              @if (invoice.clientName) { <div class="list"><div class="row"><strong>Client name</strong><span>{{ invoice.clientName }}</span></div></div> }
               <div class="list">
                 @for (item of invoice.items; track item.id) {
                   <div class="row"><div><strong>{{ item.name }}</strong><small>{{ item.type }} · Qty {{ item.quantity }}</small></div><span>{{ formatMoney(item.amountPaise) }}</span></div>
@@ -331,7 +330,7 @@ type SearchSuggestion = { type: "Client" | "Service" | "Invoice"; value: string 
               <h3>Payments</h3>
               <div class="list">
                 @for (payment of invoice.payments; track payment.id) {
-                  <div class="row"><div><strong>{{ payment.mode || 'Payment' }}</strong><small>{{ payment.createdAt | date:'short':'+0530' }} · {{ payment.reference || 'No reference' }}</small></div><span>{{ formatMoney(payment.amountPaise) }}</span></div>
+                  <div class="row"><div><strong>{{ payment.mode || 'Payment' }}</strong><small>{{ payment.createdAt | date:'short':'+0530' }}</small></div><span>{{ formatMoney(payment.amountPaise) }}</span></div>
                 } @empty { <p class="empty">No payments recorded.</p> }
               </div>
             }
@@ -396,7 +395,6 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     };
 
     for (const appointment of this.business()?.appointments || []) {
-      add("Client", appointment.clientName);
       add("Invoice", appointment.billing?.invoiceNumber || appointment.billing?.saleId);
     }
     for (const service of this.business()?.services || []) add("Service", service.name);

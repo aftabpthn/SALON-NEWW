@@ -89,18 +89,18 @@ test("staff WebAuthn and staff-self mutation policies are explicit", async () =>
   const webauthn = await readFile(new URL("../server/services/webauthn.service.js", import.meta.url), "utf8");
   const routes = await readFile(new URL("../server/routes/staff-self.routes.js", import.meta.url), "utf8");
   assert.match(webauthn, /user\.staffId && !parsed\.userVerified/);
-  assert.match(routes, /staffSelfContext\(\["status", "notes"\]\)/);
-  assert.match(routes, /requirePermission\("update", \(\) => "appointments"\)/);
+  assert.doesNotMatch(routes, /staff-self\/appointments\/:id/);
   assert.match(routes, /requireIdempotencyKey/);
 });
 
-test("staff-self presenter excludes restricted finance and sensitive client fields", () => {
-  const access = { tenantId: "tenant_aura", role: "staff", permissions: ["read:appointments", "read:clients"] };
+test("staff-self presenter excludes restricted finance and all client fields", () => {
+  const access = { tenantId: "tenant_aura", role: "staff", permissions: ["read:appointments"] };
   const dashboard = staffSelfResponsePresenterService.dashboard({
-    summary: { appointments: 4, revenue: 50000, appointmentValue: 70000 },
+    summary: { appointments: 4, revenue: 50000, appointmentValue: 70000, uniqueClients: 3 },
+    appointments: [{ id: "appointment_1", clientId: "client_1", clientName: "Private", notes: "private" }],
     sales: [{ id: "sale_1", total: 50000, commissionTotal: 5000 }]
   }, access);
-  assert.deepEqual(dashboard, { summary: { appointments: 4 } });
+  assert.deepEqual(dashboard, { summary: { appointments: 4 }, appointments: [{ id: "appointment_1" }] });
 
   const enterprise = staffSelfResponsePresenterService.enterprise({
     home: { tasks: 2, expectedRevenue: 80000, pendingPayments: 1 },
@@ -109,22 +109,13 @@ test("staff-self presenter excludes restricted finance and sensitive client fiel
   }, access);
   assert.deepEqual(enterprise, { home: { tasks: 2 }, leaderboard: [{ staffId: "staff_1", score: 90 }] });
 
-  const client = staffSelfResponsePresenterService.client360({
-    profile: { id: "client_1", name: "Client", notes: "private", allergies: "latex", phone: "999" },
-    preferences: { tags: ["vip"], medicalNotes: "restricted" }
-  }, access);
-  assert.deepEqual(client, {
-    profile: { id: "client_1", name: "Client", phone: "999" },
-    preferences: { tags: ["vip"] }
-  });
+  const daily = staffSelfResponsePresenterService.staffData({ appointments: [{ id: "appointment_1", customerName: "Private", notes: "private" }] }, access);
+  assert.deepEqual(daily, { appointments: [{ id: "appointment_1" }] });
 });
 
-test("staff-self presenter retains fields for explicitly authorized access", () => {
+test("staff-self presenter preserves finance access and only allows invoice client name", () => {
   const financialAccess = { tenantId: "tenant_aura", role: "custom", permissions: ["read:sales"] };
-  const financial = { summary: { revenue: 50000 }, sales: [{ total: 50000 }] };
-  assert.deepEqual(staffSelfResponsePresenterService.dashboard(financial, financialAccess), financial);
-
-  const sensitiveAccess = { tenantId: "tenant_aura", role: "custom", permissions: ["read:sensitive-client"] };
-  const client = { profile: { notes: "private", allergies: "latex" } };
-  assert.deepEqual(staffSelfResponsePresenterService.client360(client, sensitiveAccess), client);
+  const financial = { summary: { revenue: 50000 }, sales: [{ total: 50000, clientName: "Private" }] };
+  assert.deepEqual(staffSelfResponsePresenterService.dashboard(financial, financialAccess), { summary: { revenue: 50000 }, sales: [{ total: 50000 }] });
+  assert.deepEqual(staffSelfResponsePresenterService.invoiceDetail({ id: "invoice_1", clientName: "Allowed", clientId: "client_1", notes: "private" }), { id: "invoice_1", clientName: "Allowed" });
 });

@@ -101,7 +101,6 @@ export class StaffDashboardSectionsComponent {
     attendance: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11H7v-2h4V6h2v7z",
     queue: "M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h11v2H4v-2z",
     tasks: "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z",
-    clients: "M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.8 0-1.2.1 1.3.9 2.2 2 2.2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z",
     calendar: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z",
     leave: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z",
     chat: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z",

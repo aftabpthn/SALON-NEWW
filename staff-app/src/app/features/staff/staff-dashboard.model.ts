@@ -86,12 +86,11 @@ const QUICK_ACTIONS: readonly RegistryItem<DashboardAction>[] = [
   { item: { id: "appointments", label: "Appointments", route: "/staff/appointments" }, permissions: ["read:appointments"] },
   { item: { id: "queue", label: "Today’s Queue", route: "/staff/queue" }, permissions: ["read:appointments"] },
   { item: { id: "tasks", label: "Tasks", route: "/staff/tasks" }, permissions: ["read:staff"] },
-  { item: { id: "clients", label: "Clients", route: "/staff/clients" }, permissions: ["read:clients"] },
   { item: { id: "calendar", label: "Calendar", route: "/staff/calendar" }, permissions: ["read:staff"] }
 ];
 
 const TOOLS: readonly RegistryItem<DashboardTool>[] = [
-  { item: { id: "calendar", label: "Shift calendar", hint: "Roster and schedule", route: "/staff/calendar" }, permissions: ["read:staff"] },
+  { item: { id: "calendar", label: "My Shifts", hint: "Roster and schedule", route: "/staff/calendar" }, permissions: ["read:staff"] },
   { item: { id: "leave", label: "Leave", hint: "Requests and balances", route: "/staff/leaves" }, permissions: ["read:staff"] },
   { item: { id: "chat", label: "Chat", hint: "Team and private owner chat", route: "/staff/chat" }, permissions: ["read:staff"] },
   { item: { id: "reports", label: "Reports", hint: "Work summaries", route: "/staff/reports" }, permissions: ["read:staff"] },
@@ -108,11 +107,11 @@ type DashboardRoleProfile = {
 };
 
 const ROLE_PROFILES: readonly DashboardRoleProfile[] = [
-  { aliases: ["frontdesk", "receptionist"], quick: ["appointments", "queue", "tasks", "clients", "attendance"], overview: ["Alerts", "Appointments", "Open tasks", "Completed"], performance: ["Services", "Utilization", "Productivity", "Revenue"], tools: ["settings", "calendar", "chat", "reports", "leave", "payroll"] },
-  { aliases: ["stylist", "seniorstylist", "therapist", "staff", "staffappuser"], quick: ["attendance", "appointments", "queue", "tasks", "clients"], overview: ["Appointments", "Completed", "Open tasks", "Alerts"], performance: ["Productivity", "Services", "Utilization", "Rating", "Revenue"], tools: ["calendar", "settings", "leave", "chat", "reports", "payroll"] },
-  { aliases: ["manager", "salonmanager", "staffappmanager"], quick: ["tasks", "appointments", "queue", "clients", "attendance"], overview: ["Alerts", "Open tasks", "Appointments", "Completed"], performance: ["Productivity", "Utilization", "Services", "Revenue", "Rating"], tools: ["reports", "calendar", "settings", "chat", "payroll", "leave"] },
-  { aliases: ["owner", "admin", "staffappadmin"], quick: ["appointments", "tasks", "queue", "clients", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Productivity", "Utilization", "Services", "Rating"], tools: ["reports", "payroll", "calendar", "settings", "chat", "leave"] },
-  { aliases: ["cashier", "inventory", "inventorymanager", "cashierinventory"], quick: ["queue", "appointments", "tasks", "clients", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Services", "Utilization", "Productivity", "Rating"], tools: ["reports", "payroll", "settings", "calendar", "chat", "leave"] }
+  { aliases: ["frontdesk", "receptionist"], quick: ["appointments", "queue", "tasks", "attendance"], overview: ["Alerts", "Appointments", "Open tasks", "Completed"], performance: ["Services", "Utilization", "Productivity", "Revenue"], tools: ["settings", "calendar", "chat", "reports", "leave", "payroll"] },
+  { aliases: ["stylist", "seniorstylist", "therapist", "staff", "staffappuser"], quick: ["attendance", "appointments", "queue", "tasks"], overview: ["Appointments", "Completed", "Open tasks", "Alerts"], performance: ["Productivity", "Services", "Utilization", "Rating", "Revenue"], tools: ["calendar", "settings", "leave", "chat", "reports", "payroll"] },
+  { aliases: ["manager", "salonmanager", "staffappmanager"], quick: ["tasks", "appointments", "queue", "attendance"], overview: ["Alerts", "Open tasks", "Appointments", "Completed"], performance: ["Productivity", "Utilization", "Services", "Revenue", "Rating"], tools: ["reports", "calendar", "settings", "chat", "payroll", "leave"] },
+  { aliases: ["owner", "admin", "staffappadmin"], quick: ["appointments", "tasks", "queue", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Productivity", "Utilization", "Services", "Rating"], tools: ["reports", "payroll", "calendar", "settings", "chat", "leave"] },
+  { aliases: ["cashier", "inventory", "inventorymanager", "cashierinventory"], quick: ["queue", "appointments", "tasks", "attendance"], overview: ["Alerts", "Appointments", "Completed", "Open tasks"], performance: ["Revenue", "Services", "Utilization", "Productivity", "Rating"], tools: ["reports", "payroll", "settings", "calendar", "chat", "leave"] }
 ];
 
 const DEFAULT_ROLE_PROFILE: DashboardRoleProfile = {
@@ -213,7 +212,6 @@ function appointmentActions(input: ActionContext, appointment: StaffAppointment,
   } else {
     if (appointmentRoute) actions.push({ id: "open-appointment", label: "Open appointment", route: appointmentRoute, primary: true });
   }
-  if (appointment.clientId && input.hasPermission("read:clients")) actions.push({ id: "view-client", label: "View client", route: ["/staff/client-360", appointment.clientId] });
   return actions.slice(0, 3);
 }
 
@@ -221,9 +219,7 @@ function alerts(input: ActionContext): DashboardAlert[] {
   const home = input.enterprise?.home;
   if (!home) return [];
   const result: DashboardAlert[] = [];
-  if (home.lateClients > 0 && input.hasPermission("read:appointments")) result.push({ id: "late", title: `${home.lateClients} late client${home.lateClients === 1 ? "" : "s"}`, detail: "Review arrivals and follow up now.", route: "/staff/appointments", tone: "critical" });
   if (home.pendingPayments > 0 && FINANCIAL_PERMISSIONS.some(input.hasPermission)) result.push({ id: "payments", title: `${home.pendingPayments} pending payment${home.pendingPayments === 1 ? "" : "s"}`, detail: "Checkout needs attention.", route: "/staff/business", tone: "critical" });
-  if (home.birthdayClients > 0 && input.hasPermission("read:clients")) result.push({ id: "birthdays", title: `${home.birthdayClients} client birthday${home.birthdayClients === 1 ? "" : "s"}`, detail: "Open the client list before their visit.", route: "/staff/clients", tone: "attention" });
   const unread = (input.enterprise?.notifications || []).filter((note) => String(note.status || "unread") !== "read").length;
   if (unread > 0 && input.hasPermission("read:staff")) result.push({ id: "unread", title: `${unread} unread notification${unread === 1 ? "" : "s"}`, detail: "Review the latest operational updates.", route: "/staff/notifications", tone: "attention" });
   return result.slice(0, 4);
@@ -235,7 +231,7 @@ function work(input: ActionContext): DashboardWork {
     const timer = input.enterprise?.serviceTimers.find((item) => item.appointmentId === active.id);
     const overrun = timer ? Math.max(0, timer.elapsedMinutes - timer.totalMinutes) : 0;
     return {
-      mode: "active", tone: overrun ? "amber" : "sage", eyebrow: "Current service", title: active.clientName || "Walk-in client",
+      mode: "active", tone: overrun ? "amber" : "sage", eyebrow: "Current service", title: "Assigned appointment",
       detail: active.serviceNames.join(", ") || "Service", status: statusLabel(active.status),
       meta: timer ? (overrun ? `${compactDurationLabel(timer.elapsedMinutes)} elapsed · ${compactDurationLabel(overrun)} over` : `${compactDurationLabel(timer.elapsedMinutes)} elapsed`) : "Timer unavailable",
       progress: timer?.progress, actions: appointmentActions(input, active, "active"),
@@ -251,14 +247,14 @@ function work(input: ActionContext): DashboardWork {
     const mode: DashboardWork["mode"] = waiting ? "waiting" : delayed ? "delayed" : "upcoming";
     const minutesToStart = timeline?.minutesToStart ?? Math.round((new Date(next.startAt).getTime() - (input.now || new Date()).getTime()) / 60000);
     return {
-      mode, tone: delayed ? "amber" : waiting ? "sage" : "neutral", eyebrow: waiting ? "Client waiting" : delayed ? "Running late" : "Next client",
-      title: next.clientName || "Walk-in client", detail: `${next.serviceNames.join(", ") || "Service"} · ${next.durationMinutes || 0} min`,
+      mode, tone: delayed ? "amber" : waiting ? "sage" : "neutral", eyebrow: waiting ? "Appointment waiting" : delayed ? "Running late" : "Next appointment",
+      title: "Assigned appointment", detail: `${next.serviceNames.join(", ") || "Service"} · ${next.durationMinutes || 0} min`,
       meta: delayed ? `${timeLabel(next.startAt)} · ${compactDurationLabel(Math.abs(minutesToStart))} late` : waiting ? timeLabel(next.startAt) : `${timeLabel(next.startAt)} · ${minutesUntilLabel(minutesToStart)}`,
       status: statusLabel(next.status), actions: appointmentActions(input, next, mode), queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined
     };
   }
   return {
-    mode: "empty", tone: "neutral", eyebrow: "Next client", title: "No client waiting right now.", detail: "", meta: "Schedule clear", actions: [],
+    mode: "empty", tone: "neutral", eyebrow: "Next appointment", title: "No appointment waiting right now.", detail: "", meta: "Schedule clear", actions: [],
     queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined,
     scheduleRoute: input.hasPermission("read:appointments") ? "/staff/appointments" : undefined,
     scheduleActionLabel: input.hasPermission("read:appointments") ? "View Schedule →" : undefined
@@ -367,7 +363,6 @@ function quickActionStatus(id: string, input: ActionContext): string | undefined
   if (id === "queue") return input.dashboard.summary.liveAppointments ? `${input.dashboard.summary.liveAppointments} live` : "No live services";
   if (id === "tasks") return input.openTaskCount ? `${input.openTaskCount} pending` : "All clear";
   if (id === "attendance") return input.today?.activeBreak ? "On break" : input.openAttendance ? "Clocked in" : input.shiftCompleted ? "Shift complete" : "Not clocked in";
-  if (id === "clients") return "Search profiles";
   if (id === "calendar") return "View shifts";
   return undefined;
 }

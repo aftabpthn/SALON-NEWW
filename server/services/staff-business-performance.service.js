@@ -817,9 +817,12 @@ function invoiceDetail(invoiceId, access) {
       AND staffId IN (${context.identityIds.map((_, index) => `@staffId${index}`).join(", ")})
       AND (@branchId = '' OR branchId = @branchId)`).get(params);
   if (!appointment) throw notFound("Invoice not found");
+  const clientId = invoice.clientId || invoice.customer_id || sale?.clientId || sale?.customer_id || "";
+  const client = clientId ? db.prepare(`SELECT name FROM clients WHERE id = @clientId AND tenantId = @tenantId
+    AND (@branchId = '' OR branchId = @branchId)`).get({ clientId, tenantId: access.tenantId, branchId: context.branchId }) : null;
   const totals = billingDetails(sale || {}, invoice);
   const payments = tableExists("payments")
-    ? db.prepare("SELECT id, mode, amount, reference, createdAt FROM payments WHERE invoiceId = @invoiceId AND tenantId = @tenantId ORDER BY createdAt ASC").all({
+    ? db.prepare("SELECT id, mode, amount, createdAt FROM payments WHERE invoiceId = @invoiceId AND tenantId = @tenantId ORDER BY createdAt ASC").all({
       invoiceId,
       tenantId: access.tenantId
     }).map((payment) => ({ ...payment, amountPaise: moneyPaise(payment, ["amountPaise", "amount"]) }))
@@ -827,6 +830,7 @@ function invoiceDetail(invoiceId, access) {
   return {
     id: invoice.id,
     invoiceNumber: totals.invoiceNumber,
+    clientName: client?.name || "",
     status: totals.invoiceStatus,
     appointmentId,
     createdAt: invoice.createdAt || invoice.created_at || "",

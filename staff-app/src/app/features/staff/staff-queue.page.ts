@@ -19,7 +19,7 @@ import { isQueuedMutation, StaffAppService, StaffEnterpriseOs } from "../../core
             <div class="panel-title"><h2>Appointment timeline</h2><span>{{ data.timeline.length }}</span></div>
             <div class="list">
               @for (item of data.timeline; track item.id) {
-                <div class="row"><div class="row-main"><strong>{{ item.startAt | date:'shortTime' }} · {{ item.clientName }}</strong><small>{{ item.serviceNames.join(', ') || 'Service' }} · {{ item.state }}</small></div><span class="badge" [class.red]="item.state === 'late'" [class.green]="item.state === 'active'">{{ item.status }}</span></div>
+                <div class="row"><div class="row-main"><strong>{{ item.startAt | date:'shortTime' }} · Assigned appointment</strong><small>{{ item.serviceNames.join(', ') || 'Service' }} · {{ item.state }}</small></div><span class="badge" [class.red]="item.state === 'late'" [class.green]="item.state === 'active'">{{ item.status }}</span></div>
               } @empty { <p class="empty">No queue items for today.</p> }
             </div>
           </article>
@@ -29,7 +29,7 @@ import { isQueuedMutation, StaffAppService, StaffEnterpriseOs } from "../../core
               @for (timer of data.serviceTimers; track timer.appointmentId) {
                 <div class="row">
                   <div class="row-main">
-                    <strong>{{ timer.clientName }}</strong>
+                    <strong>Active service</strong>
                     <small>{{ formatMinutes(timer.remainingMinutes) }} remaining · {{ timer.status }}</small>
                     <div class="timer-track"><span [style.width.%]="timer.progress"></span></div>
                   </div>

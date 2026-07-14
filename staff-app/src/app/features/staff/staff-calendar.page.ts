@@ -49,7 +49,7 @@ import { addBusinessDays, businessDate } from "../../core/business-date";
               <div class="panel-title"><h2>Queue hint</h2><span>{{ os()?.timeline?.length || 0 }}</span></div>
               <div class="list">
                 @for (item of os()?.timeline?.slice(0, 6) || []; track item.id) {
-                  <div class="row"><div class="row-main"><strong>{{ item.clientName }}</strong><small>{{ item.startAt }} · {{ item.state }}</small></div><span class="badge">{{ item.status }}</span></div>
+                  <div class="row"><div class="row-main"><strong>Assigned appointment</strong><small>{{ item.startAt }} · {{ item.state }}</small></div><span class="badge">{{ item.status }}</span></div>
                 } @empty { <p class="empty">No appointment timeline items.</p> }
               </div>
             </article>

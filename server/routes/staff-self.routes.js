@@ -7,8 +7,6 @@ import { generalSettingsService } from "../services/general-settings.service.js"
 import { requireIdempotencyKey } from "../middleware/idempotency.middleware.js";
 import { staffSelfContext } from "../middleware/staff-self-context.middleware.js";
 import { staffSelfResponsePresenterService } from "../services/staff-self-response-presenter.service.js";
-import { staffClientMediaUpload } from "../middleware/staff-client-media-upload.middleware.js";
-import { staffClientMediaUploadService } from "../services/staff-client-media-upload.service.js";
 
 export const staffSelfRouter = Router();
 
@@ -44,54 +42,6 @@ staffSelfRouter.get(
   })
 );
 
-staffSelfRouter.get(
-  "/staff-self/clients",
-  authenticateJwt(),
-  staffSelfContext(),
-  requirePermission("read", () => "clients"),
-  asyncHandler((req, res) => {
-    const result = staffLoginService.clients(req.query, req.access);
-    res.json(staffSelfResponsePresenterService.clients(result, req.access));
-  })
-);
-
-staffSelfRouter.get(
-  "/staff-self/clients/:clientId/360",
-  authenticateJwt(),
-  staffSelfContext(),
-  requirePermission("read", () => "clients"),
-  asyncHandler((req, res) => {
-    const result = staffLoginService.client360(req.params.clientId, req.query, req.access);
-    res.json(staffSelfResponsePresenterService.client360(result, req.access));
-  })
-);
-
-staffSelfRouter.post(
-  "/staff-self/clients/:clientId/media",
-  authenticateJwt(),
-  requirePermission("update", () => "clients"),
-  staffClientMediaUpload,
-  asyncHandler(async (req, res) => {
-    res.status(201).json(await staffClientMediaUploadService.create(req.params.clientId, req.body, req.file, req.access));
-  })
-);
-
-staffSelfRouter.get(
-  "/staff-self/client-media/:mediaId/content",
-  authenticateJwt(),
-  requirePermission("read", () => "clients"),
-  asyncHandler(async (req, res) => {
-    const content = await staffClientMediaUploadService.content(req.params.mediaId, req.access);
-    res.set("Cache-Control", "private, no-store");
-    res.set("Content-Security-Policy", "default-src 'none'; sandbox");
-    res.set("Content-Disposition", "inline");
-    res.set("Content-Length", String(content.buffer.length));
-    res.set("Cross-Origin-Resource-Policy", "same-origin");
-    res.set("X-Content-Type-Options", "nosniff");
-    res.type(content.mimeType).send(content.buffer);
-  })
-);
-
 staffSelfRouter.patch(
   "/staff-self/notifications/:id",
   authenticateJwt(),
@@ -99,16 +49,6 @@ staffSelfRouter.patch(
   requirePermission("update", () => "notifications"),
   asyncHandler((req, res) => {
     res.json(staffLoginService.updateStaffNotification(req.params.id, req.body, req.access));
-  })
-);
-
-staffSelfRouter.patch(
-  "/staff-self/appointments/:id",
-  authenticateJwt(),
-  staffSelfContext(["status", "notes"]),
-  requirePermission("update", () => "appointments"),
-  asyncHandler((req, res) => {
-    res.json(staffLoginService.updateStaffAppointment(req.params.id, req.body, req.access));
   })
 );
 

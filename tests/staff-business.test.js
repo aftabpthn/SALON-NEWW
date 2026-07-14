@@ -85,9 +85,9 @@ test("restricted responses and CSV omit monetary values while lifecycle actions 
   assert.doesNotMatch(staffOs.match(/const staffCompleteStatuses[^;]+;/)?.[0] || "", /booked|confirmed|arrived/);
 });
 
-test("staff portal exposes complete Business UI and keeps Queue compatibility", () => {
+test("staff portal exposes client-safe Business UI and keeps Queue compatibility", () => {
   assert.match(appRoutes, /path: "business"/);
-  assert.match(appRoutes, /path: "queue", redirectTo: "business", pathMatch: "full"/);
+  assert.match(appRoutes, /path: "queue"/);
   assert.match(appService, /canStartServiceStatus/);
   assert.match(appService, /canCompleteServiceStatus/);
   assert.match(appService, /businessInvoice/);
@@ -99,7 +99,7 @@ test("staff portal exposes complete Business UI and keeps Queue compatibility", 
   assert.match(page, /Overlapping targets/);
   assert.match(page, /Clear filters/);
   assert.match(page, /Load More/);
-  assert.match(page, /Export CSV/);
+  assert.doesNotMatch(page, /Export CSV/);
   assert.match(page, /document:keydown\.escape/);
   assert.match(page, /focus\(\)/);
 });

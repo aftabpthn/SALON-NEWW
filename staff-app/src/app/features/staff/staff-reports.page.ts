@@ -74,7 +74,7 @@ import { PaiseInrPipe } from "../../core/paise-inr.pipe";
             <div class="panel-title"><h2>Work report</h2><span>{{ dash.workReport.length }}</span></div>
             <div class="list">
               @for (item of dash.workReport.slice(0, 30); track item.id) {
-                <div class="row"><div class="row-main"><strong>{{ item.clientName || 'Client' }}</strong><small>{{ item.startAt | date:'medium' }} · {{ item.serviceNames.join(', ') || 'Service' }}</small></div><span class="badge">{{ item.status }}</span></div>
+                <div class="row"><div class="row-main"><strong>Assigned appointment</strong><small>{{ item.startAt | date:'medium' }} · {{ item.serviceNames.join(', ') || 'Service' }}</small></div><span class="badge">{{ item.status }}</span></div>
               } @empty { <p class="empty">No completed work in this report window.</p> }
             </div>
           </article>

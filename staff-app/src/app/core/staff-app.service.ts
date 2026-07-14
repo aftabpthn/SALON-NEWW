@@ -1,4 +1,4 @@
-import { HttpClient, HttpErrorResponse, HttpEventType, HttpHeaders } from "@angular/common/http";
+import { HttpClient, HttpErrorResponse, HttpHeaders } from "@angular/common/http";
 import { Injectable, signal } from "@angular/core";
 import { firstValueFrom, Observable } from "rxjs";
 import { environment } from "../../environments/environment";
@@ -60,9 +60,6 @@ export type StaffUser = {
 
 export type StaffAppointment = {
   id: string;
-  clientId: string;
-  clientName: string;
-  clientPhone: string;
   staffId: string;
   branchId: string;
   serviceIds: string[];
@@ -74,7 +71,6 @@ export type StaffAppointment = {
   status: string;
   chair: string;
   source: string;
-  notes: string;
 };
 
 export type StaffDashboard = {
@@ -114,15 +110,12 @@ export type StaffEnterpriseOs = {
     todayAppointments: number;
     expectedRevenue: number;
     tasks: number;
-    lateClients: number;
-    vipClients: number;
-    birthdayClients: number;
     pendingPayments: number;
     recentNotifications: number;
     targetProgress: { label: string; targetValue: number; achievedValue: number; percentage: number; remaining: number };
   };
-  timeline: Array<{ id: string; clientId: string; clientName: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number }>;
-  serviceTimers: Array<{ appointmentId: string; clientName: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number }>;
+  timeline: Array<{ id: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number }>;
+  serviceTimers: Array<{ appointmentId: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number }>;
   performance: { revenue: number; completedServices: number; avgUtilization: number; avgRating: number; productivityScore: number; strengths: string[]; opportunities: string[] };
   leaderboard: Array<{ rank: number; staffId: string; staffName: string; revenue: number; score: number; rating: number; days: number; isMe: boolean }>;
   gamification: { points: number; level: number; stars: number; dailyStreak: number; monthlyStreak: number; badges: Array<{ label: string; description: string; earned: boolean }> };
@@ -174,7 +167,6 @@ export type StaffBusinessPermissions = {
 
 export type StaffBusinessPerformance = {
   statusCounts: { booked: number; confirmed: number; arrived: number; inService: number; completed: number; cancelled: number; noShow: number; other: number };
-  uniqueClients: number;
   invoiceCount: number;
   actualWorkedMinutes: number;
   estimatedWorkedMinutes: number;
@@ -256,7 +248,6 @@ export type StaffBusinessAppointment = StaffAppointment & {
   workedMinutes: number;
   timer: {
     appointmentId: string;
-    clientName: string;
     status: string;
     live: boolean;
     startedAt: string | null;
@@ -291,42 +282,13 @@ export type StaffBusiness = {
 export type StaffBusinessInvoiceDetail = {
   id: string;
   invoiceNumber: string;
+  clientName?: string;
   status: string;
   appointmentId: string;
   createdAt: string;
   totals: StaffBusinessBilling;
   items: Array<{ id: string; name: string; type: string; quantity: number; amountPaise: number }>;
-  payments: Array<{ id: string; mode: string; amount: number; amountPaise: number; reference: string; createdAt: string }>;
-};
-
-export type StaffClient360 = {
-  profile: { id: string; name: string; phone: string; email: string; birthday: string; notes: string; allergies: string; preferredStylist: string };
-  membership: { status: string; plan: string };
-  wallet: { balance: number };
-  outstandingBalance: number;
-  previousServices: Array<{ id: string; startAt: string; status: string; serviceIds: string[] }>;
-  productsBought: Array<{ id: string; total: number; createdAt: string; status: string }>;
-  cancellationHistory: Array<{ id: string; startAt: string; status: string; notes: string }>;
-  preferences?: { notes: string; allergies: string; tags: string[]; preferredStylist: string };
-  mediaPortfolio?: Array<{ id: string; clientId?: string; title: string; type: string; url: string; mimeType?: string; byteSize?: number; createdAt: string }>;
-  lifetimeSpend: number;
-  visitFrequency: number;
-  lastVisit: string;
-  retentionScore: number;
-  aiRecommendations: string[];
-};
-
-export type StaffClientListItem = {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  branchId: string;
-  tags: string[];
-  totalSpend: number;
-  visitCount: number;
-  lastVisitAt: string;
-  membershipStatus: string;
+  payments: Array<{ id: string; mode: string; amount: number; amountPaise: number; createdAt: string }>;
 };
 
 export type StaffChatThread = { id: string; tenantId: string; branchId: string; title: string; channel: string; messageCount?: number; lastMessageAt?: string };
@@ -338,11 +300,6 @@ export type StaffWorkspacePreferences = {
   interface: { compactMode: boolean };
   defaults: { staffHints: boolean };
 };
-
-export type StaffClientMedia = NonNullable<StaffClient360["mediaPortfolio"]>[number];
-export type StaffClientMediaUploadEvent =
-  | { state: "progress"; loaded: number; total: number | null; progress: number | null }
-  | { state: "completed"; media: StaffClientMedia };
 
 export type StaffAttendance = {
   id: string;
@@ -597,66 +554,8 @@ export class StaffAppService {
       ["in-service", "in service", "inprogress", "in progress", "running", "active", "started"].includes(String(status || "").trim().toLowerCase());
   }
 
-  async client360(clientId: string): Promise<StaffClient360> {
-    return this.get<StaffClient360>(`/staff-self/clients/${encodeURIComponent(clientId)}/360`);
-  }
-
-  async clients(query = ""): Promise<StaffClientListItem[]> {
-    return this.get<StaffClientListItem[]>("/staff-self/clients", { q: query.trim() });
-  }
-
   async updateNotification(id: string, status: "read" | "unread" | "archived" = "read"): Promise<unknown> {
     return this.queueableMutation("PATCH", `/staff-self/notifications/${encodeURIComponent(id)}`, { status });
-  }
-
-  async updateAppointment(appointmentId: string, payload: { notes?: string; chair?: string; status?: string; startAt?: string; endAt?: string; serviceIds?: string[] }): Promise<MutationResult<StaffAppointment>> {
-    return this.onlineMutation(() => this.patch<StaffAppointment>(`/staff-self/appointments/${encodeURIComponent(appointmentId)}`, payload));
-  }
-
-  addClientMedia(clientId: string, file: File, payload: { title: string; type?: string }, idempotencyKey: string): Observable<StaffClientMediaUploadEvent> {
-    const body = new FormData();
-    body.append("file", file, file.name);
-    body.append("title", payload.title);
-    body.append("type", payload.type || "photo");
-    this.error.set("");
-
-    return new Observable((subscriber) => {
-      const request = this.authenticatedObservable(() => this.http.request<StaffClientMedia | ApiEnvelope<StaffClientMedia>>(
-        "POST",
-        `${this.baseUrl}/staff-self/clients/${encodeURIComponent(clientId)}/media`,
-        {
-          body,
-          headers: this.authHeaders().set("Idempotency-Key", idempotencyKey),
-          observe: "events",
-          reportProgress: true,
-          withCredentials: true
-        }
-      )).subscribe({
-        next: (event) => {
-          if (event.type === HttpEventType.UploadProgress) {
-            const total = event.total ?? null;
-            subscriber.next({ state: "progress", loaded: event.loaded, total, progress: total ? Math.round(event.loaded * 100 / total) : null });
-          } else if (event.type === HttpEventType.Response) {
-            subscriber.next({ state: "completed", media: this.unwrap(event.body as StaffClientMedia | ApiEnvelope<StaffClientMedia>) });
-          }
-        },
-        error: (error) => {
-          this.error.set(this.errorMessage(error, "Unable to add client media."));
-          subscriber.error(error);
-        },
-        complete: () => subscriber.complete()
-      });
-      return () => request.unsubscribe();
-    });
-  }
-
-  clientMediaBlob(mediaUrl: string): Observable<Blob> {
-    const url = this.safeMediaUrl(mediaUrl);
-    return this.authenticatedObservable(() => this.http.get(url, {
-      headers: this.authHeaders(),
-      responseType: "blob",
-      withCredentials: true
-    }));
   }
 
   async updateSchedule(scheduleId: string, payload: { version: number; scheduleDate?: string; startTime?: string; endTime?: string; status?: string; notes?: string }): Promise<unknown> {
@@ -1087,14 +986,6 @@ export class StaffAppService {
         requestSubscription?.unsubscribe();
       };
     });
-  }
-
-  private safeMediaUrl(mediaUrl: string): string {
-    const appOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
-    const apiUrl = new URL(this.baseUrl, appOrigin);
-    const url = new URL(mediaUrl, apiUrl);
-    if (!["http:", "https:"].includes(url.protocol) || url.origin !== apiUrl.origin) throw new Error("Invalid client media URL.");
-    return url.toString();
   }
 
   private async queueableMutation<T = unknown>(method: "POST" | "PATCH", path: string, body: Record<string, unknown>): Promise<MutationResult<T>> {

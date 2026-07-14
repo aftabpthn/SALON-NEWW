@@ -3,7 +3,7 @@ import { StaffDashboard, StaffEnterpriseOs, StaffToday, StaffUser } from "../../
 import { buildStaffDashboardViewModel, DashboardViewModelInput, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 
 const user: StaffUser = { id: "user-1", name: "Mira Sen", loginId: "mira", email: "mira@example.com", role: "custom-specialist", staffId: "staff-1", branchId: "branch-1", branchIds: ["branch-1"], permissions: [] };
-const appointment = { id: "appt-1", clientId: "client-1", clientName: "Anita", clientPhone: "", staffId: "staff-1", branchId: "branch-1", serviceIds: ["service-1"], serviceNames: ["Hair spa"], durationMinutes: 60, value: 120000, startAt: "2026-07-14T12:00:00.000Z", endAt: "2026-07-14T13:00:00.000Z", status: "confirmed", chair: "", source: "", notes: "" };
+const appointment = { id: "appt-1", staffId: "staff-1", branchId: "branch-1", serviceIds: ["service-1"], serviceNames: ["Hair spa"], durationMinutes: 60, value: 120000, startAt: "2026-07-14T12:00:00.000Z", endAt: "2026-07-14T13:00:00.000Z", status: "confirmed", chair: "", source: "" };
 const dashboard: StaffDashboard = {
   staff: { id: "staff-1", fullName: "Mira Sen", firstName: "Mira", lastName: "Sen", mobile: "", email: "", roleId: "custom", department: "", designation: "", status: "active" },
   summary: { appointments: 1, todayAppointments: 1, liveAppointments: 0, completedAppointments: 0, cancelledAppointments: 0, salesCount: 0, revenue: 125000, appointmentValue: 120000 },
@@ -12,7 +12,7 @@ const dashboard: StaffDashboard = {
 const today: StaffToday = { date: "2026-07-14", schedules: [{ id: "shift-1", scheduleDate: "2026-07-14", startTime: "09:00", endTime: "18:00", shiftType: "regular", status: "scheduled" }], attendance: [], activeBreak: null, tasks: [{ id: "task-1", title: "Confirm consultation", description: "", status: "open", priority: "high", dueAt: "", version: 1 }] };
 const enterprise: StaffEnterpriseOs = {
   staff: dashboard.staff,
-  home: { greeting: "", todayAppointments: 1, expectedRevenue: 125000, tasks: 1, lateClients: 0, vipClients: 0, birthdayClients: 0, pendingPayments: 0, recentNotifications: 0, targetProgress: { label: "", targetValue: 0, achievedValue: 0, percentage: 0, remaining: 0 } },
+  home: { greeting: "", todayAppointments: 1, expectedRevenue: 125000, tasks: 1, pendingPayments: 0, recentNotifications: 0, targetProgress: { label: "", targetValue: 0, achievedValue: 0, percentage: 0, remaining: 0 } },
   timeline: [], serviceTimers: [], performance: { revenue: 125000, completedServices: 0, avgUtilization: 55, avgRating: 4.8, productivityScore: 72, strengths: [], opportunities: [] }, leaderboard: [], gamification: { points: 40, level: 2, stars: 1, dailyStreak: 1, monthlyStreak: 1, badges: [] }, notifications: [], tasks: [], calendar: [], reports: {}
 };
 
@@ -34,7 +34,7 @@ describe("staff dashboard permission-first view model", () => {
   });
 
   it("keeps attendance in the hero without duplicating first-viewport actions", () => {
-    const allowed = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
+    const allowed = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"]));
     const restricted = buildStaffDashboardViewModel(input(["read:appointments"]));
     expect(allowed.hero).toMatchObject({ title: "Ready to start your shift? 👋", detail: "Not clocked in", shiftAssigned: true, shift: "09:00–18:00" });
     expect(allowed.quickActions.some((action) => action.id === "attendance")).toBe(false);
@@ -77,11 +77,11 @@ describe("staff dashboard permission-first view model", () => {
   });
 
   it("puts permitted critical floor alerts ahead of attendance and service work", () => {
-    const lateEnterprise = { ...enterprise, home: { ...enterprise.home, lateClients: 1, pendingPayments: 2 } };
+    const lateEnterprise = { ...enterprise, home: { ...enterprise.home, pendingPayments: 2 } };
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:finance", "allow:staff-checkin-checkout"], { enterprise: lateEnterprise }));
     expect(vm.hero.title).toBe("The floor needs attention");
-    expect(vm.hero.actions[0]).toMatchObject({ route: "/staff/appointments", primary: true });
-    expect(vm.alerts.map((alert) => alert.id)).toEqual(["late", "payments"]);
+    expect(vm.hero.actions[0]).toMatchObject({ route: "/staff/business", primary: true });
+    expect(vm.alerts.map((alert) => alert.id)).toEqual(["payments"]);
     expect(vm.hero.actions.filter((action) => action.primary)).toHaveLength(1);
   });
 
@@ -103,30 +103,26 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.hero).toMatchObject({ title: "You’re clocked in", actions: [{ id: "next", route: "/staff/appointments", primary: true }, { id: "attendance-details" }] });
   });
 
-  it("shows an upcoming client with real timing, status, and permission-safe actions", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:clients"]));
-    expect(vm.work).toMatchObject({ mode: "upcoming", title: "Anita", status: "Confirmed", meta: expect.stringContaining("In 30 min") });
-    expect(vm.work.actions).toEqual([
-      { id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true },
-      { id: "view-client", label: "View client", route: ["/staff/client-360", "client-1"] }
-    ]);
+  it("shows upcoming assigned work with timing and permission-safe actions", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments"]));
+    expect(vm.work).toMatchObject({ mode: "upcoming", title: "Assigned appointment", status: "Confirmed", meta: expect.stringContaining("In 30 min") });
+    expect(vm.work.actions).toEqual([{ id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true }]);
   });
 
-  it("models waiting clients with sage emphasis and only valid service actions", () => {
+  it("models waiting appointments with sage emphasis and only valid service actions", () => {
     const waiting = { ...appointment, status: "arrived" };
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:clients", "update:appointments"], { dashboard: { ...dashboard, todayAppointments: [waiting], appointments: [waiting] } }));
-    expect(vm.work).toMatchObject({ mode: "waiting", tone: "sage", title: "Anita", status: "Arrived" });
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "update:appointments"], { dashboard: { ...dashboard, todayAppointments: [waiting], appointments: [waiting] } }));
+    expect(vm.work).toMatchObject({ mode: "waiting", tone: "sage", title: "Assigned appointment", status: "Arrived" });
     expect(vm.work.meta).not.toMatch(/elapsed/i);
     expect(vm.work.actions).toMatchObject([
       { kind: "start-service", primary: true },
-      { id: "open-appointment", route: "/staff/appointments", primary: false },
-      { id: "view-client", route: ["/staff/client-360", "client-1"] }
+      { id: "open-appointment", route: "/staff/appointments", primary: false }
     ]);
   });
 
   it("uses connected timer elapsed data and the queue route for an active service", () => {
     const active = { ...appointment, status: "in-service" };
-    const timedEnterprise = { ...enterprise, serviceTimers: [{ appointmentId: active.id, clientName: active.clientName, status: active.status, elapsedMinutes: 35, totalMinutes: 60, remainingMinutes: 25, progress: 58 }] };
+    const timedEnterprise = { ...enterprise, serviceTimers: [{ appointmentId: active.id, status: active.status, elapsedMinutes: 35, totalMinutes: 60, remainingMinutes: 25, progress: 58 }] };
     const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "update:appointments"], { dashboard: { ...dashboard, liveAppointments: [active], todayAppointments: [active] }, enterprise: timedEnterprise }));
     expect(vm.work).toMatchObject({ mode: "active", tone: "sage", meta: "35 min elapsed", progress: 58 });
     expect(vm.work.actions).toMatchObject([
@@ -137,7 +133,7 @@ describe("staff dashboard permission-first view model", () => {
 
   it("uses amber only when the connected timeline marks an appointment late", () => {
     const delayed = { ...appointment, startAt: "2026-07-14T11:00:00.000Z", endAt: "2026-07-14T12:30:00.000Z" };
-    const lateEnterprise = { ...enterprise, timeline: [{ id: delayed.id, clientId: delayed.clientId, clientName: delayed.clientName, serviceNames: delayed.serviceNames, startAt: delayed.startAt, endAt: delayed.endAt, status: delayed.status, state: "late", minutesToStart: -30, durationMinutes: delayed.durationMinutes }] };
+    const lateEnterprise = { ...enterprise, timeline: [{ id: delayed.id, serviceNames: delayed.serviceNames, startAt: delayed.startAt, endAt: delayed.endAt, status: delayed.status, state: "late", minutesToStart: -30, durationMinutes: delayed.durationMinutes }] };
     const vm = buildStaffDashboardViewModel(input(["read:appointments"], { dashboard: { ...dashboard, todayAppointments: [delayed], appointments: [delayed] }, enterprise: lateEnterprise }));
     expect(vm.work).toMatchObject({ mode: "delayed", tone: "amber", meta: expect.stringContaining("30 min late") });
     expect(vm.work.actions[0]).toMatchObject({ label: "Open appointment", route: "/staff/appointments", primary: true });
@@ -162,27 +158,24 @@ describe("staff dashboard permission-first view model", () => {
   });
 
   it("supports a custom restricted role using permissions rather than role defaults", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:clients"], { user: { ...user, role: "owner" } }));
-    expect(vm.quickActions.map((action) => action.id)).toEqual(["clients"]);
+    const vm = buildStaffDashboardViewModel(input([], { user: { ...user, role: "owner" } }));
+    expect(vm.quickActions).toEqual([]);
     expect(vm.tools.map((tool) => tool.id)).toEqual(["settings"]);
   });
 
   it("orders authorized content by role profile without granting missing permissions", () => {
-    const receptionist = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"], { user: { ...user, role: "receptionist" } }));
+    const receptionist = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"], { user: { ...user, role: "receptionist" } }));
     const inventory = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"], { user: { ...user, role: "inventory-manager" } }));
-    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["appointments", "queue", "tasks", "clients"]);
+    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["appointments", "queue", "tasks", "calendar"]);
     expect(receptionist.tools[0].id).toBe("settings");
     expect(inventory.quickActions.map((action) => action.id)).toEqual(["queue", "appointments", "tasks", "calendar"]);
-    expect(inventory.quickActions.some((action) => action.id === "clients")).toBe(false);
-    expect(inventory.tools.some((tool) => tool.id === "clients")).toBe(false);
   });
 
   it("adds compact live metadata with meaningful zero language to quick actions", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"]));
     expect(vm.quickActions.find((action) => action.id === "appointments")?.status).toBe("1 today");
     expect(vm.quickActions.find((action) => action.id === "queue")?.status).toBe("No live services");
     expect(vm.quickActions.find((action) => action.id === "tasks")?.status).toBe("1 pending");
-    expect(vm.quickActions.find((action) => action.id === "clients")?.status).toBe("Search profiles");
   });
 
   it("builds four backed overview metrics or a complete three-metric fallback", () => {
@@ -202,10 +195,9 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.performance).toHaveLength(3);
   });
 
-  it("keeps Settings in the fixed workspace and excludes the Clients shortcut", () => {
-    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients"]));
+  it("keeps Settings in the fixed workspace", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "read:staff"]));
     expect(vm.tools.some((tool) => tool.id === "settings")).toBe(true);
-    expect(vm.tools.some((tool) => tool.id === "clients")).toBe(false);
     expect(vm.tools.length).toBeLessThanOrEqual(6);
   });
 
@@ -215,7 +207,7 @@ describe("staff dashboard permission-first view model", () => {
     const vm = buildStaffDashboardViewModel(input(["read:appointments"], { dashboard: emptyDashboard, enterprise: null, today: emptyToday }));
     expect(vm).not.toHaveProperty("empty");
     expect(vm.work.mode).toBe("empty");
-    expect(vm.work).toMatchObject({ eyebrow: "Next client", meta: "Schedule clear", title: "No client waiting right now.", detail: "", scheduleRoute: "/staff/appointments", scheduleActionLabel: "View Schedule →" });
+    expect(vm.work).toMatchObject({ eyebrow: "Next appointment", meta: "Schedule clear", title: "No appointment waiting right now.", detail: "", scheduleRoute: "/staff/appointments", scheduleActionLabel: "View Schedule →" });
     expect(vm.overview[0]).toMatchObject({ value: "0", hint: "No bookings" });
   });
 });

@@ -693,39 +693,6 @@ export class StaffLoginService {
     return updated;
   }
 
-  updateStaffAppointment(id, payload = {}, access) {
-    const dashboard = this.staffDashboard({}, access);
-    const appointment = dashboard.appointments.find((item) => item.id === id) || dashboard.todayAppointments.find((item) => item.id === id);
-    if (!appointment) throw notFound("Appointment not found for this staff member");
-    const allowedStatuses = new Set(["booked", "confirmed", "arrived", "checked-in", "in-service", "completed", "no-show"]);
-    if (payload.status && !allowedStatuses.has(String(payload.status).toLowerCase())) throw badRequest("Unsupported staff appointment status");
-    const columns = columnsFor("appointments");
-    const patch = {
-      id,
-      notes: String(payload.notes ?? appointment.notes ?? ""),
-      chair: String(payload.chair ?? appointment.chair ?? ""),
-      status: String(payload.status || appointment.status || "booked"),
-      startAt: String(payload.startAt || appointment.startAt || ""),
-      endAt: String(payload.endAt || appointment.endAt || ""),
-      serviceIds: payload.serviceIds ? json(payload.serviceIds) : json(appointment.serviceIds || []),
-      updatedAt: now()
-    };
-    const sets = [];
-    if (columns.includes("notes")) sets.push("notes = @notes");
-    if (columns.includes("chair")) sets.push("chair = @chair");
-    if (columns.includes("status")) sets.push("status = @status");
-    if (columns.includes("startAt")) sets.push("startAt = @startAt");
-    if (columns.includes("endAt")) sets.push("endAt = @endAt");
-    if (columns.includes("serviceIds")) sets.push("serviceIds = @serviceIds");
-    if (columns.includes("updatedAt")) sets.push("updatedAt = @updatedAt");
-    if (!sets.length) return appointment;
-    db.prepare(`UPDATE appointments SET ${sets.join(", ")} WHERE id = @id`).run(patch);
-    const updated = this.staffDashboard({}, access).appointments.find((item) => item.id === id) || { ...appointment, ...patch };
-    writeStaffSelfAudit("staff.appointment_updated", "appointments", id, access, appointment.branchId || access.branchId || "", appointment.staffId || "", patch);
-    realtimeService.broadcast("staff-self.appointment_updated", { appointment: updated }, { tenantId: access.tenantId, branchId: appointment.branchId || access.branchId || "" });
-    return updated;
-  }
-
   updateStaffCalendarItem(id, payload = {}, access) {
     ensureStaffSelfAppSchema();
     const staffId = this.resolveStaffId({}, access);

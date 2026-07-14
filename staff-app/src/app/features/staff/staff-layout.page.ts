@@ -62,7 +62,7 @@ type StaffRecentItem = { label: string; path: string };
           </div>
         </header>
          <main class="staff-content">
-          @if (preferences().defaults.staffHints && !isDashboard()) { <p class="staff-policy-hint">Tip: use search to quickly open permitted staff tools, clients and appointments.</p> }
+          @if (preferences().defaults.staffHints && !isDashboard()) { <p class="staff-policy-hint">Tip: use search to quickly open permitted staff tools and appointments.</p> }
           <router-outlet />
         </main>
       </div>
@@ -81,7 +81,7 @@ type StaffRecentItem = { label: string; path: string };
         <section class="command-backdrop" (click)="closeCommand()">
           <div class="command-palette" role="dialog" aria-modal="true" aria-labelledby="staff-command-title" tabindex="-1" #commandDialog (keydown)="trapFocus($event, commandDialog)" (click)="$event.stopPropagation()">
             <div class="command-head"><strong id="staff-command-title">Command palette</strong><button type="button" (click)="closeCommand()">Close</button></div>
-            <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown)="onCommandKeydown($event)" aria-label="Search staff pages and business" placeholder="Search staff pages, clients, business..." #commandInput autofocus />
+            <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown)="onCommandKeydown($event)" aria-label="Search staff pages and business" placeholder="Search staff pages and business..." #commandInput autofocus />
             @if (query().trim()) { <small class="search-hint">{{ commandResults().length }} matches · Press Enter to open the first result</small> }
             <div class="command-list">
               @for (item of commandResults(); track $index) {
@@ -206,7 +206,7 @@ type StaffRecentItem = { label: string; path: string };
      @media (max-width: 900px) {
        .staff-app-shell { --staff-header-height: calc(54px + env(safe-area-inset-top)); display: block; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
        .staff-main-shell { display: block; height: 100dvh; min-height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-padding-top: var(--staff-header-height); -webkit-overflow-scrolling: touch; }
-        .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: var(--staff-header-height); padding: calc(3px + env(safe-area-inset-top)) 12px 3px; gap: 2px; }
+        .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: var(--staff-header-height); padding: calc(3px + env(safe-area-inset-top)) 2px 3px 12px; gap: 2px; }
       .menu-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; width: 48px; height: 48px; margin: 0 2px 0 -10px; padding: 0; border: 0; border-radius: 14px; background: transparent; color: var(--staff-text); font-size: .78rem; font-weight: 750; box-shadow: none; }
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
        .staff-identity { flex: 1 1 auto; width:0; max-width:none; gap: 10px; overflow: hidden; }
@@ -215,12 +215,12 @@ type StaffRecentItem = { label: string; path: string };
         .staff-identity strong { max-width: 100%; font-size: .88rem; }
         .staff-identity small { max-width:100%;font-size:.7rem; }
       .staff-topbar p { font-size: .66rem; }
-       .topbar-actions { gap: 0; flex: 0 0 auto; flex-wrap: nowrap; }
+       .topbar-actions { gap: 0; flex: 0 0 auto; flex-wrap: nowrap; margin-left: auto; justify-content: flex-end; }
       .search-button span,.search-button kbd,.topbar-actions > span:not(.queue-status) { display: none; }
-      .search-button { display:inline-grid;grid-template-columns:1fr;place-items:center;width:48px;height:48px;padding:0;border:0;border-radius:14px;background:transparent;box-shadow:none; }
+      .search-button { display:inline-grid;grid-template-columns:1fr;place-items:center;width:32px;height:44px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none; }
        .topbar-actions span { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .68rem; }
-      .topbar-actions button { padding: 7px 10px; }
-      .topbar-actions .bell-button { width:48px;height:48px;min-width:48px;padding:0;border:0;border-radius:14px;background:transparent;box-shadow:none; }
+      .topbar-actions button { padding:0; }
+      .topbar-actions .bell-button { width:32px;height:44px;min-width:32px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none; }
       .topbar-actions :is(.search-button,.bell-button):hover { border:0;background:transparent; }
       .bell-icon { width: 19px; height: 19px; }
        .staff-content { overflow: visible; padding: 14px 0 var(--staff-bottom-clearance); }
@@ -299,8 +299,6 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     { label: "Attendance", path: "/staff/attendance", iconPath: "M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z", group: "Work", anyPermissions: ["allow:staff-checkin-checkout", "read:staff", "write:staff"] },
     { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "read:staff" },
     { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "read:staff" },
-    { label: "Clients", path: "/staff/clients", iconPath: "M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zM8 11c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.7 0-1.1.1 1.1.8 2.1 1.9 2.1 3.4V19h6v-2.5C23 14.2 18.3 13 16 13z", group: "Clients", permission: "read:clients" },
-    { label: "Client 360", path: "/staff/client-360", iconPath: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 17.9V17h-2v2.9A8 8 0 0 1 4.1 13H7v-2H4.1A8 8 0 0 1 11 4.1V7h2V4.1A8 8 0 0 1 19.9 11H17v2h2.9A8 8 0 0 1 13 19.9z", group: "Clients", permission: "read:clients" },
     { label: "Performance", path: "/staff/performance", iconPath: "M3 17h3v4H3v-4zm5-6h3v10H8V11zm5 3h3v7h-3v-7zm5-9h3v16h-3V5z", group: "Intelligence", permission: "read:staff" },
     { label: "Leaderboard", path: "/staff/leaderboard", iconPath: "M7 21h10v-2H7v2zM5 3h14v4a7 7 0 0 1-6 6.9V17h-2v-3.1A7 7 0 0 1 5 7V3zm2 2v2a5 5 0 0 0 10 0V5H7z", group: "Intelligence", permission: "read:staff" },
     { label: "Reports", path: "/staff/reports", iconPath: "M5 3h11l3 3v15H5V3zm10 1.5V7h2.5L15 4.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z", group: "Intelligence", permission: "read:staff" },
@@ -316,7 +314,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const text = this.query().trim().toLowerCase();
     const navItems = this.visibleNav().map((item) => ({ ...item }));
     const notices = this.staff.hasPermission("read:staff") ? (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" })) : [];
-    const business = this.staff.hasPermission("read:appointments") ? (this.os()?.timeline || []).map((item) => ({ label: item.clientName, path: "/staff/business", iconPath: this.iconFor("Business"), group: item.serviceNames?.join(", ") || "Appointment" })) : [];
+    const business = this.staff.hasPermission("read:appointments") ? (this.os()?.timeline || []).map((item) => ({ label: item.serviceNames?.join(", ") || "Appointment", path: "/staff/business", iconPath: this.iconFor("Business"), group: "Scheduled work" })) : [];
     const all = [...navItems, ...notices, ...business];
     if (!text) return all.slice(0, 12);
     return all

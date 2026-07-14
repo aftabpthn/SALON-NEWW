@@ -3,13 +3,7 @@ import { can, normalizeRole } from "../middleware/rbac.js";
 const adminRoles = new Set(["owner", "admin", "superAdmin"]);
 const financialResources = ["finance", "sales", "payments", "invoices"];
 const financialExactFields = new Set(["total", "paid", "sales", "salescount", "appointmentvalue", "aicoach"]);
-const sensitiveClientFields = new Set([
-  "allergies",
-  "medicalnotes",
-  "medicalhistory",
-  "privatenotes",
-  "healthnotes"
-]);
+const privateClientFields = new Set(["notes", "allergies", "medicalnotes", "medicalhistory", "privatenotes", "healthnotes", "birthday", "dateofbirth", "clientprofile", "clientpreferences", "mediaportfolio"]);
 
 function normalizedField(field) {
   return String(field || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -34,13 +28,6 @@ function hasFinancialAccess(access = {}) {
   );
 }
 
-function hasSensitiveClientAccess(access = {}) {
-  const role = normalizeRole(access.role || "staff");
-  return adminRoles.has(role) ||
-    grants(access, "read", "sensitive-client") ||
-    can(role, "read", "sensitive-client", access);
-}
-
 function withoutFields(value, restricted) {
   if (Array.isArray(value)) return value.map((item) => withoutFields(item, restricted));
   if (!value || typeof value !== "object") return value;
@@ -58,26 +45,36 @@ function isFinancialField(field) {
     ["targetprogress", "targetvalue", "achievedvalue", "remaining"].includes(normalized);
 }
 
-function isSensitiveClientField(field) {
+function isPrivateClientField(field) {
   const normalized = normalizedField(field);
-  return normalized === "notes" || sensitiveClientFields.has(normalized);
+  return normalized.includes("client") || normalized.includes("customer") || privateClientFields.has(normalized);
+}
+
+function withoutClientData(result) {
+  return withoutFields(result, isPrivateClientField);
 }
 
 export class StaffSelfResponsePresenterService {
   dashboard(result, access) {
-    return hasFinancialAccess(access) ? result : withoutFields(result, isFinancialField);
+    const safeResult = withoutClientData(result);
+    return hasFinancialAccess(access) ? safeResult : withoutFields(safeResult, isFinancialField);
   }
 
   enterprise(result, access) {
-    return hasFinancialAccess(access) ? result : withoutFields(result, isFinancialField);
+    const safeResult = withoutClientData(result);
+    return hasFinancialAccess(access) ? safeResult : withoutFields(safeResult, isFinancialField);
   }
 
-  clients(result, access) {
-    return hasSensitiveClientAccess(access) ? result : withoutFields(result, isSensitiveClientField);
+  staffData(result, access) {
+    const safeResult = withoutClientData(result);
+    return hasFinancialAccess(access) ? safeResult : withoutFields(safeResult, isFinancialField);
   }
 
-  client360(result, access) {
-    return hasSensitiveClientAccess(access) ? result : withoutFields(result, isSensitiveClientField);
+  invoiceDetail(result) {
+    return withoutFields(result, (field) => {
+      const normalized = normalizedField(field);
+      return normalized !== "clientname" && (isPrivateClientField(field) || normalized === "reference");
+    });
   }
 }
 
