@@ -25,10 +25,10 @@ import { StaffAppService } from "../../core/staff-app.service";
         </section>
 
         <section class="staff-card">
+          <div class="orb login-orb"></div>
           <button type="button" class="login-theme-button" [attr.aria-pressed]="theme() === 'dark'" (click)="toggleTheme()">{{ theme() === 'dark' ? 'Light mode' : 'Dark mode' }}</button>
           <p class="eyebrow dark">Secure staff access</p>
           <h2>Open your workspace</h2>
-          <p class="form-copy">Demo staff is prefilled. Login writes a real staff session, then opens the connected dashboard.</p>
 
           @if (staff.error()) {
             <div class="notice">{{ staff.error() }}</div>
@@ -76,6 +76,7 @@ import { StaffAppService } from "../../core/staff-app.service";
     .orb { position: absolute; border-radius: 50%; opacity: .5; }
     .orb.one { width: 190px; height: 190px; right: -42px; top: -36px; background: var(--staff-decoration-one); }
     .orb.two { width: 260px; height: 260px; left: -90px; bottom: -90px; background: var(--staff-decoration-two); }
+    .orb.login-orb { width: 190px; height: 190px; right: -42px; top: -36px; background: var(--staff-decoration-one); }
     .eyebrow { position: relative; margin: 0 0 12px; color: var(--staff-primary-hover); font-size: .72rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
     .dark { color: var(--staff-primary); }
     h1 { position: relative; max-width: 680px; margin: 0; font-size: clamp(3rem, 8vw, 5.8rem); line-height: .9; letter-spacing: -.06em; }
