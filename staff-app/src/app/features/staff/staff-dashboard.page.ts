@@ -34,8 +34,8 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
         }
 
         @if (actionMessage()) { <section class="notice" [class.success]="!actionFailed()" role="status">{{ actionMessage() }}</section> }
-        @if (optionalErrors().length) {
-          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Some information may be outdated.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
+        @if (refreshWarning()) {
+          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Couldn’t refresh everything.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
         }
 
         @if (initialLoading()) {
@@ -70,6 +70,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   readonly refreshing = signal(false);
   readonly blockingError = signal("");
   readonly optionalErrors = signal<string[]>([]);
+  readonly refreshWarning = signal(false);
   readonly actionMessage = signal("");
   readonly actionFailed = signal(false);
   readonly pendingMutation = signal("");
@@ -105,7 +106,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       hero: vm.hero,
       hintsEnabled: this.preferences()?.defaults.staffHints !== false,
       dismissedIdentity: this.dismissedRecommendation(),
-      hasPartialWarning: this.optionalErrors().length > 0
+      hasPartialWarning: this.refreshWarning()
     });
   });
 
@@ -142,7 +143,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       if (generation !== this.loadGeneration) return;
       const message = this.staff.error() || (error instanceof Error ? error.message : "Unable to load your staff workspace.");
       if (!hasData || this.isStaffRecordError(message) || this.isSessionError(message)) this.blockingError.set(this.friendlyBlockingError(message));
-      else this.optionalErrors.set(["Today’s core summary could not refresh; the last successful data remains visible."]);
+      else { this.optionalErrors.set(["Today’s core summary could not refresh; the last successful data remains visible."]); this.refreshWarning.set(true); }
       this.initialLoading.set(false);
       this.refreshing.set(false);
       return;
@@ -174,6 +175,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       if (name === "preferences") this.preferences.set(result.value as StaffWorkspacePreferences);
     });
     this.optionalErrors.set(errors);
+    this.refreshWarning.set(hasData && errors.length > 0);
     this.queuedActions.set(this.staff.offlineQueueSize());
     this.initialLoading.set(false);
     this.refreshing.set(false);

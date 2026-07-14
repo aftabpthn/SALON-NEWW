@@ -138,11 +138,14 @@ input:not(:disabled):active,select:not(:disabled):active,textarea:not(:disabled)
 .today-hero h1{max-width:24ch;font-size:clamp(1.45rem,3.2vw,2.15rem);line-height:1.08;letter-spacing:-.035em}
 .today-hero p:not(.eyebrow){font-size:.82rem;line-height:1.35}
 .shift-line{margin-top:2px;font-size:.74rem}
+.shift-line.no-shift{display:grid;gap:2px}.shift-line.no-shift small{color:var(--staff-text-secondary);font-size:.7rem;font-weight:600}
+.button-icon{width:18px;height:18px;margin-right:6px;fill:currentColor}
+.today-hero+.quick-section{margin-top:8px}
 .hero-action-stack{grid-template-columns:repeat(2,minmax(112px,auto))}
 .quick-action-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .quick-action-grid>a,.quick-action-grid>button{display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;justify-content:start;gap:10px;min-height:76px;padding:10px 12px}
 .quick-action-grid svg,.tool-grid svg{width:20px;height:20px;fill:currentColor}
-.quick-action-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:12px;background:var(--staff-surface-secondary);color:var(--staff-primary-hover)}
+.quick-action-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:12px;background:#f3f7f5;color:var(--staff-primary-hover)}
 .quick-action-grid>*>span:last-child{min-width:0;overflow-wrap:anywhere}
 .quick-action-copy{display:grid;min-width:0;gap:2px;line-height:1.2}
 .quick-action-copy b,.quick-action-copy small{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

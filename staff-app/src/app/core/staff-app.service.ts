@@ -51,6 +51,7 @@ export type StaffUser = {
   role: string;
   staffId: string;
   branchId: string;
+  branchName?: string;
   branchIds: string[];
   permissions?: string[];
 };

@@ -31,12 +31,17 @@ describe("staff dashboard permission-first view model", () => {
   it("keeps attendance in the hero without duplicating first-viewport actions", () => {
     const allowed = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "read:clients", "allow:staff-checkin-checkout"]));
     const restricted = buildStaffDashboardViewModel(input(["read:appointments"]));
-    expect(allowed.hero).toMatchObject({ title: "Ready to start?", detail: "Not clocked in" });
+    expect(allowed.hero).toMatchObject({ title: "Ready to start your shift? 👋", detail: "Not clocked in", shiftAssigned: true, shift: "09:00–18:00" });
     expect(allowed.quickActions.some((action) => action.id === "attendance")).toBe(false);
     expect(allowed.quickActions).toHaveLength(4);
     expect(allowed.quickActions.some((action) => allowed.hero.actions.some((hero) => hero.primary && (hero.id === action.id || hero.route === action.route)))).toBe(false);
     expect(restricted.quickActions.some((action) => action.id === "attendance")).toBe(false);
     expect(allowed.hero.actions).toMatchObject([{ id: "attendance", primary: true }, { id: "schedule", label: "Today’s schedule" }]);
+  });
+
+  it("exposes a helpful no-shift state without an empty shift label", () => {
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"], { today: { ...today, schedules: [] } }));
+    expect(vm.hero).toMatchObject({ shiftAssigned: false, shift: "" });
   });
 
   it("deduplicates the hero recommendation and lets a partial warning take precedence", () => {
@@ -121,7 +126,7 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.quickActions.find((action) => action.id === "appointments")?.status).toBe("1 today");
     expect(vm.quickActions.find((action) => action.id === "queue")?.status).toBe("No live services");
     expect(vm.quickActions.find((action) => action.id === "tasks")?.status).toBe("1 pending");
-    expect(vm.quickActions.find((action) => action.id === "clients")?.status).toBeUndefined();
+    expect(vm.quickActions.find((action) => action.id === "clients")?.status).toBe("Search profiles");
   });
 
   it("keeps at most three actionable coach cards and filters generic positive statuses", () => {

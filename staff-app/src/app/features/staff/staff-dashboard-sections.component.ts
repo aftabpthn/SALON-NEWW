@@ -12,19 +12,20 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
         <p class="eyebrow">{{ viewModel.hero.eyebrow }}</p>
         <h1 id="today-heading">{{ viewModel.hero.title }}</h1>
         @if (viewModel.hero.detail) { <p>{{ viewModel.hero.detail }}</p> }
-        <span class="shift-line"><b>Shift</b> {{ viewModel.hero.shift }}</span>
+        @if (viewModel.hero.shiftAssigned) { <span class="shift-line"><b>Shift</b> {{ viewModel.hero.shift }}</span> }
+        @else { <span class="shift-line no-shift"><b>No shift assigned today</b><small>Check today’s schedule or ask your manager.</small></span> }
       </div>
       <div class="hero-action-stack" aria-label="Recommended next actions">
         @for (action of viewModel.hero.actions; track action.id) {
           @if (action.route) { <a class="button" [class.primary]="action.primary" [routerLink]="action.route">{{ action.label }}</a> }
-          @else { <button type="button" class="link-button" [class.primary-action]="action.primary" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
+           @else { <button type="button" class="link-button" [class.primary-action]="action.primary" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">@if (action.kind === 'clock') { <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11H7v-2h4V6h2v7z"></path></svg> }{{ pendingLabel(action) }}</button> }
         }
       </div>
     </section>
 
     @if (viewModel.quickActions.length) {
       <section class="dashboard-section quick-section" aria-labelledby="quick-actions-heading">
-        <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="quick-actions-heading">Quick actions</h2></div></div>
+        <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="quick-actions-heading">Quick Actions</h2></div></div>
         <div class="quick-action-grid">
           @for (action of viewModel.quickActions; track action.id) {
             @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ action.label }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></a> }
@@ -35,7 +36,7 @@ import { DashboardAction, DashboardTool, StaffDashboardViewModel } from "./staff
     }
 
     <section class="dashboard-section" aria-labelledby="overview-heading">
-      <div class="section-heading"><div><p class="eyebrow">At a glance</p><h2 id="overview-heading">Today overview</h2></div></div>
+      <div class="section-heading"><div><p class="eyebrow">At a glance</p><h2 id="overview-heading">Today’s Overview</h2></div></div>
        <div class="overview-grid" [class.three-metrics]="viewModel.overview.length === 3" [class.single-metric]="viewModel.overview.length === 1">
         @for (metric of viewModel.overview; track metric.label) {
           @if (metric.route) { <a class="overview-card" [routerLink]="metric.route"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></a> }

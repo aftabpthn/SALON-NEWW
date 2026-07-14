@@ -22,7 +22,7 @@ type StaffRecentItem = { label: string; path: string };
         </div>
         <a class="user-card" routerLink="/staff/profile" (click)="closeMenu()" aria-label="Open my profile">
           <b>{{ initials() }}</b>
-          <div><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ roleLabel() }} · {{ branchLabel() }}</small></div>
+          <div><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ identitySubtitle() }}</small></div>
         </a>
         <button type="button" class="theme-button" [attr.aria-label]="theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" [attr.aria-pressed]="theme() === 'dark'" (click)="toggleTheme()">
           @if (theme() === 'dark') { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V2h1v2h-1zm0 18v-2h1v2h-1zM4 13H2v-1h2v1zm18 0h-2v-1h2v1zM5.6 6.3 4.2 4.9l.7-.7 1.4 1.4-.7.7zm13.5 13.5-1.4-1.4.7-.7 1.4 1.4-.7.7zm0-14.2-.7.7-1.4-1.4.7-.7 1.4 1.4-.7.7zM6.3 18.4l-1.4 1.4-.7-.7 1.4-1.4.7.7zM12.5 7a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"></path></svg><span>Light mode</span> }
@@ -48,7 +48,7 @@ type StaffRecentItem = { label: string; path: string };
        <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
         <header class="staff-topbar">
            <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu" [attr.aria-expanded]="menuOpen()" #menuButton><span></span><span></span><span></span></button>
-          <a class="staff-identity" routerLink="/staff/profile" aria-label="Open my profile"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ roleLabel() }} · {{ branchLabel() }}</small></div></a>
+          <a class="staff-identity" routerLink="/staff/profile" aria-label="Open my profile"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small>{{ identitySubtitle() }}</small></div></a>
           <div class="topbar-actions">
              @if (visibleNav().length) { <button type="button" class="search-button" (click)="openCommand()" aria-label="Search permitted staff tools" [attr.aria-expanded]="commandOpen()" #commandButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button> }
              @if (staff.hasPermission('read:staff')) { <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
@@ -139,7 +139,7 @@ type StaffRecentItem = { label: string; path: string };
     nav a.active span { background: var(--staff-primary); color: var(--staff-on-primary); }
     .nav-logout { width: 100%; min-height:46px;margin-top: 12px; padding: 11px 13px; border: 1px solid var(--staff-error-border); border-radius: 16px; background: var(--staff-error-surface); color: var(--staff-error-text); font-weight: 750; text-align: left; }
     .staff-main-shell { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; overflow: hidden; }
-    .staff-topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height:var(--staff-header-height);padding: 9px 16px; border-bottom: 1px solid var(--staff-border); background: var(--staff-surface-glass); backdrop-filter: blur(16px); }
+    .staff-topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height:var(--staff-header-height);padding: 3px 16px; border-bottom: 1px solid var(--staff-border); background: var(--staff-surface-glass); backdrop-filter: blur(16px); }
     .staff-identity { display: flex; align-items:center; min-width: 0; gap: 10px; color:inherit; text-decoration:none; }
     .staff-identity>div { display:grid;gap:1px;min-width:0; }
     .staff-identity span { overflow: hidden; color: var(--staff-text-secondary); font-size: .72rem; font-weight: 650; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
@@ -206,9 +206,9 @@ type StaffRecentItem = { label: string; path: string };
      @keyframes shell-toast-enter { from { opacity: 0; transform: translate(-50%, 8px); } }
     .mobile-bottom-nav { display: none; }
      @media (max-width: 900px) {
-       .staff-app-shell { --staff-header-height: calc(64px + env(safe-area-inset-top)); display: block; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+       .staff-app-shell { --staff-header-height: calc(54px + env(safe-area-inset-top)); display: block; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
        .staff-main-shell { display: block; height: 100dvh; min-height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-padding-top: var(--staff-header-height); -webkit-overflow-scrolling: touch; }
-        .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: var(--staff-header-height); padding: calc(8px + env(safe-area-inset-top)) 12px 8px; gap: 2px; }
+        .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: var(--staff-header-height); padding: calc(3px + env(safe-area-inset-top)) 12px 3px; gap: 2px; }
       .menu-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; width: 48px; height: 48px; margin: 0 2px 0 -10px; padding: 0; border: 0; border-radius: 14px; background: transparent; color: var(--staff-text); font-size: .78rem; font-weight: 750; box-shadow: none; }
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
        .staff-identity { flex: 1 1 auto; gap: 10px; overflow: hidden; }
@@ -233,6 +233,7 @@ type StaffRecentItem = { label: string; path: string };
        .mobile-bottom-nav a.active::after { position:absolute;top:2px;width:16px;height:2px;border-radius:999px;background:var(--staff-primary);content:""; }
       .mobile-bottom-nav a svg { display: block; width: 20px; height: 20px; margin: 0; fill: currentColor; }
        .mobile-bottom-nav a.active { color: var(--staff-primary-hover); background: transparent; }
+       .mobile-bottom-nav a.active svg { box-sizing:content-box;padding:3px;border-radius:8px;background:var(--staff-primary-light); }
       .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 29; border: 0; opacity: 0; pointer-events: none; background: rgba(31,41,55,.28); backdrop-filter: blur(2px); transition: opacity .18s ease; }
       .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
       .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 72vw; min-width: 0; max-width: 360px; box-sizing: border-box; height: 100dvh; overflow: auto; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-right: 1px solid var(--staff-border); border-radius: 0 22px 22px 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: 18px 0 40px rgba(31, 41, 55, .14); }
@@ -413,7 +414,9 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   roleLabel(): string { return formatStaffRoleLabel(this.staff.user()?.role); }
 
-  branchLabel(): string { return this.staff.user()?.branchId ? "Active branch" : "Branch not selected"; }
+  branchLabel(): string { return this.staff.user()?.branchName?.trim() || ""; }
+
+  identitySubtitle(): string { return [this.roleLabel(), this.branchLabel()].filter(Boolean).join(" · "); }
 
   isDashboard(): boolean { return this.router.url.split("?")[0] === "/staff/dashboard"; }
 

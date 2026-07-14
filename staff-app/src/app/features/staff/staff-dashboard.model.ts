@@ -29,7 +29,7 @@ export type DashboardWork = {
 };
 
 export type StaffDashboardViewModel = {
-  hero: { eyebrow: string; title: string; detail: string; shift: string; actions: DashboardAction[] };
+  hero: { eyebrow: string; title: string; detail: string; shift: string; shiftAssigned: boolean; actions: DashboardAction[] };
   quickActions: DashboardAction[];
   overview: DashboardMetric[];
   work: DashboardWork;
@@ -240,14 +240,14 @@ function statusLabel(value: string): string {
 
 function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashboardViewModel["hero"] {
   const shift = input.today?.schedules[0];
-  const shiftText = shift ? `${shift.startTime || "--"}–${shift.endTime || "--"} · ${shift.status || "scheduled"}` : "No shift assigned";
+  const shiftText = shift ? `${shift.startTime || "--"}–${shift.endTime || "--"}` : "";
   let title = "Your day is ready";
   let detail = `${input.dashboard.summary.todayAppointments} appointment${input.dashboard.summary.todayAppointments === 1 ? "" : "s"} assigned today.`;
   const actions: DashboardAction[] = [];
   if (activeAlerts.some((item) => item.tone === "critical")) {
     title = "The floor needs attention"; detail = activeAlerts[0].detail; actions.push({ id: "urgent", label: "Review urgent items", route: activeAlerts[0].route, primary: true });
   } else if (!input.openAttendance && !input.shiftCompleted && ATTENDANCE_PERMISSIONS.some(input.hasPermission)) {
-    title = "Ready to start?"; detail = "Not clocked in"; actions.push({ id: "attendance", label: "Clock in", kind: "clock", primary: true });
+    title = "Ready to start your shift? 👋"; detail = "Not clocked in"; actions.push({ id: "attendance", label: "Clock in", kind: "clock", primary: true });
   } else if (input.activeAppointment) {
     title = `Continue with ${input.activeAppointment.clientName || "your client"}`; detail = input.activeAppointment.serviceNames.join(", ") || "Service in progress";
     const action = serviceAction(input, input.activeAppointment); if (action) actions.push(action);
@@ -269,7 +269,7 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
   }
   if (!actions.length && input.hasPermission("read:appointments")) actions.push({ id: "appointments", label: "View schedule", route: "/staff/appointments", primary: true });
   else if (actions[0]?.id === "attendance" && input.hasPermission("read:appointments")) actions.push({ id: "schedule", label: "Today’s schedule", route: "/staff/appointments" });
-  return { eyebrow: input.openAttendance ? "Clocked in" : "Today", title, detail, shift: shiftText, actions: actions.slice(0, 2) };
+  return { eyebrow: input.openAttendance ? "Clocked in" : "Today", title, detail, shift: shiftText, shiftAssigned: !!shift, actions: actions.slice(0, 2) };
 }
 
 function minutesUntil(appointment: StaffAppointment, now: Date): number {
@@ -336,6 +336,8 @@ function quickActionStatus(id: string, input: ActionContext): string | undefined
   if (id === "queue") return input.dashboard.summary.liveAppointments ? `${input.dashboard.summary.liveAppointments} live` : "No live services";
   if (id === "tasks") return input.openTaskCount ? `${input.openTaskCount} pending` : "All clear";
   if (id === "attendance") return input.today?.activeBreak ? "On break" : input.openAttendance ? "Clocked in" : input.shiftCompleted ? "Shift complete" : "Not clocked in";
+  if (id === "clients") return "Search profiles";
+  if (id === "calendar") return "View shifts";
   return undefined;
 }
 
