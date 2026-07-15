@@ -1,15 +1,15 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
 import { DashboardAction, buildStaffDashboardViewModel, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 import { StaffDashboardSectionsComponent } from "./staff-dashboard-sections.component";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferences";
 
 @Component({
   standalone: true,
-  imports: [IonSpinner, StaffDashboardSectionsComponent],
+  imports: [StaffDashboardSectionsComponent, StaffPageStateComponent],
   template: `
     <section class="page dashboard-page" aria-busy="{{ initialLoading() }}">
       @if (blockingError()) {
@@ -27,13 +27,13 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
       } @else {
         @if (!online()) { <section class="sync-banner offline" role="status"><b>Offline</b><span>Live data may be out of date. Supported changes will sync when you reconnect.</span></section> }
         @if (queuedActions() > 0) { <section class="sync-banner" role="status"><b>{{ queuedActions() }} pending</b><span>Staff action{{ queuedActions() === 1 ? '' : 's' }} waiting to sync.</span></section> }
-        @if (refreshing() && data()) { <div class="refresh-line" role="status"><ion-spinner name="crescent" /> Refreshing today’s data</div> }
+        @if (refreshing() && data()) { <div staffPageState class="refresh-line" role="status" [loading]="true">Refreshing today’s data</div> }
 
         @if (showTip()) {
           <aside class="context-notice" aria-label="Recommended action"><span class="recommendation-mark" aria-hidden="true">✓</span><b>{{ recommendationText() }}</b><button type="button" (click)="dismissTip()" aria-label="Dismiss recommendation">×</button></aside>
         }
 
-        @if (actionMessage()) { <section class="notice" [class.success]="!actionFailed()" role="status">{{ actionMessage() }}</section> }
+        @if (actionMessage()) { <section staffPageState class="notice" [class.success]="!actionFailed()" role="status">{{ actionMessage() }}</section> }
         @if (refreshWarning()) {
           <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Couldn’t refresh everything.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
         }

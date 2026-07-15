@@ -1,19 +1,19 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffToday } from "../../core/staff-app.service";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [DatePipe, IonSpinner],
+  imports: [DatePipe, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Attendance</p><h1>Attendance</h1><p>Clock-in, break, and clock-out controls.</p></div></header>
-      @if (!canUseAttendance()) { <section class="notice">You do not have permission to use attendance controls.</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading attendance...</section> }
-       @if (message()) { <section class="notice success">{{ message() }}</section> }
-       @if (localError()) { <section class="notice">{{ localError() }}</section> }
-       @if (staff.error() && !localError()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (!canUseAttendance()) { <section staffPageState class="notice">You do not have permission to use attendance controls.</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading attendance...</section> }
+       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
+       @if (staff.error() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (today(); as data) {
         <section class="grid four"><article class="kpi"><span>Status</span><strong>{{ attendanceStatus() }}</strong></article><article class="kpi"><span>Clock in</span><strong>{{ activeOrLatestAttendance()?.clockInAt ? (activeOrLatestAttendance()?.clockInAt | date:'shortTime') : '-' }}</strong></article><article class="kpi"><span>Clock out</span><strong>{{ activeOrLatestAttendance()?.clockOutAt ? (activeOrLatestAttendance()?.clockOutAt | date:'shortTime') : '-' }}</strong></article><article class="kpi"><span>Worked</span><strong>{{ workedLabel() }}</strong></article></section>
         <section class="panel"><div class="panel-title"><h2>Actions</h2><span>{{ pendingAction() ? 'Saving...' : data.date }}</span></div><div class="row-actions">@if (canUseAttendance()) { @if (!activeAttendance()) { <button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="clockIn()">{{ pendingAction() === 'clock-in' ? 'Clocking in...' : 'Clock in' }}</button> } @else if (isOnBreak()) { <button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="endBreak()">{{ pendingAction() === 'end-break' ? 'Ending break...' : 'End break' }}</button> } @else { <button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="startBreak()">{{ pendingAction() === 'start-break' ? 'Starting break...' : 'Start break' }}</button><button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="clockOut()">{{ pendingAction() === 'clock-out' ? 'Clocking out...' : 'Clock out' }}</button> } }</div></section>

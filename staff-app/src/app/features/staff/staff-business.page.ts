@@ -1,7 +1,6 @@
 import { DatePipe } from "@angular/common";
 import { Component, computed, HostListener, OnDestroy, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { IonSpinner } from "@ionic/angular/standalone";
 import {
   StaffAppService,
   StaffBusiness,
@@ -11,23 +10,24 @@ import {
 } from "../../core/staff-app.service";
 import { businessDate } from "../../core/business-date";
 import { formatPaiseInr } from "../../core/paise-inr.pipe";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 type BusinessPreset = "today" | "1m" | "3m" | "6m" | "1y" | "custom";
 type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
 
 @Component({
   standalone: true,
-  imports: [DatePipe, FormsModule, IonSpinner],
+  imports: [DatePipe, FormsModule, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head">
         <div><p class="eyebrow">My business</p><h1>Work & billing</h1><p>Appointments, service time and billing across any selected period.</p></div>
       </header>
 
-      @if (!canReadBusiness()) { <section class="notice">You do not have permission to read staff business data.</section> }
-      @if (message()) { <section class="notice">{{ message() }}</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading business report...</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (!canReadBusiness()) { <section staffPageState class="notice">You do not have permission to read staff business data.</section> }
+      @if (message()) { <section staffPageState class="notice">{{ message() }}</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading business report...</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadBusiness()) {
         <section class="panel">
@@ -192,7 +192,7 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
             }
           </details>
         } @else if (!data.permissions.earnings) {
-          <section class="notice">Earnings and payroll are restricted for your role.</section>
+          <section staffPageState class="notice">Earnings and payroll are restricted for your role.</section>
         }
 
         @if (data.targets.length) {
@@ -311,8 +311,8 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
         <div class="drawer-backdrop" (click)="dismissBackdrop($event)">
           <aside id="business-invoice-drawer" class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="business-invoice-title" tabindex="-1">
             <div class="panel-title"><h2 id="business-invoice-title">Invoice detail</h2><button class="link-button" type="button" (click)="closeDrawers()">Close</button></div>
-            @if (invoiceLoading()) { <section class="state"><ion-spinner name="crescent" /> Loading invoice...</section> }
-            @if (invoiceError()) { <section class="notice">{{ invoiceError() }}</section> }
+            @if (invoiceLoading()) { <section staffPageState class="state" [loading]="true">Loading invoice...</section> }
+            @if (invoiceError()) { <section staffPageState class="notice">{{ invoiceError() }}</section> }
             @if (invoiceDetail(); as invoice) {
               <section class="grid two compact-grid">
                 <article class="kpi"><span>Invoice</span><strong>{{ invoice.invoiceNumber || invoice.id }}</strong><small>{{ invoice.status }}</small></article>
@@ -609,12 +609,6 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     const valid = /^\d{4}-\d{2}-\d{2}$/.test(this.fromDate()) && /^\d{4}-\d{2}-\d{2}$/.test(this.toDate()) && this.fromDate() <= this.toDate();
     if (!valid) this.message.set("Choose a valid From date on or before the To date.");
     return valid;
-  }
-
-  private async reloadLoadedPages() {
-    const pages = Math.max(1, this.business()?.pagination.page || 1);
-    await this.load(true);
-    for (let page = 1; page < pages && this.business()?.pagination.hasMore; page += 1) await this.load(false);
   }
 
   private monthsAgo(date: string, months: number): string {

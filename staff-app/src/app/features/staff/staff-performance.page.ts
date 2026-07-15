@@ -1,15 +1,15 @@
 import { Component, OnInit, signal } from "@angular/core";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [PaiseInrPipe, IonSpinner],
+  imports: [PaiseInrPipe, StaffPageStateComponent],
   template: `
     <section class="page"><header class="page-head"><div><p class="eyebrow">Performance</p><h1>Performance intelligence</h1><p>Productivity, utilization, rating and improvement signals.</p></div></header>
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading performance...</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading performance...</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (os(); as data) {
         <section class="grid four"><article class="kpi"><span>Score</span><strong>{{ data.performance.productivityScore }}/100</strong></article><article class="kpi"><span>Services</span><strong>{{ data.performance.completedServices }}</strong></article><article class="kpi"><span>Utilization</span><strong>{{ data.performance.avgUtilization }}%</strong></article><article class="kpi"><span>Rating</span><strong>{{ data.performance.avgRating || '-' }}</strong></article></section>
         <section class="panel"><div class="panel-title"><h2>Trend board</h2><span>daily to yearly</span></div><div class="trend-grid">@for (key of reportKeys(); track key) { <article><span>{{ key }}</span><strong>{{ data.reports[key].productivityScore }}/100</strong><div class="timer-track"><span [style.width.%]="data.reports[key].productivityScore"></span></div><small>{{ data.reports[key].services }} services</small></article> }</div></section>

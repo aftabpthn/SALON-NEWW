@@ -2,6 +2,7 @@ import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, comp
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import { StaffAppService, StaffEnterpriseOs, StaffWorkspacePreferences } from "../../core/staff-app.service";
+import { StaffPushService } from "../../core/staff-push.service";
 import { resolveStaffIdentity } from "./staff-role-label";
 
 type StaffNavItem = { label: string; path: string; iconPath: string; group: string; permission?: string; anyPermissions?: readonly string[] };
@@ -99,6 +100,14 @@ type StaffRecentItem = { label: string; path: string };
         <button type="button" class="drawer-backdrop open" (click)="closeNotifications()" aria-label="Close notifications"></button>
         <aside class="notification-drawer open" role="dialog" aria-modal="true" aria-labelledby="staff-notifications-title" tabindex="-1" #notificationDialog (keydown)="trapFocus($event, notificationDialog)">
           <div class="drawer-title"><strong id="staff-notifications-title">Notifications</strong><button type="button" (click)="closeNotifications()">Close</button></div>
+          <section class="push-permission-card" [attr.data-state]="push.state()">
+            <div><strong>Mobile notifications</strong><small>{{ push.label() }}</small></div>
+            @if (push.state() === 'available' || push.state() === 'unconfigured') {
+              <button type="button" [disabled]="push.busy()" (click)="enableMobileNotifications()">{{ push.busy() ? 'Enabling...' : 'Enable' }}</button>
+            }
+            @if (push.state() === 'enabled') { <span>On</span> }
+          </section>
+          @if (push.message()) { <p class="push-message" role="status">{{ push.message() }}</p> }
           <div class="notice-list">
             @for (note of os()?.notifications || []; track note.id) {
               <article><strong>{{ note.title }}</strong><small>{{ note.body || note.status }}</small><span>{{ note.status }}</span><button type="button" (click)="markNotification(note.id, note.status === 'read' ? 'unread' : 'read')">{{ note.status === 'read' ? 'Mark unread' : 'Mark read' }}</button></article>
@@ -191,6 +200,13 @@ type StaffRecentItem = { label: string; path: string };
     .command-list strong, .command-list small { display: block; color: var(--staff-text); }
     .command-list small { color: var(--staff-text-secondary); }
      .notification-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 31; width: min(420px, 92vw); box-sizing: border-box; overflow: auto; padding: 14px; background: var(--staff-background); box-shadow: var(--staff-shadow-elevated); overscroll-behavior: contain; animation: shell-drawer-enter var(--staff-motion-standard) var(--staff-motion-ease) both; }
+    .push-permission-card { display:flex;align-items:center;gap:12px;margin:10px 0;padding:13px;border:1px solid var(--staff-border);border-radius:14px;background:var(--staff-surface-secondary); }
+    .push-permission-card div { min-width:0;flex:1; }
+    .push-permission-card strong,.push-permission-card small { display:block; }
+    .push-permission-card small { margin-top:4px;color:var(--staff-text-secondary);line-height:1.35; }
+    .push-permission-card button { min-height:38px;padding:8px 12px;border:0;border-radius:10px;color:var(--staff-text-inverse);background:var(--staff-primary);font-weight:800; }
+    .push-permission-card span { padding:6px 9px;border-radius:999px;color:var(--staff-primary-hover);background:var(--staff-primary-light);font-size:12px;font-weight:800; }
+    .push-message { margin:8px 2px;color:var(--staff-text-secondary);font-size:12px; }
     .notice-list { display: grid; gap: 8px; }
     .notice-list article { padding: 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface); }
     .notice-list strong, .notice-list small, .notice-list span { display: block; }
@@ -327,12 +343,13 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       .slice(0, 12);
   });
 
-  constructor(readonly staff: StaffAppService, private readonly router: Router) {}
+  constructor(readonly staff: StaffAppService, readonly push: StaffPushService, private readonly router: Router) {}
 
   ngOnInit() {
     void this.loadShellData();
     void this.flushOfflineQueue();
     void this.connectRealtime();
+    void this.push.refreshStatus();
     this.pollTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && !this.realtimeConnected()) void this.loadShellData();
     }, 60000);
@@ -449,6 +466,10 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   async markNotification(id: string, status: "read" | "unread" | "archived") {
     await this.staff.updateNotification(id, status);
     await this.loadShellData();
+  }
+
+  async enableMobileNotifications() {
+    await this.push.enable();
   }
 
   activateNav(item: StaffNavItem) {

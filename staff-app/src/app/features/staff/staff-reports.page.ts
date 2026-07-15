@@ -1,14 +1,14 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { StaffAppService, StaffDashboard, StaffEnterpriseOs } from "../../core/staff-app.service";
 import { businessDateOffset } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [PaiseInrPipe, DatePipe, FormsModule, IonSpinner],
+  imports: [PaiseInrPipe, DatePipe, FormsModule, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head">
@@ -19,10 +19,10 @@ import { PaiseInrPipe } from "../../core/paise-inr.pipe";
         </div>
       </header>
 
-      @if (!canReadReports()) { <section class="notice">You do not have permission to view reports.</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading reports...</section> }
-      @if (message()) { <section class="notice success">{{ message() }}</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (!canReadReports()) { <section staffPageState class="notice">You do not have permission to view reports.</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading reports...</section> }
+      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadReports()) {
         <section class="panel">

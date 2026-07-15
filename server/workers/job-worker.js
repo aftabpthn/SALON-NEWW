@@ -7,6 +7,7 @@ import { run as emailSend } from "./handlers/email-send.handler.js";
 import { run as inventoryDeduct } from "./handlers/inventory-deduct.handler.js";
 import { run as loyaltyCredit } from "./handlers/loyalty-credit.handler.js";
 import { run as summaryRefresh } from "./handlers/summary-refresh.handler.js";
+import { run as staffWebPushSend } from "./handlers/staff-web-push-send.handler.js";
 import { run as whatsappSend } from "./handlers/whatsapp-send.handler.js";
 
 const handlers = {
@@ -25,7 +26,9 @@ const handlers = {
   summary_refresh: summaryRefresh,
   "summary-refresh": summaryRefresh,
   audit_write: auditWrite,
-  "audit-write": auditWrite
+  "audit-write": auditWrite,
+  staff_web_push_send: staffWebPushSend,
+  "staff-web-push-send": staffWebPushSend
 };
 
 let timer = null;

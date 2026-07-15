@@ -1,20 +1,20 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { StaffAppService, StaffLeave, StaffLeaveBalance } from "../../core/staff-app.service";
 import { businessDate } from "../../core/business-date";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [DatePipe, FormsModule, IonSpinner],
+  imports: [DatePipe, FormsModule, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Leaves</p><h1>Leave management</h1><p>Balances, history and request form.</p></div></header>
-      @if (!canReadLeaves()) { <section class="notice">You do not have permission to view leave data.</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading leaves...</section> }
-      @if (message()) { <section class="notice success">{{ message() }}</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (!canReadLeaves()) { <section staffPageState class="notice">You do not have permission to view leave data.</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading leaves...</section> }
+      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadLeaves()) {
         <section class="grid two">

@@ -407,6 +407,9 @@ export type StaffConversationMessage = {
   createdAt: string;
 };
 
+export type StaffPushDevice = { id: string };
+export type StaffPushConfig = { configured: boolean; publicKey: string };
+
 type StaffRefreshResponse = {
   accessToken: string;
   user?: StaffUser;
@@ -546,6 +549,24 @@ export class StaffAppService {
 
   async updateNotification(id: string, status: "read" | "unread" | "archived" = "read"): Promise<unknown> {
     return this.queueableMutation("PATCH", `/staff-self/notifications/${encodeURIComponent(id)}`, { status });
+  }
+
+  async mobilePushConfig(): Promise<StaffPushConfig> {
+    return this.get<StaffPushConfig>("/mobile/push-config");
+  }
+
+  async registerPushDevice(id: string): Promise<StaffPushDevice> {
+    return this.post<StaffPushDevice>("/mobile/devices", {
+      id,
+      platform: "web",
+      pushProvider: "web-push",
+      appVersion: "0.1.0",
+      capabilities: { pwa: true, pushNotifications: true }
+    });
+  }
+
+  async registerPushSubscription(payload: Record<string, unknown>): Promise<unknown> {
+    return this.post("/mobile/push-subscriptions", payload);
   }
 
   async updateSchedule(scheduleId: string, payload: { version: number; scheduleDate?: string; startTime?: string; endTime?: string; status?: string; notes?: string }): Promise<unknown> {

@@ -15,18 +15,21 @@ function scope(access, branchId = "") {
 
 export class PushNotificationService {
   registerDevice(payload = {}, access) {
-    return authService.registerDevice(payload, access);
+    const existing = payload.id ? repositories.mobileDevices.getById(payload.id, { tenantId: access.tenantId }) : null;
+    if (existing && existing.userId !== access.userId) throw notFound("Mobile device not found");
+    return authService.registerDevice({ ...payload, userId: access.userId }, access);
   }
 
   subscribe(payload = {}, access) {
     if (!payload.deviceId || !payload.endpoint) throw badRequest("deviceId and endpoint are required");
     const device = repositories.mobileDevices.getById(payload.deviceId, { tenantId: access.tenantId });
     if (!device) throw notFound("Mobile device not found");
+    if (device.userId !== access.userId) throw notFound("Mobile device not found");
     const existing = repositories.pushSubscriptions
       .list({ limit: 10000 }, { tenantId: access.tenantId })
       .find((item) => item.deviceId === payload.deviceId && item.endpoint === payload.endpoint);
     const record = {
-      userId: payload.userId || access.userId,
+      userId: access.userId,
       deviceId: payload.deviceId,
       branchId: payload.branchId || device.branchId || access.branchId || "",
       endpoint: payload.endpoint,

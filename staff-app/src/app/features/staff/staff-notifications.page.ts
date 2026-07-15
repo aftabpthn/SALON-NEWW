@@ -1,18 +1,18 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [DatePipe, IonSpinner],
+  imports: [DatePipe, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Notifications</p><h1>Notifications</h1><p>Staff alerts and connected system notices.</p></div></header>
-      @if (!canReadNotifications()) { <section class="notice">You do not have permission to view notifications.</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading notifications...</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
-      @if (message()) { <section class="notice success">{{ message() }}</section> }
+      @if (!canReadNotifications()) { <section staffPageState class="notice">You do not have permission to view notifications.</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading notifications...</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (canReadNotifications() && os(); as data) {
         <section class="panel">
           <div class="panel-title"><h2>Inbox</h2><span>{{ data.notifications.length }}</span></div>

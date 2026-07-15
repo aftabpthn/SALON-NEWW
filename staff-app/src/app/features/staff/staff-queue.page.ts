@@ -1,17 +1,17 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [DatePipe, IonSpinner],
+  imports: [DatePipe, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Today's queue</p><h1>Live queue</h1><p>Timeline and service timers for today.</p></div></header>
-      @if (!canReadQueue()) { <section class="notice">You do not have permission to read queue data.</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading queue...</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (!canReadQueue()) { <section staffPageState class="notice">You do not have permission to read queue data.</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading queue...</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (canReadQueue() && os(); as data) {
         <section class="grid two">
           <article class="panel">
@@ -58,7 +58,7 @@ export class StaffQueuePage implements OnInit {
   }
 
   canReadQueue(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasAnyPermission(["read:appointments", "read:staff"]);
   }
 
   formatMinutes(minutes: number): string { const safe = Math.max(0, Number(minutes || 0)); return `${Math.floor(safe / 60)}h ${safe % 60}m`; }

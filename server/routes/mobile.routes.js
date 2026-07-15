@@ -2,9 +2,14 @@ import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { requirePermission } from "../middleware/rbac.js";
 import { pushNotificationService } from "../services/push-notification.service.js";
+import { staffWebPushService } from "../services/staff-web-push.service.js";
 import { validateBody } from "../validators/request-validator.js";
 
 export const mobileRouter = Router();
+
+mobileRouter.get("/mobile/push-config", asyncHandler((req, res) => {
+  res.json(staffWebPushService.publicConfig());
+}));
 
 mobileRouter.get("/mobile/context", asyncHandler((req, res) => {
   res.json({

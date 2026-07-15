@@ -1,12 +1,11 @@
 import { Component, OnInit, signal } from "@angular/core";
-import { FormsModule } from "@angular/forms";
-import { IonSpinner } from "@ionic/angular/standalone";
 import { StaffAppService, StaffEnterpriseOs, StaffToday } from "../../core/staff-app.service";
 import { addBusinessDays, businessDate } from "../../core/business-date";
+import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [FormsModule, IonSpinner],
+  imports: [StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head">
@@ -23,10 +22,10 @@ import { addBusinessDays, businessDate } from "../../core/business-date";
         </div>
       </header>
 
-      @if (!canReadRoster()) { <section class="notice">You do not have permission to read roster data.</section> }
-      @if (loading()) { <section class="state"><ion-spinner name="crescent" /> Loading roster...</section> }
-      @if (message()) { <section class="notice success">{{ message() }}</section> }
-      @if (staff.error()) { <section class="notice">{{ staff.error() }}</section> }
+      @if (!canReadRoster()) { <section staffPageState class="notice">You do not have permission to read roster data.</section> }
+      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading roster...</section> }
+      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadRoster() && today(); as data) {
         <section class="grid two">
