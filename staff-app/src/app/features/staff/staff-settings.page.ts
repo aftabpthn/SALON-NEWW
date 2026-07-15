@@ -36,17 +36,23 @@ import { StaffAppService, StaffDashboard } from "../../core/staff-app.service";
             </div>
           </article>
 
-          <article class="panel dark">
-            <div class="panel-title"><h2>Biometric unlock</h2><span>{{ staff.biometricEnabled() ? 'enabled' : 'off' }}</span></div>
+          <article class="panel dark biometric-panel">
+            <div class="panel-title">
+              <h2>Biometric unlock</h2>
+              <button
+                class="biometric-switch"
+                type="button"
+                role="switch"
+                [attr.aria-checked]="staff.biometricEnabled()"
+                aria-label="Biometric unlock"
+                [disabled]="!staff.biometricSupported() || !staff.hasSavedSession()"
+                (click)="toggleBiometric()"
+              ><span aria-hidden="true"></span></button>
+            </div>
             <p class="muted">Use device fingerprint, face unlock, or secure screen lock to open this staff app on this device.</p>
             <div class="list">
               <div class="row"><strong>Device support</strong><span>{{ staff.biometricSupported() ? 'Available' : 'Not available' }}</span></div>
               <div class="row"><strong>Saved session</strong><span>{{ staff.hasSavedSession() ? 'Ready' : 'Login required' }}</span></div>
-            </div>
-            <div class="row-actions permission-actions">
-              <button class="button primary" type="button" [disabled]="!staff.biometricSupported() || !staff.hasSavedSession()" (click)="toggleBiometric()">
-                {{ staff.biometricEnabled() ? 'Turn off biometric' : 'Enable biometric' }}
-              </button>
             </div>
           </article>
         </section>
@@ -61,7 +67,25 @@ import { StaffAppService, StaffDashboard } from "../../core/staff-app.service";
       }
     </section>
   `,
-  styleUrls: ["./staff-app.styles.css"]
+  styleUrls: ["./staff-app.styles.css"],
+  styles: [`
+    .biometric-panel { padding: 16px; border-radius: 18px; }
+    .biometric-panel .panel-title { min-height: 28px; margin-bottom: 8px; }
+    .biometric-panel .muted { margin: 0 0 6px; font-size: .84rem; line-height: 1.45; }
+    .biometric-panel .row { min-height: 48px; padding: 8px 0; }
+    .biometric-switch { position: relative; width: 42px; height: 24px; flex: 0 0 42px; padding: 0; border: 1px solid var(--staff-border-accent); border-radius: 999px; background: var(--staff-surface-secondary); cursor: pointer; transition: background-color 180ms ease, border-color 180ms ease; }
+    .biometric-switch span { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--staff-text-secondary); transition: transform 180ms ease, background-color 180ms ease; }
+    .biometric-switch[aria-checked="true"] { border-color: var(--staff-primary); background: var(--staff-primary); }
+    .biometric-switch[aria-checked="true"] span { transform: translateX(18px); background: var(--staff-on-primary); }
+    .biometric-switch:focus-visible { outline: 3px solid var(--staff-focus-ring); outline-offset: 3px; }
+    .biometric-switch:disabled { opacity: .55; cursor: not-allowed; }
+    @media (max-width: 700px) {
+      .biometric-panel .row { display: flex; align-items: center; gap: 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .biometric-switch, .biometric-switch span { transition: none; }
+    }
+  `]
 })
 export class StaffSettingsPage implements OnInit {
   readonly dashboard = signal<StaffDashboard | null>(null);
