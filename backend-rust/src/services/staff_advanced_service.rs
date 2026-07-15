@@ -10,11 +10,12 @@ use crate::{
     repositories::staff_advanced_repository::{
         self as repository, BiometricConsentRecord, BiometricDeviceInput, BiometricDeviceRecord,
         BiometricEventRecord, BiometricGatewayRecord, BiometricMappingRecord, IncentiveRuleInput,
-        IncentiveRuleRecord, MobileAttendanceSummary, MobilePayrollSummary, MobileScheduleSummary,
-        MobileStaffSummary, PayrollAdjustmentRuleInput, PayrollAdjustmentRuleRecord,
-        PayrollStructureInput, PayrollStructureRecord, PerformanceSourceRecord,
-        StaffMobileConflictRecord, StaffMobileDeviceAuthRecord, StaffMobileDeviceRecord,
-        StaffMobileSyncRecord, StaffTaskCommentRecord, StaffTaskInput, StaffTaskRecord,
+        IncentiveRuleRecord, MobileAttendanceSummary, MobilePayrollSummary,
+        MobilePushSubscriptionRecord, MobileScheduleSummary, MobileStaffSummary,
+        PayrollAdjustmentRuleInput, PayrollAdjustmentRuleRecord, PayrollStructureInput,
+        PayrollStructureRecord, PerformanceSourceRecord, StaffMobileConflictRecord,
+        StaffMobileDeviceAuthRecord, StaffMobileDeviceRecord, StaffMobileSyncRecord,
+        StaffTaskCommentRecord, StaffTaskInput, StaffTaskRecord,
     },
     services::{auth_service, staff_attendance_service},
 };
@@ -276,6 +277,13 @@ pub struct MobileDeviceRequest {
 pub struct MobileDeviceRegistration {
     pub device: StaffMobileDeviceRecord,
     pub sync_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobilePushSubscriptionRequest {
+    pub push_token: Option<String>,
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -618,6 +626,16 @@ pub async fn register_biometric_gateway(
     Ok(BiometricGatewayRegistration { gateway, api_key })
 }
 
+pub async fn list_biometric_gateways(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<BiometricGatewayRecord>, AppError> {
+    repository::list_biometric_gateways(db, tenant_id, branch_id)
+        .await
+        .map_err(internal("load biometric gateways"))
+}
+
 pub async fn heartbeat_biometric_gateway(
     db: &PgPool,
     gateway_id: &str,
@@ -905,6 +923,60 @@ pub async fn register_mobile_device(
     .map_err(internal("register staff mobile device"))?
     .ok_or_else(|| AppError::validation("employee is invalid"))?;
     Ok(MobileDeviceRegistration { device, sync_token })
+}
+
+pub async fn save_mobile_push_subscription(
+    db: &PgPool,
+    encryption_key: Option<&str>,
+    tenant_id: &str,
+    branch_id: &str,
+    device_id: &str,
+    sync_token: &str,
+    request: MobilePushSubscriptionRequest,
+) -> Result<MobilePushSubscriptionRecord, AppError> {
+    authenticate_mobile_device(db, tenant_id, branch_id, device_id, sync_token).await?;
+    let enabled = request.enabled.unwrap_or(true);
+    let token = request
+        .push_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if enabled && token.is_none() {
+        return Err(AppError::validation(
+            "push token is required when push is enabled",
+        ));
+    }
+    let (ciphertext, fingerprint) = if let Some(token) = token {
+        if token.chars().count() > 4_096 {
+            return Err(AppError::validation("push token is invalid"));
+        }
+        let key = encryption_key.ok_or_else(|| {
+            AppError::service_unavailable(
+                "PUSH_ENCRYPTION_NOT_CONFIGURED",
+                "mobile push encryption is not configured",
+            )
+        })?;
+        (
+            Some(crate::services::security_service::encrypt_secret(
+                key, token,
+            )?),
+            Some(sha256_text(token)),
+        )
+    } else {
+        (None, None)
+    };
+    repository::save_mobile_push_subscription(
+        db,
+        tenant_id,
+        branch_id,
+        device_id,
+        ciphertext.as_deref(),
+        fingerprint.as_deref(),
+        enabled,
+    )
+    .await
+    .map_err(internal("save mobile push subscription"))?
+    .ok_or_else(|| AppError::not_found("mobile device was not found"))
 }
 
 pub async fn mobile_dashboard(

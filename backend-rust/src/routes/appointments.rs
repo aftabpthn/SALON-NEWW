@@ -1,4 +1,9 @@
-use crate::state::{AppState, AppointmentEvent};
+use crate::{
+    repositories::services_repository,
+    routes::pos,
+    services::service_pricing_service,
+    state::{AppState, AppointmentEvent},
+};
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode},
@@ -103,6 +108,10 @@ pub fn router() -> Router<AppState> {
         .route("/appointments", axum::routing::get(list_appointments))
         .route("/appointments", axum::routing::post(create_appointment))
         .route(
+            "/appointments/batch",
+            axum::routing::post(save_appointment_batch),
+        )
+        .route(
             "/appointment-resources",
             axum::routing::get(list_appointment_resources),
         )
@@ -119,6 +128,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::patch(save_appointment_settings),
         )
         .route("/appointments/:id", axum::routing::get(get_appointment))
+        .route(
+            "/appointments/:id/notes",
+            axum::routing::patch(update_appointment_notes),
+        )
         .route("/appointments/:id/status", axum::routing::post(set_status))
         .route(
             "/appointment-lifecycle/appointments/:id/status",
@@ -151,6 +164,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/appointments/:id/no-show",
             axum::routing::post(mark_no_show),
+        )
+        .route(
+            "/appointments/:id/no-show-charge",
+            axum::routing::post(mark_no_show_with_charge),
         )
         .route(
             "/appointments/:id/duplicate",
@@ -264,6 +281,19 @@ pub(crate) struct AppointmentCreatePayload {
     pub(crate) source: Option<String>,
     #[serde(default)]
     pub(crate) chair_room_id: String,
+    #[serde(default, alias = "serviceSelections")]
+    pub(crate) service_selections: Vec<AppointmentServiceSelection>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AppointmentServiceSelection {
+    #[serde(default)]
+    pub(crate) service_id: String,
+    #[serde(default)]
+    pub(crate) variant_id: String,
+    #[serde(default)]
+    pub(crate) addon_ids: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -332,6 +362,66 @@ pub(crate) struct StatusPayload {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NoShowChargePayload {
+    pub(crate) amount_paise: i64,
+    #[serde(default = "default_payment_provider")]
+    pub(crate) provider: String,
+    #[serde(default)]
+    pub(crate) idempotency_key: String,
+}
+
+fn default_payment_provider() -> String {
+    "razorpay".to_string()
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AppointmentNotesPayload {
+    #[serde(default)]
+    pub(crate) notes: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AppointmentBatchLinePayload {
+    #[serde(default)]
+    pub(crate) appointment_id: String,
+    #[serde(default)]
+    pub(crate) staff_id: String,
+    #[serde(default)]
+    pub(crate) service_id: String,
+    #[serde(default)]
+    pub(crate) start_at: String,
+    #[serde(default)]
+    pub(crate) end_at: String,
+    #[serde(default)]
+    pub(crate) chair_room_id: String,
+    #[serde(default)]
+    pub(crate) notes: String,
+    #[serde(default)]
+    pub(crate) variant_id: String,
+    #[serde(default)]
+    pub(crate) addon_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AppointmentBatchPayload {
+    #[serde(default)]
+    pub(crate) client_id: String,
+    #[serde(default)]
+    pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) booking_group_id: String,
+    #[serde(default)]
+    pub(crate) removed_appointment_ids: Vec<String>,
+    #[serde(default)]
+    pub(crate) recurrence_count: Option<i32>,
+    #[serde(default)]
+    pub(crate) recurrence_interval_days: Option<i64>,
+    #[serde(default)]
+    pub(crate) lines: Vec<AppointmentBatchLinePayload>,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct ReschedulePayload {
     #[serde(default)]
     pub(crate) start_at: String,
@@ -341,6 +431,8 @@ pub(crate) struct ReschedulePayload {
     pub(crate) reason: String,
     #[serde(default)]
     pub(crate) staff_id: String,
+    #[serde(default)]
+    pub(crate) service_ids: Vec<String>,
     #[serde(default)]
     pub(crate) branch_id: String,
     #[serde(default)]
@@ -406,6 +498,14 @@ fn blackout_staff_ids(payload: &BlackoutPayload) -> Vec<String> {
     staff_ids
 }
 
+fn blackout_group_id(staff_ids: &[String]) -> String {
+    if staff_ids.len() > 1 {
+        uuid::Uuid::new_v4().to_string()
+    } else {
+        String::new()
+    }
+}
+
 fn appointment_settings_json(value: Value) -> Value {
     value
         .is_object()
@@ -435,6 +535,48 @@ mod blackout_tests {
     #[test]
     fn rejects_non_object_appointment_settings() {
         assert_eq!(appointment_settings_json(json!([])), json!({}));
+    }
+
+    #[test]
+    fn creates_a_group_only_for_multi_staff_blackouts() {
+        assert!(blackout_group_id(&["staff-a".into()]).is_empty());
+        assert!(!blackout_group_id(&["staff-a".into(), "staff-b".into()]).is_empty());
+    }
+
+    #[test]
+    fn uses_requested_service_ids_when_replacing_a_booking_service() {
+        assert_eq!(
+            requested_service_ids(&["service-old".into()], vec!["service-new".into()]),
+            vec!["service-new"]
+        );
+    }
+
+    #[test]
+    fn maps_staff_booking_rule_codes_to_user_errors() {
+        assert_eq!(
+            staff_booking_rule_message("STAFF_SERVICE"),
+            "selected staff is not assigned to this service"
+        );
+        assert_eq!(
+            staff_booking_rule_message("OTHER_CENTER_WORKING"),
+            "staff is working at another center for this time"
+        );
+    }
+
+    #[test]
+    fn serializes_variant_and_addons_for_booked_price_snapshot() {
+        let result = service_selections_json(
+            &["service-1".into()],
+            &[AppointmentServiceSelection {
+                service_id: "service-1".into(),
+                variant_id: "variant-1".into(),
+                addon_ids: vec!["addon-1".into()],
+            }],
+        );
+        assert!(result.is_ok());
+        let json = result.ok().unwrap();
+        assert!(json.contains("variant-1"));
+        assert!(json.contains("addon-1"));
     }
 }
 
@@ -507,6 +649,8 @@ pub(crate) struct SalePayload {
     sale_id: String,
     appointment_id: String,
     total: i64,
+    total_paise: i64,
+    status: String,
 }
 
 #[derive(Serialize)]
@@ -574,6 +718,84 @@ fn parse_datetime(value: &str, field: &str) -> Result<DateTime<Utc>, ApiError> {
 
 fn service_ids_to_json(service_ids: &[String]) -> String {
     serde_json::to_string(service_ids).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn service_selections_json(
+    service_ids: &[String],
+    selections: &[AppointmentServiceSelection],
+) -> Result<String, ApiError> {
+    let allowed = service_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    let mut values = serde_json::Map::new();
+    for selection in selections {
+        let service_id = selection.service_id.trim();
+        if service_id.is_empty() || !allowed.contains(service_id) || values.contains_key(service_id)
+        {
+            return Err(ApiError::bad_request(
+                "service selections must be unique and belong to the booking",
+            ));
+        }
+        values.insert(
+            service_id.to_string(),
+            json!({
+                "variantId": selection.variant_id.trim(),
+                "addonIds": selection.addon_ids,
+            }),
+        );
+    }
+    Ok(Value::Object(values).to_string())
+}
+
+pub(crate) async fn validate_service_pricing(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    service_ids: &[String],
+    selections: &[AppointmentServiceSelection],
+    starts_at: DateTime<Utc>,
+) -> Result<i64, ApiError> {
+    let selections = selections
+        .iter()
+        .map(|selection| (selection.service_id.trim(), selection))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut total = 0i64;
+    for service_id in service_ids {
+        let selection = selections.get(service_id.trim()).copied();
+        let quote = service_pricing_service::quote(
+            &state.db,
+            tenant_id,
+            branch_id,
+            service_id,
+            staff_id,
+            selection
+                .map(|value| value.variant_id.trim())
+                .unwrap_or_default(),
+            selection
+                .map(|value| value.addon_ids.as_slice())
+                .unwrap_or_default(),
+            starts_at,
+        )
+        .await
+        .map_err(|_| ApiError::bad_request("service pricing selection is invalid"))?;
+        total = total.saturating_add(quote.final_price_paise);
+    }
+    Ok(total)
+}
+
+fn requested_service_ids(current: &[String], requested: Vec<String>) -> Vec<String> {
+    let service_ids = requested
+        .into_iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    if service_ids.is_empty() {
+        current.to_vec()
+    } else {
+        service_ids
+    }
 }
 
 fn parse_service_ids(raw: &str) -> Vec<String> {
@@ -662,7 +884,7 @@ fn allowed_status() -> Vec<&'static str> {
 }
 
 fn status_is_closed(status: &str) -> bool {
-    matches!(status, "completed" | "paid" | "cancelled")
+    matches!(status, "completed" | "billed" | "paid" | "cancelled")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1021,7 +1243,9 @@ async fn insert_activity(
     let _ = state.appointment_events.send(AppointmentEvent {
         tenant_id: tenant_id.to_string(),
         branch_id: new.branch_id.clone(),
-        appointment_id: new.id.clone(),
+        client_id: new.client_id.clone(),
+        entity_type: "appointment".to_string(),
+        entity_id: new.id.clone(),
         action: action.to_string(),
     });
     Ok(())
@@ -1187,9 +1411,17 @@ async fn validate_staff_blackout(
         return Ok(());
     }
     let blocked = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM appointment_blackouts
-         WHERE tenant_id=$1 AND branch_id=$2 AND (staff_id='' OR staff_id=$3)
-           AND blocked_from IS NOT NULL AND blocked_from < $5 AND blocked_until > $4)",
+        "WITH slot AS (
+            SELECT ($4 AT TIME ZONE 'Asia/Kolkata')::date AS business_date
+         )
+         SELECT EXISTS(SELECT 1 FROM appointment_blackouts b, slot
+         WHERE b.tenant_id=$1 AND b.branch_id=$2 AND (b.staff_id='' OR b.staff_id=$3)
+           AND (
+             (b.blocked_from IS NOT NULL AND b.blocked_until IS NOT NULL
+              AND b.blocked_from < $5 AND b.blocked_until > $4)
+             OR (b.blocked_from IS NULL AND b.blocked_until IS NULL
+                 AND b.blackout_date = slot.business_date::text)
+           ))",
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -1203,6 +1435,181 @@ async fn validate_staff_blackout(
         return Err(ApiError::conflict(
             "staff is unavailable for this blocked time",
         ));
+    }
+    Ok(())
+}
+
+fn staff_booking_rule_message(code: &str) -> &'static str {
+    match code {
+        "STAFF_UNAVAILABLE" => "selected staff is not active in this branch",
+        "SERVICE_UNAVAILABLE" => "selected service is unavailable in this branch",
+        "STAFF_SERVICE" => "selected staff is not assigned to this service",
+        "WEEKLY_OFF" | "SCHEDULE_WEEKLY_OFF" => "staff is on weekly off for this date",
+        "APPROVED_LEAVE" | "SCHEDULE_LEAVE" => "staff is on approved leave for this date",
+        "BOOKING_INTERVAL" => "appointment start time does not match staff booking interval",
+        "SCHEDULE_OTHER_CENTER" | "OTHER_CENTER_WORKING" => {
+            "staff is working at another center for this time"
+        }
+        "OUTSIDE_SHIFT" => "appointment time is outside the saved staff shift",
+        _ => "staff is unavailable for this appointment",
+    }
+}
+
+async fn validate_staff_booking_rules(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    service_ids: &[String],
+    start_at: DateTime<Utc>,
+    end_at: DateTime<Utc>,
+) -> Result<(), ApiError> {
+    let service_ids = service_ids
+        .iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    let rule_code = sqlx::query_scalar::<_, Option<String>>(
+        "WITH requested AS (
+            SELECT UNNEST($6::TEXT[]) AS service_id
+         ),
+         slot AS (
+            SELECT
+              ($4::timestamptz AT TIME ZONE 'Asia/Kolkata')::date AS business_date,
+              ($4::timestamptz AT TIME ZONE 'Asia/Kolkata')::time AS start_time,
+              ($5::timestamptz AT TIME ZONE 'Asia/Kolkata')::time AS end_time,
+              EXTRACT(DOW FROM ($4::timestamptz AT TIME ZONE 'Asia/Kolkata'))::smallint AS dow,
+              (EXTRACT(HOUR FROM ($4::timestamptz AT TIME ZONE 'Asia/Kolkata'))::int * 60
+                + EXTRACT(MINUTE FROM ($4::timestamptz AT TIME ZONE 'Asia/Kolkata'))::int) AS start_minute
+         ),
+         target AS (
+            SELECT s.id, s.user_id, p.booking_interval_minutes, p.shift_template_id
+            FROM staff s
+            LEFT JOIN staff_profiles p
+              ON p.staff_id=s.id AND p.tenant_id=s.tenant_id AND p.branch_id=s.branch_id
+            WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE
+         )
+         SELECT CASE
+           WHEN NOT EXISTS(SELECT 1 FROM target)
+             THEN 'STAFF_UNAVAILABLE'
+           WHEN EXISTS(
+             SELECT 1 FROM requested r
+             WHERE NOT EXISTS(
+               SELECT 1 FROM services svc
+               WHERE svc.tenant_id=$1 AND svc.branch_id=$2 AND svc.id=r.service_id AND svc.active=TRUE
+             )
+           )
+             THEN 'SERVICE_UNAVAILABLE'
+           WHEN EXISTS(
+             SELECT 1 FROM requested r
+             WHERE NOT EXISTS(
+               SELECT 1 FROM staff_service_assignments ssa
+               WHERE ssa.tenant_id=$1 AND ssa.branch_id=$2 AND ssa.staff_id=$3 AND ssa.service_id=r.service_id
+             )
+             AND NOT EXISTS(
+               SELECT 1 FROM staff_catalog_assignments sca
+               WHERE sca.tenant_id=$1 AND sca.branch_id=$2 AND sca.staff_id=$3
+                 AND sca.item_type='service' AND sca.item_id=r.service_id
+             )
+           )
+             THEN 'STAFF_SERVICE'
+           WHEN EXISTS(
+             SELECT 1 FROM target t
+             JOIN staff_shift_templates st
+               ON st.id=t.shift_template_id AND st.tenant_id=$1 AND st.branch_id=$2 AND st.active=TRUE
+             CROSS JOIN slot
+             WHERE slot.dow = ANY(st.weekly_off_days)
+           )
+             THEN 'WEEKLY_OFF'
+           WHEN EXISTS(
+             SELECT 1 FROM staff_leave_requests lr, slot
+             WHERE lr.tenant_id=$1 AND lr.branch_id=$2 AND lr.staff_id=$3
+               AND lr.status='approved'
+               AND slot.business_date BETWEEN lr.start_date AND lr.end_date
+           )
+             THEN 'APPROVED_LEAVE'
+           WHEN EXISTS(
+             SELECT 1 FROM target t, slot
+             WHERE COALESCE(t.booking_interval_minutes, 0) > 0
+               AND MOD(slot.start_minute, t.booking_interval_minutes) <> 0
+           )
+             THEN 'BOOKING_INTERVAL'
+           WHEN EXISTS(
+             SELECT 1 FROM staff_schedules ss, slot
+             WHERE ss.tenant_id=$1 AND ss.branch_id=$2 AND ss.staff_id=$3
+               AND ss.schedule_date=slot.business_date AND ss.status='working_other_center'
+           )
+             THEN 'SCHEDULE_OTHER_CENTER'
+           WHEN EXISTS(
+             SELECT 1 FROM staff_schedules ss, slot
+             WHERE ss.tenant_id=$1 AND ss.branch_id=$2 AND ss.staff_id=$3
+               AND ss.schedule_date=slot.business_date AND ss.status='weekly_off'
+           )
+             THEN 'SCHEDULE_WEEKLY_OFF'
+           WHEN EXISTS(
+             SELECT 1 FROM staff_schedules ss, slot
+             WHERE ss.tenant_id=$1 AND ss.branch_id=$2 AND ss.staff_id=$3
+               AND ss.schedule_date=slot.business_date
+               AND ss.status IN ('annual_leave','jury_duty','leave','sick_leave','special_leave')
+           )
+             THEN 'SCHEDULE_LEAVE'
+           WHEN EXISTS(
+             SELECT 1 FROM staff_schedules ss, slot
+             WHERE ss.tenant_id=$1 AND ss.branch_id=$2 AND ss.staff_id=$3
+               AND ss.schedule_date=slot.business_date
+           )
+           AND NOT EXISTS(
+             SELECT 1 FROM staff_schedules ss, slot
+             WHERE ss.tenant_id=$1 AND ss.branch_id=$2 AND ss.staff_id=$3
+               AND ss.schedule_date=slot.business_date AND ss.status='working'
+               AND (
+                 (ss.shift1_start IS NOT NULL AND ss.shift1_end IS NOT NULL
+                   AND ss.shift1_start <= slot.start_time AND ss.shift1_end >= slot.end_time)
+                 OR
+                 (ss.shift2_start IS NOT NULL AND ss.shift2_end IS NOT NULL
+                   AND ss.shift2_start <= slot.start_time AND ss.shift2_end >= slot.end_time)
+               )
+           )
+             THEN 'OUTSIDE_SHIFT'
+           WHEN EXISTS(
+             SELECT 1
+             FROM target t
+             JOIN staff other_staff
+               ON other_staff.tenant_id=$1
+              AND other_staff.user_id IS NOT NULL
+              AND other_staff.user_id=t.user_id
+              AND other_staff.branch_id<>$2
+             JOIN staff_schedules other_schedule
+               ON other_schedule.tenant_id=$1
+              AND other_schedule.branch_id=other_staff.branch_id
+              AND other_schedule.staff_id=other_staff.id
+             CROSS JOIN slot
+             WHERE t.user_id IS NOT NULL
+               AND other_schedule.schedule_date=slot.business_date
+               AND other_schedule.status='working'
+               AND (
+                 (other_schedule.shift1_start IS NOT NULL AND other_schedule.shift1_end IS NOT NULL
+                   AND other_schedule.shift1_start < slot.end_time AND other_schedule.shift1_end > slot.start_time)
+                 OR
+                 (other_schedule.shift2_start IS NOT NULL AND other_schedule.shift2_end IS NOT NULL
+                   AND other_schedule.shift2_start < slot.end_time AND other_schedule.shift2_end > slot.start_time)
+               )
+           )
+             THEN 'OTHER_CENTER_WORKING'
+           ELSE NULL
+         END",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(start_at)
+    .bind(end_at)
+    .bind(&service_ids)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to validate staff booking rules"))?;
+    if let Some(code) = rule_code {
+        return Err(ApiError::conflict(staff_booking_rule_message(&code)));
     }
     Ok(())
 }
@@ -1271,6 +1678,17 @@ async fn validate_staff_booking_availability(
     if staff_id.trim().is_empty() {
         return Ok(());
     }
+
+    validate_staff_booking_rules(
+        state,
+        tenant_id,
+        branch_id,
+        staff_id,
+        service_ids,
+        start_at,
+        end_at,
+    )
+    .await?;
 
     let allow_overlap = sqlx::query_scalar::<_, bool>(
         "SELECT allow_overlap FROM appointment_branch_settings WHERE tenant_id=$1 AND branch_id=$2",
@@ -1531,6 +1949,18 @@ pub async fn create_booking_from_smart_booking(
     if client_id.is_empty() {
         return Err(ApiError::bad_request("client_id is required"));
     }
+    let service_selections_json =
+        service_selections_json(&payload.service_ids, &payload.service_selections)?;
+    validate_service_pricing(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &payload.staff_id,
+        &payload.service_ids,
+        &payload.service_selections,
+        start_at,
+    )
+    .await?;
     validate_staff_blackout(
         &state,
         &tenant_id,
@@ -1565,8 +1995,10 @@ pub async fn create_booking_from_smart_booking(
     let id = uuid::Uuid::new_v4().to_string();
     let row = sqlx::query(
         "INSERT INTO appointments (
-            id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json,
+            service_selections_json, start_at, end_at, status, notes, source_channel, source,
+            booking_group_id, version, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
     )
     .bind(&id)
@@ -1576,6 +2008,7 @@ pub async fn create_booking_from_smart_booking(
     .bind(&payload.staff_id)
     .bind(&payload.chair_room_id)
     .bind(service_ids_to_json(&payload.service_ids))
+    .bind(service_selections_json)
     .bind(start_at)
     .bind(end_at)
     .bind(status)
@@ -1952,9 +2385,335 @@ pub async fn create_appointment(
             source_channel: payload.source_channel,
             source: payload.source,
             chair_room_id: payload.chair_room_id,
+            service_selections: payload.service_selections,
         }),
     )
     .await
+}
+
+async fn save_appointment_batch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<AppointmentBatchPayload>,
+) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let client_id = payload.client_id.trim();
+    if client_id.is_empty() || payload.lines.is_empty() {
+        return Err(ApiError::bad_request(
+            "client_id and at least one service are required",
+        ));
+    }
+    let status = normalize_status(&payload.status).unwrap_or_else(|_| "booked".to_string());
+    let recurrence_count = payload.recurrence_count.unwrap_or(1);
+    let recurrence_interval_days = payload.recurrence_interval_days.unwrap_or(7);
+    if !(1..=52).contains(&recurrence_count) || !(1..=365).contains(&recurrence_interval_days) {
+        return Err(ApiError::bad_request(
+            "recurrence_count must be 1-52 and recurrence_interval_days must be 1-365",
+        ));
+    }
+    if recurrence_count > 1
+        && (!payload.removed_appointment_ids.is_empty()
+            || payload
+                .lines
+                .iter()
+                .any(|line| !line.appointment_id.trim().is_empty()))
+    {
+        return Err(ApiError::bad_request(
+            "recurrence can only be used for a new booking",
+        ));
+    }
+    let mut current_by_id = std::collections::HashMap::new();
+    for appointment_id in payload
+        .removed_appointment_ids
+        .iter()
+        .chain(payload.lines.iter().map(|line| &line.appointment_id))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        if !current_by_id.contains_key(appointment_id) {
+            current_by_id.insert(
+                appointment_id.to_string(),
+                find_appointment(&state, &tenant_id, &branch_id, appointment_id).await?,
+            );
+        }
+    }
+    for appointment_id in &payload.removed_appointment_ids {
+        let current = current_by_id
+            .get(appointment_id.trim())
+            .ok_or_else(|| ApiError::not_found("Appointment service was not found"))?;
+        if status_is_closed(&current.status) {
+            return Err(ApiError::conflict(
+                "Completed, billed, paid, or cancelled services cannot be removed",
+            ));
+        }
+    }
+    let mut planned_slots: Vec<(String, String, DateTime<Utc>, DateTime<Utc>)> = Vec::new();
+    for line in &payload.lines {
+        if line.staff_id.trim().is_empty()
+            || line.service_id.trim().is_empty()
+            || line.start_at.trim().is_empty()
+            || line.end_at.trim().is_empty()
+        {
+            return Err(ApiError::bad_request(
+                "Every service needs staff, service, start, and end time",
+            ));
+        }
+        let current = current_by_id.get(line.appointment_id.trim());
+        if let Some(current) = current {
+            if status_is_closed(&current.status) {
+                return Err(ApiError::conflict(
+                    "Completed, billed, paid, or cancelled services cannot be updated",
+                ));
+            }
+            if current.client_id != client_id {
+                return Err(ApiError::conflict(
+                    "All booking services must belong to the selected client",
+                ));
+            }
+        }
+        let base_start = parse_datetime(&line.start_at, "start_at")?;
+        let base_end = parse_datetime(&line.end_at, "end_at")?;
+        if base_end <= base_start {
+            return Err(ApiError::bad_request("end_at must be after start_at"));
+        }
+        let selection = AppointmentServiceSelection {
+            service_id: line.service_id.trim().to_string(),
+            variant_id: line.variant_id.trim().to_string(),
+            addon_ids: line.addon_ids.clone(),
+        };
+        service_selections_json(
+            &[selection.service_id.clone()],
+            std::slice::from_ref(&selection),
+        )?;
+        for occurrence in 0..recurrence_count {
+            let offset = Duration::days(recurrence_interval_days * i64::from(occurrence));
+            let start_at = base_start + offset;
+            let end_at = base_end + offset;
+            if planned_slots
+                .iter()
+                .any(|(staff_id, chair_room_id, start, end)| {
+                    (staff_id == line.staff_id.trim()
+                        || (!line.chair_room_id.trim().is_empty()
+                            && chair_room_id == line.chair_room_id.trim()))
+                        && start_at < *end
+                        && end_at > *start
+                })
+            {
+                return Err(ApiError::conflict(
+                    "booking services overlap for the same staff or chair / room",
+                ));
+            }
+            planned_slots.push((
+                line.staff_id.trim().to_string(),
+                line.chair_room_id.trim().to_string(),
+                start_at,
+                end_at,
+            ));
+            validate_staff_blackout(
+                &state,
+                &tenant_id,
+                &branch_id,
+                line.staff_id.trim(),
+                start_at,
+                end_at,
+            )
+            .await?;
+            validate_staff_booking_availability(
+                &state,
+                &tenant_id,
+                &branch_id,
+                line.staff_id.trim(),
+                &[line.service_id.trim().to_string()],
+                start_at,
+                end_at,
+                current.map(|appointment| appointment.id.as_str()),
+            )
+            .await?;
+            validate_chair_room_availability(
+                &state,
+                &tenant_id,
+                &branch_id,
+                line.chair_room_id.trim(),
+                start_at,
+                end_at,
+                current.map(|appointment| appointment.id.as_str()),
+            )
+            .await?;
+            validate_service_pricing(
+                &state,
+                &tenant_id,
+                &branch_id,
+                line.staff_id.trim(),
+                &[line.service_id.trim().to_string()],
+                std::slice::from_ref(&selection),
+                start_at,
+            )
+            .await?;
+        }
+    }
+
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| ApiError::internal("failed to start booking save"))?;
+    let now = Utc::now();
+    let mut changes: Vec<(Option<AppointmentPayload>, AppointmentPayload, &'static str)> =
+        Vec::new();
+    for appointment_id in &payload.removed_appointment_ids {
+        let appointment_id = appointment_id.trim();
+        if appointment_id.is_empty() {
+            continue;
+        }
+        let current = current_by_id
+            .get(appointment_id)
+            .expect("validated appointment must exist");
+        let row = sqlx::query(
+            "UPDATE appointments
+             SET status='cancelled', notes=COALESCE(notes,'') || ' | Service removed from booking', version=version+1, updated_at=$1
+             WHERE id=$2 AND tenant_id=$3 AND branch_id=$4
+             RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
+        )
+        .bind(now)
+        .bind(appointment_id)
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal("failed to remove appointment service"))?;
+        changes.push((Some(current.clone()), build_appointment(&row)?, "CANCELLED"));
+    }
+    let recurrence_series_id = (recurrence_count > 1)
+        .then(|| uuid::Uuid::new_v4().to_string())
+        .unwrap_or_default();
+    let group_ids = (0..recurrence_count)
+        .map(|occurrence| {
+            if occurrence == 0 && !payload.booking_group_id.trim().is_empty() {
+                payload.booking_group_id.trim().to_string()
+            } else if payload.lines.len() < 2 {
+                String::new()
+            } else {
+                uuid::Uuid::new_v4().to_string()
+            }
+        })
+        .collect::<Vec<_>>();
+    for occurrence in 0..recurrence_count {
+        let offset = Duration::days(recurrence_interval_days * i64::from(occurrence));
+        for line in &payload.lines {
+            let start_at = parse_datetime(&line.start_at, "start_at")? + offset;
+            let end_at = parse_datetime(&line.end_at, "end_at")? + offset;
+            let current = current_by_id.get(line.appointment_id.trim());
+            let selection = AppointmentServiceSelection {
+                service_id: line.service_id.trim().to_string(),
+                variant_id: line.variant_id.trim().to_string(),
+                addon_ids: line.addon_ids.clone(),
+            };
+            let selections_json =
+                if selection.variant_id.is_empty() && selection.addon_ids.is_empty() {
+                    "{}".to_string()
+                } else {
+                    service_selections_json(
+                        &[selection.service_id.clone()],
+                        std::slice::from_ref(&selection),
+                    )?
+                };
+            let row = if let Some(current) = current {
+                let current_start = parse_datetime(&current.start_at, "current.start_at")?;
+                let current_end = parse_datetime(&current.end_at, "current.end_at")?;
+                let next_status = if current_start != start_at
+                    || current_end != end_at
+                    || current.staff_id != line.staff_id.trim()
+                {
+                    "rescheduled"
+                } else {
+                    current.status.as_str()
+                };
+                sqlx::query(
+                "UPDATE appointments
+                 SET staff_id=$1, chair_room_id=NULLIF($2,''), service_ids_json=$3,
+                     service_selections_json=CASE WHEN $4::jsonb='{}'::jsonb THEN service_selections_json ELSE $4::jsonb END,
+                     start_at=$5, end_at=$6,
+                     status=$7, notes=CASE WHEN COALESCE($8,'')='' THEN notes ELSE $8 END,
+                     booking_group_id=NULLIF($9,''), version=version+1, updated_at=$10
+                 WHERE id=$11 AND tenant_id=$12 AND branch_id=$13
+                 RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
+            )
+            .bind(line.staff_id.trim())
+            .bind(line.chair_room_id.trim())
+            .bind(service_ids_to_json(&[line.service_id.trim().to_string()]))
+            .bind(&selections_json)
+            .bind(start_at)
+            .bind(end_at)
+            .bind(next_status)
+            .bind(line.notes.trim())
+            .bind(&group_ids[occurrence as usize])
+            .bind(now)
+            .bind(&current.id)
+            .bind(&tenant_id)
+            .bind(&branch_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| ApiError::internal("failed to update appointment service"))?
+            } else {
+                let id = uuid::Uuid::new_v4().to_string();
+                sqlx::query(
+                "INSERT INTO appointments (
+                    id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json,
+                    service_selections_json, start_at, end_at, status, notes, source_channel, source,
+                    booking_group_id, recurrence_series_id, version, created_at, updated_at
+                ) VALUES ($1,$2,$3,$4,$5,NULLIF($6,''),$7,$8::jsonb,$9,$10,$11,$12,'manual','manual',NULLIF($13,''),$14,1,$15,$16)
+                 RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
+            )
+            .bind(id)
+            .bind(&tenant_id)
+            .bind(&branch_id)
+            .bind(client_id)
+            .bind(line.staff_id.trim())
+            .bind(line.chair_room_id.trim())
+            .bind(service_ids_to_json(&[line.service_id.trim().to_string()]))
+            .bind(&selections_json)
+            .bind(start_at)
+            .bind(end_at)
+            .bind(&status)
+            .bind(line.notes.trim())
+            .bind(&group_ids[occurrence as usize])
+            .bind(&recurrence_series_id)
+            .bind(now)
+            .bind(now)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| ApiError::internal("failed to create appointment service"))?
+            };
+            let updated = build_appointment(&row)?;
+            changes.push((
+                current.cloned(),
+                updated,
+                if current.is_some() {
+                    "BOOKING_UPDATED"
+                } else {
+                    "BOOKED"
+                },
+            ));
+        }
+    }
+    tx.commit()
+        .await
+        .map_err(|_| ApiError::internal("failed to save booking"))?;
+
+    for (previous, updated, action) in &changes {
+        let _ = insert_activity(
+            &state,
+            &tenant_id,
+            previous.as_ref(),
+            updated,
+            action,
+            "booking saved",
+        )
+        .await;
+    }
+    Ok(Json(
+        changes.into_iter().map(|(_, updated, _)| updated).collect(),
+    ))
 }
 
 pub async fn list_appointments(
@@ -2009,15 +2768,59 @@ async fn get_appointment(
     Ok(Json(appointment))
 }
 
+async fn update_appointment_notes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<AppointmentNotesPayload>,
+) -> Result<Json<AppointmentPayload>, ApiError> {
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    let row = sqlx::query(
+        "UPDATE appointments
+         SET notes=$1, version=version+1, updated_at=$2
+         WHERE id=$3 AND tenant_id=$4 AND branch_id=$5
+         RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
+    )
+    .bind(payload.notes.trim())
+    .bind(Utc::now())
+    .bind(&id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to update appointment notes"))?;
+    let updated = build_appointment(&row)?;
+    insert_activity(
+        &state,
+        &tenant_id,
+        Some(&current),
+        &updated,
+        "BOOKING_UPDATED",
+        "notes updated",
+    )
+    .await?;
+    Ok(Json(updated))
+}
+
 pub async fn set_status(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<StatusPayload>,
 ) -> Result<Json<AppointmentPayload>, ApiError> {
-    if normalize_status(&payload.status).ok().as_deref() == Some("cancelled") {
-        let response = cancel_appointment(State(state), headers, Path(id), Json(payload)).await?;
-        return Ok(Json(response.0.appointment));
+    match normalize_status(&payload.status).ok().as_deref() {
+        Some("cancelled") => {
+            let response =
+                cancel_appointment(State(state), headers, Path(id), Json(payload)).await?;
+            return Ok(Json(response.0.appointment));
+        }
+        Some("completed") => {
+            let response =
+                complete_appointment(State(state), headers, Path(id), Json(payload)).await?;
+            return Ok(Json(response.0.appointment));
+        }
+        _ => {}
     }
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
@@ -2065,7 +2868,7 @@ pub async fn cancel_appointment(
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
     if status_is_closed(&current.status) {
         return Err(ApiError::conflict(
-            "Completed/paid/cancelled appointments cannot be cancelled",
+            "Completed/billed/paid/cancelled appointments cannot be cancelled",
         ));
     }
     let booking_group_id = current
@@ -2205,7 +3008,7 @@ async fn remove_appointment_service(
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
     if status_is_closed(&current.status) {
         return Err(ApiError::conflict(
-            "Completed/paid/cancelled services cannot be removed",
+            "Completed/billed/paid/cancelled services cannot be removed",
         ));
     }
 
@@ -2268,6 +3071,7 @@ pub async fn reschedule_appointment(
     } else {
         payload.staff_id.clone()
     };
+    let next_service_ids = requested_service_ids(&current.service_ids, payload.service_ids);
     let next_branch = if payload.branch_id.is_empty() {
         current.branch_id.clone()
     } else {
@@ -2324,7 +3128,7 @@ pub async fn reschedule_appointment(
         &tenant_id,
         &branch_id,
         &next_staff,
-        &current.service_ids,
+        &next_service_ids,
         next_start,
         next_end,
         Some(&id),
@@ -2333,13 +3137,14 @@ pub async fn reschedule_appointment(
 
     let row = sqlx::query(
         "UPDATE appointments
-         SET branch_id=$1, staff_id=$2, chair_room_id=NULLIF($3,''), start_at=$4, end_at=$5, status=$12, notes=COALESCE(notes,'') || $6, version=version+1, updated_at=$7, booking_group_id=COALESCE(NULLIF($11,''), booking_group_id)
-         WHERE id=$8 AND tenant_id=$9 AND branch_id=$10
+         SET branch_id=$1, staff_id=$2, chair_room_id=NULLIF($3,''), service_ids_json=$4, start_at=$5, end_at=$6, status=$13, notes=COALESCE(notes,'') || $7, version=version+1, updated_at=$8, booking_group_id=COALESCE(NULLIF($12,''), booking_group_id)
+         WHERE id=$9 AND tenant_id=$10 AND branch_id=$11
          RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
     )
     .bind(&next_branch)
     .bind(&next_staff)
     .bind(&next_chair_room)
+    .bind(service_ids_to_json(&next_service_ids))
     .bind(next_start)
     .bind(next_end)
     .bind(update_note)
@@ -2410,39 +3215,9 @@ pub(crate) async fn complete_appointment(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
-    Json(payload): Json<StatusPayload>,
+    Json(_payload): Json<StatusPayload>,
 ) -> Result<Json<AppointmentResponse>, ApiError> {
-    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
-    let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
-    let row = sqlx::query(
-        "UPDATE appointments
-         SET status='completed', notes=COALESCE(notes,'') || $1, version=version+1, updated_at=$2
-         WHERE id=$3 AND tenant_id=$4 AND branch_id=$5
-         RETURNING id, tenant_id, branch_id, client_id, staff_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
-    )
-    .bind(format!(" {}", if payload.reason.is_empty() { "completed" } else { &payload.reason }))
-    .bind(Utc::now())
-    .bind(&id)
-    .bind(&tenant_id)
-    .bind(&branch_id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| ApiError::internal("failed to complete appointment"))?;
-    let appointment = build_appointment(&row)?;
-    insert_activity(
-        &state,
-        &tenant_id,
-        Some(&current),
-        &appointment,
-        "COMPLETED",
-        &payload.reason,
-    )
-    .await?;
-    Ok(Json(AppointmentResponse {
-        appointment,
-        waitlist_offer: None,
-        sales_order: None,
-    }))
+    convert_to_sale(State(state), headers, Path(id)).await
 }
 
 pub(crate) async fn mark_no_show(
@@ -2461,6 +3236,51 @@ pub(crate) async fn mark_no_show(
         }),
     )
     .await
+}
+
+pub(crate) async fn mark_no_show_with_charge(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<NoShowChargePayload>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    if matches!(current.status.as_str(), "cancelled" | "billed" | "paid") {
+        return Err(ApiError::conflict(
+            "cancelled or billed appointments cannot receive a no-show charge",
+        ));
+    }
+    let appointment = if current.status == "no-show" {
+        current.clone()
+    } else {
+        set_status(
+            State(state.clone()),
+            headers,
+            Path(id.clone()),
+            Json(StatusPayload {
+                status: "no-show".to_string(),
+                reason: "no show charge".to_string(),
+                apply_group: false,
+            }),
+        )
+        .await?
+        .0
+    };
+    let charge = pos::create_no_show_charge(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &appointment.client_id,
+        &appointment.staff_id,
+        payload.amount_paise,
+        &payload.provider,
+        &payload.idempotency_key,
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to create no-show payment collection"))?;
+    Ok(Json(json!({"appointment": appointment, "charge": charge})))
 }
 
 pub(crate) async fn duplicate_appointment(
@@ -2486,6 +3306,7 @@ pub(crate) async fn duplicate_appointment(
         source_channel: Some(current.source_channel.clone()),
         source: Some(current.source.clone()),
         chair_room_id: current.chair_room_id.clone(),
+        service_selections: Vec::new(),
     };
 
     let duplicate =
@@ -2505,37 +3326,158 @@ pub(crate) async fn convert_to_sale(
 ) -> Result<Json<AppointmentResponse>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
-    if current.status != "completed" {
+    if matches!(current.status.as_str(), "cancelled" | "no-show") {
         return Err(ApiError::conflict(
-            "Appointment must be completed before billing",
+            "Cancelled or no-show appointments cannot be billed",
         ));
     }
-    let row = sqlx::query(
-        "UPDATE appointments SET status='billed', version=version+1, updated_at=$1
-         WHERE id=$2 AND tenant_id=$3 AND branch_id=$4
-         RETURNING id, tenant_id, branch_id, client_id, staff_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
+    let booking_group_id = current
+        .booking_group_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_default()
+        .to_string();
+    let reference_id = pos::canonical_appointment_reference(&state, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| ApiError::internal("failed to resolve appointment invoice reference"))?;
+    let apply_group = reference_id != id;
+    let group_rows = sqlx::query(
+        "SELECT id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at
+         FROM appointments
+         WHERE tenant_id=$1 AND branch_id=$2
+           AND (id=$3 OR ($4::boolean AND booking_group_id=$5))
+           AND status NOT IN ('cancelled', 'no-show')
+         ORDER BY start_at, created_at",
     )
-    .bind(Utc::now())
-    .bind(&id)
     .bind(&tenant_id)
     .bind(&branch_id)
-    .fetch_one(&state.db)
+    .bind(&id)
+    .bind(apply_group)
+    .bind(&booking_group_id)
+    .fetch_all(&state.db)
     .await
-    .map_err(|_| ApiError::internal("failed to convert to sale"))?;
-    let appointment = build_appointment(&row)?;
-    insert_activity(
-        &state,
-        &tenant_id,
-        Some(&current),
-        &appointment,
-        "BILLED",
-        "POS invoice linked",
+    .map_err(|_| ApiError::internal("failed to load booking group for billing"))?;
+    let appointments = group_rows
+        .iter()
+        .map(build_appointment)
+        .collect::<Result<Vec<_>, _>>()?;
+    if appointments.is_empty() {
+        return Err(ApiError::conflict(
+            "No active appointment services are available to bill",
+        ));
+    }
+    if appointments
+        .iter()
+        .any(|appointment| appointment.client_id != current.client_id)
+    {
+        return Err(ApiError::conflict(
+            "Booking group services must belong to the same client before billing",
+        ));
+    }
+
+    let existing = pos::find_appointment_pos_sale(&state, &headers, &reference_id)
+        .await
+        .map_err(|_| ApiError::internal("failed to load appointment invoice"))?;
+    if existing.is_none()
+        && appointments
+            .iter()
+            .any(|appointment| matches!(appointment.status.as_str(), "billed" | "paid"))
+    {
+        return Err(ApiError::conflict(
+            "A booking group member is already linked to another invoice",
+        ));
+    }
+
+    let draft = match existing {
+        Some(existing) => existing,
+        None => {
+            let mut lines = Vec::new();
+            for appointment in &appointments {
+                for service_id in &appointment.service_ids {
+                    let service =
+                        services_repository::get(&state.db, &tenant_id, &branch_id, service_id)
+                            .await
+                            .map_err(|_| ApiError::internal("failed to load appointment service"))?
+                            .ok_or_else(|| {
+                                ApiError::conflict("Appointment service was not found")
+                            })?;
+                    lines.push(pos::appointment_service_line(
+                        service.id,
+                        service.name,
+                        appointment.staff_id.clone(),
+                        service.price_paise,
+                        service.gst_percent,
+                        service.sac_code,
+                    ));
+                }
+            }
+            if lines.is_empty() {
+                return Err(ApiError::conflict(
+                    "Appointment must have at least one service before billing",
+                ));
+            }
+            pos::create_or_resume_appointment_draft(
+                &state,
+                headers,
+                &reference_id,
+                &current.client_id,
+                &current.staff_id,
+                lines,
+            )
+            .await
+            .map_err(|_| ApiError::internal("failed to create appointment invoice"))?
+        }
+    };
+    let updated_rows = sqlx::query(
+        "UPDATE appointments
+         SET status='completed', version=version+1, updated_at=$1
+         WHERE tenant_id=$2 AND branch_id=$3
+           AND (id=$4 OR ($5::boolean AND booking_group_id=$6))
+           AND status NOT IN ('cancelled', 'no-show', 'completed', 'billed', 'paid')
+         RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
     )
-    .await?;
+    .bind(Utc::now())
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .bind(apply_group)
+    .bind(&booking_group_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to complete appointment after invoice creation"))?;
+    let updated_rows = updated_rows
+        .iter()
+        .map(build_appointment)
+        .collect::<Result<Vec<_>, _>>()?;
+    for updated in &updated_rows {
+        if let Some(previous) = appointments
+            .iter()
+            .find(|appointment| appointment.id == updated.id)
+        {
+            if previous.status != updated.status {
+                insert_activity(
+                    &state,
+                    &tenant_id,
+                    Some(previous),
+                    updated,
+                    "COMPLETED",
+                    "POS draft created",
+                )
+                .await?;
+            }
+        }
+    }
+    let appointment = updated_rows
+        .iter()
+        .find(|appointment| appointment.id == id)
+        .cloned()
+        .unwrap_or(current);
     let sale = SalePayload {
-        sale_id: uuid::Uuid::new_v4().to_string(),
+        sale_id: draft.sale_id,
         appointment_id: appointment.id.clone(),
-        total: i64::try_from(appointment.service_ids.len()).unwrap_or(0i64) * 500,
+        total: draft.total_paise / 100,
+        total_paise: draft.total_paise,
+        status: draft.status,
     };
     Ok(Json(AppointmentResponse {
         appointment,
@@ -2555,7 +3497,7 @@ pub(crate) async fn list_blackouts(
         scope_query.branch_id.as_deref(),
     );
     let rows = sqlx::query(
-        "SELECT id, tenant_id, branch_id, staff_id, blackout_date, blocked_from, reason, blocked_until, created_at
+        "SELECT id, tenant_id, branch_id, staff_id, blackout_group_id, blackout_date, blocked_from, reason, blocked_until, created_at
          FROM appointment_blackouts
          WHERE tenant_id=$1 AND branch_id=$2 ORDER BY blackout_date DESC",
     )
@@ -2578,6 +3520,7 @@ pub(crate) async fn list_blackouts(
                 "tenantId": row.try_get::<String,_>("tenant_id").unwrap_or_default(),
                 "branchId": row.try_get::<String,_>("branch_id").unwrap_or_default(),
                 "staffId": row.try_get::<String,_>("staff_id").unwrap_or_default(),
+                "blackoutGroupId": row.try_get::<String,_>("blackout_group_id").unwrap_or_default(),
                 "blackoutDate": date,
                 "blockedFrom": row.try_get::<Option<DateTime<Utc>>,_>("blocked_from").ok().flatten().map(|value| value.to_rfc3339()).unwrap_or_default(),
                 "reason": reason,
@@ -2640,6 +3583,7 @@ pub(crate) async fn create_blackout(
     }
     let until_response = until.to_rfc3339();
     let from_response = from.to_rfc3339();
+    let group_id = blackout_group_id(&staff_ids);
     let mut transaction = state
         .db
         .begin()
@@ -2650,13 +3594,14 @@ pub(crate) async fn create_blackout(
         let id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO appointment_blackouts (
-                id, tenant_id, branch_id, staff_id, blackout_date, blocked_from, reason, blocked_until, created_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())",
+                id, tenant_id, branch_id, staff_id, blackout_group_id, blackout_date, blocked_from, reason, blocked_until, created_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())",
         )
         .bind(&id)
         .bind(&tenant_id)
         .bind(&branch_id)
         .bind(staff_id)
+        .bind(&group_id)
         .bind(&payload.blackout_date)
         .bind(from)
         .bind(if payload.reason.is_empty() { "maintenance" } else { &payload.reason })
@@ -2678,6 +3623,7 @@ pub(crate) async fn create_blackout(
         "branchId": branch_id,
         "staffId": staff_ids.first().cloned().unwrap_or_default(),
         "staffIds": staff_ids,
+        "blackoutGroupId": group_id,
         "blackoutDate": payload.blackout_date,
         "blockedFrom": from_response,
         "blockedUntil": until_response,
@@ -2692,12 +3638,25 @@ async fn delete_blackout(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
-    let affected = sqlx::query(
-        "DELETE FROM appointment_blackouts WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
+    let group_id = sqlx::query_scalar::<_, String>(
+        "SELECT blackout_group_id FROM appointment_blackouts WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
     )
     .bind(&id)
     .bind(&tenant_id)
     .bind(&branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to find blackout"))?
+    .ok_or_else(|| ApiError::not_found("blackout not found"))?;
+    let affected = sqlx::query(
+        "DELETE FROM appointment_blackouts
+         WHERE tenant_id=$2 AND branch_id=$3
+           AND (id=$1 OR ($4<>'' AND blackout_group_id=$4))",
+    )
+    .bind(&id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&group_id)
     .execute(&state.db)
     .await
     .map_err(|_| ApiError::internal("failed to delete blackout"))?

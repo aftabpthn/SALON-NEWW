@@ -1,0 +1,62 @@
+<section class="growth-page">
+  <p class="alert" *ngIf="error">{{ error }}</p>
+  <div class="split">
+    <section class="workspace marketing">
+      <header><h1>Marketing & Messaging</h1><button class="primary" type="button" (click)="openCampaign()">New campaign</button></header>
+      <nav class="tabs"><button class="active">Overview</button><button>Campaigns</button><button>Templates</button><button>Outbox</button></nav>
+      <div class="metrics">
+        <article><span>Draft campaigns</span><strong>{{ campaignCount('draft') }}</strong></article>
+        <article><span>Scheduled</span><strong>{{ campaignCount('scheduled') }}</strong></article>
+        <article><span>Delivered</span><strong>{{ campaignCount('delivered') }}</strong></article>
+        <article><span>Failed</span><strong>{{ campaignCount('failed') }}</strong></article>
+      </div>
+      <div class="filters"><select [(ngModel)]="channel"><option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select><select [(ngModel)]="status"><option value="all">All status</option><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="delivered">Delivered</option><option value="failed">Failed</option></select></div>
+      <div class="campaign-grid">
+        <div class="table-shell">
+          <div class="table-head"><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span><span>Created</span></div>
+          <div class="table-row" *ngFor="let campaign of filteredCampaigns"><strong>{{ campaign.title }}</strong><span>{{ campaign.metadata?.channel || '—' }}</span><span>{{ campaign.metadata?.audience || '—' }}</span><span>{{ campaign.metadata?.status || 'draft' }}</span><span>{{ formatDate(campaign.createdAt) }}</span></div>
+          <div class="empty" *ngIf="!loading && !filteredCampaigns.length">No campaigns yet</div>
+          <div class="empty" *ngIf="loading">Loading campaigns…</div>
+        </div>
+        <aside class="consent"><h2>Consent coverage</h2><p><span>WhatsApp</span><b>{{ insights.consent?.whatsapp || 0 }}</b></p><p><span>SMS</span><b>{{ insights.consent?.sms || 0 }}</b></p><p><span>Email</span><b>{{ insights.consent?.email || 0 }}</b></p></aside>
+      </div>
+      <div class="insight-grid">
+        <section><header><h2>Live providers</h2></header><p><span>WhatsApp</span><b [class.ready]="providerReady('whatsapp')">{{ providerReady('whatsapp') ? 'Ready' : 'Setup required' }}</b></p><p><span>SMS</span><b [class.ready]="providerReady('sms')">{{ providerReady('sms') ? 'Ready' : 'Setup required' }}</b></p></section>
+        <section><header><h2>Booking attribution</h2></header><p *ngFor="let source of insights.attribution"><span>{{ source.source }}</span><b>{{ source.count }}</b></p><div class="mini-empty" *ngIf="!insights.attribution?.length">No records yet</div></section>
+        <section><header><h2>Reputation · {{ formatRating(insights.reputation?.averageRating) }}/5</h2></header><p *ngFor="let review of insights.reputation?.reviews?.slice(0, 5)"><span>{{ review.platform }} · {{ review.clientName }}</span><b>{{ review.rating || '—' }}</b></p><div class="mini-empty" *ngIf="!insights.reputation?.reviews?.length">No reviews yet</div></section>
+      </div>
+    </section>
+
+    <section class="workspace leads">
+      <header><h1>Leads</h1><button class="primary" type="button" (click)="openLead()">Add lead</button></header>
+      <nav class="tabs"><button class="active">Pipeline</button><button>Follow-ups</button><button>Sources</button></nav>
+      <div class="pipeline">
+        <section *ngFor="let stageName of stages"><header><strong>{{ stageName }}</strong><span>{{ stageLeads(stageName).length }}</span></header>
+          <article class="lead-card" *ngFor="let lead of stageLeads(stageName)"><strong>{{ displayName(lead) }}</strong><span>{{ lead.phone }}</span><select [ngModel]="stageName" (ngModelChange)="moveLead(lead, $event)" [disabled]="busy"><option *ngFor="let option of stages" [ngValue]="option">{{ option }}</option></select></article>
+          <div class="column-empty" *ngIf="!stageLeads(stageName).length">No leads</div>
+        </section>
+      </div>
+      <div class="empty lead-empty" *ngIf="!loading && !leads.length">No leads yet</div>
+    </section>
+  </div>
+
+  <aside class="drawer" *ngIf="drawer">
+    <header><h2>{{ drawer === 'lead' ? 'Add lead' : 'New campaign' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+    <div class="drawer-body" *ngIf="drawer === 'lead'">
+      <label>Name<input [ngModel]="leadDraft.name" (ngModelChange)="leadDraft.name = titleCase($event)" placeholder="Enter name" /></label>
+      <label>Phone<input [(ngModel)]="leadDraft.phone" inputmode="tel" placeholder="Enter phone" /></label>
+      <label>Email<input [(ngModel)]="leadDraft.email" type="email" placeholder="Enter email" /></label>
+      <label>Source<select [(ngModel)]="leadDraft.source"><option value="">Select source</option><option>Walk-in</option><option>Referral</option><option>Website</option><option>Social</option></select></label>
+      <label>Next follow-up<as-date-picker [(value)]="leadDraft.followUp" ariaLabel="Next follow-up date" /></label>
+    </div>
+    <div class="drawer-body" *ngIf="drawer === 'campaign'">
+      <label>Campaign name<input [ngModel]="campaignDraft.name" (ngModelChange)="campaignDraft.name = titleCase($event)" /></label>
+      <label>Channel<select [(ngModel)]="campaignDraft.channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></label>
+      <label>Audience<select [(ngModel)]="campaignDraft.audience"><option value="all">All consented clients</option><option value="active">Active clients</option><option value="at-risk">At-risk clients</option></select></label>
+      <label>Schedule date<as-date-picker [(value)]="campaignDraft.scheduledDate" ariaLabel="Campaign schedule date" /></label>
+      <label>Schedule time<input type="time" [(ngModel)]="campaignDraft.scheduledTime" /></label>
+      <label>Message<textarea [(ngModel)]="campaignDraft.message" rows="7"></textarea></label>
+    </div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy" (click)="drawer === 'lead' ? saveLead() : saveCampaign()">{{ busy ? 'Saving…' : (drawer === 'lead' ? 'Save lead' : (campaignDraft.scheduledDate ? 'Schedule campaign' : 'Save draft')) }}</button></footer>
+  </aside>
+</section>

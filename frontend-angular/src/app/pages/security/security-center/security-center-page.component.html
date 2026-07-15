@@ -1,0 +1,560 @@
+<main class="security-page">
+  <header class="page-header">
+    <h1>Security Center</h1>
+    <button class="utility-button" type="button" [disabled]="loading" (click)="reload()">
+      <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+      <span>Refresh</span>
+    </button>
+  </header>
+
+  <p *ngIf="errorMessage" class="message error" role="alert">{{ errorMessage }}</p>
+  <p *ngIf="notice" class="message success" role="status">{{ notice }}</p>
+  <p *ngIf="mfaEnrollmentRequired" class="message" role="status">Set up MFA to continue.</p>
+
+  <nav *ngIf="!mfaEnrollmentRequired" class="tabs" aria-label="Security sections">
+    <button
+      *ngFor="let tab of visibleTabs"
+      type="button"
+      [class.active]="activeTab === tab.key"
+      (click)="activeTab = tab.key"
+    >{{ tab.label }}</button>
+  </nav>
+
+  <section *ngIf="loading" class="panel compact-state" aria-live="polite">Loading security data...</section>
+
+  <ng-container *ngIf="!loading">
+    <section *ngIf="activeTab === 'overview'" class="panel">
+      <div class="section-header">
+        <h2>Compliance evidence</h2>
+        <button *ngIf="canManageSecurity" class="utility-button" type="button" [disabled]="saving" (click)="exportComplianceEvidence()">
+          <i class="bi bi-download" aria-hidden="true"></i>
+          <span>Export JSON</span>
+        </button>
+      </div>
+      <dl class="status-strip" *ngIf="summary">
+        <div><dt>Open alerts</dt><dd>{{ summary.counts.openAlerts }}</dd></div>
+        <div><dt>Active blocks</dt><dd>{{ summary.counts.activeBlocks }}</dd></div>
+        <div><dt>Active sessions</dt><dd>{{ summary.counts.activeSessions }}</dd></div>
+        <div><dt>Audit events</dt><dd>{{ summary.counts.auditEvents }}</dd></div>
+      </dl>
+      <div *ngIf="!summary" class="compact-state">No security summary yet.</div>
+    </section>
+
+    <section *ngIf="activeTab === 'mfa'" class="panel mfa-panel">
+      <ng-container *ngIf="mfaStatus; else noMfaStatus">
+        <div class="mfa-status">
+          <span class="badge" [class.enabled]="mfaStatus.enabled">{{ mfaStatus.enabled ? 'Enabled' : (mfaStatus.pending ? 'Pending' : 'Disabled') }}</span>
+          <span *ngIf="mfaStatus.enabled">Recovery codes: {{ mfaStatus.recoveryCodesRemaining }}</span>
+        </div>
+
+        <button *ngIf="!mfaStatus.enabled && !mfaSetup" class="primary-button" type="button" [disabled]="saving" (click)="startMfaSetup()">
+          Set up authenticator
+        </button>
+
+        <div *ngIf="mfaSetup" class="mfa-setup">
+          <label>Secret<input type="text" readonly [value]="mfaSetup.secret" /></label>
+          <label>Authenticator URI<textarea rows="3" readonly [value]="mfaSetup.otpAuthUri"></textarea></label>
+          <label>Verification code<input type="text" [(ngModel)]="mfaCode" autocomplete="one-time-code" maxlength="16" /></label>
+          <button class="primary-button" type="button" [disabled]="saving || !mfaCode.trim()" (click)="enableMfa()">Enable MFA</button>
+        </div>
+
+        <div *ngIf="mfaStatus.enabled && !mfaStatus.required" class="mfa-setup">
+          <label>Authenticator or recovery code<input type="text" [(ngModel)]="mfaCode" autocomplete="one-time-code" maxlength="16" /></label>
+          <button class="utility-button danger" type="button" [disabled]="saving || !mfaCode.trim()" (click)="disableMfa()">Disable MFA</button>
+        </div>
+
+        <div *ngIf="recoveryCodes.length" class="recovery-codes" role="status">
+          <strong>Recovery codes</strong>
+          <code *ngFor="let code of recoveryCodes">{{ code }}</code>
+        </div>
+      </ng-container>
+      <ng-template #noMfaStatus><div class="compact-state">No MFA status loaded.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'passkeys'" class="panel passkey-panel">
+      <div *ngIf="!webauthn.supported" class="compact-state">Passkeys are not supported in this browser.</div>
+      <div *ngIf="webauthn.supported" class="passkey-add">
+        <label>Passkey name
+          <input
+            type="text"
+            maxlength="60"
+            [ngModel]="passkeyLabel"
+            (ngModelChange)="passkeyLabel = titleCase($event)"
+            placeholder="Device name"
+          />
+        </label>
+        <button class="primary-button" type="button" [disabled]="saving || !passkeyLabel.trim()" (click)="addPasskey()">Add passkey</button>
+      </div>
+      <div class="table-wrap" *ngIf="passkeys.length; else noPasskeys">
+        <table>
+          <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let passkey of passkeys; trackBy: trackById">
+              <td>{{ passkey.label }}</td>
+              <td>{{ passkey.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ passkey.lastUsedAt ? (passkey.lastUsedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td><button class="utility-button danger" type="button" (click)="deletePasskey(passkey)">Delete</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noPasskeys><div class="compact-state">No passkeys yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'privileged'" class="panel mfa-panel">
+      <ng-container *ngIf="privilegedStatus; else noPrivilegedStatus">
+        <div class="mfa-status">
+          <span class="badge" [class.enabled]="privilegedStatus.active">{{ privilegedStatus.active ? 'Verified' : 'Not verified' }}</span>
+          <span>{{ privilegedStatus.actionScope.replaceAll('_', ' ') }}</span>
+          <span *ngIf="privilegedStatus.expiresAt">Expires {{ privilegedStatus.expiresAt | date:'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+
+        <div *ngIf="!privilegedStatus.active" class="mfa-setup">
+          <label *ngIf="mfaStatus?.enabled">Authenticator or recovery code
+            <input type="text" [(ngModel)]="privilegedMfaCode" autocomplete="one-time-code" maxlength="16" />
+          </label>
+          <label *ngIf="!mfaStatus?.enabled">Current password
+            <input type="password" [(ngModel)]="privilegedPassword" autocomplete="current-password" maxlength="160" />
+          </label>
+          <button
+            class="primary-button"
+            type="button"
+            [disabled]="saving || (mfaStatus?.enabled ? !privilegedMfaCode.trim() : !privilegedPassword.trim())"
+            (click)="verifyPrivilegedSession()"
+          >Verify session</button>
+        </div>
+
+        <button *ngIf="privilegedStatus.active" class="utility-button danger" type="button" [disabled]="saving" (click)="revokePrivilegedSession()">
+          End privileged session
+        </button>
+      </ng-container>
+      <ng-template #noPrivilegedStatus><div class="compact-state">No privileged session status.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'provisioning'" class="panel mfa-panel">
+      <div class="section-header"><h2>OIDC SSO</h2></div>
+      <form *ngIf="ssoPolicy" class="mfa-setup" (ngSubmit)="saveSsoPolicy()">
+        <label class="check-field">
+          <input name="googleSsoEnabled" type="checkbox" [disabled]="!ssoPolicy.googleConfigured" [(ngModel)]="ssoDraft.googleEnabled" />
+          <span>Google OIDC — {{ ssoPolicy.googleConfigured ? 'Configured' : 'Not configured' }}</span>
+        </label>
+        <label class="check-field">
+          <input name="microsoftSsoEnabled" type="checkbox" [disabled]="!ssoPolicy.microsoftConfigured" [(ngModel)]="ssoDraft.microsoftEnabled" />
+          <span>Microsoft Entra ID — {{ ssoPolicy.microsoftConfigured ? 'Configured' : 'Not configured' }}</span>
+        </label>
+        <label class="check-field">
+          <input name="samlSsoEnabled" type="checkbox" [disabled]="!ssoPolicy.samlConfigured" [(ngModel)]="ssoDraft.samlEnabled" />
+          <span>SAML federation — {{ ssoPolicy.samlConfigured ? 'Configured' : 'Not configured' }}</span>
+        </label>
+        <label>Require SSO for roles
+          <select name="ssoEnforcedRoles" multiple [(ngModel)]="ssoDraft.enforcedRoles">
+            <option value="owner">Owner</option><option value="admin">Admin</option><option value="superadmin">SuperAdmin</option>
+          </select>
+        </label>
+        <button class="primary-button" type="submit" [disabled]="saving">Save SSO policy</button>
+      </form>
+      <div *ngIf="!ssoPolicy" class="compact-state">No SSO policy loaded.</div>
+
+      <div class="section-header governance-divider"><h2>SCIM provisioning</h2></div>
+      <div class="mfa-status">
+        <span class="badge" [class.enabled]="scimStatus?.configured">{{ scimStatus?.configured ? 'SCIM enabled' : 'SCIM disabled' }}</span>
+        <span *ngIf="scimStatus?.lastFour">Token ending {{ scimStatus?.lastFour }}</span>
+        <span *ngIf="scimStatus?.updatedAt">Updated {{ scimStatus?.updatedAt | date:'dd/MM/yyyy HH:mm' }}</span>
+      </div>
+      <div class="mfa-setup">
+        <label>SCIM base URL<input type="text" readonly value="/api/v1/scim/v2" /></label>
+        <label *ngIf="scimToken">New bearer token<input type="text" readonly [value]="scimToken" /></label>
+        <div class="action-cell">
+          <button class="primary-button" type="button" [disabled]="saving" (click)="rotateScimToken()">
+            {{ scimStatus?.configured ? 'Rotate token' : 'Generate token' }}
+          </button>
+          <button *ngIf="scimToken" class="utility-button" type="button" (click)="copyScimToken()">Copy token</button>
+          <button *ngIf="scimStatus?.configured" class="utility-button danger" type="button" [disabled]="saving" (click)="revokeScimToken()">Revoke</button>
+        </div>
+      </div>
+    </section>
+
+    <section *ngIf="activeTab === 'audit'" class="panel">
+      <div *ngIf="auditChain" class="audit-chain-status" role="status">
+        <span class="badge" [class.enabled]="auditChain.valid" [class.critical]="!auditChain.valid">
+          {{ auditChain.valid ? 'Chain verified' : 'Chain broken' }}
+        </span>
+        <span>{{ auditChain.sealedEvents }}/{{ auditChain.events }} sealed</span>
+        <code>{{ (auditChain.headHash | slice:0:16) || '—' }}</code>
+        <button *ngIf="canManageSecurity" class="utility-button" type="button" [disabled]="saving" (click)="sealAuditChain()">
+          Seal &amp; verify
+        </button>
+      </div>
+      <div class="panel-toolbar">
+        <label>
+          <span class="sr-only">Search audit</span>
+          <input [(ngModel)]="auditSearch" type="search" placeholder="Search audit" (keyup.enter)="reload()" />
+        </label>
+        <button class="utility-button icon-only" type="button" aria-label="Search audit" (click)="reload()">
+          <i class="bi bi-search" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="table-wrap" *ngIf="auditEvents.length; else noAudit">
+        <table>
+          <thead><tr><th>Event</th><th>Outcome</th><th>User</th><th>IP</th><th>Time</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let event of auditEvents; trackBy: trackById">
+              <td>{{ event.eventType }}</td><td>{{ event.outcome }}</td><td>{{ event.userId || '—' }}</td>
+              <td>{{ event.ipAddress || '—' }}</td><td>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noAudit><div class="compact-state">No audit events yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'fieldAudit'" class="panel">
+      <div class="panel-toolbar">
+        <label>
+          <span class="sr-only">Search field audit</span>
+          <input [(ngModel)]="fieldAuditSearch" type="search" placeholder="Search field audit" (keyup.enter)="reloadFieldAudit()" />
+        </label>
+        <button class="utility-button icon-only" type="button" aria-label="Search field audit" (click)="reloadFieldAudit()">
+          <i class="bi bi-search" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="table-wrap" *ngIf="fieldAuditEvents.length; else noFieldAudit">
+        <table>
+          <thead><tr><th>Field</th><th>Access</th><th>Actor</th><th>Entity</th><th>Reason</th><th>Time</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let event of fieldAuditEvents; trackBy: trackById">
+              <td><strong>{{ event.fieldName }}</strong><small>{{ event.fieldGroup }}</small></td>
+              <td><span class="badge" [class.enabled]="event.maskingApplied">{{ event.accessType }}</span></td>
+              <td>{{ event.actorUserId }}</td>
+              <td><strong>{{ event.entityType }}</strong><small>{{ event.entityId }}</small></td>
+              <td>{{ event.reason || '—' }}</td>
+              <td>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noFieldAudit><div class="compact-state">No field audit events yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'sessions'" class="panel">
+      <div class="table-wrap" *ngIf="sessions.length; else noSessions">
+        <table>
+          <thead><tr><th>User</th><th>Role</th><th>Device</th><th>IP</th><th>Expires</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let session of sessions; trackBy: trackById">
+              <td>{{ session.userId }}</td><td>{{ session.roleName || '—' }}</td>
+              <td>{{ session.deviceId || session.userAgent || '—' }}</td><td>{{ session.ipAddress || '—' }}</td>
+              <td>{{ session.expiresAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><button class="utility-button" type="button" (click)="revokeSession(session)">Revoke</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noSessions><div class="compact-state">No active sessions.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'devices'" class="panel">
+      <div class="table-wrap" *ngIf="devices.length; else noDevices">
+        <table>
+          <thead><tr><th>User</th><th>Device</th><th>Status</th><th>Active sessions</th><th>Signals</th><th>Last seen</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let device of devices; trackBy: trackByDevice">
+              <td>{{ device.userId }}</td>
+              <td>{{ device.deviceId }}</td>
+              <td><span class="badge" [class.critical]="device.status === 'revoked'" [class.enabled]="device.status === 'trusted'">{{ device.status }}</span></td>
+              <td>{{ device.activeSessions }}</td>
+              <td>{{ device.ipCount }} IP / {{ device.userAgentCount }} UA</td>
+              <td>{{ device.lastSeenAt ? (device.lastSeenAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td class="action-cell">
+                <button *ngIf="device.status === 'revoked'" class="utility-button" type="button" [disabled]="saving" (click)="trustDevice(device)">Trust</button>
+                <button *ngIf="device.status !== 'revoked'" class="utility-button danger" type="button" [disabled]="saving" (click)="revokeDevice(device)">Revoke</button>
+                <button class="utility-button" type="button" [disabled]="saving || !device.activeSessions" (click)="signOutAllDevices(device)">Sign out all</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noDevices><div class="compact-state">No device records yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'permissions'" class="panel">
+      <div class="table-wrap" *ngIf="permissions?.roles?.length; else noRoles">
+        <table>
+          <thead><tr><th>Role</th><th>Type</th><th>Masked fields</th><th>Permissions</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let role of permissions?.roles">
+              <td>{{ role.name }}</td><td>{{ role.isSystem ? 'System' : 'Custom' }}</td>
+              <td><span class="permission-list">{{ role.maskedFields?.join(', ') || 'No masks' }}</span></td>
+              <td><span class="permission-list">{{ role.permissions.join(', ') || 'No permissions' }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noRoles><div class="compact-state">No roles yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'governance'" class="panel governance-panel">
+      <div class="section-header"><h2>Security approvals</h2></div>
+      <form *ngIf="canManageSecurity" class="control-form" (ngSubmit)="createApproval()">
+        <label>Action type<input name="approvalActionType" type="text" maxlength="80" required [(ngModel)]="approvalDraft.actionType" /></label>
+        <label>Summary<input name="approvalSummary" type="text" maxlength="200" required [(ngModel)]="approvalDraft.summary" /></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !approvalDraft.actionType.trim() || !approvalDraft.summary.trim()">Request approval</button>
+      </form>
+      <div class="table-wrap" *ngIf="approvals.length; else noApprovals">
+        <table>
+          <thead><tr><th>Action</th><th>Summary</th><th>Status</th><th>Requested by</th><th>Decided by</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let approval of approvals; trackBy: trackById">
+              <td>{{ approval.actionType }}</td><td>{{ approval.summary }}</td>
+              <td><span class="badge" [class.enabled]="approval.status === 'approved'" [class.critical]="approval.status === 'rejected'">{{ approval.status }}</span></td>
+              <td>{{ approval.requestedBy }}</td><td>{{ approval.decidedBy || '—' }}</td>
+              <td>{{ approval.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td class="action-cell">
+                <button *ngIf="canManageSecurity && approval.status === 'pending'" class="utility-button" type="button" (click)="decideApproval(approval, 'approve')">Approve</button>
+                <button *ngIf="canManageSecurity && approval.status === 'pending'" class="utility-button danger" type="button" (click)="decideApproval(approval, 'reject')">Reject</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noApprovals><div class="compact-state">No security approvals yet.</div></ng-template>
+
+      <div class="section-header governance-divider"><h2>Temporary access</h2></div>
+      <form *ngIf="canManageSecurity" class="control-form" (ngSubmit)="requestElevation()">
+        <label>User ID<input name="elevationUserId" type="text" maxlength="120" required [(ngModel)]="elevationDraft.userId" /></label>
+        <label>Permissions<select name="elevationPermissions" multiple required [(ngModel)]="elevationDraft.permissions"><option *ngFor="let permission of permissions?.permissionOptions" [value]="permission.code">{{ permission.label }}</option></select></label>
+        <label>Minutes<input name="elevationMinutes" type="number" min="5" max="60" required [(ngModel)]="elevationDraft.durationMinutes" /></label>
+        <label>Reason<input name="elevationReason" type="text" maxlength="240" required [(ngModel)]="elevationDraft.reason" /></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !elevationDraft.userId.trim() || !elevationDraft.permissions.length || elevationDraft.durationMinutes === null || !elevationDraft.reason.trim()">Request access</button>
+      </form>
+      <div class="table-wrap" *ngIf="elevations.length; else noElevations">
+        <table>
+          <thead><tr><th>User</th><th>Source</th><th>Permissions</th><th>Reason</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let elevation of elevations; trackBy: trackById">
+              <td>{{ elevation.userId }}</td><td>{{ elevation.source.replaceAll('_', ' ') }}</td>
+              <td><span class="permission-list">{{ elevation.permissionsJson.join(', ') }}</span></td><td>{{ elevation.reason }}</td>
+              <td>{{ elevation.expiresAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><span class="badge" [class.enabled]="elevationActive(elevation)">{{ elevation.revokedAt ? 'revoked' : (elevationActive(elevation) ? 'active' : 'expired') }}</span></td>
+              <td><button *ngIf="canManageSecurity && elevationActive(elevation)" class="utility-button danger" type="button" (click)="revokeElevation(elevation)">Revoke</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noElevations><div class="compact-state">No temporary access yet.</div></ng-template>
+
+      <div class="section-header governance-divider"><h2>Permission simulator</h2></div>
+      <form class="control-form" (ngSubmit)="simulatePermissions()">
+        <label>User ID<input name="simulatorUserId" type="text" maxlength="120" required [(ngModel)]="simulatorUserId" /></label>
+        <button class="primary-button" type="submit" [disabled]="!simulatorUserId.trim()">Simulate</button>
+      </form>
+      <dl *ngIf="simulation" class="simulation-result">
+        <div><dt>Role</dt><dd>{{ simulation.roleName }}</dd></div>
+        <div><dt>Effective</dt><dd>{{ simulation.effectivePermissions.join(', ') || 'No permissions' }}</dd></div>
+        <div><dt>Temporary</dt><dd>{{ simulation.elevatedPermissions.join(', ') || 'None' }}</dd></div>
+        <div><dt>Denied</dt><dd>{{ simulation.deniedPermissions.join(', ') || 'None' }}</dd></div>
+      </dl>
+
+      <ng-container *ngIf="canActivateBreakGlass">
+        <div class="section-header governance-divider"><h2>Emergency access</h2></div>
+        <form class="control-form" (ngSubmit)="activateBreakGlass()">
+          <label>Permissions<select name="breakGlassPermissions" multiple required [(ngModel)]="breakGlassDraft.permissions"><option *ngFor="let permission of permissions?.permissionOptions" [value]="permission.code">{{ permission.label }}</option></select></label>
+          <label>Minutes<input name="breakGlassMinutes" type="number" min="5" max="15" required [(ngModel)]="breakGlassDraft.durationMinutes" /></label>
+          <label>Reason<input name="breakGlassReason" type="text" maxlength="240" required [(ngModel)]="breakGlassDraft.reason" /></label>
+          <button class="utility-button danger" type="submit" [disabled]="saving || !privilegedStatus?.active || !breakGlassDraft.permissions.length || breakGlassDraft.durationMinutes === null || !breakGlassDraft.reason.trim()">Activate</button>
+        </form>
+      </ng-container>
+
+      <div class="section-header governance-divider"><h2>IP access rules</h2></div>
+      <form *ngIf="canManageSecurity" class="control-form" (ngSubmit)="createAccessRule()">
+        <label>IP address<input name="accessRuleIp" type="text" maxlength="45" required [(ngModel)]="accessRuleDraft.matchValue" /></label>
+        <label>Effect<select name="accessRuleEffect" [(ngModel)]="accessRuleDraft.effect"><option value="watch">Watch</option><option value="allow">Allow</option><option value="deny">Deny signal</option></select></label>
+        <label>Reason<input name="accessRuleReason" type="text" maxlength="240" [(ngModel)]="accessRuleDraft.reason" /></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !accessRuleDraft.matchValue.trim() || (accessRuleDraft.effect === 'deny' && !accessRuleDraft.reason.trim())">Add rule</button>
+      </form>
+      <div class="table-wrap" *ngIf="accessRules.length; else noAccessRules">
+        <table>
+          <thead><tr><th>Type</th><th>Value</th><th>Effect</th><th>Reason</th><th>Status</th><th>Created by</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let rule of accessRules; trackBy: trackById">
+              <td>{{ rule.ruleType }}</td><td>{{ rule.matchValue }}</td><td>{{ rule.effect }}</td><td>{{ rule.reason || '—' }}</td>
+              <td><span class="badge" [class.enabled]="rule.status === 'active'">{{ rule.status }}</span></td>
+              <td>{{ rule.createdBy }}</td>
+              <td><button *ngIf="canManageSecurity && rule.status === 'active'" class="utility-button danger" type="button" (click)="disableAccessRule(rule)">Disable</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noAccessRules><div class="compact-state">No access rules yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'playbooks'" class="panel governance-panel">
+      <div class="section-header"><h2>Incident-response playbooks</h2></div>
+      <form *ngIf="canManageSecurity" class="control-form playbook-form" (ngSubmit)="createPlaybook()">
+        <label>Playbook key<input name="playbookKey" type="text" maxlength="80" required [(ngModel)]="playbookDraft.playbookKey" /></label>
+        <label>Title<input name="playbookTitle" type="text" maxlength="120" required [ngModel]="playbookDraft.title" (ngModelChange)="playbookDraft.title = titleCase($event)" /></label>
+        <label>Severity<select name="playbookSeverity" [(ngModel)]="playbookDraft.severity"><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+        <label>Checklist<textarea name="playbookChecklist" rows="4" maxlength="4000" required [(ngModel)]="playbookDraft.checklistText"></textarea></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !playbookDraft.playbookKey.trim() || !playbookDraft.title.trim() || !playbookDraft.checklistText.trim()">Add playbook</button>
+      </form>
+      <div class="table-wrap" *ngIf="playbooks.length; else noPlaybooks">
+        <table>
+          <thead><tr><th>Playbook</th><th>Severity</th><th>Checklist</th><th>Status</th><th>Created by</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let playbook of playbooks; trackBy: trackById">
+              <td><strong>{{ playbook.title }}</strong><small>{{ playbook.playbookKey }}</small></td>
+              <td><span class="badge" [class.critical]="playbook.severity === 'critical'">{{ playbook.severity }}</span></td>
+              <td><span class="permission-list">{{ playbook.checklistJson.join(' · ') }}</span></td>
+              <td><span class="badge" [class.enabled]="playbook.status === 'active'">{{ playbook.status }}</span></td>
+              <td>{{ playbook.createdBy }}</td><td>{{ playbook.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><button *ngIf="canManageSecurity && playbook.status === 'active'" class="utility-button danger" type="button" (click)="disablePlaybook(playbook)">Disable</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noPlaybooks><div class="compact-state">No incident playbooks yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'privacy'" class="panel governance-panel">
+      <div class="section-header"><h2>Privacy requests</h2></div>
+      <form *ngIf="canManageSecurity" class="control-form privacy-form" (ngSubmit)="createPrivacyRequest()">
+        <label>Subject type<select name="privacySubjectType" [(ngModel)]="privacyDraft.subjectType"><option value="client">Client</option><option value="staff">Staff</option><option value="user">User</option></select></label>
+        <label>Subject ID<input name="privacySubjectId" type="text" maxlength="120" [(ngModel)]="privacyDraft.subjectId" /></label>
+        <label>Request type<select name="privacyRequestType" [(ngModel)]="privacyDraft.requestType"><option value="access">Access</option><option value="export">Export</option><option value="rectification">Rectification</option><option value="deletion">Deletion</option></select></label>
+        <label>Summary<input name="privacySummary" type="text" maxlength="500" required [(ngModel)]="privacyDraft.summary" /></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !privacyDraft.summary.trim()">Add request</button>
+      </form>
+      <div class="table-wrap" *ngIf="privacyRequests.length; else noPrivacyRequests">
+        <table>
+          <thead><tr><th>Request</th><th>Subject</th><th>Status</th><th>Requested by</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let request of privacyRequests; trackBy: trackById">
+              <td><strong>{{ request.summary }}</strong><small>{{ request.requestType }}</small></td>
+              <td>{{ request.subjectType }}<small *ngIf="request.subjectId">{{ request.subjectId }}</small></td>
+              <td><span class="badge" [class.enabled]="request.status === 'open'">{{ request.status }}</span></td>
+              <td>{{ request.requesterId }}</td><td>{{ request.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><button *ngIf="canManageSecurity && request.status === 'open'" class="utility-button" type="button" (click)="resolvePrivacyRequest(request)">Resolve</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noPrivacyRequests><div class="compact-state">No privacy requests yet.</div></ng-template>
+
+      <div class="section-header governance-divider"><h2>Disclosure reports</h2></div>
+      <form *ngIf="canManageSecurity" class="control-form disclosure-form" (ngSubmit)="createDisclosureReport()">
+        <label>Reporter<input name="disclosureReporter" type="text" maxlength="120" [ngModel]="disclosureDraft.reporterName" (ngModelChange)="disclosureDraft.reporterName = titleCase($event)" /></label>
+        <label>Contact<input name="disclosureContact" type="text" maxlength="180" [(ngModel)]="disclosureDraft.reporterContact" /></label>
+        <label>Summary<input name="disclosureSummary" type="text" maxlength="500" required [(ngModel)]="disclosureDraft.summary" /></label>
+        <label>Details<textarea name="disclosureDetails" rows="3" maxlength="4000" [(ngModel)]="disclosureDraft.details"></textarea></label>
+        <label>Severity<select name="disclosureSeverity" [(ngModel)]="disclosureDraft.severity"><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !disclosureDraft.summary.trim()">Add report</button>
+      </form>
+      <div class="table-wrap" *ngIf="disclosureReports.length; else noDisclosureReports">
+        <table>
+          <thead><tr><th>Report</th><th>Reporter</th><th>Severity</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let report of disclosureReports; trackBy: trackById">
+              <td><strong>{{ report.summary }}</strong><small *ngIf="report.details">{{ report.details }}</small></td>
+              <td>{{ report.reporterName || '—' }}<small *ngIf="report.reporterContact">{{ report.reporterContact }}</small></td>
+              <td><span class="badge" [class.critical]="report.severity === 'critical'">{{ report.severity }}</span></td>
+              <td><span class="badge" [class.enabled]="report.status === 'new'">{{ report.status }}</span></td>
+              <td>{{ report.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><button *ngIf="canManageSecurity && report.status === 'new'" class="utility-button" type="button" (click)="resolveDisclosureReport(report)">Resolve</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noDisclosureReports><div class="compact-state">No disclosure reports yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'alerts'" class="panel">
+      <div class="table-wrap" *ngIf="alerts.length; else noAlerts">
+        <table>
+          <thead><tr><th>Alert</th><th>Severity</th><th>Status</th><th>Source</th><th>Detected</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let alert of alerts; trackBy: trackById">
+              <td><strong>{{ alert.summary }}</strong><small>{{ alert.alertType }}</small></td>
+              <td><span class="badge" [class.critical]="alert.severity === 'critical'">{{ alert.severity }}</span></td>
+              <td>{{ alert.status }}</td><td>{{ alert.sourceIp || '—' }}</td>
+              <td>{{ alert.detectedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><button *ngIf="alert.status === 'open'" class="utility-button" type="button" (click)="resolveAlert(alert)">Resolve</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noAlerts><div class="compact-state">No security alerts.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'blocklist'" class="panel">
+      <div class="table-wrap" *ngIf="blocks.length; else noBlocks">
+        <table>
+          <thead><tr><th>IP/User</th><th>Reason</th><th>Severity</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let block of blocks; trackBy: trackById">
+              <td>{{ block.ipAddress || block.userId || '—' }}</td><td>{{ block.reason }}</td><td>{{ block.severity }}</td>
+              <td>{{ block.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><button *ngIf="!block.unblockedAt" class="utility-button" type="button" (click)="unblock(block)">Unblock</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noBlocks><div class="compact-state">No blocked identities.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'fraud'" class="panel fraud-panel">
+      <div class="section-header">
+        <h2>Payment, subscription and account-sharing risks</h2>
+        <button *ngIf="canManageSecurity" class="utility-button" type="button" [disabled]="saving" (click)="scanFraudRisks()">
+          {{ saving ? 'Scanning...' : 'Run scan' }}
+        </button>
+      </div>
+      <div class="table-wrap" *ngIf="fraudRisks.length; else noFraudRisks">
+        <table>
+          <thead><tr><th>Risk</th><th>Entity</th><th>Score</th><th>Amount at risk</th><th>Severity</th><th>Date</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let risk of fraudRisks; trackBy: trackById">
+              <td>{{ risk.riskCode.replaceAll('_', ' ') }}</td>
+              <td>{{ risk.entityType.replaceAll('_', ' ') }}</td>
+              <td>{{ risk.riskScore }}</td>
+              <td>{{ money(risk.amountAtRiskPaise) | currency:'INR' }}</td>
+              <td><span class="badge" [class.critical]="risk.severity === 'critical'">{{ risk.severity }}</span></td>
+              <td>{{ risk.businessDate | date:'dd/MM/yyyy' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noFraudRisks><div class="compact-state">No open fraud risks.</div></ng-template>
+
+      <div class="section-header warning-header"><h2>Fraud warnings</h2></div>
+      <form *ngIf="canManageSecurity" class="fraud-form" (ngSubmit)="createFraudWarning()">
+        <label>Title<input name="fraudTitle" maxlength="120" [ngModel]="fraudWarningDraft.title" (ngModelChange)="fraudWarningDraft.title = titleCase($event)" /></label>
+        <label>Message<input name="fraudMessage" maxlength="500" [(ngModel)]="fraudWarningDraft.message" /></label>
+        <label>Severity<select name="fraudSeverity" [(ngModel)]="fraudWarningDraft.severity"><option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+        <button class="primary-button" type="submit" [disabled]="saving || !fraudWarningDraft.title.trim() || !fraudWarningDraft.message.trim()">Add warning</button>
+      </form>
+      <div class="table-wrap" *ngIf="fraudWarnings.length; else noFraudWarnings">
+        <table>
+          <thead><tr><th>Title</th><th>Message</th><th>Severity</th><th>Created</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let warning of fraudWarnings; trackBy: trackById">
+              <td>{{ warning.title }}</td><td>{{ warning.message }}</td>
+              <td><span class="badge" [class.critical]="warning.severity === 'critical'">{{ warning.severity }}</span></td>
+              <td>{{ warning.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noFraudWarnings><div class="compact-state">No fraud warnings yet.</div></ng-template>
+    </section>
+
+    <section *ngIf="activeTab === 'policy'" class="panel">
+      <form *ngIf="policy" class="policy-form" (ngSubmit)="savePolicy()">
+        <label>Audit retention days<input name="auditRetentionDays" type="number" min="1" max="3650" required [(ngModel)]="policy.auditRetentionDays" /></label>
+        <label>Audit page size<input name="auditPageSize" type="number" min="10" max="250" required [(ngModel)]="policy.auditPageSize" /></label>
+        <label class="check-field"><input name="sessionRevocationEnabled" type="checkbox" [(ngModel)]="policy.sessionRevocationEnabled" /><span>Session revocation enabled</span></label>
+        <div class="form-actions"><button class="primary-button" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save policy' }}</button></div>
+      </form>
+      <div *ngIf="!policy" class="compact-state">No policy loaded.</div>
+    </section>
+  </ng-container>
+</main>

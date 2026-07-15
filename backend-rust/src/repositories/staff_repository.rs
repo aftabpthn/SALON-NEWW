@@ -54,6 +54,11 @@ pub struct AuthRoleRecord {
     pub id: String,
     pub name: String,
     pub permissions_json: Value,
+    pub denied_permissions_json: Value,
+    pub masked_fields_json: Value,
+    pub max_discount_paise: Option<i64>,
+    pub max_refund_paise: Option<i64>,
+    pub max_cash_movement_paise: Option<i64>,
     pub is_system: bool,
 }
 
@@ -519,7 +524,7 @@ pub async fn list_managed_auth_roles(
     tenant_id: &str,
 ) -> Result<Vec<AuthRoleRecord>, sqlx::Error> {
     sqlx::query_as::<_, AuthRoleRecord>(
-        "SELECT id, name, permissions_json, is_system FROM roles WHERE tenant_id=$1 ORDER BY is_system DESC, name ASC",
+        "SELECT id, name, permissions_json, denied_permissions_json, masked_fields_json, max_discount_paise, max_refund_paise, max_cash_movement_paise, is_system FROM roles WHERE tenant_id=$1 ORDER BY is_system DESC, name ASC",
     )
     .bind(tenant_id)
     .fetch_all(db)
@@ -532,7 +537,7 @@ pub async fn get_auth_role(
     role_id: &str,
 ) -> Result<Option<AuthRoleRecord>, sqlx::Error> {
     sqlx::query_as::<_, AuthRoleRecord>(
-        "SELECT id, name, permissions_json, is_system FROM roles WHERE tenant_id=$1 AND id=$2",
+        "SELECT id, name, permissions_json, denied_permissions_json, masked_fields_json, max_discount_paise, max_refund_paise, max_cash_movement_paise, is_system FROM roles WHERE tenant_id=$1 AND id=$2",
     )
     .bind(tenant_id)
     .bind(role_id)
@@ -545,17 +550,30 @@ pub async fn create_auth_role(
     tenant_id: &str,
     name: &str,
     permissions_json: Value,
+    denied_permissions_json: Value,
+    masked_fields_json: Value,
+    max_discount_paise: Option<i64>,
+    max_refund_paise: Option<i64>,
+    max_cash_movement_paise: Option<i64>,
 ) -> Result<AuthRoleRecord, sqlx::Error> {
     sqlx::query_as::<_, AuthRoleRecord>(
         r#"
-        INSERT INTO roles (tenant_id, name, permissions_json, is_system)
-        VALUES ($1, $2, $3, FALSE)
-        RETURNING id, name, permissions_json, is_system
+        INSERT INTO roles (
+          tenant_id, name, permissions_json, denied_permissions_json, masked_fields_json,
+          max_discount_paise, max_refund_paise, max_cash_movement_paise, is_system
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE)
+        RETURNING id, name, permissions_json, denied_permissions_json, masked_fields_json,
+                  max_discount_paise, max_refund_paise, max_cash_movement_paise, is_system
         "#,
     )
     .bind(tenant_id)
     .bind(name)
     .bind(permissions_json)
+    .bind(denied_permissions_json)
+    .bind(masked_fields_json)
+    .bind(max_discount_paise)
+    .bind(max_refund_paise)
+    .bind(max_cash_movement_paise)
     .fetch_one(db)
     .await
 }
@@ -566,19 +584,32 @@ pub async fn update_auth_role(
     role_id: &str,
     name: &str,
     permissions_json: Value,
+    denied_permissions_json: Value,
+    masked_fields_json: Value,
+    max_discount_paise: Option<i64>,
+    max_refund_paise: Option<i64>,
+    max_cash_movement_paise: Option<i64>,
 ) -> Result<Option<AuthRoleRecord>, sqlx::Error> {
     sqlx::query_as::<_, AuthRoleRecord>(
         r#"
         UPDATE roles
-        SET name=$3, permissions_json=$4, updated_at=NOW()
+        SET name=$3, permissions_json=$4, denied_permissions_json=$5, masked_fields_json=$6,
+            max_discount_paise=$7, max_refund_paise=$8, max_cash_movement_paise=$9,
+            updated_at=NOW()
         WHERE tenant_id=$1 AND id=$2 AND is_system=FALSE
-        RETURNING id, name, permissions_json, is_system
+        RETURNING id, name, permissions_json, denied_permissions_json, masked_fields_json,
+                  max_discount_paise, max_refund_paise, max_cash_movement_paise, is_system
         "#,
     )
     .bind(tenant_id)
     .bind(role_id)
     .bind(name)
     .bind(permissions_json)
+    .bind(denied_permissions_json)
+    .bind(masked_fields_json)
+    .bind(max_discount_paise)
+    .bind(max_refund_paise)
+    .bind(max_cash_movement_paise)
     .fetch_optional(db)
     .await
 }

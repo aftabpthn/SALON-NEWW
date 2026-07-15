@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use crate::{
     models::common::AppError,
     repositories::inventory_transfer_repository::{self, InventoryTransfer, InventoryTransferLine},
+    services::inventory_adjustment_service,
     state::AppState,
 };
 
@@ -132,17 +133,23 @@ pub async fn dispatch(
                 "source inventory has insufficient stock for transfer",
             ));
         }
-        let destination_exists = inventory_transfer_repository::active_inventory_item_exists(
-            &mut tx,
-            tenant_id,
-            &input.destination_branch_id,
-            &line.destination_inventory_item_id,
-        )
-        .await
-        .map_err(|_| AppError::internal("failed to validate destination inventory"))?;
-        if !destination_exists {
+        let destination_tracking =
+            inventory_transfer_repository::active_inventory_item_batch_tracked(
+                &mut tx,
+                tenant_id,
+                &input.destination_branch_id,
+                &line.destination_inventory_item_id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to validate destination inventory"))?;
+        let Some(destination_tracking) = destination_tracking else {
             return Err(AppError::validation(
                 "destination inventory item is inactive or unavailable",
+            ));
+        };
+        if destination_tracking != source.batch_tracked {
+            return Err(AppError::conflict(
+                "source and destination items must use the same batch tracking setting",
             ));
         }
         let transfer_line = inventory_transfer_repository::create_line(
@@ -166,7 +173,7 @@ pub async fn dispatch(
         )
         .await
         .map_err(|_| AppError::internal("failed to reserve source inventory"))?;
-        inventory_transfer_repository::add_stock_ledger(
+        let ledger_id = inventory_transfer_repository::add_stock_ledger(
             &mut tx,
             tenant_id,
             source_branch_id,
@@ -179,6 +186,16 @@ pub async fn dispatch(
         )
         .await
         .map_err(|_| AppError::internal("failed to record inventory transfer dispatch"))?;
+        inventory_adjustment_service::allocate_fefo_quantity(
+            &mut tx,
+            tenant_id,
+            source_branch_id,
+            &line.source_inventory_item_id,
+            source.batch_tracked,
+            &ledger_id,
+            line.quantity,
+        )
+        .await?;
         created_lines.push(transfer_line);
     }
     tx.commit()
@@ -240,6 +257,20 @@ pub async fn receive(
         .ok_or_else(|| {
             AppError::validation("destination inventory item is inactive or unavailable")
         })?;
+        let source_tracking = inventory_transfer_repository::active_inventory_item_batch_tracked(
+            &mut tx,
+            tenant_id,
+            &transfer.source_branch_id,
+            &line.source_inventory_item_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate source batch tracking"))?
+        .ok_or_else(|| AppError::validation("source inventory item is unavailable"))?;
+        if source_tracking != destination.batch_tracked {
+            return Err(AppError::conflict(
+                "source and destination items must use the same batch tracking setting",
+            ));
+        }
         let quantity = destination
             .stock_quantity
             .checked_add(line.quantity)
@@ -260,7 +291,7 @@ pub async fn receive(
         )
         .await
         .map_err(|_| AppError::internal("failed to receive destination inventory"))?;
-        inventory_transfer_repository::add_stock_ledger(
+        let ledger_id = inventory_transfer_repository::add_stock_ledger(
             &mut tx,
             tenant_id,
             destination_branch_id,
@@ -273,6 +304,19 @@ pub async fn receive(
         )
         .await
         .map_err(|_| AppError::internal("failed to record inventory transfer receipt"))?;
+        if destination.batch_tracked {
+            inventory_adjustment_service::receive_transfer_batches(
+                &mut tx,
+                tenant_id,
+                &transfer.source_branch_id,
+                destination_branch_id,
+                &line.source_inventory_item_id,
+                &line.destination_inventory_item_id,
+                &line.id,
+                &ledger_id,
+            )
+            .await?;
+        }
     }
     inventory_transfer_repository::mark_received(&mut tx, tenant_id, transfer_id, actor_user_id)
         .await
@@ -343,7 +387,7 @@ pub async fn cancel(
         )
         .await
         .map_err(|_| AppError::internal("failed to restore source inventory"))?;
-        inventory_transfer_repository::add_stock_ledger(
+        let reversal_ledger_id = inventory_transfer_repository::add_stock_ledger(
             &mut tx,
             tenant_id,
             source_branch_id,
@@ -356,6 +400,26 @@ pub async fn cancel(
         )
         .await
         .map_err(|_| AppError::internal("failed to record inventory transfer cancellation"))?;
+        if source.batch_tracked {
+            let outbound_ledger_id = inventory_transfer_repository::stock_ledger_id(
+                &mut tx,
+                tenant_id,
+                source_branch_id,
+                &line.id,
+                "transfer_out",
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to load dispatched batch movement"))?
+            .ok_or_else(|| AppError::internal("dispatched batch movement was not found"))?;
+            inventory_adjustment_service::restore_transfer_batches(
+                &mut tx,
+                tenant_id,
+                source_branch_id,
+                &outbound_ledger_id,
+                &reversal_ledger_id,
+            )
+            .await?;
+        }
     }
     inventory_transfer_repository::mark_cancelled(&mut tx, tenant_id, transfer_id, actor_user_id)
         .await

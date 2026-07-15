@@ -69,6 +69,8 @@ struct ConfirmRequest {
     #[serde(rename = "staffId")]
     staff_id: Option<String>,
     notes: Option<String>,
+    #[serde(rename = "packageCreditId")]
+    package_credit_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -150,6 +152,7 @@ async fn booking_portal_context(
         .collect::<Vec<_>>();
     let services = load_booking_services(&state, &tenant_id, &branch_id).await?;
     let staff = load_booking_staff(&state, &tenant_id, &branch_id).await?;
+    let package_booking = load_booking_packages(&state, &tenant_id, &branch_id).await?;
 
     Ok(Json(json!({
         "tenantId": tenant_id,
@@ -161,6 +164,8 @@ async fn booking_portal_context(
         "branches": branches,
         "services": services,
         "staff": staff,
+        "packages": package_booking.0,
+        "packageClientPurchaseEnabled": package_booking.1,
         "paymentReady": {
             "onlinePayment": true,
             "modes": ["upi","card","wallet"],
@@ -243,12 +248,25 @@ async fn booking_portal_confirm(
         .unwrap_or_else(|| add_minutes(&start_at, DEFAULT_SLOT_MINUTES));
     let staff_id = slot.staff_id.unwrap_or_default();
 
+    let package_credit_id = payload.package_credit_id.unwrap_or_default();
+    if !package_credit_id.trim().is_empty() {
+        validate_package_credit_booking(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &client_id,
+            &services,
+            &package_credit_id,
+        )
+        .await?;
+    }
+
     let request = AppointmentCreatePayload {
-        tenant_id: Some(tenant_id),
-        branch_id: Some(branch_id),
+        tenant_id: Some(tenant_id.clone()),
+        branch_id: Some(branch_id.clone()),
         staff_id,
-        client_id,
-        service_ids: services,
+        client_id: client_id.clone(),
+        service_ids: services.clone(),
         start_at,
         end_at,
         notes: payload.notes.unwrap_or_default(),
@@ -257,9 +275,17 @@ async fn booking_portal_confirm(
         source_channel: Some("booking-portal".to_string()),
         source: Some("public-booking".to_string()),
         chair_room_id: String::new(),
+        service_selections: Vec::new(),
     };
 
-    let created = appointments::create_appointment(State(state), headers, Json(request)).await?;
+    let created =
+        appointments::create_appointment(State(state.clone()), headers, Json(request)).await?;
+    if !package_credit_id.trim().is_empty() {
+        sqlx::query("INSERT INTO appointment_package_reservations (tenant_id,branch_id,appointment_id,client_package_credit_id,quantity,status) VALUES ($1,$2,$3,$4,1,'reserved')")
+            .bind(&tenant_id).bind(&branch_id).bind(&created.0.id).bind(&package_credit_id)
+            .execute(&state.db).await
+            .map_err(|_| ApiError::internal("failed to reserve package credit"))?;
+    }
     Ok(created)
 }
 
@@ -276,7 +302,11 @@ async fn booking_portal_cancel(
         apply_group: false,
     };
     let response =
-        appointments::cancel_appointment(State(state), headers, Path(id), Json(status)).await?;
+        appointments::cancel_appointment(State(state.clone()), headers, Path(id), Json(status))
+            .await?;
+    sqlx::query("UPDATE appointment_package_reservations SET status='released',updated_at=NOW() WHERE appointment_id=$1 AND status='reserved'")
+        .bind(&response.0.appointment.id).execute(&state.db).await
+        .map_err(|_| ApiError::internal("failed to release package reservation"))?;
     Ok(response)
 }
 
@@ -311,6 +341,7 @@ async fn booking_portal_reschedule(
         end_at: requested_end,
         reason: payload.reason.unwrap_or_default(),
         staff_id: slot.and_then(|s| s.staff_id).unwrap_or_default(),
+        service_ids: Vec::new(),
         branch_id: payload.branch_id.unwrap_or_default(),
         chair_room_id: String::new(),
         booking_group_id: String::new(),
@@ -401,6 +432,103 @@ async fn load_booking_services(
             })
         })
         .collect())
+}
+
+async fn load_booking_packages(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<(Vec<Value>, bool), ApiError> {
+    let settings = sqlx::query_scalar::<_, Value>(
+        "SELECT settings_json FROM package_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to load package booking settings"))?
+    .unwrap_or_else(|| json!({}));
+    let show_packages = settings
+        .pointer("/onlineBooking/showPackages")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let allow_purchase = settings
+        .pointer("/onlineBooking/allowClientPurchase")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !show_packages {
+        return Ok((Vec::new(), allow_purchase));
+    }
+    let rows = sqlx::query("SELECT id,name,description,price_paise,validity_days,service_rows_json FROM packages WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND show_online_booking=TRUE ORDER BY name LIMIT 100")
+        .bind(tenant_id).bind(branch_id).fetch_all(&state.db).await
+        .map_err(|_| ApiError::internal("failed to load booking packages"))?;
+    Ok((
+        rows.into_iter()
+            .map(|row| json!({
+                "id": row.try_get::<String,_>("id").unwrap_or_default(),
+                "name": row.try_get::<String,_>("name").unwrap_or_default(),
+                "description": row.try_get::<String,_>("description").unwrap_or_default(),
+                "pricePaise": row.try_get::<i64,_>("price_paise").unwrap_or_default(),
+                "validityDays": row.try_get::<i32,_>("validity_days").unwrap_or_default(),
+                "services": row.try_get::<Value,_>("service_rows_json").unwrap_or_else(|_| json!([]))
+            }))
+            .collect(),
+        allow_purchase,
+    ))
+}
+
+async fn validate_package_credit_booking(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    service_ids: &[String],
+    credit_id: &str,
+) -> Result<(), ApiError> {
+    let settings = sqlx::query_scalar::<_, Value>(
+        "SELECT settings_json FROM package_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to load package booking settings"))?
+    .unwrap_or_else(|| json!({}));
+    if !settings
+        .pointer("/onlineBooking/allowPackageServiceBooking")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+    {
+        return Err(ApiError::bad_request("package-service booking is disabled"));
+    }
+    let allow_cross_service = settings
+        .pointer("/creditsRedemption/allowCrossService")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let credit = sqlx::query_as::<_, (String, i32, i64)>(
+        r#"SELECT pc.service_id,pc.remaining_qty,COUNT(r.id)::BIGINT
+             FROM client_package_credits pc
+             JOIN packages p ON p.id=pc.package_id AND p.tenant_id=pc.tenant_id AND p.branch_id=pc.branch_id
+             LEFT JOIN appointment_package_reservations r ON r.client_package_credit_id=pc.id AND r.status='reserved'
+            WHERE pc.id=$1 AND pc.tenant_id=$2 AND pc.branch_id=$3 AND pc.client_id=$4
+              AND pc.active=TRUE AND pc.remaining_qty>0
+              AND (pc.expires_at IS NULL OR pc.expires_at>=CURRENT_DATE)
+              AND p.active=TRUE AND p.show_online_booking=TRUE
+            GROUP BY pc.service_id,pc.remaining_qty"#,
+    )
+    .bind(credit_id).bind(tenant_id).bind(branch_id).bind(client_id)
+    .fetch_optional(&state.db).await
+    .map_err(|_| ApiError::internal("failed to validate package credit"))?
+    .ok_or_else(|| ApiError::bad_request("package credit is not available for booking"))?;
+    if credit.1 <= credit.2 as i32 {
+        return Err(ApiError::bad_request("package credit is already reserved"));
+    }
+    if !allow_cross_service && !service_ids.iter().any(|service_id| service_id == &credit.0) {
+        return Err(ApiError::bad_request(
+            "package credit does not match the booked service",
+        ));
+    }
+    Ok(())
 }
 
 async fn load_booking_staff(

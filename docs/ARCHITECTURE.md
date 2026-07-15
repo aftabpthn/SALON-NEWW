@@ -117,11 +117,12 @@ flowchart LR
 | Clients/CRM | client pages | client and customer intelligence services | clients, interactions, segments | PII is role-gated. |
 | Staff/Payroll | staff pages | staff intelligence/payroll services | staff, shifts, payroll, statutory rows | Branch access is enforced server-side. |
 | Inventory | inventory pages | inventory services/repositories | products, stock movements, transfers | WMA costing and stock ledgers are truth. |
+| Laundry Tracker | `inventory/laundry` | laundry route/service/repository | laundry orders, items, events, issues | Tenant/branch-scoped chain of custody; events are immutable. |
 | Accounting | finance pages | balance sheet, ledger, accrual services | `journalEntryLines` | Debit equals credit. |
 | Reporting/Analytics | report/dashboard pages | report and analytics services | snapshots and source ledgers | Heavy calculations run as snapshots. |
 | AI | AI/command pages | local AI plus provider adapter | `ai_interactions` | Local deterministic fallback stays available. |
 | Notifications | engagement pages | WhatsApp/SMS/email/push services | notification rows and provider events | Webhooks are signed and idempotent. |
-| SaaS Admin | super admin pages | SaaS/domain/tenant services | tenants, branches, subscriptions | Platform role required. |
+| SaaS Admin | shared platform/tenant SaaS console | SaaS route/service/repository | plans, subscriptions, usage events, SaaS invoices/payments, support and SLA events | Platform writes require platform-tenant super admin; tenant self-service remains scoped. |
 
 ## 12. Architecture Diagrams
 
@@ -173,6 +174,41 @@ flowchart LR
 Third-party systems enter through route/service adapters. Webhooks validate
 signatures, dedupe by provider event id, write audit/provider rows, then trigger
 domain updates inside transactions.
+
+```mermaid
+flowchart LR
+  Admin["Integrations and Data"] --> OAuth["OAuth 2.0 plus PKCE"]
+  OAuth --> Providers["QuickBooks, Xero, NetSuite, Google"]
+  Providers --> Encrypted[("Encrypted tenant and branch tokens")]
+  Encrypted --> Jobs["Durable connector sync jobs"]
+  Jobs --> Health["Provider account verification"]
+  Zapier --> Keys["Scoped API keys"]
+  Zapier --> Hooks["Signed webhook retries"]
+```
+
+Connector provider calls stay in `integration_service`; durable state and SQL
+stay in `integration_repository`. External provider activation is controlled by
+environment credentials, while tenant authorization records remain encrypted
+and branch scoped.
+
+### Enterprise AI Concierge Flow
+
+```mermaid
+flowchart LR
+  Web["Header assistant"] --> Rust["Rust AI concierge boundary"]
+  Voice["Signed voice transcript webhook"] --> Rust
+  WhatsApp["Verified WhatsApp webhook"] --> Rust
+  Rust --> Context["Real branch service catalog"]
+  Rust --> Python["FastAPI structured-response adapter"]
+  Python --> Model["Configured model or deterministic fallback"]
+  Rust --> Audit[("Governance, transcripts, safety flags, actions")]
+  Rust --> Draft["Booking draft or human handoff"]
+  Draft --> Booking["Existing OTP and booking confirmation flow"]
+```
+
+The model never writes appointments, prices, payments, or clients directly.
+Only validated drafts enter the existing booking workflow, where OTP,
+availability, pricing, tenant scope, and confirmation remain authoritative.
 
 ## 15. Architecture Acceptance Criteria
 

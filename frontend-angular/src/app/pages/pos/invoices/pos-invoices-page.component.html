@@ -5,7 +5,9 @@
     </div>
     <nav>
       <a routerLink="/pos">Checkout</a>
+      <a routerLink="/pos/sales">Sales register</a>
       <a routerLink="/reports/invoices">Reports</a>
+      <a routerLink="/settings/invoice">Settings</a>
     </nav>
   </header>
 
@@ -82,8 +84,32 @@
         <span>Paid {{ money(paymentReconciliation.providerAmountPaidPaise) }}</span>
         <span *ngIf="paymentReconciliation.requiresSignedWebhook">Awaiting signed webhook</span>
       </div>
-      <label><span>Recipient</span><input [(ngModel)]="recipient" name="recipient" type="email" placeholder="Email address" /></label>
-      <button type="button" class="resend" (click)="requestResend()">Request resend</button>
+      <section class="payment-compliance" *ngIf="paymentInstruments.length">
+        <h3>Saved payment instruments</h3>
+        <article *ngFor="let instrument of paymentInstruments">
+          <div>
+            <strong>{{ instrument.brand || lineTypeLabel(instrument.methodType) }}<ng-container *ngIf="instrument.last4"> · •••• {{ instrument.last4 }}</ng-container></strong>
+            <span>{{ instrument.provider }} · {{ instrument.status }}<ng-container *ngIf="instrument.recurringEnabled"> · autopay</ng-container></span>
+          </div>
+          <button type="button" *ngIf="instrument.status !== 'revoked'" [disabled]="!!revokingInstrumentId" (click)="revokePaymentInstrument(instrument)">{{ revokingInstrumentId === instrument.id ? 'Revoking…' : 'Revoke' }}</button>
+        </article>
+      </section>
+      <section class="payment-compliance disputes" *ngIf="paymentDisputes.length">
+        <h3>Payment disputes</h3>
+        <article *ngFor="let dispute of paymentDisputes">
+          <div><strong>{{ money(dispute.amountPaise) }} · {{ dispute.status }}</strong><span>{{ dispute.provider }} · {{ dispute.providerDisputeId }}</span><small *ngIf="dispute.reason">{{ dispute.reason }}</small></div>
+          <time>{{ formatDate(dispute.openedAt) }}</time>
+        </article>
+      </section>
+      <label><span>Delivery channel</span><select [(ngModel)]="deliveryChannel" name="deliveryChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label>
+      <label><span>Recipient</span><input [(ngModel)]="recipient" name="recipient" [type]="deliveryChannel === 'email' ? 'email' : 'text'" [placeholder]="deliveryChannel === 'email' ? 'Email address' : 'Mobile number'" /></label>
+      <button type="button" class="resend" (click)="requestResend()">Queue delivery</button>
+      <button type="button" class="resend" [disabled]="reminderLoading" (click)="scheduleDueReminders()">{{ reminderLoading ? 'Queuing…' : 'Queue due reminders' }}</button>
+      <section class="deliveries">
+        <h3>Delivery outbox</h3>
+        <div *ngFor="let item of deliveries; trackBy: trackByDelivery"><strong>{{ item.channel }} · {{ item.status }}</strong><span>{{ item.recipient }}</span><small>Attempts {{ item.attempts }}<ng-container *ngIf="item.lastError"> · {{ item.lastError }}</ng-container></small></div>
+        <p class="empty" *ngIf="!deliveries.length">No deliveries yet</p>
+      </section>
       <section class="history">
         <h3>Action history</h3>
         <div *ngFor="let item of history; trackBy: trackByHistory"><strong>{{ item.action }}</strong><span>{{ item.recipient || '-' }}</span><time>{{ item.createdAt | date:'dd/MM/yyyy, HH:mm' }}</time></div>
@@ -102,6 +128,7 @@
 
     <div class="return-drawer-body">
       <label class="return-reason"><span>Reason</span><input [(ngModel)]="returnReason" name="returnReason" maxlength="500" placeholder="Reason for return" /></label>
+      <label class="return-reason"><span>MFA code</span><input [(ngModel)]="returnMfaCode" name="returnMfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
 
       <section class="return-lines" aria-label="Invoice items">
         <article class="return-line" *ngFor="let line of returnLines">
@@ -171,6 +198,7 @@
 
     <div class="return-drawer-body">
       <p class="credit-note-warning">The provider link will be created for the selected invoice balance.</p>
+      <label class="return-reason"><span>Provider</span><select [(ngModel)]="paymentLinkProvider" name="paymentLinkProvider"><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree</option><option value="phonepe">PhonePe</option></select></label>
       <label class="return-reason"><span>Amount</span><input [(ngModel)]="paymentLinkAmount" name="paymentLinkAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
     </div>
 

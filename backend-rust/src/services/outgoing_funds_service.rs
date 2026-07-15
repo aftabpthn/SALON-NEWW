@@ -1,0 +1,1307 @@
+use std::collections::BTreeMap;
+
+use chrono::NaiveDate;
+use serde::Deserialize;
+use sqlx::PgPool;
+
+use crate::{
+    models::{
+        common::AppError,
+        outgoing_funds::{
+            OutgoingFundCategory, OutgoingFundCreateRequest, OutgoingFundDecisionRequest,
+            OutgoingFundLineRequest, OutgoingFundLineResponse, OutgoingFundListQuery,
+            OutgoingFundPage, OutgoingFundPageMeta, OutgoingFundResponse, OutgoingFundSummary,
+            OutgoingFundUpdateRequest,
+        },
+    },
+    repositories::{
+        cash_drawer_repository, clients_repository,
+        outgoing_funds_repository::{self, NewOutgoingFundLine},
+        purchase_repository, staff_repository,
+    },
+    services::accounting_service::{self, ManualJournalLine},
+};
+
+#[derive(Clone, Copy)]
+struct CategoryMeta {
+    key: &'static str,
+    label: &'static str,
+    account_code: Option<&'static str>,
+    workflow_path: Option<&'static str>,
+    workflow_label: Option<&'static str>,
+}
+
+const CATEGORY_META: &[CategoryMeta] = &[
+    CategoryMeta {
+        key: "rent",
+        label: "Rent / Lease",
+        account_code: Some("RENT_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "utilities",
+        label: "Electricity / Water / Internet",
+        account_code: Some("UTILITIES_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "marketing",
+        label: "Marketing / Ads / Referral",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "software_subscription",
+        label: "Software / SMS / WhatsApp",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "repair_maintenance",
+        label: "Repair / Maintenance",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "cleaning_housekeeping",
+        label: "Cleaning / Laundry / Housekeeping",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "client_refreshment",
+        label: "Client Refreshment",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "uniform",
+        label: "Uniform / Grooming",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "stationery",
+        label: "Stationery / Printing",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "bank_charges",
+        label: "Bank / Payment Gateway Charges",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "professional_legal",
+        label: "CA / Legal / License",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "gst_payment",
+        label: "GST / Tax Payment",
+        account_code: Some("GST_PAYABLE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "statutory_payment",
+        label: "PF / ESI / PT / TDS Payment",
+        account_code: Some("PAYROLL_STATUTORY_PAYABLE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "security_deposit",
+        label: "Security Deposit",
+        account_code: Some("PREPAID_EXPENSES"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "prepaid_expense",
+        label: "Prepaid Expense",
+        account_code: Some("PREPAID_EXPENSES"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "loan",
+        label: "Loan / EMI Principal",
+        account_code: Some("LOANS_PAYABLE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "interest",
+        label: "Interest / Finance Cost",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "owner_drawing",
+        label: "Owner Drawing",
+        account_code: Some("OWNER_EQUITY"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "travel",
+        label: "Travel / Conveyance",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "training",
+        label: "Training / Education",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "other",
+        label: "Other Salon Outgoing",
+        account_code: Some("OPERATING_EXPENSE"),
+        workflow_path: None,
+        workflow_label: None,
+    },
+    CategoryMeta {
+        key: "salary",
+        label: "Staff Salary",
+        account_code: None,
+        workflow_path: Some("/staff/payroll"),
+        workflow_label: Some("Open payroll"),
+    },
+    CategoryMeta {
+        key: "staff_commission",
+        label: "Staff Commission / Incentive",
+        account_code: None,
+        workflow_path: Some("/staff/payroll"),
+        workflow_label: Some("Open payroll"),
+    },
+    CategoryMeta {
+        key: "advance",
+        label: "Staff Advance",
+        account_code: None,
+        workflow_path: Some("/staff"),
+        workflow_label: Some("Open staff"),
+    },
+    CategoryMeta {
+        key: "inventory_purchase",
+        label: "Product Purchase / Supplier Payment",
+        account_code: None,
+        workflow_path: Some("/purchase-payables"),
+        workflow_label: Some("Open supplier payables"),
+    },
+    CategoryMeta {
+        key: "product_consumable",
+        label: "Product Consumable / COGS",
+        account_code: None,
+        workflow_path: Some("/inventory/backbar"),
+        workflow_label: Some("Open backbar"),
+    },
+    CategoryMeta {
+        key: "wastage_damage",
+        label: "Wastage / Expiry / Damage",
+        account_code: None,
+        workflow_path: Some("/inventory/advanced-controls"),
+        workflow_label: Some("Open inventory controls"),
+    },
+    CategoryMeta {
+        key: "fixed_asset_purchase",
+        label: "Fixed Asset Purchase",
+        account_code: None,
+        workflow_path: Some("/finance/fixed-assets"),
+        workflow_label: Some("Open fixed assets"),
+    },
+    CategoryMeta {
+        key: "bank_deposit",
+        label: "Bank Deposit / Cash Transfer",
+        account_code: None,
+        workflow_path: Some("/pos/cash-drawer"),
+        workflow_label: Some("Open cash drawer"),
+    },
+];
+
+#[derive(Debug)]
+struct ValidatedVoucher {
+    business_date: NaiveDate,
+    payment_account_code: String,
+    payment_mode: String,
+    reference_number: Option<String>,
+    cheque_number: Option<String>,
+    cheque_date: Option<NaiveDate>,
+    linked_party_type: String,
+    linked_party_id: Option<String>,
+    linked_party_name: Option<String>,
+    bill_reference: Option<String>,
+    attachment_url: Option<String>,
+    remarks: Option<String>,
+    lines: Vec<NewOutgoingFundLine>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredLine {
+    id: String,
+    line_number: i32,
+    category_key: String,
+    account_code: String,
+    amount_paise: i64,
+    gst_treatment: String,
+    gst_paise: i64,
+    remarks: Option<String>,
+}
+
+pub fn categories() -> Vec<OutgoingFundCategory> {
+    CATEGORY_META
+        .iter()
+        .map(|category| OutgoingFundCategory {
+            key: category.key.into(),
+            label: category.label.into(),
+            account_code: category.account_code.map(str::to_string),
+            manual_entry: category.account_code.is_some(),
+            workflow_path: category.workflow_path.map(str::to_string),
+            workflow_label: category.workflow_label.map(str::to_string),
+        })
+        .collect()
+}
+
+pub async fn list(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    query: OutgoingFundListQuery,
+) -> Result<OutgoingFundPage, AppError> {
+    let from_date = parse_optional_date(query.from_date.as_deref(), "fromDate")?;
+    let to_date = parse_optional_date(query.to_date.as_deref(), "toDate")?;
+    if from_date.zip(to_date).is_some_and(|(from, to)| from > to) {
+        return Err(AppError::validation("fromDate cannot be after toDate"));
+    }
+    let status = clean_filter(query.status.as_deref(), 20, "status")?;
+    if !status.is_empty() && !valid_status(&status) {
+        return Err(AppError::validation("invalid outgoing fund status"));
+    }
+    let search = clean_filter(query.q.as_deref(), 100, "q")?;
+    let category = clean_filter(query.category.as_deref(), 64, "category")?;
+    if !category.is_empty() && category_meta(&category).is_none() {
+        return Err(AppError::validation("invalid outgoing fund category"));
+    }
+    let page = query.page.unwrap_or(1).clamp(1, 100_000);
+    let page_size = query.page_size.unwrap_or(100).clamp(1, 500);
+    let offset = (page - 1).saturating_mul(page_size);
+    let rows = outgoing_funds_repository::list(
+        db, tenant_id, branch_id, from_date, to_date, &status, &search, &category, page_size,
+        offset,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to list outgoing funds"))?;
+    let total = outgoing_funds_repository::count(
+        db, tenant_id, branch_id, from_date, to_date, &status, &search, &category,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to count outgoing funds"))?;
+    let summary = outgoing_funds_repository::summary(
+        db, tenant_id, branch_id, from_date, to_date, &status, &search, &category,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to summarize outgoing funds"))?;
+    Ok(OutgoingFundPage {
+        rows: rows.into_iter().map(map_record).collect::<Result<_, _>>()?,
+        summary: OutgoingFundSummary {
+            voucher_count: summary.0,
+            total_paise: summary.1,
+            pending_count: summary.2,
+            input_gst_paise: summary.3,
+        },
+        meta: OutgoingFundPageMeta {
+            page,
+            page_size,
+            total,
+        },
+    })
+}
+
+pub async fn export_rows(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    mut query: OutgoingFundListQuery,
+) -> Result<Vec<OutgoingFundResponse>, AppError> {
+    query.page_size = Some(500);
+    let mut rows = Vec::new();
+    for page_number in 1..=100_000 {
+        query.page = Some(page_number);
+        let page = list(db, tenant_id, branch_id, query.clone()).await?;
+        let empty = page.rows.is_empty();
+        rows.extend(page.rows);
+        if empty || rows.len() >= page.meta.total as usize {
+            break;
+        }
+    }
+    Ok(rows)
+}
+
+pub async fn get(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<OutgoingFundResponse, AppError> {
+    let record = outgoing_funds_repository::find(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load outgoing fund"))?
+        .ok_or_else(|| AppError::not_found("outgoing fund voucher was not found"))?;
+    map_record(record)
+}
+
+pub async fn create(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    payload: OutgoingFundCreateRequest,
+) -> Result<OutgoingFundResponse, AppError> {
+    let key = validate_idempotency_key(&payload.idempotency_key)?;
+    if let Some(record) =
+        outgoing_funds_repository::find_by_idempotency(db, tenant_id, branch_id, &key)
+            .await
+            .map_err(|_| AppError::internal("failed to check outgoing fund retry"))?
+    {
+        return map_record(record);
+    }
+    let mut validated = validate_voucher(
+        &payload.business_date,
+        &payload.payment_account_code,
+        &payload.payment_mode,
+        payload.reference_number.as_deref(),
+        payload.cheque_number.as_deref(),
+        payload.cheque_date.as_deref(),
+        payload.linked_party_type.as_deref(),
+        payload.linked_party_id.as_deref(),
+        payload.linked_party_name.as_deref(),
+        payload.bill_reference.as_deref(),
+        payload.attachment_url.as_deref(),
+        payload.remarks.as_deref(),
+        &payload.lines,
+    )?;
+    validated.linked_party_name = resolve_linked_party_name(
+        db,
+        tenant_id,
+        branch_id,
+        &validated.linked_party_type,
+        validated.linked_party_id.as_deref(),
+        validated.linked_party_name.as_deref(),
+    )
+    .await?;
+    let status = if payload.submit.unwrap_or(false) {
+        "pending"
+    } else {
+        "draft"
+    };
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund save"))?;
+    let id = outgoing_funds_repository::create(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        actor,
+        outgoing_funds_repository::NewOutgoingFundVoucher {
+            business_date: validated.business_date,
+            payment_account_code: &validated.payment_account_code,
+            payment_mode: &validated.payment_mode,
+            reference_number: validated.reference_number.as_deref(),
+            cheque_number: validated.cheque_number.as_deref(),
+            cheque_date: validated.cheque_date,
+            linked_party_type: &validated.linked_party_type,
+            linked_party_id: validated.linked_party_id.as_deref(),
+            linked_party_name: validated.linked_party_name.as_deref(),
+            bill_reference: validated.bill_reference.as_deref(),
+            attachment_url: validated.attachment_url.as_deref(),
+            remarks: validated.remarks.as_deref(),
+            status,
+            idempotency_key: &key,
+        },
+        &validated.lines,
+    )
+    .await
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|database_error| database_error.code().as_deref() == Some("23505"))
+        {
+            AppError::conflict("outgoing fund retry conflicts with an existing voucher")
+        } else {
+            AppError::internal("failed to save outgoing fund")
+        }
+    })?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund"))?;
+    get(db, tenant_id, branch_id, &id).await
+}
+
+pub async fn update(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+    payload: OutgoingFundUpdateRequest,
+) -> Result<OutgoingFundResponse, AppError> {
+    if payload.version <= 0 {
+        return Err(AppError::validation("version is required"));
+    }
+    let mut validated = validate_voucher(
+        &payload.business_date,
+        &payload.payment_account_code,
+        &payload.payment_mode,
+        payload.reference_number.as_deref(),
+        payload.cheque_number.as_deref(),
+        payload.cheque_date.as_deref(),
+        payload.linked_party_type.as_deref(),
+        payload.linked_party_id.as_deref(),
+        payload.linked_party_name.as_deref(),
+        payload.bill_reference.as_deref(),
+        payload.attachment_url.as_deref(),
+        payload.remarks.as_deref(),
+        &payload.lines,
+    )?;
+    validated.linked_party_name = resolve_linked_party_name(
+        db,
+        tenant_id,
+        branch_id,
+        &validated.linked_party_type,
+        validated.linked_party_id.as_deref(),
+        validated.linked_party_name.as_deref(),
+    )
+    .await?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund update"))?;
+    let updated = outgoing_funds_repository::update_draft(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        actor,
+        outgoing_funds_repository::UpdateOutgoingFundVoucher {
+            business_date: validated.business_date,
+            payment_account_code: &validated.payment_account_code,
+            payment_mode: &validated.payment_mode,
+            reference_number: validated.reference_number.as_deref(),
+            cheque_number: validated.cheque_number.as_deref(),
+            cheque_date: validated.cheque_date,
+            linked_party_type: &validated.linked_party_type,
+            linked_party_id: validated.linked_party_id.as_deref(),
+            linked_party_name: validated.linked_party_name.as_deref(),
+            bill_reference: validated.bill_reference.as_deref(),
+            attachment_url: validated.attachment_url.as_deref(),
+            remarks: validated.remarks.as_deref(),
+            expected_version: payload.version,
+        },
+        &validated.lines,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to update outgoing fund"))?;
+    if !updated {
+        return Err(AppError::conflict(
+            "outgoing fund changed or is no longer editable",
+        ));
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund update"))?;
+    get(db, tenant_id, branch_id, id).await
+}
+
+pub async fn submit(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+) -> Result<OutgoingFundResponse, AppError> {
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund submission"))?;
+    let record = lock_required(&mut tx, tenant_id, branch_id, id).await?;
+    if !matches!(record.status.as_str(), "draft" | "rejected") {
+        return Err(AppError::conflict(
+            "only draft or rejected vouchers can be submitted",
+        ));
+    }
+    outgoing_funds_repository::mark_submitted(&mut tx, tenant_id, branch_id, id, actor)
+        .await
+        .map_err(|_| AppError::internal("failed to submit outgoing fund"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund submission"))?;
+    get(db, tenant_id, branch_id, id).await
+}
+
+pub async fn approve(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+    role: &str,
+) -> Result<OutgoingFundResponse, AppError> {
+    require_approver(role)?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund approval"))?;
+    let record = lock_required(&mut tx, tenant_id, branch_id, id).await?;
+    if record.status != "pending" {
+        return Err(AppError::conflict("only pending vouchers can be approved"));
+    }
+    let response = map_record(record.clone())?;
+    ensure_cash_drawer_open(&mut tx, tenant_id, branch_id, &response).await?;
+    let journal_lines = journal_lines(&response.lines, &response.payment_account_code, false)?;
+    let journal_id = accounting_service::post_control_journal(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        "outgoing_fund",
+        id,
+        response.business_date,
+        &format!("Outgoing fund {}", response.voucher_number),
+        actor,
+        &journal_lines,
+    )
+    .await?
+    .or(outgoing_funds_repository::accounting_journal_id(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        "outgoing_fund",
+        id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to resolve outgoing fund journal"))?)
+    .ok_or_else(|| AppError::internal("outgoing fund journal was not created"))?;
+    if !outgoing_funds_repository::mark_approved(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        actor,
+        &journal_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to approve outgoing fund"))?
+    {
+        return Err(AppError::conflict("outgoing fund approval state changed"));
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund approval"))?;
+    get(db, tenant_id, branch_id, id).await
+}
+
+pub async fn reject(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+    role: &str,
+    payload: OutgoingFundDecisionRequest,
+) -> Result<OutgoingFundResponse, AppError> {
+    require_approver(role)?;
+    let reason = required_note(payload.reason.as_deref(), "rejection reason")?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund rejection"))?;
+    let record = lock_required(&mut tx, tenant_id, branch_id, id).await?;
+    if record.status != "pending" {
+        return Err(AppError::conflict("only pending vouchers can be rejected"));
+    }
+    outgoing_funds_repository::mark_rejected(&mut tx, tenant_id, branch_id, id, actor, &reason)
+        .await
+        .map_err(|_| AppError::internal("failed to reject outgoing fund"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund rejection"))?;
+    get(db, tenant_id, branch_id, id).await
+}
+
+pub async fn reverse(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+    role: &str,
+    payload: OutgoingFundDecisionRequest,
+) -> Result<OutgoingFundResponse, AppError> {
+    require_approver(role)?;
+    let reason = required_note(payload.reason.as_deref(), "reversal reason")?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund reversal"))?;
+    let record = lock_required(&mut tx, tenant_id, branch_id, id).await?;
+    if record.status != "approved" {
+        return Err(AppError::conflict("only approved vouchers can be reversed"));
+    }
+    let response = map_record(record.clone())?;
+    ensure_cash_drawer_open(&mut tx, tenant_id, branch_id, &response).await?;
+    let journal_lines = journal_lines(&response.lines, &response.payment_account_code, true)?;
+    let journal_id = accounting_service::post_control_journal(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        "outgoing_fund_reversal",
+        id,
+        response.business_date,
+        &format!(
+            "Outgoing fund reversal {}: {reason}",
+            response.voucher_number
+        ),
+        actor,
+        &journal_lines,
+    )
+    .await?
+    .or(outgoing_funds_repository::accounting_journal_id(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        "outgoing_fund_reversal",
+        id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to resolve outgoing fund reversal journal"))?)
+    .ok_or_else(|| AppError::internal("outgoing fund reversal journal was not created"))?;
+    if !outgoing_funds_repository::mark_reversed(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        actor,
+        &reason,
+        &journal_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to reverse outgoing fund"))?
+    {
+        return Err(AppError::conflict("outgoing fund reversal state changed"));
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund reversal"))?;
+    get(db, tenant_id, branch_id, id).await
+}
+
+pub async fn cancel(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+) -> Result<OutgoingFundResponse, AppError> {
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start outgoing fund cancellation"))?;
+    let record = lock_required(&mut tx, tenant_id, branch_id, id).await?;
+    if !matches!(record.status.as_str(), "draft" | "rejected") {
+        return Err(AppError::conflict(
+            "only draft or rejected vouchers can be cancelled",
+        ));
+    }
+    outgoing_funds_repository::mark_cancelled(&mut tx, tenant_id, branch_id, id, actor)
+        .await
+        .map_err(|_| AppError::internal("failed to cancel outgoing fund"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit outgoing fund cancellation"))?;
+    get(db, tenant_id, branch_id, id).await
+}
+
+async fn lock_required(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<outgoing_funds_repository::OutgoingFundRecord, AppError> {
+    outgoing_funds_repository::lock(tx, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock outgoing fund"))?
+        .ok_or_else(|| AppError::not_found("outgoing fund voucher was not found"))
+}
+
+async fn ensure_cash_drawer_open(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    voucher: &OutgoingFundResponse,
+) -> Result<(), AppError> {
+    if voucher.payment_account_code != "CASH_ON_HAND" {
+        return Ok(());
+    }
+    let open =
+        cash_drawer_repository::is_open_for_update(tx, tenant_id, branch_id, voucher.business_date)
+            .await
+            .map_err(|_| AppError::internal("failed to validate cash drawer"))?;
+    if open {
+        Ok(())
+    } else {
+        Err(AppError::conflict(
+            "an open cash drawer is required for this voucher date",
+        ))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_voucher(
+    business_date: &str,
+    payment_account_code: &str,
+    payment_mode: &str,
+    reference_number: Option<&str>,
+    cheque_number: Option<&str>,
+    cheque_date: Option<&str>,
+    linked_party_type: Option<&str>,
+    linked_party_id: Option<&str>,
+    linked_party_name: Option<&str>,
+    bill_reference: Option<&str>,
+    attachment_url: Option<&str>,
+    remarks: Option<&str>,
+    lines: &[OutgoingFundLineRequest],
+) -> Result<ValidatedVoucher, AppError> {
+    let business_date = parse_date(business_date, "businessDate")?;
+    let payment_account_code = payment_account_code.trim().to_ascii_uppercase();
+    if !matches!(
+        payment_account_code.as_str(),
+        "CASH_ON_HAND" | "BANK_CLEARING"
+    ) {
+        return Err(AppError::validation(
+            "paymentAccountCode must be CASH_ON_HAND or BANK_CLEARING",
+        ));
+    }
+    let payment_mode = normalize_payment_mode(payment_mode)?;
+    if (payment_mode == "Cash" && payment_account_code != "CASH_ON_HAND")
+        || (payment_mode != "Cash"
+            && payment_mode != "Other"
+            && payment_account_code != "BANK_CLEARING")
+    {
+        return Err(AppError::validation(
+            "payment account does not match paymentMode",
+        ));
+    }
+    let reference_number = optional_text(reference_number, 100, "referenceNumber")?;
+    let cheque_number = optional_text(cheque_number, 60, "chequeNumber")?;
+    let cheque_date = parse_optional_date(cheque_date, "chequeDate")?;
+    if payment_mode.eq_ignore_ascii_case("cheque")
+        && (cheque_number.is_none() || cheque_date.is_none())
+    {
+        return Err(AppError::validation(
+            "chequeNumber and chequeDate are required for cheque payments",
+        ));
+    }
+    let linked_party_type = linked_party_type
+        .unwrap_or("none")
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(
+        linked_party_type.as_str(),
+        "none" | "vendor" | "staff" | "client" | "owner" | "other"
+    ) {
+        return Err(AppError::validation("invalid linkedPartyType"));
+    }
+    let linked_party_id = optional_text(linked_party_id, 100, "linkedPartyId")?;
+    let linked_party_name = optional_text(linked_party_name, 160, "linkedPartyName")?;
+    if linked_party_type != "none" && linked_party_id.is_none() && linked_party_name.is_none() {
+        return Err(AppError::validation(
+            "linked party is required for the selected type",
+        ));
+    }
+    let bill_reference = optional_text(bill_reference, 120, "billReference")?;
+    let attachment_url = optional_text(attachment_url, 500, "attachmentUrl")?;
+    if attachment_url
+        .as_deref()
+        .is_some_and(|value| !value.starts_with("https://") && !value.starts_with("http://"))
+    {
+        return Err(AppError::validation(
+            "attachmentUrl must be an HTTP or HTTPS URL",
+        ));
+    }
+    let remarks = optional_text(remarks, 500, "remarks")?;
+    if lines.is_empty() || lines.len() > 50 {
+        return Err(AppError::validation(
+            "outgoing fund requires between 1 and 50 lines",
+        ));
+    }
+    let mut validated_lines = Vec::with_capacity(lines.len());
+    let mut total = 0_i64;
+    for line in lines {
+        validated_lines.push(validate_line(line)?);
+        total = total
+            .checked_add(line.amount_paise)
+            .ok_or_else(|| AppError::validation("outgoing fund total exceeds supported range"))?;
+    }
+    if total <= 0 || total > 1_000_000_000_000_000 {
+        return Err(AppError::validation("outgoing fund total is invalid"));
+    }
+    Ok(ValidatedVoucher {
+        business_date,
+        payment_account_code,
+        payment_mode,
+        reference_number,
+        cheque_number,
+        cheque_date,
+        linked_party_type,
+        linked_party_id,
+        linked_party_name,
+        bill_reference,
+        attachment_url,
+        remarks,
+        lines: validated_lines,
+    })
+}
+
+async fn resolve_linked_party_name(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    party_type: &str,
+    party_id: Option<&str>,
+    entered_name: Option<&str>,
+) -> Result<Option<String>, AppError> {
+    let record_id = party_id.filter(|value| !value.trim().is_empty());
+    match party_type {
+        "none" => Ok(None),
+        "vendor" => {
+            let id = record_id.ok_or_else(|| AppError::validation("vendor record is required"))?;
+            purchase_repository::get_supplier(db, tenant_id, branch_id, id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate vendor"))?
+                .map(|record| record.name)
+                .ok_or_else(|| AppError::validation("selected vendor was not found"))
+                .map(Some)
+        }
+        "staff" => {
+            let id = record_id.ok_or_else(|| AppError::validation("staff record is required"))?;
+            staff_repository::get(db, tenant_id, branch_id, id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate staff"))?
+                .map(|record| {
+                    [record.first_name, record.middle_name, record.last_name]
+                        .into_iter()
+                        .filter(|part| !part.trim().is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .ok_or_else(|| AppError::validation("selected staff was not found"))
+                .map(Some)
+        }
+        "client" => {
+            let id = record_id.ok_or_else(|| AppError::validation("client record is required"))?;
+            clients_repository::get(db, tenant_id, branch_id, id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate client"))?
+                .map(|record| {
+                    format!("{} {}", record.first_name, record.last_name)
+                        .trim()
+                        .to_string()
+                })
+                .ok_or_else(|| AppError::validation("selected client was not found"))
+                .map(Some)
+        }
+        _ => entered_name
+            .map(str::to_string)
+            .ok_or_else(|| AppError::validation("linked party name is required"))
+            .map(Some),
+    }
+}
+
+fn validate_line(line: &OutgoingFundLineRequest) -> Result<NewOutgoingFundLine, AppError> {
+    let key = line.category_key.trim().to_ascii_lowercase();
+    let category = category_meta(&key)
+        .ok_or_else(|| AppError::validation("invalid outgoing fund category"))?;
+    let account_code = category.account_code.ok_or_else(|| {
+        AppError::validation(format!(
+            "{} must use {}",
+            category.label,
+            category.workflow_label.unwrap_or("its existing workflow")
+        ))
+    })?;
+    if line.amount_paise <= 0 || line.amount_paise > 1_000_000_000_000_000 {
+        return Err(AppError::validation("line amountPaise is invalid"));
+    }
+    let gst_treatment = line
+        .gst_treatment
+        .as_deref()
+        .unwrap_or("none")
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(gst_treatment.as_str(), "none" | "cgst_sgst" | "igst") {
+        return Err(AppError::validation("invalid GST treatment"));
+    }
+    let gst_paise = line.gst_paise.unwrap_or(0);
+    if gst_paise < 0
+        || gst_paise > line.amount_paise
+        || (gst_treatment == "none" && gst_paise != 0)
+        || (gst_treatment != "none" && gst_paise == 0)
+    {
+        return Err(AppError::validation(
+            "line GST amount does not match GST treatment",
+        ));
+    }
+    Ok(NewOutgoingFundLine {
+        category_key: key,
+        account_code: account_code.into(),
+        amount_paise: line.amount_paise,
+        gst_treatment,
+        gst_paise,
+        remarks: optional_text(line.remarks.as_deref(), 300, "line remarks")?,
+    })
+}
+
+fn journal_lines(
+    lines: &[OutgoingFundLineResponse],
+    payment_account_code: &str,
+    reverse: bool,
+) -> Result<Vec<ManualJournalLine>, AppError> {
+    let mut totals: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+    let mut total = 0_i64;
+    for line in lines {
+        let net = line
+            .amount_paise
+            .checked_sub(line.gst_paise)
+            .ok_or_else(|| AppError::validation("outgoing fund GST exceeds amount"))?;
+        add_journal_amount(
+            &mut totals,
+            &line.account_code,
+            if reverse { 0 } else { net },
+            if reverse { net } else { 0 },
+        )?;
+        match line.gst_treatment.as_str() {
+            "cgst_sgst" => {
+                let cgst = line.gst_paise / 2;
+                let sgst = line.gst_paise - cgst;
+                add_journal_amount(
+                    &mut totals,
+                    "INPUT_CGST",
+                    if reverse { 0 } else { cgst },
+                    if reverse { cgst } else { 0 },
+                )?;
+                add_journal_amount(
+                    &mut totals,
+                    "INPUT_SGST",
+                    if reverse { 0 } else { sgst },
+                    if reverse { sgst } else { 0 },
+                )?;
+            }
+            "igst" => add_journal_amount(
+                &mut totals,
+                "INPUT_IGST",
+                if reverse { 0 } else { line.gst_paise },
+                if reverse { line.gst_paise } else { 0 },
+            )?,
+            _ => {}
+        }
+        total = total
+            .checked_add(line.amount_paise)
+            .ok_or_else(|| AppError::validation("outgoing fund total exceeds supported range"))?;
+    }
+    add_journal_amount(
+        &mut totals,
+        payment_account_code,
+        if reverse { total } else { 0 },
+        if reverse { 0 } else { total },
+    )?;
+    Ok(totals
+        .into_iter()
+        .filter(|(_, (debit, credit))| *debit > 0 || *credit > 0)
+        .map(
+            |(account_code, (debit_paise, credit_paise))| ManualJournalLine {
+                account_code,
+                debit_paise,
+                credit_paise,
+            },
+        )
+        .collect())
+}
+
+fn add_journal_amount(
+    totals: &mut BTreeMap<String, (i64, i64)>,
+    account: &str,
+    debit: i64,
+    credit: i64,
+) -> Result<(), AppError> {
+    if debit == 0 && credit == 0 {
+        return Ok(());
+    }
+    let entry = totals.entry(account.into()).or_default();
+    entry.0 = entry
+        .0
+        .checked_add(debit)
+        .ok_or_else(|| AppError::validation("journal debit exceeds supported range"))?;
+    entry.1 = entry
+        .1
+        .checked_add(credit)
+        .ok_or_else(|| AppError::validation("journal credit exceeds supported range"))?;
+    Ok(())
+}
+
+fn map_record(
+    record: outgoing_funds_repository::OutgoingFundRecord,
+) -> Result<OutgoingFundResponse, AppError> {
+    let stored = serde_json::from_value::<Vec<StoredLine>>(record.lines_json)
+        .map_err(|_| AppError::internal("failed to decode outgoing fund lines"))?;
+    let lines = stored
+        .into_iter()
+        .map(|line| {
+            let label = category_meta(&line.category_key)
+                .map(|category| category.label)
+                .unwrap_or("Other Salon Outgoing");
+            OutgoingFundLineResponse {
+                id: line.id,
+                line_number: line.line_number,
+                category_key: line.category_key,
+                category_label: label.into(),
+                account_code: line.account_code,
+                amount_paise: line.amount_paise,
+                gst_treatment: line.gst_treatment,
+                gst_paise: line.gst_paise,
+                net_paise: line.amount_paise.saturating_sub(line.gst_paise),
+                remarks: line.remarks,
+            }
+        })
+        .collect::<Vec<_>>();
+    let total_paise = lines
+        .iter()
+        .try_fold(0_i64, |total, line| total.checked_add(line.amount_paise))
+        .ok_or_else(|| AppError::internal("outgoing fund total exceeds supported range"))?;
+    let gst_paise = lines
+        .iter()
+        .try_fold(0_i64, |total, line| total.checked_add(line.gst_paise))
+        .ok_or_else(|| AppError::internal("outgoing fund GST exceeds supported range"))?;
+    Ok(OutgoingFundResponse {
+        id: record.id,
+        voucher_number: record.voucher_number,
+        business_date: record.business_date,
+        payment_account_name: payment_account_name(&record.payment_account_code).into(),
+        payment_account_code: record.payment_account_code,
+        payment_mode: record.payment_mode,
+        reference_number: record.reference_number,
+        cheque_number: record.cheque_number,
+        cheque_date: record.cheque_date,
+        linked_party_type: record.linked_party_type,
+        linked_party_id: record.linked_party_id,
+        linked_party_name: record.linked_party_name,
+        bill_reference: record.bill_reference,
+        attachment_url: record.attachment_url,
+        remarks: record.remarks,
+        status: record.status,
+        total_paise,
+        gst_paise,
+        journal_entry_id: record.journal_entry_id,
+        reversal_journal_entry_id: record.reversal_journal_entry_id,
+        version: record.version,
+        created_by_user_id: record.created_by_user_id,
+        submitted_by_user_id: record.submitted_by_user_id,
+        approved_by_user_id: record.approved_by_user_id,
+        rejected_by_user_id: record.rejected_by_user_id,
+        reversed_by_user_id: record.reversed_by_user_id,
+        submitted_at: record.submitted_at,
+        approved_at: record.approved_at,
+        rejected_at: record.rejected_at,
+        reversed_at: record.reversed_at,
+        rejection_reason: record.rejection_reason,
+        reversal_reason: record.reversal_reason,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+        lines,
+    })
+}
+
+fn category_meta(key: &str) -> Option<CategoryMeta> {
+    CATEGORY_META
+        .iter()
+        .copied()
+        .find(|category| category.key == key)
+}
+
+fn payment_account_name(code: &str) -> &'static str {
+    if code == "CASH_ON_HAND" {
+        "Cash on Hand"
+    } else {
+        "Bank Clearing"
+    }
+}
+
+fn normalize_payment_mode(value: &str) -> Result<String, AppError> {
+    let canonical = match value.trim().to_ascii_lowercase().as_str() {
+        "cash" => "Cash",
+        "bank transfer" => "Bank Transfer",
+        "upi" => "UPI",
+        "card" => "Card",
+        "cheque" => "Cheque",
+        "neft" => "NEFT",
+        "rtgs" => "RTGS",
+        "imps" => "IMPS",
+        "wallet" => "Wallet",
+        "other" => "Other",
+        _ => return Err(AppError::validation("invalid paymentMode")),
+    };
+    Ok(canonical.into())
+}
+
+fn valid_status(value: &str) -> bool {
+    matches!(
+        value,
+        "draft" | "pending" | "approved" | "rejected" | "reversed" | "cancelled"
+    )
+}
+
+fn require_approver(role: &str) -> Result<(), AppError> {
+    if matches!(
+        role.trim().to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "manager"
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "outgoing fund approval requires owner, admin, or manager role",
+        ))
+    }
+}
+
+fn parse_date(value: &str, field: &str) -> Result<NaiveDate, AppError> {
+    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d")
+        .map_err(|_| AppError::validation(format!("{field} must use YYYY-MM-DD")))
+}
+
+fn parse_optional_date(value: Option<&str>, field: &str) -> Result<Option<NaiveDate>, AppError> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    parse_date(value, field).map(Some)
+}
+
+fn optional_text(value: Option<&str>, max: usize, field: &str) -> Result<Option<String>, AppError> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    if value.chars().count() > max {
+        return Err(AppError::validation(format!(
+            "{field} must be at most {max} characters"
+        )));
+    }
+    Ok(Some(value.into()))
+}
+
+fn clean_filter(value: Option<&str>, max: usize, field: &str) -> Result<String, AppError> {
+    Ok(optional_text(value, max, field)?.unwrap_or_default())
+}
+
+fn validate_idempotency_key(value: &str) -> Result<String, AppError> {
+    let value = value.trim();
+    if !(8..=128).contains(&value.len())
+        || !value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | ':')
+        })
+    {
+        return Err(AppError::validation("idempotencyKey is invalid"));
+    }
+    Ok(value.into())
+}
+
+fn required_note(value: Option<&str>, field: &str) -> Result<String, AppError> {
+    let note = optional_text(value, 500, field)?
+        .ok_or_else(|| AppError::validation(format!("{field} is required")))?;
+    if note.chars().count() < 3 {
+        return Err(AppError::validation(format!(
+            "{field} must be at least 3 characters"
+        )));
+    }
+    Ok(note)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::outgoing_funds::OutgoingFundLineResponse;
+
+    use super::{categories, journal_lines, validate_idempotency_key};
+
+    #[test]
+    fn categories_have_unique_keys_and_manual_accounts() {
+        let categories = categories();
+        let mut keys = categories
+            .iter()
+            .map(|category| category.key.as_str())
+            .collect::<Vec<_>>();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), categories.len());
+        assert!(categories
+            .iter()
+            .filter(|category| category.manual_entry)
+            .all(|category| category.account_code.is_some()));
+        assert!(categories
+            .iter()
+            .any(|category| category.key == "inventory_purchase" && !category.manual_entry));
+    }
+
+    #[test]
+    fn idempotency_keys_are_provider_safe() {
+        assert!(validate_idempotency_key("outgoing-12345678").is_ok());
+        assert!(validate_idempotency_key("short").is_err());
+        assert!(validate_idempotency_key("bad key!").is_err());
+    }
+
+    #[test]
+    fn journal_posts_gross_cash_and_reverses_exactly() {
+        let lines = vec![OutgoingFundLineResponse {
+            id: "line-1".into(),
+            line_number: 1,
+            category_key: "rent".into(),
+            category_label: "Rent / Lease".into(),
+            account_code: "RENT_EXPENSE".into(),
+            amount_paise: 11_800,
+            gst_treatment: "cgst_sgst".into(),
+            gst_paise: 1_800,
+            net_paise: 10_000,
+            remarks: None,
+        }];
+        let posted = journal_lines(&lines, "CASH_ON_HAND", false).unwrap();
+        let reversed = journal_lines(&lines, "CASH_ON_HAND", true).unwrap();
+        assert_eq!(
+            posted.iter().map(|line| line.debit_paise).sum::<i64>(),
+            11_800
+        );
+        assert_eq!(
+            posted.iter().map(|line| line.credit_paise).sum::<i64>(),
+            11_800
+        );
+        assert!(posted
+            .iter()
+            .zip(reversed.iter())
+            .all(|(left, right)| left.account_code == right.account_code
+                && left.debit_paise == right.credit_paise
+                && left.credit_paise == right.debit_paise));
+    }
+}

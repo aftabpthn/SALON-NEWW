@@ -1,0 +1,14 @@
+<main class="status-page">
+  <section class="status-card">
+    <header><span>AS</span><h1>Membership status</h1></header>
+    <div class="loading" *ngIf="loading">Loading membership...</div>
+    <p class="error" *ngIf="error">{{ error }}</p>
+    <ng-container *ngIf="status as item">
+      <dl><div><dt>Client</dt><dd>{{ item.clientName }}</dd></div><div><dt>Membership</dt><dd>{{ item.membershipName || '—' }}</dd></div><div><dt>Status</dt><dd><span class="pill">{{ item.status }}</span></dd></div><div><dt>Expiry</dt><dd>{{ formatDate(item.expiresAt) }}</dd></div></dl>
+      <p class="success" *ngIf="message">{{ message }}</p>
+      <section class="request-section"><h2>Renewal</h2><button type="button" [disabled]="requesting" (click)="requestRenewal()">Request renewal</button></section>
+      <section class="request-section"><h2>Payment update</h2><label>Payment reference<input [(ngModel)]="paymentReference" maxlength="200" /></label><button type="button" [disabled]="requesting" (click)="submitRequest('payment_method_update')">Submit payment update</button></section>
+      <section class="request-section"><h2>Credit adjustment</h2><label>Service<select [(ngModel)]="creditServiceId"><option value="">Select service</option><option *ngFor="let credit of item.credits" [value]="credit.serviceId">{{ credit.serviceName }} · {{ credit.remainingQty }}</option></select></label><label>Adjustment<input type="number" [(ngModel)]="creditDelta" /></label><label>Reason<textarea [(ngModel)]="reason"></textarea></label><button type="button" [disabled]="requesting" (click)="submitRequest('credit_adjustment')">Submit credit request</button></section>
+    </ng-container>
+</section>
+</main>

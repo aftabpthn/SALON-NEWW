@@ -1,0 +1,143 @@
+<section class="suppliers-page">
+  <header class="command-bar">
+    <div class="command-title"><h1>Suppliers</h1><span class="data-pill" [class.online]="!loading && !error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
+    <label class="search-box">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <input
+        type="search"
+        aria-label="Search suppliers"
+        placeholder="Search supplier, code or GSTIN"
+        [(ngModel)]="searchTerm"
+      />
+    </label>
+    <select aria-label="Filter supplier status" [(ngModel)]="statusFilter">
+      <option value="all">All statuses</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+    </select>
+    <button class="icon-button" type="button" aria-label="Refresh suppliers" [disabled]="loading" (click)="reload()">
+      <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+    </button>
+    <button class="primary-button" type="button" (click)="openCreate()">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+      Add supplier
+    </button>
+  </header>
+
+  <nav class="view-tabs" aria-label="Supplier workspace">
+    <button type="button" [class.active]="view === 'register'" (click)="selectView('register')">Supplier Register</button>
+    <button type="button" [class.active]="view === 'compliance'" (click)="selectView('compliance')">Compliance</button>
+    <button type="button" [class.active]="view === 'price'" (click)="selectView('price')">Price Intelligence</button>
+  </nav>
+
+  <div class="message error" *ngIf="error">{{ error }}</div>
+  <div class="message success" *ngIf="notice">{{ notice }}</div>
+
+  <section class="metrics" aria-label="Supplier summary">
+    <article class="blue"><i class="bi bi-people" aria-hidden="true"></i><div><span>Suppliers</span><strong>{{ suppliers.length }}</strong></div></article>
+    <article class="amber"><i class="bi bi-check2" aria-hidden="true"></i><div><span>Active</span><strong>{{ activeCount }}</strong></div></article>
+    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><div><span>At risk</span><strong>{{ atRiskCount }}</strong></div></article>
+    <article class="green"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><div><span>Open POs</span><strong>{{ openOrderCount }}</strong></div></article>
+  </section>
+
+  <section class="register-card" *ngIf="view === 'register'">
+    <header>
+      <h2>Supplier command register</h2>
+      <div class="quick-filters">
+        <button type="button" [class.active]="quickFilter === 'gstin'" (click)="setQuickFilter('gstin')">GSTIN missing</button>
+        <button type="button" [class.active]="quickFilter === 'openPo'" (click)="setQuickFilter('openPo')">Pending PO</button>
+      </div>
+    </header>
+
+    <div class="loading-state" *ngIf="loading">
+      <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+      <span>Loading suppliers</span>
+    </div>
+
+    <div class="table-scroll" *ngIf="!loading">
+      <table>
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Contact / GSTIN</th>
+            <th>Score</th>
+            <th>Spend</th>
+            <th>Open POs</th>
+            <th>Compliance</th>
+            <th>Status</th>
+            <th aria-label="Actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let supplier of filteredSuppliers">
+            <td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td>
+            <td><strong>{{ supplier.contactName || '—' }}</strong><small>{{ supplier.phone || supplier.email || '—' }} · {{ supplier.gstin || 'GSTIN missing' }}</small></td>
+            <td><span class="score">{{ score(supplier) }}%</span></td>
+            <td>{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td>
+            <td>{{ openOrdersFor(supplier.id) }}</td>
+            <td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td>
+            <td><span class="status" [class.inactive]="!supplier.active">{{ supplier.active ? 'Active' : 'Inactive' }}</span></td>
+            <td><button class="icon-button" type="button" aria-label="Edit supplier" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
+          </tr>
+          <tr *ngIf="!filteredSuppliers.length">
+            <td class="empty-state" colspan="8">No records yet</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="register-card" *ngIf="view === 'compliance'">
+    <header><h2>Supplier compliance</h2><span>{{ suppliers.length }} suppliers</span></header>
+    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Loading suppliers</span></div>
+    <div class="table-scroll" *ngIf="!loading">
+      <table>
+        <thead><tr><th>Supplier</th><th>GSTIN</th><th>Contact</th><th>Address</th><th>Score</th><th>Status</th><th aria-label="Actions"></th></tr></thead>
+        <tbody>
+          <tr *ngFor="let supplier of filteredSuppliers"><td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td><td>{{ supplier.gstin || 'Missing' }}</td><td>{{ supplier.phone || supplier.email || 'Missing' }}</td><td>{{ supplier.address || 'Missing' }}</td><td><span class="score">{{ score(supplier) }}%</span></td><td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td><td><button class="icon-button" type="button" aria-label="Edit supplier" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td></tr>
+          <tr *ngIf="!filteredSuppliers.length"><td class="empty-state" colspan="7">No records yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="register-card" *ngIf="view === 'price'">
+    <header><h2>Price intelligence</h2><span>Received purchase value</span></header>
+    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Loading purchase data</span></div>
+    <div class="table-scroll" *ngIf="!loading">
+      <table>
+        <thead><tr><th>Supplier</th><th>Receipts</th><th>Net spend</th><th>Outstanding</th><th>Open POs</th><th>Payment terms</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let supplier of filteredSuppliers"><td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td><td>{{ ordersLoaded ? metricsFor(supplier.id).receipts : '—' }}</td><td>{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td><td>{{ ordersLoaded ? money(metricsFor(supplier.id).outstandingPaise) : '—' }}</td><td>{{ openOrdersFor(supplier.id) }}</td><td>{{ supplier.paymentTermsDays }} days</td></tr>
+          <tr *ngIf="!filteredSuppliers.length"><td class="empty-state" colspan="6">No records yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <button class="drawer-backdrop" type="button" aria-label="Close supplier form" *ngIf="drawerOpen" (click)="closeDrawer()"></button>
+  <aside class="supplier-drawer" *ngIf="drawerOpen" aria-label="Supplier form">
+    <header>
+      <h2>{{ editingSupplierId ? 'Edit supplier' : 'Add supplier' }}</h2>
+      <button class="icon-button" type="button" aria-label="Close supplier form" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </header>
+
+    <div class="drawer-body">
+      <label>Supplier code<input maxlength="80" autocomplete="off" [ngModel]="draft.code" (ngModelChange)="draft.code = $event.toUpperCase()" /></label>
+      <label>Supplier name<input maxlength="160" autocomplete="organization" [ngModel]="draft.name" (ngModelChange)="draft.name = titleCase($event)" /></label>
+      <label>GSTIN<input maxlength="15" autocomplete="off" [ngModel]="draft.gstin" (ngModelChange)="draft.gstin = $event.toUpperCase()" /></label>
+      <label>Contact name<input maxlength="160" autocomplete="name" [ngModel]="draft.contactName" (ngModelChange)="draft.contactName = titleCase($event)" /></label>
+      <label>Phone<input maxlength="40" autocomplete="tel" [(ngModel)]="draft.phone" /></label>
+      <label>Email<input type="email" maxlength="254" autocomplete="email" [(ngModel)]="draft.email" /></label>
+      <label>Payment terms (days)<input type="number" min="0" max="3650" [(ngModel)]="draft.paymentTermsDays" /></label>
+      <label class="active-field"><input type="checkbox" [(ngModel)]="draft.active" />Active</label>
+      <label class="full-field">Address<textarea maxlength="1000" rows="4" [(ngModel)]="draft.address"></textarea></label>
+      <p class="form-error full-field" *ngIf="error">{{ error }}</p>
+    </div>
+
+    <footer>
+      <button type="button" (click)="closeDrawer()">Cancel</button>
+      <button class="primary-button" type="button" [disabled]="saving" (click)="saveSupplier()">{{ saving ? 'Saving...' : 'Save supplier' }}</button>
+    </footer>
+  </aside>
+</section>

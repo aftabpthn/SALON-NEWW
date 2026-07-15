@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
 type PayrollTab = 'summary' | 'detail' | 'history';
 type PayrollColumn = 'attendance' | 'payrate' | 'commission' | 'adjustments' | 'gross' | 'net' | 'validation' | 'status';
@@ -20,6 +21,7 @@ type PayrollItem = {
   attendanceDaysX2: number;
   paidLeaveDaysX2: number;
   weeklyOffDaysX2: number;
+  holidayDaysX2: number;
   workedMinutes: number;
   overtimeMinutes: number;
   earnedSalaryPaise: number;
@@ -57,6 +59,7 @@ type PayrollRun = {
 
 type PayrollEvent = { id: string; eventType: string; actorUserId: string; payloadJson: unknown; createdAt: string };
 type PayrollRunDetail = { run: PayrollRun; items: PayrollItem[]; events: PayrollEvent[] };
+type StaffHoliday = { id: string; holidayDate: string; name: string; isPaid: boolean; active: boolean };
 type PayrollPreview = {
   cycle: string;
   periodStart: string;
@@ -72,7 +75,7 @@ type PayrollPreview = {
 @Component({
   selector: 'page-staff-payroll',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DatePickerComponent],
   templateUrl: './staff-payroll-page.component.html',
   styleUrls: ['./staff-payroll-page.component.css'],
 })
@@ -122,7 +125,13 @@ export class StaffPayrollPageComponent implements OnInit {
   lastChecked = '';
   payoutMethod = '';
   payoutReference = '';
+  actionMfaCode = '';
   payoutKey = crypto.randomUUID();
+  holidays: StaffHoliday[] = [];
+  holidayOpen = false;
+  holidayDate = '';
+  holidayName = '';
+  holidayPaid = true;
 
   constructor() {
     const currentYear = new Date().getFullYear();
@@ -130,7 +139,7 @@ export class StaffPayrollPageComponent implements OnInit {
   }
 
   async ngOnInit() {
-    await Promise.all([this.loadStaff(), this.loadHistory()]);
+    await Promise.all([this.loadStaff(), this.loadHistory(), this.loadHolidays()]);
     await this.loadPeriod();
   }
 
@@ -157,7 +166,9 @@ export class StaffPayrollPageComponent implements OnInit {
   get canSaveDraft() { return this.run?.status === 'calculated' && !this.loading; }
   get canAdvance() {
     if (!this.run || this.invalidCount > 0 || !['calculated', 'reviewed', 'finalized'].includes(this.run.status) || this.loading) return false;
-    return this.run.status !== 'finalized' || Boolean(this.payoutMethod && (this.payoutMethod === 'cash' || this.payoutReference.trim()));
+    if (this.run.status === 'calculated') return true;
+    if (!this.actionMfaCode.trim()) return false;
+    return this.run.status !== 'finalized' || Boolean(this.payoutMethod && (['cash', 'bank'].includes(this.payoutMethod) || this.payoutReference.trim()));
   }
 
   isVisible(column: PayrollColumn) { return this.visibleColumns[column]; }
@@ -169,12 +180,12 @@ export class StaffPayrollPageComponent implements OnInit {
 
   async changePeriod() {
     this.success = '';
-    await this.loadPeriod();
+    await Promise.all([this.loadPeriod(), this.loadHolidays()]);
   }
 
   async refresh() {
     this.success = '';
-    await this.loadHistory();
+    await Promise.all([this.loadHistory(), this.loadHolidays()]);
     await this.loadPeriod();
   }
 
@@ -222,11 +233,14 @@ export class StaffPayrollPageComponent implements OnInit {
     if (!this.run || !this.canAdvance) return;
     const action = this.run.status === 'calculated' ? 'review' : this.run.status === 'reviewed' ? 'finalize' : 'payout';
     await this.perform(action, async () => {
-      const payload = action === 'payout' ? { paymentMethod: this.payoutMethod, reference: this.payoutReference.trim(), idempotencyKey: this.payoutKey } : {};
+      const payload = action === 'payout'
+        ? { paymentMethod: this.payoutMethod, reference: this.payoutReference.trim(), idempotencyKey: this.payoutKey, mfaCode: this.actionMfaCode.trim() }
+        : action === 'finalize' ? { mfaCode: this.actionMfaCode.trim() } : {};
       const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollRunDetail>>(`/staff-payroll/runs/${this.run!.id}/${action}`, payload));
       this.applyDetail(this.unwrap(result, 'Unable to update payroll status'));
       await this.loadHistory();
       this.success = `Payroll ${this.run!.status}`;
+      this.actionMfaCode = '';
     });
   }
 
@@ -248,6 +262,31 @@ export class StaffPayrollPageComponent implements OnInit {
     await this.download(`/staff-payroll/runs/${this.run.id}/payslips/${item.staffId}`, `payslip-${item.staffName}.pdf`);
   }
 
+  async saveHoliday() {
+    if (!this.holidayDate || !this.holidayName.trim()) return;
+    await this.perform('holiday', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffHoliday>>('/staff-payroll/holidays', {
+        holidayDate: this.holidayDate,
+        name: this.holidayName.trim(),
+        isPaid: this.holidayPaid,
+      }));
+      this.unwrap(result, 'Unable to save holiday');
+      this.holidayDate = '';
+      this.holidayName = '';
+      await this.loadHolidays();
+      this.success = 'Holiday saved';
+    });
+  }
+
+  async deleteHoliday(id: string) {
+    await this.perform('holiday', async () => {
+      const result = await firstValueFrom(this.api.delete<ApiEnvelope<unknown>>(`/staff-payroll/holidays/${id}`));
+      this.unwrap(result, 'Unable to delete holiday');
+      await this.loadHolidays();
+      this.success = 'Holiday removed';
+    });
+  }
+
   formatMoney(paise: number | null | undefined) {
     if (paise === null || paise === undefined) return '—';
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(paise / 100);
@@ -262,6 +301,7 @@ export class StaffPayrollPageComponent implements OnInit {
     return `${employee.firstName || employee.appointmentDisplayName || ''} ${employee.lastName || ''}`.trim();
   }
   statusLabel(status: string) { return status.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+  titleCase(value: string) { return value.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()); }
   backToStaff() { void this.router.navigate(['/staff']); }
 
   private async loadStaff() {
@@ -279,6 +319,15 @@ export class StaffPayrollPageComponent implements OnInit {
       this.history = this.unwrap(result, 'Unable to load payroll history');
     } catch (error) {
       this.error = this.message(error, 'Unable to load payroll history');
+    }
+  }
+
+  async loadHolidays() {
+    try {
+      const result = await firstValueFrom(this.api.get<ApiEnvelope<StaffHoliday[]>>(`/staff-payroll/holidays?from=${this.year}-01-01&to=${this.year}-12-31`));
+      this.holidays = this.unwrap(result, 'Unable to load holidays');
+    } catch (error) {
+      this.error = this.message(error, 'Unable to load holidays');
     }
   }
 

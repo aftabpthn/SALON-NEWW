@@ -16,6 +16,7 @@
       <a class="secondary-action" routerLink="/pos/holds">Held invoices</a>
       <a class="secondary-action" routerLink="/pos/tips">Tip register</a>
       <a class="secondary-action" routerLink="/pos/payment-modes">Payment modes</a>
+      <a class="secondary-action" routerLink="/pos/cash-drawer">Cash drawer</a>
       <button type="button" class="secondary-action" [disabled]="!selectedSale" (click)="printSelectedSale()">Print invoice</button>
     </div>
   </nav>
@@ -119,6 +120,8 @@
           </div>
         </label>
         <label><span>Source</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9S14.5 18.3 12 21M12 3C9.5 5.7 8.2 8.7 8.2 12S9.5 18.3 12 21"></path></svg></span><input type="text" [(ngModel)]="source" placeholder="Counter" /></div></label>
+        <label *ngIf="cashTills.length"><span>Cash till</span><div class="control-with-icon"><select [(ngModel)]="selectedCashTillId"><option value="" [disabled]="cashTills.length > 1">Select till</option><option *ngFor="let till of cashTills" [value]="till.id">{{ till.tillName }} ({{ till.tillCode }})</option></select></div></label>
+        <label *ngIf="terminals.length"><span>Terminal</span><div class="control-with-icon"><select [(ngModel)]="selectedTerminalId"><option value="">Select terminal</option><option *ngFor="let terminal of terminals" [value]="terminal.id">{{ terminal.terminalName }} ({{ terminal.terminalCode }})</option></select></div></label>
         <label class="wide-half">
           <span>Appointment</span>
           <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M8 13h5"></path></svg></span><select [ngModel]="reference" (ngModelChange)="setCompletedAppointment($event)">
@@ -156,27 +159,27 @@
       </div>
 
       <div class="addon-strip">
-        <label class="addon-field">
-          <span><span class="ui-icon addon-icon green"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><path d="M4 10h16M8 15h4"></path></svg></span>Membership sale</span>
-          <select [(ngModel)]="selectedMembershipId">
-            <option value="">Choose membership</option>
-            <option *ngFor="let plan of memberships; trackBy: trackById" [value]="plan.id">{{ addonLabel(plan) }}</option>
-          </select>
-        </label>
-        <button type="button" class="secondary-action" (click)="addMembershipSale()" [disabled]="!selectedMembershipId">Add</button>
-        <label class="addon-field">
+        <button *ngIf="membershipSalesVisible" type="button" class="addon-field" [class.active]="activeAddonSale === 'membership'" [attr.aria-expanded]="activeAddonSale === 'membership'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('membership')">
+            <span><span class="ui-icon addon-icon green"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><path d="M4 10h16M8 15h4"></path></svg></span>Membership sale</span>
+            <span class="addon-chevron" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="addon-field" [class.active]="activeAddonSale === 'package'" [attr.aria-expanded]="activeAddonSale === 'package'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('package')">
           <span><span class="ui-icon addon-icon blue"><svg viewBox="0 0 24 24"><path d="M4 9h16v11H4z"></path><path d="M4 9l8-5 8 5M12 4v16"></path></svg></span>Package sale</span>
-          <select [(ngModel)]="selectedPackageId">
-            <option value="">Choose package</option>
-            <option *ngFor="let itemPackage of packages; trackBy: trackById" [value]="itemPackage.id">{{ addonLabel(itemPackage) }}</option>
-          </select>
-        </label>
-        <button type="button" class="secondary-action" (click)="addPackageSale()" [disabled]="!selectedPackageId">Add</button>
-        <label class="addon-field">
+          <span class="addon-chevron" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="addon-field" [class.active]="activeAddonSale === 'gift_card'" [attr.aria-expanded]="activeAddonSale === 'gift_card'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('gift_card')">
           <span><span class="ui-icon addon-icon violet"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M4 14h16M12 10v10M8 10c-2-2-1-5 1.5-5 1.5 0 2.5 2 2.5 5M16 10c2-2 1-5-1.5-5-1.5 0-2.5 2-2.5 5"></path></svg></span>Gift card sale</span>
-          <input type="number" min="0" step="0.01" [(ngModel)]="giftCardAmount" placeholder="Amount" />
-        </label>
-        <button type="button" class="secondary-action" (click)="addGiftCardSale()" [disabled]="num(giftCardAmount) <= 0">Add</button>
+          <span class="addon-chevron" aria-hidden="true">›</span>
+        </button>
+
+        <div id="addon-sale-editor" class="addon-editor" *ngIf="activeAddonSale">
+          <label *ngIf="activeAddonSale === 'membership'">Membership<select [(ngModel)]="selectedMembershipId"><option value="">Choose membership</option><option *ngFor="let plan of posMemberships; trackBy: trackById" [value]="plan.id">{{ addonLabel(plan) }}</option></select></label>
+          <label *ngIf="activeAddonSale === 'package'">Package<select [(ngModel)]="selectedPackageId"><option value="">Choose package</option><option *ngFor="let itemPackage of packages; trackBy: trackById" [value]="itemPackage.id">{{ addonLabel(itemPackage) }}</option></select></label>
+          <label *ngIf="activeAddonSale === 'gift_card'">Gift card amount<input type="number" min="0" step="0.01" [(ngModel)]="giftCardAmount" placeholder="Amount" /></label>
+          <button *ngIf="activeAddonSale === 'membership'" type="button" class="secondary-action" (click)="addMembershipSale()" [disabled]="!selectedMembershipId">Add membership</button>
+          <button *ngIf="activeAddonSale === 'package'" type="button" class="secondary-action" (click)="addPackageSale()" [disabled]="!selectedPackageId">Add package</button>
+          <button *ngIf="activeAddonSale === 'gift_card'" type="button" class="secondary-action" (click)="addGiftCardSale()" [disabled]="num(giftCardAmount) <= 0">Add gift card</button>
+        </div>
       </div>
 
       <section class="package-redemption" *ngIf="membershipRedeemRows.length">
@@ -189,8 +192,8 @@
           <div class="package-redeem-row package-redeem-title"><span>Membership</span><span>Service</span><span>Pending</span><span>Redeem</span><span>Staff</span><span></span></div>
           <div class="package-redeem-row" *ngFor="let row of membershipRedeemRows; trackBy: trackById">
             <div><strong>{{ row.membershipName }}</strong><small>Expiry {{ formatDate(row.expiresAt) }}</small></div><span>{{ row.serviceName }}</span><strong>{{ row.pendingQty }}</strong>
-            <input type="number" min="0" [max]="row.pendingQty" [ngModel]="row.redeemQty" (ngModelChange)="setMembershipRedeemQty(row, $event)" />
-            <select [ngModel]="row.staffId || ''" (ngModelChange)="setMembershipRedeemStaff(row, $event)"><option value="">Staff</option><option *ngFor="let person of staff; trackBy: trackById" [value]="person.id">{{ recordName(person) }}</option></select>
+            <input type="number" min="0" [max]="row.pendingQty" [disabled]="!membershipSettings.redemptionRules.allowPartialCredits" [ngModel]="row.redeemQty" (ngModelChange)="setMembershipRedeemQty(row, $event)" />
+            <select [ngModel]="row.staffId || ''" (ngModelChange)="setMembershipRedeemStaff(row, $event)"><option value="">{{ membershipSettings.redemptionRules.requireStaffConfirmation ? 'Select staff' : 'Staff' }}</option><option *ngFor="let person of staff; trackBy: trackById" [value]="person.id">{{ recordName(person) }}</option></select>
             <button type="button" class="secondary-action" (click)="redeemMembershipRow(row)" [disabled]="row.pendingQty <= 0">Redeem</button>
           </div>
         </div>
@@ -259,7 +262,7 @@
             <button type="button" (click)="incrementLineQty(line)">+</button>
           </div>
           <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.unitPrice" placeholder="0" /></label>
-          <label class="item-cell discount-combo"><select [(ngModel)]="line.discountType"><option value="amount">₹</option><option value="percent">%</option></select><input type="number" min="0" step="0.01" [(ngModel)]="line.discount" placeholder="0" /></label>
+          <label class="item-cell discount-combo"><select [ngModel]="line.discountType" (ngModelChange)="setLineDiscountType(line, $event)"><option value="amount">₹</option><option value="percent">%</option></select><input type="number" min="0" step="0.01" [ngModel]="line.discount" (ngModelChange)="setLineDiscount(line, $event)" placeholder="0" /></label>
           <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.taxPercent" placeholder="0" /></label>
           <strong class="line-total">{{ lineTotalPaise(line) / 100 | currency:'INR':'symbol':'1.0-0' }}</strong>
           <button class="icon-action kebab-action" type="button" (click)="removeSaleLine(line)" aria-label="Remove line"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
@@ -300,10 +303,16 @@
       <section class="payment-card" id="tip-register">
         <div class="payment-head"><h3>Payment collection</h3><div><button type="button" (click)="clearPayments()">Clear</button></div></div>
         <div class="payment-grid">
-          <label class="payment-method" *ngFor="let method of paymentMethods; trackBy: trackByPayment" (click)="fillPayment(method)">
+          <label class="payment-method" [class.gift-card-method]="method.code === 'gift_card'" *ngFor="let method of paymentMethods; trackBy: trackByPayment" (click)="fillPayment(method)">
             <span>{{ method.label }}</span>
             <button type="button" (click)="$event.stopPropagation(); fillPayment(method)">Click {{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</button>
             <input type="number" min="0" step="0.01" [(ngModel)]="paymentInputs[method.code]" placeholder="0" (click)="$event.stopPropagation()" (focus)="(!paymentInputs[method.code] || paymentInputs[method.code] === '0') && fillPayment(method)" />
+            <div class="gift-card-reference" *ngIf="method.code === 'gift_card'" (click)="$event.stopPropagation()">
+              <input type="text" aria-label="Gift card code" placeholder="Gift card code" autocomplete="off" [ngModel]="giftCardPaymentCode" (ngModelChange)="onGiftCardCodeInput($event)" (keydown.enter)="$event.preventDefault(); verifyGiftCard()" />
+              <button type="button" [disabled]="giftCardLookupLoading || !giftCardPaymentCode" (click)="verifyGiftCard()">{{ giftCardLookupLoading ? 'Checking...' : 'Verify' }}</button>
+            </div>
+            <small class="gift-card-state success" *ngIf="method.code === 'gift_card' && verifiedGiftCard">{{ verifiedGiftCard.clientName || verifiedGiftCard.code }} · {{ verifiedGiftCard.balancePaise / 100 | currency:'INR':'symbol':'1.0-0' }} available</small>
+            <small class="gift-card-state error" *ngIf="method.code === 'gift_card' && giftCardLookupError">{{ giftCardLookupError }}</small>
           </label>
           <p class="empty" *ngIf="!paymentMethods.length">No payment modes yet.</p>
         </div>
@@ -317,13 +326,17 @@
         </div>
         <p class="wallet-line" *ngIf="walletCreditPaise > 0">Wallet credit: {{ walletCreditPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</p>
         <p class="wallet-line">Wallet balance: {{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</p>
+        <label class="reward-redemption" *ngIf="selectedClientId && clientKpi.hasActiveMembership && membershipSettings.creditsBenefits.rewardPointsEnabled && clientKpi.rewardPointsBalance > 0">
+          <span>Reward points <small>{{ clientKpi.rewardPointsBalance }} available</small></span>
+          <input type="number" min="0" step="1" [max]="clientKpi.rewardPointsBalance" [(ngModel)]="rewardPointsToRedeem" placeholder="Points to redeem" />
+        </label>
       </section>
 
       <section class="review-card">
         <h3>Review payment split</h3>
         <div class="review-grid">
           <div><span>Advance adjusted</span><strong>{{ advanceAdjustedPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-          <div><span>Counter payment</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+          <div><span>Collection amount</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
           <div><span>Due after save</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
         </div>
       </section>

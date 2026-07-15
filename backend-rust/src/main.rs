@@ -29,6 +29,54 @@ async fn main() -> Result<()> {
     let redis = infrastructure::cache::create_client(&settings.redis_url).await?;
     let state = AppState::new(settings.clone(), db, redis);
 
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(900));
+            loop {
+                interval.tick().await;
+                if services::client_service::refresh_intelligence_snapshots(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("client intelligence snapshot refresh failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
+            loop {
+                interval.tick().await;
+                if services::ai_concierge_service::purge_expired_transcripts(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("AI transcript retention cycle failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
+            loop {
+                interval.tick().await;
+                if services::happy_hours_service::run_auto_sunset_worker(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("Happy Hours auto-sunset cycle failed");
+                }
+            }
+        });
+    }
+
     if state.settings.invoice_delivery_configured() {
         let worker_state = state.clone();
         tokio::spawn(async move {
@@ -49,6 +97,165 @@ async fn main() -> Result<()> {
                 {
                     tracing::warn!("invoice delivery worker cycle failed");
                 }
+                if routes::pos_legacy_completion::process_due_daily_reports_worker(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("POS daily-report delivery cycle failed");
+                }
+                if services::analytics_service::process_due_custom_reports(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("custom report delivery cycle failed");
+                }
+            }
+        });
+    }
+
+    if state.settings.benefit_delivery_configured() {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if services::benefit_notification_service::schedule(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("benefit and campaign scheduling failed");
+                }
+                if services::benefit_notification_service::process_due(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("benefit and campaign delivery cycle failed");
+                }
+            }
+        });
+    }
+
+    if state.settings.security_encryption_key.is_some() {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                if services::integration_service::process_webhooks(
+                    &worker_state.db,
+                    &worker_state.settings,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("integration webhook delivery cycle failed");
+                }
+                if services::integration_service::process_connector_sync_jobs(
+                    &worker_state.db,
+                    &worker_state.settings,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("integration connector sync cycle failed");
+                }
+            }
+        });
+    }
+
+    if state.settings.mobile_push_provider_enabled() {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(15));
+            loop {
+                interval.tick().await;
+                if services::team_chat_service::process_push_deliveries(
+                    &worker_state.db,
+                    worker_state
+                        .settings
+                        .mobile_push_provider_url
+                        .as_deref()
+                        .unwrap_or_default(),
+                    worker_state
+                        .settings
+                        .mobile_push_provider_token
+                        .as_deref()
+                        .unwrap_or_default(),
+                    worker_state
+                        .settings
+                        .security_encryption_key
+                        .as_deref()
+                        .unwrap_or_default(),
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("mobile push delivery cycle failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                if services::migration_service::process_due(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("data import worker cycle failed");
+                }
+            }
+        });
+    }
+
+    if state.settings.compliance_provider_enabled() {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if services::compliance_provider_service::process_due(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("invoice compliance worker cycle failed");
+                }
+            }
+        });
+    }
+
+    if state.settings.razorpay_payment_links_enabled() {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                if services::membership_auto_renew_service::process_due(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("membership auto-renew worker cycle failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                if services::pos_enterprise_service::run_integrity_monitor(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("POS financial integrity monitor cycle failed");
+                }
             }
         });
     }
@@ -58,7 +265,11 @@ async fn main() -> Result<()> {
 
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("aura-shine-backend listening on {}", addr);
-    serve(listener, app).await?;
+    serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

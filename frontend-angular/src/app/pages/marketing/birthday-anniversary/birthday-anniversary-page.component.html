@@ -1,0 +1,169 @@
+<section class="birthday-board" [class.drawer-open]="drawer">
+  <section class="command-strip" aria-label="Birthday and anniversary commands">
+    <div class="title-row">
+      <span class="title-icon" aria-hidden="true"><i class="bi bi-calendar2-heart"></i></span>
+      <h1>Birthdays &amp; Anniversaries</h1>
+      <span class="data-pill" [class.online]="loaded && !error">{{ dataStatus }}</span>
+    </div>
+    <div class="command-actions">
+      <as-date-picker ariaLabel="Occasion date" [(value)]="selectedDate" (valueChange)="refresh()"></as-date-picker>
+      <div class="view-switch" aria-label="Date range">
+        <button type="button" [class.active]="range === 'today'" (click)="range = 'today'">Today</button>
+        <button type="button" [class.active]="range === 'week'" (click)="range = 'week'">7 days</button>
+        <button type="button" [class.active]="range === 'month'" (click)="range = 'month'">This month</button>
+      </div>
+      <button type="button" (click)="openAudit()"><i class="bi bi-journal-check"></i> Audit</button>
+      <button type="button" (click)="openSettings()"><i class="bi bi-gear"></i> Settings</button>
+      <button class="primary" type="button" (click)="openDraft()"><i class="bi bi-magic"></i> Generate drafts</button>
+    </div>
+  </section>
+
+  <p class="action-message" *ngIf="notice">{{ notice }}</p>
+  <p class="action-error" *ngIf="error">{{ error }}</p>
+
+  <section class="metrics" aria-label="Birthday and anniversary summary">
+    <article class="birthday"><span class="metric-icon"><i class="bi bi-cake2"></i></span><span><small>Today birthdays</small><strong>{{ overview.metrics.todayBirthdays }}</strong></span></article>
+    <article class="anniversary"><span class="metric-icon"><i class="bi bi-hearts"></i></span><span><small>Today anniversaries</small><strong>{{ overview.metrics.todayAnniversaries }}</strong></span></article>
+    <article class="pending"><span class="metric-icon"><i class="bi bi-clock-history"></i></span><span><small>Pending approval</small><strong>{{ overview.metrics.pendingApprovals }}</strong></span></article>
+    <article class="queued"><span class="metric-icon"><i class="bi bi-send"></i></span><span><small>Queued</small><strong>{{ overview.metrics.queued }}</strong></span></article>
+    <article class="sent"><span class="metric-icon"><i class="bi bi-check-circle"></i></span><span><small>Sent</small><strong>{{ overview.metrics.sent }}</strong></span></article>
+  </section>
+
+  <section class="workspace">
+    <nav class="tabs" aria-label="Birthday workspace sections">
+      <button type="button" [class.active]="activeTab === 'occasions'" (click)="setTab('occasions')">Occasions</button>
+      <button type="button" [class.active]="activeTab === 'reminders'" (click)="setTab('reminders')">Reminders</button>
+      <button type="button" [class.active]="activeTab === 'vouchers'" (click)="setTab('vouchers')">Vouchers</button>
+      <button type="button" [class.active]="activeTab === 'campaign'" (click)="setTab('campaign')">Campaign</button>
+    </nav>
+
+    <div class="filters" *ngIf="activeTab !== 'campaign'">
+      <label class="search"><i class="bi bi-search"></i><input [(ngModel)]="search" aria-label="Search clients" placeholder="Search clients" /></label>
+      <select [(ngModel)]="eventFilter" aria-label="Occasion filter"><option value="">All occasions</option><option value="birthday">Birthday</option><option value="anniversary">Anniversary</option></select>
+      <select [(ngModel)]="statusFilter" aria-label="Status filter"><option value="">All statuses</option><option value="not started">Not started</option><option value="draft">Draft</option><option value="approved">Approved</option><option value="queued">Queued</option><option value="sent">Sent</option><option value="failed">Failed</option><option value="blocked">Blocked</option><option value="cancelled">Cancelled</option></select>
+      <button class="icon-button" type="button" aria-label="Refresh" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+
+    <div class="loading-table" *ngIf="loading" aria-label="Loading birthday and anniversary records">
+      <span>Loading</span><i></i><i></i><i></i>
+    </div>
+
+    <div class="table-wrap" *ngIf="!loading && activeTab === 'occasions'">
+      <table>
+        <thead><tr><th>Client</th><th>Occasion</th><th>Date</th><th>Top service</th><th>Reachable via</th><th>Reminder</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of occasions; trackBy: trackById">
+            <td data-label="Client"><strong>{{ clientName(row) }}</strong><small>{{ row.phone || row.email || '—' }}</small></td>
+            <td data-label="Occasion"><span class="occasion"><i class="bi" [ngClass]="row.eventType === 'birthday' ? 'bi-cake2' : 'bi-hearts'"></i>{{ title(row.eventType) }}</span></td>
+            <td data-label="Date">{{ displayDate(row.eventDate) }}<small>{{ row.daysUntil === 0 ? 'Today' : row.daysUntil + ' days' }}</small></td>
+            <td data-label="Top service">{{ serviceName(row) }}<small *ngIf="row.mostUsedServiceVisits">{{ row.mostUsedServiceVisits }} visits</small></td>
+            <td data-label="Reachable via">{{ reachable(row) }}</td>
+            <td data-label="Reminder"><span class="status" [attr.data-status]="row.reminderStatus || 'not-started'">{{ title(row.reminderStatus || 'not started') }}</span></td>
+            <td data-label="Actions"><button type="button" (click)="openDraft(row)">Draft</button></td>
+          </tr>
+          <tr *ngIf="!occasions.length"><td class="empty" colspan="7"><i class="bi bi-calendar2-heart"></i><strong>No records yet</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap" *ngIf="!loading && activeTab === 'reminders'">
+      <table>
+        <thead><tr><th>Client</th><th>Occasion</th><th>Date</th><th>Channels</th><th>Status</th><th>Voucher</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of reminders; trackBy: trackById">
+            <td data-label="Client"><strong>{{ row.clientName || row.clientId }}</strong></td>
+            <td data-label="Occasion">{{ title(row.eventType) }}</td>
+            <td data-label="Date">{{ displayDate(row.eventDate) }}</td>
+            <td data-label="Channels">{{ row.channels.join(', ') || '—' }}</td>
+            <td data-label="Status"><span class="status" [attr.data-status]="row.status">{{ title(row.status) }}</span><small *ngIf="row.failureReason">{{ row.failureReason }}</small></td>
+            <td data-label="Voucher">{{ row.couponCode || '—' }}</td>
+            <td data-label="Actions" class="row-actions"><button type="button" *ngIf="row.status === 'draft'" (click)="openApproval(row)">Review</button><button class="primary compact" type="button" *ngIf="row.status === 'approved'" [disabled]="busy" (click)="sendReminder(row)">Send</button></td>
+          </tr>
+          <tr *ngIf="!reminders.length"><td class="empty" colspan="7"><i class="bi bi-send"></i><strong>No records yet</strong></td></tr>
+        </tbody>
+      </table>
+      <div class="table-footer"><button type="button" [disabled]="busy || !overview.settings.autoSendEnabled" (click)="runAutoSend()">Run auto-send</button></div>
+    </div>
+
+    <div class="table-wrap" *ngIf="!loading && activeTab === 'vouchers'">
+      <table>
+        <thead><tr><th>Voucher</th><th>Client</th><th>Status</th><th>Expires</th><th>Sale</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of overview.vouchers; trackBy: trackById"><td data-label="Voucher"><strong>{{ row.couponCode }}</strong></td><td data-label="Client">{{ row.clientName }}</td><td data-label="Status"><span class="status" [attr.data-status]="row.status">{{ title(row.status) }}</span></td><td data-label="Expires">{{ displayDate(row.expiresAt) }}</td><td data-label="Sale">{{ row.redeemedSaleId || '—' }}</td><td data-label="Actions"><button type="button" *ngIf="row.status === 'created' || row.status === 'sent'" (click)="openRedeem(row)">Redeem</button></td></tr>
+          <tr *ngIf="!overview.vouchers.length"><td class="empty" colspan="6"><i class="bi bi-ticket-perforated"></i><strong>No records yet</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="campaign" *ngIf="!loading && activeTab === 'campaign'">
+      <div class="campaign-toolbar">
+        <div class="view-switch"><button type="button" [class.active]="campaignMode === 'all'" (click)="campaignMode = 'all'">All</button><button type="button" [class.active]="campaignMode === 'today'" (click)="campaignMode = 'today'">Today</button><button type="button" [class.active]="campaignMode === 'upcoming'" (click)="campaignMode = 'upcoming'">Upcoming</button></div>
+        <span>{{ campaignClients.length }} clients</span>
+      </div>
+      <div class="campaign-grid">
+        <label>Client<select [(ngModel)]="campaignClientId"><option value="">Select client</option><option *ngFor="let row of campaignClients; trackBy: trackById" [value]="row.clientId">{{ clientName(row) }} · {{ displayDate(row.eventDate) }}</option></select></label>
+        <label>Voucher<select [(ngModel)]="campaignCouponId"><option value="">No voucher</option><option *ngFor="let coupon of activeCoupons; trackBy: trackById" [value]="coupon.id">{{ coupon.code }}</option></select></label>
+        <fieldset><legend>Channels</legend><label><input type="checkbox" [(ngModel)]="campaignChannels.whatsapp" /> WhatsApp</label><label><input type="checkbox" [(ngModel)]="campaignChannels.sms" /> SMS</label><label><input type="checkbox" [(ngModel)]="campaignChannels.email" /> Email</label></fieldset>
+        <div class="suggestions" *ngIf="campaign.messageSuggestions.length">
+          <strong>Messages</strong>
+          <button type="button" *ngFor="let suggestion of campaign.messageSuggestions; trackBy: trackById" (click)="applyCampaignMessage(suggestion)">{{ suggestion.text }}</button>
+        </div>
+        <div class="suggestions" *ngIf="campaign.offerSuggestions.length">
+          <strong>Gifts</strong>
+          <button type="button" *ngFor="let suggestion of campaign.offerSuggestions; trackBy: trackById" (click)="applyCampaignOffer(suggestion)">{{ suggestion.title }}</button>
+        </div>
+        <label class="message-field">Message<textarea rows="6" maxlength="4000" [(ngModel)]="campaignMessage"></textarea></label>
+      </div>
+      <div class="campaign-actions"><button type="button" [disabled]="busy || !campaignClientId" (click)="sendCampaign()">Send selected</button><button type="button" [disabled]="busy || !campaign.current.length" (click)="sendCampaign('today')">Send today</button><button class="primary" type="button" [disabled]="busy || !campaign.upcoming.length" (click)="sendCampaign('upcoming')">Send upcoming</button></div>
+      <p class="empty campaign-empty" *ngIf="!campaignClients.length"><i class="bi bi-calendar2-heart"></i><strong>No records yet</strong></p>
+    </section>
+  </section>
+
+  <aside class="provider-card" aria-label="Provider readiness">
+    <strong>Provider readiness</strong>
+    <span><i class="bi bi-whatsapp"></i> WhatsApp <em [class.ready]="providerReady('whatsapp')">{{ providerReady('whatsapp') ? 'Ready' : 'Setup required' }}</em></span>
+    <span><i class="bi bi-chat-dots"></i> SMS <em [class.ready]="providerReady('sms')">{{ providerReady('sms') ? 'Ready' : 'Setup required' }}</em></span>
+    <span><i class="bi bi-envelope"></i> Email <em [class.ready]="providerReady('email')">{{ providerReady('email') ? 'Ready' : 'Setup required' }}</em></span>
+  </aside>
+
+  <div class="drawer-backdrop" *ngIf="drawer" (click)="closeDrawer()"></div>
+  <aside class="drawer" *ngIf="drawer" role="dialog" aria-modal="true" [attr.aria-label]="drawer === 'draft' ? 'Reminder draft' : drawer">
+    <header><h2>{{ drawer === 'draft' ? (editingReminder ? 'Approve reminder' : 'Draft reminder') : drawer === 'settings' ? 'Settings' : drawer === 'audit' ? 'Audit log' : 'Redeem voucher' }}</h2><button class="icon-button" type="button" aria-label="Close" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+
+    <div class="drawer-body" *ngIf="drawer === 'draft'">
+      <label>Client<select [(ngModel)]="draft.clientId" [disabled]="!!editingReminder"><option value="">All matching clients</option><option *ngFor="let row of overview.clients; trackBy: trackById" [value]="row.clientId">{{ clientName(row) }} · {{ title(row.eventType) }}</option></select></label>
+      <label>Occasion<select [(ngModel)]="draft.eventType" [disabled]="!!editingReminder"><option value="">All occasions</option><option value="birthday">Birthday</option><option value="anniversary">Anniversary</option></select></label>
+      <label>Voucher<select [(ngModel)]="draft.couponId"><option value="">No voucher</option><option *ngFor="let coupon of activeCoupons; trackBy: trackById" [value]="coupon.id">{{ coupon.code }}</option></select></label>
+      <fieldset [disabled]="!!editingReminder"><legend>Reachable via</legend><label><input type="checkbox" [(ngModel)]="draft.whatsapp" /> WhatsApp</label><label><input type="checkbox" [(ngModel)]="draft.sms" /> SMS</label><label><input type="checkbox" [(ngModel)]="draft.email" /> Email</label></fieldset>
+      <div class="suggestions" *ngIf="draftSuggestions.length">
+        <strong>Messages</strong>
+        <button type="button" *ngFor="let suggestion of draftSuggestions; trackBy: trackById" (click)="applyDraftMessage(suggestion)">{{ suggestion.text }}</button>
+      </div>
+      <label>Message<textarea rows="7" maxlength="4000" [(ngModel)]="draft.message"></textarea></label>
+      <div class="schedule-grid"><label>Send on<as-date-picker ariaLabel="Scheduled send date" [(value)]="draft.scheduleDate"></as-date-picker></label><label>Send at<input type="time" [(ngModel)]="draft.scheduleTime" /></label></div>
+    </div>
+
+    <div class="drawer-body" *ngIf="drawer === 'settings'">
+      <label>Workflow<select [(ngModel)]="settingsDraft.workflowMode"><option value="legacy_auto">Legacy auto</option><option value="managed">Managed</option></select></label>
+      <label>Timezone<input [(ngModel)]="settingsDraft.timezone" /></label>
+      <label>Default send time<input type="time" [(ngModel)]="settingsDraft.defaultSendTime" /></label>
+      <label>Days ahead<input type="number" min="1" max="366" [(ngModel)]="settingsDraft.daysAhead" /></label>
+      <fieldset><legend>Default channels</legend><label *ngFor="let channel of ['whatsapp', 'sms', 'email']"><input type="checkbox" [checked]="settingsDraft.channels.includes(channel)" (change)="toggleSettingChannel(channel)" /> {{ title(channel) }}</label></fieldset>
+      <label class="switch"><input type="checkbox" [(ngModel)]="settingsDraft.popupEnabled" /> Morning popup</label>
+      <label class="switch"><input type="checkbox" [(ngModel)]="settingsDraft.approvalRequired" /> Approval required</label>
+      <label class="switch"><input type="checkbox" [(ngModel)]="settingsDraft.autoSendEnabled" /> Auto-send enabled</label>
+    </div>
+
+    <div class="drawer-body audit-list" *ngIf="drawer === 'audit'">
+      <article *ngFor="let log of auditLogs; trackBy: trackById"><strong>{{ title(log.action) }}</strong><span>{{ log.clientName || 'System' }}</span><small>{{ displayDateTime(log.createdAt) }} · {{ log.actorUserId }}</small></article>
+      <p class="empty" *ngIf="!auditLogs.length"><strong>No records yet</strong></p>
+    </div>
+
+    <div class="drawer-body" *ngIf="drawer === 'redeem'">
+      <label>Voucher<input [value]="redeemVoucher?.couponCode || ''" disabled /></label>
+      <label>Sale ID<input [(ngModel)]="redeemSaleId" /></label>
+    </div>
+
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" *ngIf="drawer === 'draft'" [disabled]="busy" (click)="saveDraft()">{{ editingReminder ? 'Approve' : 'Save draft' }}</button><button class="primary" type="button" *ngIf="drawer === 'settings'" [disabled]="busy" (click)="saveSettings()">Save</button><button class="primary" type="button" *ngIf="drawer === 'redeem'" [disabled]="busy" (click)="redeem()">Redeem</button></footer>
+  </aside>
+</section>

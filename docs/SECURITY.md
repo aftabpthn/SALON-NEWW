@@ -131,3 +131,183 @@ live in `docs/security-hardening.md`; the live permission matrix in `docs/permis
 - No secret/PII leakage.
 - Rate limit where abuse is possible.
 - Webhook/payment actions idempotent.
+
+## 17. MFA and Passkeys
+
+- Authenticator MFA uses RFC 6238 TOTP. Secrets are encrypted at rest with
+  `SECURITY_ENCRYPTION_KEY`; recovery codes are stored only as one-way hashes
+  and are consumed atomically on first use.
+- Owner, Admin, and finance scopes receive enrollment-only access until MFA is
+  enabled. MFA cannot be disabled while the current scope requires it.
+- Passkey ceremonies require `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGIN`.
+  Production origins must use HTTPS; plain HTTP is accepted only for localhost.
+- Registration and authentication challenge state is stored server-side in
+  PostgreSQL, expires after five minutes, and is deleted when consumed.
+- Passkey credentials and challenge lookups are scoped by tenant and user.
+  Successful passkey login enters the existing branch-selection and session
+  issuance flow.
+- MFA and passkey controls are available as authenticated self-service;
+  security administration tabs remain permission-gated.
+- Self-service endpoints are `/api/v1/auth/mfa/*` and
+  `/api/v1/auth/webauthn/register/*`; public passkey login uses
+  `/api/v1/auth/webauthn/login/*`.
+
+## 18. Branch Hierarchy and Deputation
+
+- Branch masters may carry Region, Zone, and Cluster metadata for owner search,
+  filtering, and explicit bulk assignment across large chains.
+- `user_branch_roles` remains the authorization source of truth. Hierarchy
+  filters expand to explicit branch grants; role names never imply access.
+- Permanent access may be the user's default branch. Deputation access requires
+  an inclusive start/end business-date window and can never become default.
+- Every authenticated request rechecks the branch grant. Scheduled deputation
+  becomes effective on its start date and expires without relying on the JWT.
+- Updating assignments revokes existing refresh sessions and increments the
+  user's permission version through the existing authorization trigger.
+
+```mermaid
+flowchart LR
+  Region --> Zone --> Cluster --> Branch
+  StaffAdmin["Staff Branch Access"] -->|"explicit bulk grants"| UserBranchRoles
+  UserBranchRoles -->|"permanent or dated deputation"| AuthMiddleware
+  AuthMiddleware -->|"effective branch and role"| ScopedJWT
+```
+
+## 19. Tamper-Evident Audit Chain
+
+- Every `auth_audit_logs` insert is sealed automatically with a tenant-scoped
+  SHA-256 chain. A locked tenant head row serializes concurrent audit writes.
+- Sealed audit records are append-only; PostgreSQL rejects update and delete.
+- `GET /api/v1/security/audit-chain/verify` verifies every stored hash and the
+  tenant chain head. `POST /api/v1/security/audit-chain/seal` records a seal
+  event and returns the fresh verification result.
+
+## 20. Honeypot and Intrusion Detection
+
+- High-confidence probes for exposed environment files, repository metadata,
+  common admin consoles and path traversal are intercepted before routing.
+- Every detection creates a tamper-evident audit event and a deduplicated
+  security alert. Three probes within ten minutes trigger a one-hour Redis
+  block and a matching durable blocklist record.
+- Forwarded client IPs are trusted only when the immediate peer is a private or
+  loopback proxy; direct public peers cannot spoof the automatic-block target.
+- Authenticated probes stay tenant/branch scoped; anonymous probes appear in
+  the SuperAdmin Security Center under the `platform/global` scope.
+
+## 21. Device Security
+
+- Device trust state is stored in `security_trusted_devices` and scoped by
+  tenant, branch, user and `deviceId`.
+- Active and historical device evidence comes from `auth_refresh_tokens`; no
+  fabricated device records are created.
+- Revoking a device immediately revokes its active refresh sessions and blocks
+  future token issue/rotation for that `deviceId`.
+- All-device sign-out revokes active refresh sessions for the selected user
+  without marking every device as permanently revoked.
+
+## 22. Privileged Sessions
+
+- Sensitive actions can require a short-lived privileged session tied to the
+  current tenant, branch, user and JWT `sessionId`.
+- When MFA is enabled, step-up uses authenticator or recovery code. Otherwise,
+  it uses current password verification.
+- Privileged sessions expire after ten minutes and can be revoked by the user.
+- Existing per-action MFA checks accept an active privileged session before
+  asking for another code.
+
+## 23. Field-Level Audit and Data Masking
+
+- Role `masked_fields_json` remains the source of truth for response masking;
+  security code must reuse it instead of adding one-off masking rules.
+- Masked JSON responses record field-audit events with actor, request path,
+  field group, field name, access type and reason.
+- Masked roles are blocked from sensitive export paths, and blocked exports are
+  also written to the field-audit ledger.
+- `GET /api/security/field-audit` exposes recent tenant/branch-scoped field
+  audit events for the Security Center.
+
+## 24. Security Approvals and Access Rules
+
+- Security approval requests are tenant and branch scoped, audited, and can be
+  decided only once by a different security manager than the requester.
+- IP access rules accept normalized IPv4 or IPv6 values with `allow`, `watch`,
+  or `deny` effects. A deny rule requires a reason.
+- Access-rule `deny` is a security risk signal; durable request blocking remains
+  owned by the existing blocklist and intrusion-detection controls.
+- Security Center uses `/api/security/approvals` and
+  `/api/security/access-rules` for list, create, decision, and disable actions.
+
+## 25. Adaptive and Emergency Access
+
+- Browser authentication sends a stable opaque `deviceId`; refresh, passkey,
+  branch-selection, and branch-switch flows reuse the same identifier.
+- Password login risk combines known-device, known-IP, and rapid-IP-change
+  evidence. High-risk login requires already-enrolled MFA and is audited.
+- Temporary permissions require maker-checker approval, expire within 60
+  minutes, remain branch scoped, and never override explicit role denies.
+- Owner break-glass access requires an active privileged session, a reason,
+  explicit permissions, and expires within 15 minutes. Activation and
+  revocation are audited.
+- The permission simulator reports base, temporary, denied, and final effective
+  permissions without changing user access.
+- Geographic impossible-travel enforcement requires a trusted GeoIP source;
+  client-supplied coordinates are never accepted as a security signal.
+
+## 26. Incident-Response Playbooks
+
+- Incident playbooks are tenant and branch scoped and contain a stable key,
+  severity, ordered checklist, status, creator, and timestamps.
+- Playbook creation validates keys, severity, checklist size, step length, and
+  duplicate steps. Create and disable actions are written to the audit chain.
+- No sample incident records or automatic playbook rows are created; Security
+  Center shows an empty state until an administrator saves a real playbook.
+- Endpoints are `GET/POST /api/security/playbooks` and
+  `POST /api/security/playbooks/:playbookId/disable`.
+
+## 27. Privacy and Disclosure Requests
+
+- Privacy requests and responsible-disclosure reports are durable PostgreSQL
+  records scoped to the active tenant and branch.
+- Privacy requests track subject, request type, requester, status and resolution;
+  disclosure reports track reporter details, severity, status and resolution.
+- Creation and resolution are permission-gated and written to the existing
+  tamper-evident audit chain. No sample requests or reports are created.
+- Endpoints are `GET/POST /api/security/privacy-requests`,
+  `POST /api/security/privacy-requests/:requestId/resolve`,
+  `GET/POST /api/security/disclosure-reports`, and
+  `POST /api/security/disclosure-reports/:reportId/resolve`.
+
+## 28. Compliance Evidence Export
+
+- Security managers can export a tenant and branch scoped JSON evidence bundle
+  for SOC 2 and ISO 27001 review from the existing Security Center.
+- The bundle contains current security counts, MFA/governance counts, the
+  verified audit-chain status, generation scope, timestamp, and exporter.
+- Every export is recorded in the tamper-evident audit chain. The endpoint is
+  `GET /api/security/compliance-evidence/export`.
+
+## 29. Microsoft Entra ID, Google OIDC, and SAML Federation
+
+- Google and Microsoft Entra ID use authorization-code flow with PKCE, signed
+  ID-token validation, nonce/state checks, and one-time login handoffs.
+- Enterprise SAML is accepted through a configured SAML-to-OIDC federation
+  broker. AuraShine validates the broker issuer, JWKS signature, audience,
+  nonce, PKCE state and verified user email before entering the same handoff.
+- Provider credentials remain deployment secrets. Tenant policy only enables
+  configured providers and selects Owner, Admin, or SuperAdmin enforcement.
+- Enforced roles cannot use password or passkey login; denied attempts and
+  policy changes are audited. Existing users are linked by verified email.
+- Tenant policy is managed through `GET/PUT /api/security/sso-policy`; public
+  login uses `/api/auth/sso/:provider/start`, callback, and exchange routes.
+
+## 30. Accounting and Automation Connectors
+
+- QuickBooks, Xero, NetSuite, and Google Calendar use OAuth 2.0 authorization
+  code plus PKCE. Access and refresh tokens are encrypted with
+  `SECURITY_ENCRYPTION_KEY` and never returned by list APIs.
+- OAuth state is one-time, expires after ten minutes, and carries tenant,
+  branch, actor, return-origin, and non-secret provider configuration.
+- Connector checks run through durable retry jobs. Provider errors are reduced
+  to safe status text; token bodies and upstream responses are never logged.
+- Zapier reuses scoped, hashed API keys and signed HTTPS webhooks instead of
+  storing a separate Zapier secret.

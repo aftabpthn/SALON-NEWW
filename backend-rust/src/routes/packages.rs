@@ -43,6 +43,10 @@ pub fn router() -> Router<AppState> {
             "/package-enterprise/reports/export",
             axum::routing::get(export_package_report),
         )
+        .route(
+            "/package-enterprise/alerts",
+            axum::routing::get(get_package_alerts),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,6 +236,16 @@ async fn get_package_report(
             query.offset.unwrap_or(0).max(0),
         )
         .await?,
+    )))
+}
+
+async fn get_package_alerts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<package_service::PackageAlert>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        package_service::alerts(&state.db, &tenant_id, &branch_id).await?,
     )))
 }
 

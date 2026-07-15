@@ -4,9 +4,72 @@
   </div>
 
   <div class="topbar-actions">
-    <span class="branch-pill" aria-label="Current branch">{{ branchName }}</span>
-    <button type="button" aria-label="Notifications">!</button>
+    <div class="branch-switcher">
+      <button
+        class="branch-trigger"
+        type="button"
+        aria-label="Current branch"
+        aria-haspopup="listbox"
+        [attr.aria-expanded]="branchMenuOpen"
+        [disabled]="branches.length < 2"
+        (click)="toggleBranchMenu()"
+      >
+        <span>{{ branchName }}</span>
+        <span *ngIf="branches.length > 1" aria-hidden="true">⌄</span>
+      </button>
+
+      <div class="branch-menu" *ngIf="branchMenuOpen">
+        <input
+          type="search"
+          aria-label="Search branches"
+          placeholder="Search branches"
+          autocomplete="off"
+          [(ngModel)]="branchSearch"
+        />
+        <div class="branch-list" role="listbox" aria-label="Assigned branches">
+          <button
+            *ngFor="let branch of filteredBranches"
+            type="button"
+            role="option"
+            class="branch-option"
+            [attr.aria-selected]="branch.branchId === currentBranch?.branchId"
+            [disabled]="!!switchingBranchId"
+            (click)="switchBranch(branch)"
+          >
+            <span>
+              <strong>{{ branch.branchName }}</strong>
+              <small>{{ branch.regionName || branch.branchId }}<ng-container *ngIf="branch.zoneName"> · {{ branch.zoneName }}</ng-container><ng-container *ngIf="branch.clusterName"> · {{ branch.clusterName }}</ng-container></small>
+            </span>
+            <small>{{ switchingBranchId === branch.branchId ? 'Switching…' : branch.roleName }}</small>
+          </button>
+          <div class="branch-empty" *ngIf="!filteredBranches.length">No branches found</div>
+        </div>
+        <div class="branch-error" role="alert" *ngIf="branchError">{{ branchError }}</div>
+      </div>
+    </div>
+
+    <button class="notification-button" type="button" aria-label="Notifications">!</button>
     <span class="user-pill">AA</span>
-    <b>{{ appName }}</b>
+    <b class="topbar-brand-name">{{ appName }}</b>
+    <button class="ai-assistant-button" type="button" aria-label="AI Assistant" title="AI Assistant" [attr.aria-expanded]="assistantOpen" (click)="toggleAssistant()">
+      <img src="/assets/ai-assistant-sidebar.png" alt="" aria-hidden="true" />
+    </button>
   </div>
 </header>
+
+<aside class="assistant-drawer" *ngIf="assistantOpen" aria-label="AI Assistant">
+  <header><div><strong>AI Receptionist</strong><small>{{ assistantSession?.status || 'Connecting' }}</small></div><button type="button" aria-label="Close AI Assistant" (click)="assistantOpen = false">×</button></header>
+  <div class="assistant-error" *ngIf="assistantError">{{ assistantError }}</div>
+  <div class="assistant-transcript">
+    <article *ngFor="let message of assistantMessages" [class.assistant]="message.role === 'assistant'">
+      <p>{{ message.body }}</p><small>{{ message.role === 'assistant' ? (message.modelName || 'Governed assistant') : 'You' }} · {{ formatTime(message.createdAt) }}</small>
+    </article>
+    <div class="assistant-empty" *ngIf="!assistantBusy && !assistantMessages.length">No conversation yet</div>
+    <div class="assistant-empty" *ngIf="assistantBusy && !assistantMessages.length">Connecting…</div>
+  </div>
+  <div class="assistant-action" *ngIf="assistantAction?.type === 'booking_draft'">
+    <span>Booking confirmation required</span><button type="button" (click)="continueBooking()">Continue</button>
+  </div>
+  <div class="assistant-action" *ngIf="assistantAction?.type === 'human_handoff'"><span>Salon team follow-up required</span></div>
+  <footer><textarea [(ngModel)]="assistantDraft" rows="2" maxlength="4000" placeholder="Ask about services or booking"></textarea><button type="button" (click)="sendAssistantMessage()" [disabled]="assistantBusy || !assistantDraft.trim() || !assistantSession">{{ assistantBusy ? 'Working…' : 'Send' }}</button></footer>
+</aside>

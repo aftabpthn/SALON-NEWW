@@ -1,0 +1,85 @@
+<section class="scanner-page">
+  <header class="page-head">
+    <div class="title-row">
+      <h1>Inventory Scanner</h1>
+      <span class="data-pill" [class.online]="matched">{{ loading ? 'Loading' : matched ? 'Product matched' : 'Ready' }}</span>
+    </div>
+    <div class="head-actions">
+      <select aria-label="Inventory branch"><option>Current branch</option></select>
+      <button type="button" (click)="historyOpen = !historyOpen">{{ historyOpen ? 'Matched product' : 'Scan history' }}</button>
+    </div>
+  </header>
+
+  <nav class="workflow-tabs" aria-label="Scanner workflow">
+    <button *ngFor="let row of workflows" type="button" [class.active]="workflow === row.id" (click)="setWorkflow(row.id)">{{ row.label }}</button>
+  </nav>
+
+  <p class="message error" *ngIf="error" role="alert">{{ error }}</p>
+  <p class="message success" *ngIf="notice">{{ notice }}</p>
+
+  <section class="scanner-grid">
+    <article class="scan-panel">
+      <h2>Scan product</h2>
+      <div class="scan-zone">
+        <video #camera *ngIf="cameraActive" muted playsinline></video>
+        <ng-container *ngIf="!cameraActive">
+          <span class="scan-icon" aria-hidden="true"><i class="bi bi-upc-scan"></i></span>
+          <strong>Ready to scan</strong>
+          <small>Use camera or enter SKU / barcode.</small>
+          <button type="button" (click)="openCamera()"><i class="bi bi-camera"></i> Use camera</button>
+        </ng-container>
+        <button class="camera-stop" *ngIf="cameraActive" type="button" (click)="stopCamera()">Stop camera</button>
+      </div>
+      <form class="match-row" (ngSubmit)="match()">
+        <input name="code" [(ngModel)]="code" autocomplete="off" autofocus placeholder="SKU or barcode" aria-label="SKU or barcode" />
+        <button class="primary" type="submit" [disabled]="loading">{{ loading ? 'Matching' : 'Match' }}</button>
+      </form>
+    </article>
+
+    <article class="result-panel">
+      <h2>{{ historyOpen ? 'Scan history' : 'Matched product' }}</h2>
+
+      <div class="history-list" *ngIf="historyOpen">
+        <article *ngFor="let row of history">
+          <i class="bi" [class.bi-check-circle]="row.status === 'matched'" [class.bi-x-circle]="row.status === 'unmatched'"></i>
+          <div><strong>{{ row.itemName || 'No product matched' }}</strong><span>{{ row.code }} · {{ row.workflow }}</span></div>
+          <time>{{ row.at | date:'HH:mm:ss' }}</time>
+        </article>
+        <div class="empty-result compact" *ngIf="!history.length"><strong>No scans yet</strong></div>
+      </div>
+
+      <div class="empty-result" *ngIf="!historyOpen && !matched">
+        <span class="result-icon" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+        <strong>No product matched</strong>
+      </div>
+
+      <div class="product-result" *ngIf="!historyOpen && matched as item">
+        <header>
+          <div><strong>{{ item.name }}</strong><span>{{ item.sku || 'No SKU' }} · {{ item.category || 'Uncategorized' }}</span></div>
+          <span class="stock">{{ item.stockQuantity }} {{ item.unit }}</span>
+        </header>
+        <dl>
+          <div><dt>Reorder point</dt><dd>{{ item.reorderPoint }}</dd></div>
+          <div><dt>Unit cost</dt><dd>{{ money(item.unitCostPaise) }}</dd></div>
+          <div><dt>Status</dt><dd>{{ item.active ? 'Active' : 'Inactive' }}</dd></div>
+        </dl>
+
+        <form class="workflow-form" *ngIf="workflow !== 'lookup'" (ngSubmit)="applyWorkflow()">
+          <label>{{ workflow === 'count' ? 'Counted quantity' : 'Quantity' }}
+            <input type="number" name="quantity" [(ngModel)]="quantity" [min]="workflow === 'count' ? 0 : 1" step="1" required />
+          </label>
+          <label *ngIf="workflow === 'transfer'">Destination branch ID
+            <input name="destinationBranchId" [(ngModel)]="destinationBranchId" required />
+          </label>
+          <label *ngIf="workflow === 'transfer'">Destination item ID
+            <input name="destinationInventoryItemId" [(ngModel)]="destinationInventoryItemId" required />
+          </label>
+          <label class="wide">Notes
+            <input name="notes" [(ngModel)]="notes" />
+          </label>
+          <button class="primary wide" type="submit" [disabled]="saving">{{ saving ? 'Saving' : 'Apply ' + workflow }}</button>
+        </form>
+      </div>
+    </article>
+  </section>
+</section>

@@ -1,1 +1,49 @@
-<section class="report-page"><header><div><p>REPORTS</p><h1>Invoice report</h1></div><a routerLink="/pos/sales">Sales register</a></header><section class="filters"><label>Branch<input [value]="branchName" readonly /></label><label>Date from<input [(ngModel)]="filters.dateFrom" name="dateFrom" placeholder="YYYY-MM-DD" /></label><label>Date to<input [(ngModel)]="filters.dateTo" name="dateTo" placeholder="YYYY-MM-DD" /></label><label>Staff<select [(ngModel)]="filters.staffId" name="staff"><option value="">All staff</option><option *ngFor="let person of staff" [value]="person.id">{{ person.name }}</option></select></label><label>Client<select [(ngModel)]="filters.clientId" name="client"><option value="">All clients</option><option *ngFor="let client of clients" [value]="client.id">{{ client.name }}</option></select></label><label>Payment mode<select [(ngModel)]="filters.paymentMethod" name="payment"><option value="">All modes</option><option *ngFor="let mode of modes" [value]="mode.code">{{ mode.name }}</option></select></label><label>Recovery<select [(ngModel)]="filters.recovery" name="recovery"><option value="">All</option><option value="paid">Paid</option><option value="due">Due</option></select></label><label>Ageing days<input [(ngModel)]="filters.ageingDays" name="ageing" type="number" min="0" placeholder="Minimum" /></label><label class="follow"><input [(ngModel)]="filters.followUp" name="followUp" type="checkbox" />Follow-up required</label><div class="filter-actions"><button type="button" (click)="load()">Apply</button><button type="button" (click)="clear()">Clear</button></div></section><p class="error" *ngIf="error">{{ error }}</p><section class="report-table"><div class="head"><span>Invoice</span><span>Client</span><span>Staff</span><span>Date</span><span>Total</span><span>Paid</span><span>Due</span><span>Ageing</span><span>Follow-up</span></div><div class="row" *ngFor="let row of rows"><strong>{{ row.invoiceNumber }}</strong><span>{{ row.clientName }}</span><span>{{ row.staffName }}</span><span>{{ formatDate(row.businessDate) }}</span><span>{{ row.totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span><span>{{ row.paidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span><strong>{{ row.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><span>{{ row.ageingDays }} days</span><span>{{ row.followUpRequired ? 'Required' : '-' }}</span></div><p *ngIf="!rows.length">No records yet.</p></section></section>
+<section class="report-page">
+  <header><div><p>REPORTS</p><h1>Invoice & Service Reports</h1></div><a routerLink="/pos/sales">Sales register</a></header>
+
+  <nav class="tabs" aria-label="Invoice report views">
+    <button type="button" [class.active]="activeTab === 'invoices'" (click)="selectTab('invoices')">Invoices</button>
+    <button type="button" [class.active]="activeTab === 'service-trends'" (click)="selectTab('service-trends')">Service Trends</button>
+    <button type="button" [class.active]="activeTab === 'service-clients'" (click)="selectTab('service-clients')">Service Clients</button>
+  </nav>
+
+  <section class="filters">
+    <label>Branch<input [value]="branchName" readonly /></label>
+    <label>Date from<as-date-picker ariaLabel="Date from" [(value)]="filters.dateFrom"></as-date-picker></label>
+    <label>Date to<as-date-picker ariaLabel="Date to" [(value)]="filters.dateTo"></as-date-picker></label>
+    <label *ngIf="activeTab !== 'invoices'">Service<select [(ngModel)]="filters.serviceId" name="service"><option value="">All services</option><option *ngFor="let service of services" [value]="service.id">{{ service.name }}</option></select></label>
+    <label>Staff<select [(ngModel)]="filters.staffId" name="staff"><option value="">All staff</option><option *ngFor="let person of staff" [value]="person.id">{{ person.name }}</option></select></label>
+    <label>Client<select [(ngModel)]="filters.clientId" name="client"><option value="">All clients</option><option *ngFor="let client of clients" [value]="client.id">{{ client.name }}</option></select></label>
+    <ng-container *ngIf="activeTab === 'invoices'">
+      <label>Payment mode<select [(ngModel)]="filters.paymentMethod" name="payment"><option value="">All modes</option><option *ngFor="let mode of modes" [value]="mode.code">{{ mode.name }}</option></select></label>
+      <label>Recovery<select [(ngModel)]="filters.recovery" name="recovery"><option value="">All</option><option value="paid">Paid</option><option value="due">Due</option></select></label>
+      <label>Ageing days<input [(ngModel)]="filters.ageingDays" name="ageing" type="number" min="0" placeholder="Minimum" /></label>
+      <label class="follow"><input [(ngModel)]="filters.followUp" name="followUp" type="checkbox" />Follow-up required</label>
+    </ng-container>
+    <label *ngIf="activeTab !== 'invoices'">Search<input [(ngModel)]="filters.q" name="search" type="search" /></label>
+    <div class="filter-actions"><button type="button" (click)="load()">Apply</button><button type="button" (click)="clear()">Clear</button></div>
+  </section>
+
+  <p class="state" *ngIf="loading">Loading…</p><p class="error" *ngIf="error">{{ error }}</p>
+
+  <section class="summary-strip" *ngIf="!loading && activeTab === 'service-trends' && trendSummary as summary">
+    <div><span>Services sold</span><strong>{{ summary.totalServicesSold }}</strong></div><div><span>Revenue</span><strong>{{ summary.totalServiceRevenuePaise / 100 | currency:'INR' }}</strong></div><div><span>Average price</span><strong>{{ summary.averageServicePricePaise / 100 | currency:'INR' }}</strong></div><div><span>Top service</span><strong>{{ summary.topService || '—' }}</strong></div><div><span>Discount</span><strong>{{ summary.discountLeakagePaise / 100 | currency:'INR' }}</strong></div><div><span>GST</span><strong>{{ summary.serviceGstCollectedPaise / 100 | currency:'INR' }}</strong></div>
+  </section>
+  <section class="summary-strip" *ngIf="!loading && activeTab === 'service-clients' && clientSummary as summary">
+    <div><span>Clients</span><strong>{{ summary.totalClients }}</strong></div><div><span>Revenue</span><strong>{{ summary.totalServiceRevenuePaise / 100 | currency:'INR' }}</strong></div><div><span>Service rows</span><strong>{{ summary.totalServiceRows }}</strong></div><div><span>Appointments</span><strong>{{ summary.appointmentRows }}</strong></div><div><span>Quick sales</span><strong>{{ summary.quickSaleRows }}</strong></div>
+  </section>
+
+  <section class="report-table invoice-table" *ngIf="!loading && activeTab === 'invoices'">
+    <div class="head"><span>Invoice</span><span>Client</span><span>Staff</span><span>Date</span><span>Total</span><span>Paid</span><span>Due</span><span>Ageing</span><span>Follow-up</span></div>
+    <div class="row" *ngFor="let row of rows"><strong>{{ row.invoiceNumber }}</strong><span>{{ row.clientName }}</span><span>{{ row.staffName }}</span><span>{{ formatDate(row.businessDate) }}</span><span>{{ row.totalPaise / 100 | currency:'INR' }}</span><span>{{ row.paidPaise / 100 | currency:'INR' }}</span><strong>{{ row.balancePaise / 100 | currency:'INR' }}</strong><span>{{ row.ageingDays }} days</span><span>{{ row.followUpRequired ? 'Required' : '—' }}</span></div>
+    <p *ngIf="!rows.length">No records yet</p>
+  </section>
+
+  <section class="report-table" *ngIf="!loading && activeTab === 'service-trends'">
+    <div class="table-scroll"><table><thead><tr><th>Service</th><th>Group</th><th>Staff</th><th>Qty</th><th>Net sale</th><th>Discount</th><th>GST</th><th>Product cost / COGS</th><th>Margin</th><th>Clients</th><th>Repeat clients</th><th>Invoices</th><th>Peak hour</th><th>Last sold</th></tr></thead><tbody><tr *ngFor="let row of trendRows"><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.serviceGroup || '—' }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.quantitySold }}</td><td>{{ row.netSalePaise / 100 | currency:'INR' }}</td><td>{{ row.discountPaise / 100 | currency:'INR' }}</td><td>{{ row.gstPaise / 100 | currency:'INR' }}</td><td>{{ row.productCostPaise ? (row.productCostPaise / 100 | currency:'INR') : 'Cost missing' }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ row.clientCount }}</td><td>{{ row.repeatClientCount }}</td><td>{{ row.invoiceCount }}</td><td>{{ row.peakSellingHour || '—' }}</td><td>{{ formatDate(row.lastSoldAt) }}</td></tr></tbody></table></div><p *ngIf="!trendRows.length">No records yet</p>
+  </section>
+
+  <section class="report-table" *ngIf="!loading && activeTab === 'service-clients'">
+    <div class="table-scroll"><table><thead><tr><th>Date</th><th>Service</th><th>Group</th><th>Client</th><th>Phone</th><th>Price</th><th>Sale type</th><th>Staff</th><th>Invoice</th></tr></thead><tbody><tr *ngFor="let row of clientRows"><td>{{ formatDate(row.businessDate) }}</td><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.serviceGroup || '—' }}</td><td>{{ row.clientName }}</td><td>{{ row.clientPhone || '—' }}</td><td>{{ row.servicePricePaise / 100 | currency:'INR' }}</td><td>{{ row.saleType }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.invoiceNumber }}</td></tr></tbody></table></div><p *ngIf="!clientRows.length">No records yet</p>
+  </section>
+</section>

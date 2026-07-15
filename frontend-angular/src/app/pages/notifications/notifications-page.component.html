@@ -1,4 +1,57 @@
-<section class="empty-page">
-  <h3>Notifications</h3>
-  <p>No records yet</p>
+<section class="inbox-page">
+  <header class="page-header">
+    <div class="title-switch"><h1>Message Inbox</h1><nav><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Clients</button><button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button></nav></div>
+    <div class="provider-state">
+      <span [class.ready]="providerReady('whatsapp')">WhatsApp</span>
+      <span [class.ready]="providerReady('sms')">SMS</span>
+      <button type="button" (click)="reload()" [disabled]="loading">Refresh</button>
+    </div>
+  </header>
+  <p class="alert" *ngIf="error">{{ error }}</p>
+
+  <div class="inbox-shell" *ngIf="mode === 'client'; else teamChat">
+    <aside class="thread-list">
+      <button type="button" *ngFor="let thread of threads" [class.active]="thread.clientId === selectedClientId" (click)="selectThread(thread)">
+        <span><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }} · {{ formatDateTime(thread.occurredAt) }}</small></span>
+        <small>{{ thread.body || thread.subject }}</small>
+      </button>
+      <div class="empty" *ngIf="loading">Loading messages…</div>
+      <div class="empty" *ngIf="!loading && !threads.length">No messages yet</div>
+    </aside>
+
+    <section class="conversation">
+      <header *ngIf="selectedThread as thread"><div><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }}</small></div></header>
+      <div class="message-list" *ngIf="selectedClientId; else noConversation">
+        <article *ngFor="let message of selectedMessages" [class.outbound]="message.direction === 'outbound'">
+          <p>{{ message.body || message.subject }}</p>
+          <small>{{ message.status }} · {{ formatDateTime(message.occurredAt) }}</small>
+        </article>
+      </div>
+      <ng-template #noConversation><div class="empty conversation-empty">Select a conversation</div></ng-template>
+      <footer *ngIf="selectedClientId">
+        <select [(ngModel)]="channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select>
+        <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a reply"></textarea>
+        <button class="primary" type="button" (click)="sendReply()" [disabled]="busy || !reply.trim() || !providerReady(channel)">{{ busy ? 'Queuing…' : 'Send' }}</button>
+      </footer>
+    </section>
+  </div>
+
+  <ng-template #teamChat>
+    <section class="team-chat-shell">
+      <header><div><strong>Branch team</strong><small>Internal messages</small></div></header>
+      <div class="message-list team-message-list">
+        <article *ngFor="let message of teamMessages" [class.outbound]="isOwnMessage(message)">
+          <strong>{{ message.senderName }}</strong>
+          <p>{{ message.body }}</p>
+          <small>{{ formatDateTime(message.createdAt) }}</small>
+        </article>
+        <div class="empty" *ngIf="loading">Loading messages…</div>
+        <div class="empty" *ngIf="!loading && !teamMessages.length">No team messages yet</div>
+      </div>
+      <footer>
+        <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a team message"></textarea>
+        <button class="primary" type="button" (click)="sendTeamMessage()" [disabled]="busy || !reply.trim()">{{ busy ? 'Sending…' : 'Send' }}</button>
+      </footer>
+    </section>
+  </ng-template>
 </section>

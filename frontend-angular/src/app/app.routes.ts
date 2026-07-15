@@ -1,28 +1,5 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router, Routes } from '@angular/router';
-import { DashboardComponent } from './pages/dashboard/dashboard.component';
-import { ClientsPageComponent } from './pages/clients/clients-page.component';
-import { StaffPageComponent } from './pages/staff/staff-page.component';
-import { ServicesPageComponent } from './pages/services/services-page.component';
-import { AppointmentsPageComponent } from './pages/appointments/appointments-page.component';
-import { AppointmentActivitiesPageComponent } from './pages/appointments/activities/appointment-activities-page.component';
-import { AvailabilityPageComponent } from './pages/availability/availability-page.component';
-import { PosPageComponent } from './pages/pos/pos-page.component';
-import { PosSalesPageComponent } from './pages/pos/sales/pos-sales-page.component';
-import { PosPaymentModesPageComponent } from './pages/pos/payment-modes/pos-payment-modes-page.component';
-import { PosInvoicesPageComponent } from './pages/pos/invoices/pos-invoices-page.component';
-import { PosHoldsPageComponent } from './pages/pos/holds/pos-holds-page.component';
-import { PosTipsPageComponent } from './pages/pos/tips/pos-tips-page.component';
-import { InvoiceReportsPageComponent } from './pages/reports/invoices/invoice-reports-page.component';
-import { AppointmentReportsPageComponent } from './pages/reports/appointments/appointment-reports-page.component';
-import { StaffBookingsReportPageComponent } from './pages/reports/staff-bookings/staff-bookings-report-page.component';
-import { InventoryPageComponent } from './pages/inventory/inventory-page.component';
-import { MembershipsPageComponent } from './pages/memberships/memberships-page.component';
-import { PackagesPageComponent } from './pages/packages/packages-page.component';
-import { ReportsPageComponent } from './pages/reports/reports-page.component';
-import { NotificationsPageComponent } from './pages/notifications/notifications-page.component';
-import { SettingsPageComponent } from './pages/settings/settings-page.component';
-import { InvoiceSettingsPageComponent } from './pages/settings/invoice/invoice-settings-page.component';
 import { authGuard } from './core/guards/auth.guard';
 
 const packageReportRedirect = (tab: string): CanActivateFn => () =>
@@ -30,30 +7,68 @@ const packageReportRedirect = (tab: string): CanActivateFn => () =>
 
 export const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-  { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
-  { path: 'clients', component: ClientsPageComponent, canActivate: [authGuard] },
-  { path: 'staff', component: StaffPageComponent, canActivate: [authGuard] },
-  { path: 'staff/:id', component: StaffPageComponent, canActivate: [authGuard] },
-  { path: 'services', component: ServicesPageComponent, canActivate: [authGuard] },
-  { path: 'appointments', component: AppointmentsPageComponent, canActivate: [authGuard] },
-  { path: 'appointments/activities', component: AppointmentActivitiesPageComponent, canActivate: [authGuard] },
-  { path: 'availability', component: AvailabilityPageComponent, canActivate: [authGuard] },
-  { path: 'pos', component: PosPageComponent, canActivate: [authGuard] },
-  { path: 'pos/sales', component: PosSalesPageComponent, canActivate: [authGuard] },
-  { path: 'pos/payment-modes', component: PosPaymentModesPageComponent, canActivate: [authGuard] },
-  { path: 'pos/invoices', component: PosInvoicesPageComponent, canActivate: [authGuard] },
-  { path: 'pos/holds', component: PosHoldsPageComponent, canActivate: [authGuard] },
-  { path: 'pos/tips', component: PosTipsPageComponent, canActivate: [authGuard] },
-  { path: 'inventory', component: InventoryPageComponent, canActivate: [authGuard] },
-  { path: 'memberships', component: MembershipsPageComponent, canActivate: [authGuard] },
-  { path: 'packages', component: PackagesPageComponent, canActivate: [authGuard] },
+  { path: 'login', loadComponent: () => import('./pages/security/login/login-page.component').then((m) => m.LoginPageComponent) },
+  { path: 'book/:tenantSlug', loadComponent: () => import('./pages/booking/public-booking-page.component').then((m) => m.PublicBookingPageComponent) },
+  { path: 'dashboard', loadComponent: () => import('./pages/dashboard/dashboard.component').then((m) => m.DashboardComponent), canActivate: [authGuard] },
+  {
+    path: 'command-center',
+    loadComponent: () => import('./pages/dashboard/command-center/command-center-page.component').then((m) => m.CommandCenterPageComponent),
+    canActivate: [authGuard],
+    data: { roles: ['owner', 'admin', 'superadmin', 'super-admin'], deniedRedirect: '/dashboard' },
+  },
+  { path: 'clients', loadComponent: () => import('./pages/clients/clients-page.component').then((m) => m.ClientsPageComponent), canActivate: [authGuard] },
+  { path: 'clients/:clientId', loadComponent: () => import('./pages/clients/clients-page.component').then((m) => m.ClientsPageComponent), canActivate: [authGuard] },
+  { path: 'staff', loadComponent: () => import('./pages/staff/staff-page.component').then((m) => m.StaffPageComponent), canActivate: [authGuard] },
+  { path: 'staff/attendance-summary', loadComponent: () => import('./pages/staff/attendance-summary/staff-attendance-summary-page.component').then((m) => m.StaffAttendanceSummaryPageComponent), canActivate: [authGuard] },
+  { path: 'staff/leave-management', loadComponent: () => import('./pages/staff/leave-management/staff-leave-management-page.component').then((m) => m.StaffLeaveManagementPageComponent), canActivate: [authGuard] },
+    { path: 'staff/payroll', loadComponent: () => import('./pages/staff/payroll/staff-payroll-page.component').then((m) => m.StaffPayrollPageComponent), canActivate: [authGuard] },
+    { path: 'staff/control-center', loadComponent: () => import('./pages/staff/control-center/staff-control-center-page.component').then((m) => m.StaffControlCenterPageComponent), canActivate: [authGuard] },
+    { path: 'staff-os', loadChildren: () => import('./features/staff-os/staff-os.routes').then((m) => m.STAFF_OS_ROUTES), canActivate: [authGuard] },
+    { path: 'staff/:id', loadComponent: () => import('./pages/staff/staff-page.component').then((m) => m.StaffPageComponent), canActivate: [authGuard] },
+  { path: 'services', loadComponent: () => import('./pages/services/services-page.component').then((m) => m.ServicesPageComponent), canActivate: [authGuard] },
+  { path: 'appointments', loadComponent: () => import('./pages/appointments/appointments-page.component').then((m) => m.AppointmentsPageComponent), canActivate: [authGuard] },
+  { path: 'appointments/activities', loadComponent: () => import('./pages/appointments/activities/appointment-activities-page.component').then((m) => m.AppointmentActivitiesPageComponent), canActivate: [authGuard] },
+  { path: 'availability', loadComponent: () => import('./pages/availability/availability-page.component').then((m) => m.AvailabilityPageComponent), canActivate: [authGuard] },
+  { path: 'pos', loadComponent: () => import('./pages/pos/pos-page.component').then((m) => m.PosPageComponent), canActivate: [authGuard] },
+  { path: 'pos/sales', loadComponent: () => import('./pages/pos/sales/pos-sales-page.component').then((m) => m.PosSalesPageComponent), canActivate: [authGuard] },
+  { path: 'pos/payment-modes', loadComponent: () => import('./pages/pos/payment-modes/pos-payment-modes-page.component').then((m) => m.PosPaymentModesPageComponent), canActivate: [authGuard] },
+  { path: 'pos/invoices', loadComponent: () => import('./pages/pos/invoices/pos-invoices-page.component').then((m) => m.PosInvoicesPageComponent), canActivate: [authGuard] },
+  { path: 'pos/holds', loadComponent: () => import('./pages/pos/holds/pos-holds-page.component').then((m) => m.PosHoldsPageComponent), canActivate: [authGuard] },
+  { path: 'pos/tips', loadComponent: () => import('./pages/pos/tips/pos-tips-page.component').then((m) => m.PosTipsPageComponent), canActivate: [authGuard] },
+  { path: 'pos/cash-drawer', loadComponent: () => import('./pages/pos/cash-drawer/pos-cash-drawer-page.component').then((m) => m.PosCashDrawerPageComponent), canActivate: [authGuard] },
+  { path: 'pos/happy-hours', loadComponent: () => import('./pages/pos/happy-hours/happy-hours-page.component').then((m) => m.HappyHoursPageComponent), canActivate: [authGuard] },
+  { path: 'pos/enterprise', loadComponent: () => import('./pages/pos/enterprise/pos-enterprise-page.component').then((m) => m.PosEnterprisePageComponent), canActivate: [authGuard] },
+  { path: 'cash-drawer-approval/:token', loadComponent: () => import('./pages/pos/cash-drawer-approval/cash-drawer-approval-page.component').then((m) => m.CashDrawerApprovalPageComponent) },
+  { path: 'inventory/gl-reconciliation', loadComponent: () => import('./pages/inventory/gl-reconciliation/gl-reconciliation-page.component').then((m) => m.GlReconciliationPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/advanced-controls', loadComponent: () => import('./pages/inventory/advanced-controls/advanced-controls-page.component').then((m) => m.AdvancedControlsPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/recipes', loadComponent: () => import('./pages/inventory/service-recipes/service-recipes-page.component').then((m) => m.ServiceRecipesPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/backbar', loadComponent: () => import('./pages/inventory/backbar-consumption/backbar-consumption-page.component').then((m) => m.BackbarConsumptionPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/scanner', loadComponent: () => import('./pages/inventory/scanner/inventory-scanner-page.component').then((m) => m.InventoryScannerPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/laundry', loadComponent: () => import('./pages/inventory/laundry-tracker/laundry-tracker-page.component').then((m) => m.LaundryTrackerPageComponent), canActivate: [authGuard] },
+  { path: 'inventory', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), canActivate: [authGuard] },
+  { path: 'suppliers', loadComponent: () => import('./pages/suppliers/suppliers-page.component').then((m) => m.SuppliersPageComponent), canActivate: [authGuard] },
+  { path: 'purchase-orders', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'orders' }, canActivate: [authGuard] },
+  { path: 'purchase-bill-entry', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'grn', inventoryDrawer: 'grn', inventoryTitle: 'Purchase Bill Entry' }, canActivate: [authGuard] },
+  { path: 'purchase-bill-register', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'grn', inventoryTitle: 'Purchase Bill Register' }, canActivate: [authGuard] },
+  { path: 'purchase-payables', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'payables', inventoryTitle: 'Supplier Payables' }, canActivate: [authGuard] },
+  { path: 'finance/outgoing-funds', loadComponent: () => import('./pages/finance/outgoing-funds/outgoing-funds-page.component').then((m) => m.OutgoingFundsPageComponent), canActivate: [authGuard], data: { roles: ['owner', 'admin', 'manager', 'analyst', 'accountant'], permissions: ['finance.read', 'reports.read', 'tenant.read'], deniedRedirect: '/dashboard' } },
+  { path: 'finance/fixed-assets', loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent), canActivate: [authGuard], data: { financeTab: 'fixedAssets', roles: ['owner', 'admin', 'manager', 'analyst', 'accountant'], permissions: ['finance.read', 'reports.read', 'tenant.read'], deniedRedirect: '/dashboard' } },
+  { path: 'transactions/outgoing-funds', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
+  { path: 'transactions/saved-vouchers', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
+  { path: 'transactions/outgoing-funds-report', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
+  { path: 'expenses', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
+  { path: 'finance/expenses', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
+  { path: 'transactions/expenses', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
+  { path: 'memberships', loadComponent: () => import('./pages/memberships/memberships-page.component').then((m) => m.MembershipsPageComponent), canActivate: [authGuard] },
+  { path: 'membership-status/:token', loadComponent: () => import('./pages/memberships/status/membership-status-page.component').then((m) => m.MembershipStatusPageComponent) },
+  { path: 'packages', loadComponent: () => import('./pages/packages/packages-page.component').then((m) => m.PackagesPageComponent), canActivate: [authGuard] },
   { path: 'reports/pending-packages', canActivate: [packageReportRedirect('pending')], children: [] },
   { path: 'reports/expired-packages', canActivate: [packageReportRedirect('expired')], children: [] },
   { path: 'reports/completed-packages', canActivate: [packageReportRedirect('completed')], children: [] },
-  { path: 'reports', component: ReportsPageComponent, canActivate: [authGuard] },
-  { path: 'appointment-reports', component: AppointmentReportsPageComponent, canActivate: [authGuard] },
-  { path: 'reports/staff-bookings', component: StaffBookingsReportPageComponent, canActivate: [authGuard] },
-  { path: 'reports/invoices', component: InvoiceReportsPageComponent, canActivate: [authGuard] },
+  { path: 'reports', loadComponent: () => import('./pages/reports/reports-page.component').then((m) => m.ReportsPageComponent), canActivate: [authGuard] },
+  { path: 'appointment-reports', loadComponent: () => import('./pages/reports/appointments/appointment-reports-page.component').then((m) => m.AppointmentReportsPageComponent), canActivate: [authGuard] },
+  { path: 'reports/staff-bookings', loadComponent: () => import('./pages/reports/staff-bookings/staff-bookings-report-page.component').then((m) => m.StaffBookingsReportPageComponent), canActivate: [authGuard] },
+  { path: 'reports/invoices', loadComponent: () => import('./pages/reports/invoices/invoice-reports-page.component').then((m) => m.InvoiceReportsPageComponent), canActivate: [authGuard] },
   {
     path: 'finance',
     loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent),
@@ -64,8 +79,14 @@ export const routes: Routes = [
       deniedRedirect: '/dashboard',
     },
   },
-  { path: 'finance/fixed-assets', loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent), canActivate: [authGuard], data: { financeTab: 'fixedAssets' } },
-  { path: 'notifications', component: NotificationsPageComponent, canActivate: [authGuard] },
-  { path: 'settings', component: SettingsPageComponent, canActivate: [authGuard] },
-  { path: 'settings/invoice', component: InvoiceSettingsPageComponent, canActivate: [authGuard] },
+  { path: 'sms-center', loadComponent: () => import('./pages/notifications/notifications-page.component').then((m) => m.NotificationsPageComponent), canActivate: [authGuard] },
+  { path: 'notifications', loadComponent: () => import('./pages/notifications/notifications-page.component').then((m) => m.NotificationsPageComponent), canActivate: [authGuard] },
+  { path: 'marketing/birthdays', loadComponent: () => import('./pages/marketing/birthday-anniversary/birthday-anniversary-page.component').then((m) => m.BirthdayAnniversaryPageComponent), canActivate: [authGuard] },
+  { path: 'marketing', loadComponent: () => import('./pages/marketing/marketing-leads-page.component').then((m) => m.MarketingLeadsPageComponent), canActivate: [authGuard] },
+  { path: 'settings', loadComponent: () => import('./pages/settings/settings-page.component').then((m) => m.SettingsPageComponent), canActivate: [authGuard] },
+  { path: 'settings/invoice', loadComponent: () => import('./pages/settings/invoice/invoice-settings-page.component').then((m) => m.InvoiceSettingsPageComponent), canActivate: [authGuard] },
+  { path: 'settings/integrations-data', loadComponent: () => import('./pages/data-migration/integrations-data-page.component').then((m) => m.IntegrationsDataPageComponent), canActivate: [authGuard] },
+  { path: 'saas', loadComponent: () => import('./pages/platform/saas-admin/saas-admin-page.component').then((m) => m.SaasAdminPageComponent), canActivate: [authGuard], data: { roles: ['owner', 'admin', 'manager'], deniedRedirect: '/dashboard' } },
+  { path: 'platform/saas-admin', loadComponent: () => import('./pages/platform/saas-admin/saas-admin-page.component').then((m) => m.SaasAdminPageComponent), canActivate: [authGuard], data: { roles: ['superadmin', 'super-admin'], deniedRedirect: '/dashboard' } },
+  { path: 'security', loadComponent: () => import('./pages/security/security-center/security-center-page.component').then((m) => m.SecurityCenterPageComponent), canActivate: [authGuard] },
 ];

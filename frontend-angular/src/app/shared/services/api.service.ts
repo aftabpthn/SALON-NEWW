@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export type ApiEnvelope<T> = {
@@ -9,12 +9,19 @@ export type ApiEnvelope<T> = {
   error?: any;
 };
 
+type HealthStatus = { status: string; service: string; environment?: string; env?: string };
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
 
-  health(): Observable<{ status: string; service: string; env: string }> {
-    return this.http.get<{ status: string; service: string; env: string }>(`${environment.apiBaseUrl}/health`);
+  health(): Observable<HealthStatus> {
+    return this.http.get<ApiEnvelope<HealthStatus> | HealthStatus>(`${environment.apiBaseUrl}/health`).pipe(
+      map((response) => {
+        const health = (response as ApiEnvelope<HealthStatus>).data;
+        return health ?? (response as HealthStatus);
+      }),
+    );
   }
 
   get<T>(path: string): Observable<T> {
@@ -29,12 +36,22 @@ export class ApiService {
     return this.http.post<T>(this.url(path), body);
   }
 
+  postWithHeaders<T>(path: string, body: unknown, headers: Record<string, string>): Observable<T> {
+    return this.http.post<T>(this.url(path), body, { headers });
+  }
+
   patch<T>(path: string, body: unknown): Observable<T> {
     return this.http.patch<T>(this.url(path), body);
   }
 
   put<T>(path: string, body: unknown): Observable<T> {
     return this.http.put<T>(this.url(path), body);
+  }
+
+  putBytes<T>(path: string, body: Blob, headers: Record<string, string> = {}): Observable<T> {
+    return this.http.put<T>(this.url(path), body, {
+      headers: { 'Content-Type': body.type || 'application/octet-stream', ...headers },
+    });
   }
 
   delete<T>(path: string): Observable<T> {

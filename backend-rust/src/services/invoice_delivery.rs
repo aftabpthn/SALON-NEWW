@@ -4,7 +4,7 @@ use crate::{config::Settings, models::common::AppError};
 
 pub async fn deliver(settings: &Settings, payload: &Value) -> Result<String, AppError> {
     if payload.get("channel").and_then(Value::as_str) == Some("whatsapp")
-        && settings.whatsapp_cloud_enabled()
+        && (settings.whatsapp_cloud_enabled() || settings.whatsapp_benefit_enabled())
     {
         return deliver_whatsapp_cloud(settings, payload).await;
     }
@@ -63,23 +63,44 @@ async fn deliver_whatsapp_cloud(settings: &Settings, payload: &Value) -> Result<
         .whatsapp_cloud_access_token
         .as_deref()
         .unwrap_or_default();
-    let template_name = settings
-        .whatsapp_invoice_template_name
-        .as_deref()
-        .unwrap_or_default();
+    let template_name = if payload.get("templateKind").and_then(Value::as_str) == Some("benefit") {
+        settings.whatsapp_benefit_template_name.as_deref()
+    } else {
+        settings.whatsapp_invoice_template_name.as_deref()
+    };
+    let template_name = template_name.unwrap_or_default();
     let url = format!("https://graph.facebook.com/v20.0/{phone_number_id}/messages");
+    let request_body =
+        if payload.get("templateKind").and_then(Value::as_str) == Some("conversation") {
+            let body = payload
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim();
+            if body.is_empty() {
+                return Err(AppError::validation("WhatsApp message is required"));
+            }
+            serde_json::json!({
+                "messaging_product": "whatsapp",
+                "to": recipient,
+                "type": "text",
+                "text": { "preview_url": false, "body": body }
+            })
+        } else {
+            serde_json::json!({
+                "messaging_product": "whatsapp",
+                "to": recipient,
+                "type": "template",
+                "template": {
+                    "name": template_name,
+                    "language": { "code": "en_US" }
+                }
+            })
+        };
     let response = reqwest::Client::new()
         .post(url)
         .bearer_auth(access_token)
-        .json(&serde_json::json!({
-            "messaging_product": "whatsapp",
-            "to": recipient,
-            "type": "template",
-            "template": {
-                "name": template_name,
-                "language": { "code": "en_US" }
-            }
-        }))
+        .json(&request_body)
         .send()
         .await
         .map_err(|_| {

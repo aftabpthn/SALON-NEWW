@@ -31,6 +31,7 @@ pub struct InventoryTransferLine {
 pub struct LockedInventoryItem {
     pub stock_quantity: i32,
     pub unit_cost_paise: i64,
+    pub batch_tracked: bool,
 }
 
 const TRANSFER_COLUMNS: &str = "id, source_branch_id, destination_branch_id, status, notes, dispatched_by_user_id, dispatched_at, received_by_user_id, received_at, cancelled_by_user_id, cancelled_at";
@@ -131,7 +132,7 @@ pub async fn lock_inventory_item(
     branch_id: &str,
     item_id: &str,
 ) -> Result<Option<LockedInventoryItem>, sqlx::Error> {
-    sqlx::query_as("SELECT stock_quantity, unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
+    sqlx::query_as("SELECT stock_quantity, unit_cost_paise, batch_tracked FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
         .bind(tenant_id)
         .bind(branch_id)
         .bind(item_id)
@@ -151,6 +152,16 @@ pub async fn active_inventory_item_exists(
         .bind(item_id)
         .fetch_one(&mut **tx)
         .await
+}
+
+pub async fn active_inventory_item_batch_tracked(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    item_id: &str,
+) -> Result<Option<bool>, sqlx::Error> {
+    sqlx::query_scalar("SELECT batch_tracked FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE")
+        .bind(tenant_id).bind(branch_id).bind(item_id).fetch_optional(&mut **tx).await
 }
 
 pub async fn create_transfer(
@@ -222,8 +233,8 @@ pub async fn add_stock_ledger(
     movement_type: &str,
     quantity_delta: i32,
     unit_cost_paise: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, inventory_transfer_id, inventory_transfer_line_id, movement_type, quantity_delta, unit_cost_paise) VALUES ($1,$2,$3,NULL,NULL,$4,$5,$6,$7,$8)")
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, inventory_transfer_id, inventory_transfer_line_id, movement_type, quantity_delta, unit_cost_paise) VALUES ($1,$2,$3,NULL,NULL,$4,$5,$6,$7,$8) RETURNING id")
         .bind(tenant_id)
         .bind(branch_id)
         .bind(inventory_item_id)
@@ -232,9 +243,20 @@ pub async fn add_stock_ledger(
         .bind(movement_type)
         .bind(quantity_delta)
         .bind(unit_cost_paise)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
+        .fetch_one(&mut **tx)
+        .await
+}
+
+pub async fn stock_ledger_id(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    transfer_line_id: &str,
+    movement_type: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND inventory_transfer_line_id=$3 AND movement_type=$4")
+        .bind(tenant_id).bind(branch_id).bind(transfer_line_id).bind(movement_type)
+        .fetch_optional(&mut **tx).await
 }
 
 pub async fn mark_received(

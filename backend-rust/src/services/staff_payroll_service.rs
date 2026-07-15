@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{Datelike, Duration, NaiveDate};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::{
+    config::Settings,
     models::common::AppError,
     repositories::staff_payroll_repository::{
         self as repository, AdjustmentInput, PayrollItemDraft,
@@ -24,6 +25,7 @@ pub struct PayrollPreviewItem {
     pub attendance_days_x2: i32,
     pub paid_leave_days_x2: i32,
     pub weekly_off_days_x2: i32,
+    pub holiday_days_x2: i32,
     pub worked_minutes: i32,
     pub overtime_minutes: i32,
     pub earned_salary_paise: i64,
@@ -76,6 +78,14 @@ pub struct PayrollPayoutInput {
     pub idempotency_key: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffHolidayInput {
+    pub holiday_date: NaiveDate,
+    pub name: String,
+    pub is_paid: Option<bool>,
+}
+
 pub async fn preview(
     db: &PgPool,
     tenant_id: &str,
@@ -93,38 +103,47 @@ pub async fn preview(
         .map(|row| row.staff_id.clone())
         .collect::<Vec<_>>();
 
-    let (rules, catalog, policies, attendance, schedules, commission_snapshots, sale_lines) =
-        tokio::try_join!(
-            repository::commission_rules(db, tenant_id, branch_id, &staff_ids, period_end),
-            repository::catalog_commissions(db, tenant_id, branch_id, &staff_ids),
-            repository::leave_policies(db, tenant_id, branch_id, &staff_ids),
-            repository::attendance_sources(
-                db,
-                tenant_id,
-                branch_id,
-                &staff_ids,
-                period_start,
-                period_end
-            ),
-            repository::schedule_sources(
-                db,
-                tenant_id,
-                branch_id,
-                &staff_ids,
-                period_start,
-                period_end
-            ),
-            repository::commission_snapshots(
-                db,
-                tenant_id,
-                branch_id,
-                &staff_ids,
-                period_start,
-                period_end
-            ),
-            repository::sale_lines(db, tenant_id, branch_id, period_start, period_end),
-        )
-        .map_err(|error| AppError::internal(format!("failed to load payroll sources: {error}")))?;
+    let (
+        rules,
+        catalog,
+        policies,
+        attendance,
+        schedules,
+        commission_snapshots,
+        sale_lines,
+        holidays,
+    ) = tokio::try_join!(
+        repository::commission_rules(db, tenant_id, branch_id, &staff_ids, period_end),
+        repository::catalog_commissions(db, tenant_id, branch_id, &staff_ids),
+        repository::leave_policies(db, tenant_id, branch_id, &staff_ids),
+        repository::attendance_sources(
+            db,
+            tenant_id,
+            branch_id,
+            &staff_ids,
+            period_start,
+            period_end
+        ),
+        repository::schedule_sources(
+            db,
+            tenant_id,
+            branch_id,
+            &staff_ids,
+            period_start,
+            period_end
+        ),
+        repository::commission_snapshots(
+            db,
+            tenant_id,
+            branch_id,
+            &staff_ids,
+            period_start,
+            period_end
+        ),
+        repository::sale_lines(db, tenant_id, branch_id, period_start, period_end),
+        repository::list_holidays(db, tenant_id, branch_id, period_start, period_end),
+    )
+    .map_err(|error| AppError::internal(format!("failed to load payroll sources: {error}")))?;
 
     let mut rules_by_staff: HashMap<String, Vec<(String, i32)>> = HashMap::new();
     for rule in rules {
@@ -205,6 +224,11 @@ pub async fn preview(
     }
 
     let days_in_month = i64::from(period_end.day());
+    let paid_holidays = holidays
+        .into_iter()
+        .filter(|row| row.is_paid)
+        .map(|row| row.holiday_date)
+        .collect::<HashSet<_>>();
     let items = staff
         .into_iter()
         .map(|staff_row| {
@@ -245,16 +269,30 @@ pub async fn preview(
             let mut paid_leave_days_x2 = 0;
             let mut weekly_off_days_x2 = 0;
             let mut scheduled_minutes = 0_i64;
+            let mut compensated_schedule_dates = HashSet::new();
             for schedule in schedule_rows {
                 scheduled_minutes += schedule.scheduled_minutes.max(0);
                 if schedule.status == "weekly_off" {
                     weekly_off_days_x2 += 2;
+                    compensated_schedule_dates.insert(schedule.schedule_date);
                 } else if let Some(leave_type) = schedule_leave_type(&schedule.status) {
                     if policy_set.contains(&(staff_row.staff_id.clone(), leave_type.to_string())) {
                         paid_leave_days_x2 += 2;
+                        compensated_schedule_dates.insert(schedule.schedule_date);
                     }
                 }
             }
+            let attended_dates = attendance_rows
+                .iter()
+                .filter(|row| matches!(row.status.as_str(), "clocked_out" | "present" | "half_day"))
+                .map(|row| row.business_date)
+                .collect::<HashSet<_>>();
+            let holiday_days_x2 = paid_holiday_days_x2(
+                &paid_holidays,
+                &attended_dates,
+                &compensated_schedule_dates,
+                staff_row.joining_date,
+            );
 
             let mut validation_errors = Vec::new();
             let mut validation_warnings = Vec::new();
@@ -287,7 +325,7 @@ pub async fn preview(
                 0
             };
             let payable_days_x2 = i64::from(
-                (attendance_days_x2 + paid_leave_days_x2 + paid_weekly_off_x2)
+                (attendance_days_x2 + paid_leave_days_x2 + paid_weekly_off_x2 + holiday_days_x2)
                     .min((days_in_month * 2) as i32),
             );
             let earned_salary_paise = match staff_row.pay_rate_type.as_deref() {
@@ -320,6 +358,7 @@ pub async fn preview(
                     "scheduleRecordCount": schedule_rows.len(),
                     "scheduledMinutes": scheduled_minutes,
                     "payableDaysX2": payable_days_x2,
+                    "holidayDaysX2": holiday_days_x2,
                 }),
                 staff_id: staff_row.staff_id,
                 staff_name: staff_row.staff_name,
@@ -329,6 +368,7 @@ pub async fn preview(
                 attendance_days_x2,
                 paid_leave_days_x2,
                 weekly_off_days_x2,
+                holiday_days_x2,
                 worked_minutes,
                 overtime_minutes,
                 earned_salary_paise,
@@ -441,6 +481,50 @@ pub async fn detail(
     Ok(PayrollRunDetail { run, items, events })
 }
 
+pub async fn payslip_pdf(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<Vec<u8>, AppError> {
+    let detail = detail(db, tenant_id, branch_id, run_id).await?;
+    if !matches!(detail.run.status.as_str(), "finalized" | "paid") {
+        return Err(AppError::conflict(
+            "payslips are available after payroll finalization",
+        ));
+    }
+    let item = detail
+        .items
+        .iter()
+        .find(|item| item.staff_id == staff_id)
+        .ok_or_else(|| AppError::not_found("payroll employee not found"))?;
+    Ok(crate::services::invoice_pdf::render_text_report(
+        "STAFF PAYSLIP",
+        &[
+            format!("Employee: {}", item.staff_name),
+            format!(
+                "Employee code: {}",
+                item.employee_code.as_deref().unwrap_or("-")
+            ),
+            format!(
+                "Period: {} to {}",
+                detail.run.period_start, detail.run.period_end
+            ),
+            format!("Status: {}", detail.run.status),
+            format!(
+                "Earned salary: INR {}",
+                paise_text(item.earned_salary_paise)
+            ),
+            format!("Overtime: INR {}", paise_text(item.overtime_paise)),
+            format!("Commission: INR {}", paise_text(item.commission_paise)),
+            format!("Adjustment: INR {}", paise_text(item.adjustment_paise)),
+            format!("Deductions: INR {}", paise_text(item.deductions_paise)),
+            format!("Net pay: INR {}", paise_text(item.net_paise)),
+        ],
+    ))
+}
+
 pub async fn save_adjustments(
     db: &PgPool,
     tenant_id: &str,
@@ -547,6 +631,7 @@ pub async fn mark_paid(
 }
 
 pub async fn record_payout(
+    settings: &Settings,
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
@@ -554,7 +639,14 @@ pub async fn record_payout(
     actor_user_id: &str,
     input: PayrollPayoutInput,
 ) -> Result<PayrollRunDetail, AppError> {
-    let (method, reference, key) = validate_payout(input)?;
+    let (method, mut reference, key) = validate_payout(input)?;
+    if method == "bank" {
+        let current = detail(db, tenant_id, branch_id, run_id).await?;
+        if current.run.status == "finalized" {
+            reference =
+                submit_bank_payout(settings, tenant_id, branch_id, run_id, &key, &current).await?;
+        }
+    }
     let reference = reference.as_str();
     let key = key.as_str();
 
@@ -641,9 +733,9 @@ fn validate_payout(input: PayrollPayoutInput) -> Result<(String, String, String)
     if !matches!(method.as_str(), "cash" | "bank" | "upi" | "other") {
         return Err(AppError::validation("paymentMethod is invalid"));
     }
-    if method != "cash" && reference.is_empty() {
+    if matches!(method.as_str(), "upi" | "other") && reference.is_empty() {
         return Err(AppError::validation(
-            "reference is required for non-cash payout",
+            "reference is required for UPI or other payout",
         ));
     }
     if reference.chars().count() > 160 || key.is_empty() || key.chars().count() > 160 {
@@ -652,6 +744,164 @@ fn validate_payout(input: PayrollPayoutInput) -> Result<(String, String, String)
         ));
     }
     Ok((method, reference, key))
+}
+
+async fn submit_bank_payout(
+    settings: &Settings,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    idempotency_key: &str,
+    detail: &PayrollRunDetail,
+) -> Result<String, AppError> {
+    if !settings.payroll_payout_provider_enabled() {
+        return Err(AppError::service_unavailable(
+            "PAYROLL_PAYOUT_PROVIDER_NOT_CONFIGURED",
+            "bank payout provider is not configured",
+        ));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|_| AppError::internal("failed to initialize payroll payout provider"))?;
+    let response = client
+        .post(
+            settings
+                .payroll_payout_provider_url
+                .as_deref()
+                .unwrap_or(""),
+        )
+        .bearer_auth(
+            settings
+                .payroll_payout_provider_token
+                .as_deref()
+                .unwrap_or(""),
+        )
+        .header("idempotency-key", idempotency_key)
+        .json(&json!({
+            "event":"payroll.payout.requested",
+            "tenantId":tenant_id,
+            "branchId":branch_id,
+            "payrollRunId":run_id,
+            "periodStart":detail.run.period_start,
+            "periodEnd":detail.run.period_end,
+            "currency":"INR",
+            "idempotencyKey":idempotency_key,
+            "items":detail.items.iter().map(|item| json!({
+                "staffId":item.staff_id,
+                "employeeCode":item.employee_code,
+                "staffName":item.staff_name,
+                "amountPaise":item.net_paise,
+            })).collect::<Vec<_>>()
+        }))
+        .send()
+        .await
+        .map_err(|_| {
+            AppError::service_unavailable(
+                "PAYROLL_PAYOUT_PROVIDER_UNAVAILABLE",
+                "bank payout provider is unavailable",
+            )
+        })?;
+    if !response.status().is_success() {
+        return Err(AppError::service_unavailable(
+            "PAYROLL_PAYOUT_PROVIDER_REJECTED",
+            "bank payout provider rejected the payroll",
+        ));
+    }
+    let body = response.json::<Value>().await.map_err(|_| {
+        AppError::service_unavailable(
+            "PAYROLL_PAYOUT_PROVIDER_INVALID_RESPONSE",
+            "bank payout provider returned an invalid response",
+        )
+    })?;
+    settled_provider_reference(&body).ok_or_else(|| {
+        AppError::service_unavailable(
+            "PAYROLL_PAYOUT_NOT_SETTLED",
+            "bank payout provider did not confirm settlement",
+        )
+    })
+}
+
+fn settled_provider_reference(body: &Value) -> Option<String> {
+    let status = body.get("status")?.as_str()?.trim().to_ascii_lowercase();
+    if !matches!(
+        status.as_str(),
+        "paid" | "processed" | "settled" | "success" | "completed"
+    ) {
+        return None;
+    }
+    body.get("providerReference")
+        .or_else(|| body.get("reference"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.chars().count() <= 160)
+        .map(str::to_string)
+}
+
+fn paid_holiday_days_x2(
+    holidays: &HashSet<NaiveDate>,
+    attended_dates: &HashSet<NaiveDate>,
+    compensated_schedule_dates: &HashSet<NaiveDate>,
+    joining_date: Option<NaiveDate>,
+) -> i32 {
+    (holidays
+        .iter()
+        .filter(|date| joining_date.is_none_or(|joined| **date >= joined))
+        .filter(|date| !attended_dates.contains(date) && !compensated_schedule_dates.contains(date))
+        .count() as i32)
+        * 2
+}
+
+pub async fn list_holidays(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<repository::StaffHolidayRecord>, AppError> {
+    if from > to || (to - from).num_days() > 400 {
+        return Err(AppError::validation("holiday date range is invalid"));
+    }
+    repository::list_holidays(db, tenant_id, branch_id, from, to)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff holidays"))
+}
+
+pub async fn save_holiday(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    input: StaffHolidayInput,
+) -> Result<repository::StaffHolidayRecord, AppError> {
+    let name = input.name.trim();
+    if name.is_empty() || name.chars().count() > 120 {
+        return Err(AppError::validation("holiday name is invalid"));
+    }
+    repository::upsert_holiday(
+        db,
+        tenant_id,
+        branch_id,
+        input.holiday_date,
+        name,
+        input.is_paid.unwrap_or(true),
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save staff holiday"))
+}
+
+pub async fn delete_holiday(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<(), AppError> {
+    repository::deactivate_holiday(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to delete staff holiday"))?
+        .then_some(())
+        .ok_or_else(|| AppError::not_found("staff holiday not found"))
 }
 
 async fn transition(
@@ -694,6 +944,7 @@ fn preview_item_to_draft(item: PayrollPreviewItem) -> PayrollItemDraft {
         attendance_days_x2: item.attendance_days_x2,
         paid_leave_days_x2: item.paid_leave_days_x2,
         weekly_off_days_x2: item.weekly_off_days_x2,
+        holiday_days_x2: item.holiday_days_x2,
         worked_minutes: item.worked_minutes,
         overtime_minutes: item.overtime_minutes,
         earned_salary_paise: item.earned_salary_paise,
@@ -769,11 +1020,19 @@ fn multiply_divide(amount: i64, numerator: i64, denominator: i64) -> i64 {
     value.min(i128::from(i64::MAX)) as i64
 }
 
+pub(crate) fn paise_text(value: i64) -> String {
+    format!("{}.{:02}", value / 100, value.unsigned_abs() % 100)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{line_attributions, multiply_divide, period, validate_payout, PayrollPayoutInput};
+    use super::{
+        line_attributions, multiply_divide, paid_holiday_days_x2, period,
+        settled_provider_reference, validate_payout, PayrollPayoutInput,
+    };
     use chrono::Datelike;
     use serde_json::json;
+    use std::collections::HashSet;
 
     #[test]
     fn commission_split_uses_integer_paise_rounding() {
@@ -795,6 +1054,21 @@ mod tests {
             reference: String::new(),
             idempotency_key: "retry-2".into()
         })
-        .is_err());
+        .is_ok());
+        let holiday = chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap();
+        assert_eq!(
+            paid_holiday_days_x2(
+                &HashSet::from([holiday]),
+                &HashSet::new(),
+                &HashSet::new(),
+                None,
+            ),
+            2
+        );
+        assert_eq!(
+            settled_provider_reference(&json!({"status":"settled","providerReference":"UTR-1"}))
+                .as_deref(),
+            Some("UTR-1")
+        );
     }
 }

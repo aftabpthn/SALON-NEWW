@@ -1,5 +1,5 @@
-<section class="reports-page">
-  <aside class="reports-nav" aria-label="Report views">
+<section class="reports-page" [class.profit-mode]="profitOpen || customOpen">
+  <aside class="reports-nav" aria-label="Report views" *ngIf="!profitOpen && !customOpen">
     <h1>Reports</h1>
     <button type="button" [class.active]="activeView === 'all' && !activeCategory" (click)="activeView = 'all'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5" /></svg>All Reports</button>
     <button type="button" [class.active]="activeView === 'favourites'" (click)="activeView = 'favourites'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg>Favourite Reports</button>
@@ -9,22 +9,140 @@
   </aside>
 
   <main class="reports-catalog">
-    <header><h2>{{ activeCategory || (activeView === 'all' ? 'All Reports' : 'Favourite Reports') }}</h2><span>{{ reports.length }} reports</span></header>
-    <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg><input type="search" [(ngModel)]="search" placeholder="Search reports" aria-label="Search reports" /></label>
-    <p class="state" *ngIf="loading">Loading reports...</p>
-    <p class="state error" *ngIf="error">{{ error }}</p>
-    <p class="state" *ngIf="!loading && !error && !categories.length">No reports yet</p>
+    <ng-container *ngIf="!profitOpen && !customOpen; else reportWorkspace">
+      <header><h2>{{ activeCategory || (activeView === 'all' ? 'All Reports' : 'Favourite Reports') }}</h2><div class="catalog-actions"><span>{{ reports.length }} reports</span><button type="button" class="primary-button" (click)="openCustomWorkspace()">Custom BI</button></div></header>
+      <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg><input type="search" [(ngModel)]="search" placeholder="Search reports" aria-label="Search reports" /></label>
+      <p class="state" *ngIf="loading">Loading reports...</p>
+      <p class="state error" *ngIf="error">{{ error }}</p>
+      <p class="state" *ngIf="!loading && !error && !categories.length">No reports yet</p>
 
-    <section class="report-category" *ngFor="let category of categories">
-      <button class="category-header" type="button" (click)="toggleCategory(category.name)" [attr.aria-expanded]="!isCollapsed(category.name)">
-        <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true" [class.collapsed]="isCollapsed(category.name)"><path d="m7 9 5 5 5-5" /></svg><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category.name)" /></svg>{{ category.name }}<small>{{ category.reports.length }}</small>
-      </button>
-      <div class="report-grid" *ngIf="!isCollapsed(category.name)">
-        <article class="report-card" *ngFor="let report of category.reports" [class.openable]="report.id === 'appointments'" (click)="openReport(report)">
-          <div><div class="report-heading"><span class="report-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="reportIcon(report.icon)" /></svg></span><h3>{{ report.title }}</h3></div><p>{{ report.description }}</p></div>
-          <button class="favourite" type="button" (click)="$event.stopPropagation(); toggleFavourite(report.id)" [attr.aria-label]="isFavourite(report.id) ? 'Remove from favourites' : 'Add to favourites'" [class.saved]="isFavourite(report.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg></button>
-        </article>
-      </div>
-    </section>
+      <section class="report-category" *ngFor="let category of categories">
+        <button class="category-header" type="button" (click)="toggleCategory(category.name)" [attr.aria-expanded]="!isCollapsed(category.name)">
+          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true" [class.collapsed]="isCollapsed(category.name)"><path d="m7 9 5 5 5-5" /></svg><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category.name)" /></svg>{{ category.name }}<small>{{ category.reports.length }}</small>
+        </button>
+        <div class="report-grid" *ngIf="!isCollapsed(category.name)">
+          <article class="report-card" *ngFor="let report of category.reports" [class.openable]="report.id === 'profit-intelligence' || report.id === 'outgoing-funds' || report.id === 'invoice-activity' || report.id === 'due-recovery' || report.id === 'service-trends' || report.id === 'service-clients' || report.id === 'appointments' || report.id === 'staff-performance' || report.id === 'cash-drawer-eod'" (click)="openReport(report)">
+            <div><div class="report-heading"><span class="report-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="reportIcon(report.icon)" /></svg></span><h3>{{ report.title }}</h3></div><p>{{ report.description }}</p></div>
+            <button class="favourite" type="button" (click)="$event.stopPropagation(); toggleFavourite(report.id)" [attr.aria-label]="isFavourite(report.id) ? 'Remove from favourites' : 'Add to favourites'" [class.saved]="isFavourite(report.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg></button>
+          </article>
+        </div>
+      </section>
+    </ng-container>
   </main>
 </section>
+
+<ng-template #reportWorkspace>
+  <ng-container *ngIf="customOpen; else profitWorkspace">
+    <section class="custom-workspace">
+      <header class="profit-command">
+        <div class="profit-title"><button type="button" class="back-button" (click)="closeCustomWorkspace()">Back</button><div><span>REPORTS</span><h1>Custom BI</h1></div></div>
+        <div class="custom-actions"><button type="button" (click)="previewCustomReport()" [disabled]="customBusy">{{ customBusy ? 'Running...' : 'Run Report' }}</button><button type="button" class="primary-button" *ngIf="canManageProfit" (click)="saveCustomReport()" [disabled]="customBusy || !customDraft.name.trim()">Save Report</button></div>
+      </header>
+
+      <p class="inline-error" *ngIf="customError">{{ customError }}</p>
+      <section class="custom-builder">
+        <label>Report name<input [ngModel]="customDraft.name" (ngModelChange)="customDraft.name = titleCase($event)" maxlength="120" /></label>
+        <label>Dataset<select [(ngModel)]="customDraft.definition.dataset" (change)="customDatasetChanged()"><option *ngFor="let dataset of customOptions.datasets" [value]="dataset.id">{{ dataset.label }}</option></select></label>
+        <label>Rows<select [(ngModel)]="customDraft.definition.rowDimension" (change)="customRowChanged()"><option *ngFor="let dimension of customDataset?.dimensions" [value]="dimension">{{ customLabel(dimension) }}</option></select></label>
+        <label>Columns<select [(ngModel)]="customDraft.definition.columnDimension"><option value="none">None</option><option *ngFor="let dimension of customDataset?.dimensions" [value]="dimension" [disabled]="dimension === customDraft.definition.rowDimension">{{ customLabel(dimension) }}</option></select></label>
+        <label>Metric<select [(ngModel)]="customDraft.definition.metric"><option *ngFor="let metric of customDataset?.metrics" [value]="metric">{{ customLabel(metric) }}</option></select></label>
+        <label>Date range<select [(ngModel)]="customDraft.definition.dateRange"><option *ngFor="let range of customOptions.dateRanges" [value]="range">{{ customLabel(range) }}</option></select></label>
+        <label *ngIf="customDraft.definition.dateRange === 'custom'">From<as-date-picker [value]="customDraft.definition.fromDate ?? ''" (valueChange)="customDraft.definition.fromDate = $event" ariaLabel="Custom report from date" /></label>
+        <label *ngIf="customDraft.definition.dateRange === 'custom'">To<as-date-picker [value]="customDraft.definition.toDate ?? ''" (valueChange)="customDraft.definition.toDate = $event" ariaLabel="Custom report to date" /></label>
+        <label>Status<input [(ngModel)]="customDraft.definition.status" maxlength="40" /></label>
+        <label>Schedule<select [(ngModel)]="customDraft.scheduleFrequency"><option *ngFor="let schedule of customOptions.schedules" [value]="schedule">{{ customLabel(schedule) }}</option></select></label>
+        <label *ngIf="customDraft.scheduleFrequency === 'weekly'">Day<select [(ngModel)]="customDraft.scheduleDay"><option *ngFor="let day of weekdays" [ngValue]="day.value">{{ day.label }}</option></select></label>
+        <label *ngIf="customDraft.scheduleFrequency === 'monthly'">Day<select [(ngModel)]="customDraft.scheduleDay"><option *ngFor="let day of monthDays" [ngValue]="day">{{ day }}</option></select></label>
+        <label *ngIf="customDraft.scheduleFrequency !== 'none'">Time<input type="time" [(ngModel)]="customDraft.scheduleTime" /></label>
+        <label *ngIf="customDraft.scheduleFrequency !== 'none'">Recipient email<input type="email" [(ngModel)]="customDraft.recipientEmail" /></label>
+      </section>
+
+      <section class="custom-grid">
+        <article class="profit-panel pivot-panel">
+          <div class="panel-heading"><div><span>PIVOT</span><h2>{{ pivot ? customLabel(pivot.metric) : 'Preview' }}</h2></div><small *ngIf="pivot">{{ pivot.fromDate }} to {{ pivot.toDate }}</small></div>
+          <div class="table-wrap" *ngIf="pivot?.rows?.length; else noPivot"><table><thead><tr><th>{{ customLabel(customDraft.definition.rowDimension) }}</th><th *ngFor="let column of pivot?.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of pivot?.rows"><td><strong>{{ row }}</strong></td><td *ngFor="let column of pivot?.columns">{{ pivotValue(row, column) }}</td></tr></tbody></table></div>
+          <ng-template #noPivot><div class="compact-empty">No records yet</div></ng-template>
+        </article>
+
+        <article class="profit-panel saved-panel">
+          <div class="panel-heading"><div><span>SAVED</span><h2>Saved Reports</h2></div><small>{{ customReports.length }}</small></div>
+          <div class="saved-list" *ngIf="customReports.length; else noSaved"><button type="button" *ngFor="let report of customReports" (click)="runSavedCustomReport(report)" [disabled]="customBusy"><span><strong>{{ report.name }}</strong><small>{{ customLabel(report.definition.dataset) }} · {{ customLabel(report.scheduleFrequency) }}</small></span><span class="status-pill" [class]="report.lastStatus">{{ customLabel(report.lastStatus) }}</span></button></div>
+          <ng-template #noSaved><div class="compact-empty">No saved reports yet</div></ng-template>
+        </article>
+      </section>
+    </section>
+  </ng-container>
+</ng-template>
+
+<ng-template #profitWorkspace>
+  <section class="profit-workspace">
+    <header class="profit-command">
+      <div class="profit-title"><button type="button" class="back-button" (click)="closeProfitWorkspace()">Back</button><div><span>REPORTS</span><h1>Profit Intelligence</h1></div></div>
+      <div class="profit-filters"><select *ngIf="canViewTenantProfit" [(ngModel)]="profitScope" aria-label="Profit branch scope"><option value="branch">Selected branch</option><option value="tenant">All authorized branches</option></select><as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker><button type="button" class="primary-button" (click)="loadProfitWorkspace()" [disabled]="profitLoading">{{ profitLoading ? 'Loading...' : 'Run Report' }}</button></div>
+    </header>
+
+    <nav class="profit-tabs" aria-label="Profit Intelligence views">
+      <button type="button" *ngFor="let tab of profitTabs" [class.active]="profitTab === tab.id" (click)="profitTab = tab.id">{{ tab.label }}<span *ngIf="tab.id === 'actions' && actionCounts.active">{{ actionCounts.active }}</span></button>
+    </nav>
+
+    <p class="inline-error" *ngIf="profitError">{{ profitError }}</p>
+    <p class="profit-state" *ngIf="profitLoading">Loading Profit Intelligence...</p>
+
+    <ng-container *ngIf="!profitLoading">
+      <section *ngIf="profitTab === 'overview' && profitSummary as summary" class="profit-panel">
+        <dl class="profit-strip"><div><dt>Revenue</dt><dd>{{ money(summary.metrics.revenuePaise) }}</dd></div><div><dt>COGS</dt><dd>{{ money(summary.metrics.costOfGoodsPaise) }}</dd></div><div><dt>Operating expense</dt><dd>{{ money(summary.metrics.operatingExpensePaise) }}</dd></div><div><dt>Net profit</dt><dd [class.negative]="summary.metrics.netProfitPaise < 0">{{ money(summary.metrics.netProfitPaise) }}</dd></div><div><dt>Net margin</dt><dd [class.negative]="summary.metrics.netMarginBps < 0">{{ percent(summary.metrics.netMarginBps) }}</dd></div><div><dt>Open actions</dt><dd>{{ actionCounts.active }}</dd></div></dl>
+        <div class="panel-heading"><div><span>ACCOUNTING LEDGER</span><h2>Profit breakdown</h2></div><small>{{ summary.branchCount }} branch{{ summary.branchCount === 1 ? '' : 'es' }} · {{ summary.fromDate }} to {{ summary.toDate }}</small></div>
+        <div class="table-wrap" *ngIf="summary.breakdown.length; else noOverview"><table><thead><tr><th>Source</th><th>Revenue</th><th>Total expense</th><th>Net profit</th><th>Margin</th></tr></thead><tbody><tr *ngFor="let row of summary.breakdown"><td><strong>{{ row.key }}</strong></td><td>{{ money(row.metrics.revenuePaise) }}</td><td>{{ money(row.metrics.totalExpensePaise) }}</td><td [class.negative]="row.metrics.netProfitPaise < 0">{{ money(row.metrics.netProfitPaise) }}</td><td>{{ percent(row.metrics.netMarginBps) }}</td></tr></tbody></table></div>
+        <ng-template #noOverview><div class="compact-empty">No ledger records yet</div></ng-template>
+      </section>
+
+      <section *ngIf="['service','staff','customer','branch'].includes(profitTab)" class="profit-panel">
+        <div class="panel-heading"><div><span>POS COST ATTRIBUTION</span><h2>{{ titleCase(profitTab) }} profit</h2></div><small *ngIf="profitTab !== 'branch'">{{ currentDimensionRows.length }} records</small><small *ngIf="profitTab === 'branch'">{{ advanced?.branchCount || 0 }} branches · {{ money(branchTotalRevenuePaise) }} revenue · {{ money(branchTotalProfitPaise) }} profit</small></div>
+        <div class="table-wrap" *ngIf="currentDimensionRows.length; else noDimension"><table><thead><tr><th>{{ titleCase(profitTab) }}</th><th>Units</th><th>Revenue</th><th>Discount</th><th>Product cost</th><th>Staff cost</th><th>Net profit</th><th>Margin</th></tr></thead><tbody><tr *ngFor="let row of currentDimensionRows"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.unitCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td [class.negative]="row.netProfitPaise < 0">{{ money(row.netProfitPaise) }}</td><td><span class="margin-pill" [class.negative]="row.marginBps < 0">{{ percent(row.marginBps) }}</span></td></tr></tbody></table></div>
+        <ng-template #noDimension><div class="compact-empty">No records yet</div></ng-template>
+      </section>
+
+      <section *ngIf="profitTab === 'leaks'" class="profit-panel">
+        <div class="panel-heading"><div><span>RECORDED IMPACT</span><h2>Profit leaks</h2></div><small>{{ advanced?.leaks?.length || 0 }} signals</small></div>
+        <div class="insight-list" *ngIf="advanced?.leaks?.length; else noLeaks"><article *ngFor="let leak of advanced?.leaks" [class]="leak.severity"><div><span>{{ titleCase(leak.kind.replace('_',' ')) }}</span><h3>{{ leak.title }}</h3><p>{{ leak.message }}</p></div><strong>{{ money(leak.impactPaise) }}</strong><button type="button" *ngIf="canManageProfit" (click)="queueLeak(leak)">Add action</button></article></div>
+        <ng-template #noLeaks><div class="compact-empty">No profit leaks detected</div></ng-template>
+      </section>
+
+      <section *ngIf="profitTab === 'pricing'" class="profit-panel">
+        <div class="panel-heading"><div><span>25% TARGET MARGIN</span><h2>Pricing recommendations</h2></div><small>{{ advanced?.pricing?.length || 0 }} opportunities</small></div>
+        <div class="table-wrap" *ngIf="advanced?.pricing?.length; else noPricing"><table><thead><tr><th>Service</th><th>Current average</th><th>Suggested</th><th>Current margin</th><th>Target</th><th>Expected lift</th><th *ngIf="canManageProfit">Action</th></tr></thead><tbody><tr *ngFor="let row of advanced?.pricing"><td><strong>{{ row.serviceName }}</strong></td><td>{{ money(row.currentAveragePricePaise) }}</td><td>{{ money(row.suggestedPricePaise) }}</td><td>{{ percent(row.currentMarginBps) }}</td><td>{{ percent(row.targetMarginBps) }}</td><td>{{ money(row.expectedProfitLiftPaise) }}</td><td *ngIf="canManageProfit"><button type="button" class="table-action" (click)="queuePricing(row)">Add action</button></td></tr></tbody></table></div>
+        <ng-template #noPricing><div class="compact-empty">No pricing actions required</div></ng-template>
+      </section>
+
+      <section *ngIf="profitTab === 'recipe'" class="profit-panel">
+        <div class="panel-heading"><div><span>EXPECTED VS ACTUAL COST</span><h2>Recipe variance</h2></div><small>{{ advanced?.recipeVariance?.length || 0 }} services</small></div>
+        <div class="table-wrap" *ngIf="advanced?.recipeVariance?.length; else noRecipe"><table><thead><tr><th>Service</th><th>Sold</th><th>Recipe items</th><th>Expected cost</th><th>Actual cost</th><th>Variance</th><th>Variance %</th></tr></thead><tbody><tr *ngFor="let row of advanced?.recipeVariance"><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.soldQuantity }}</td><td>{{ row.recipeItemCount }}</td><td>{{ money(row.expectedCostPaise) }}</td><td>{{ money(row.actualCostPaise) }}</td><td [class.negative]="row.variancePaise > 0">{{ money(row.variancePaise) }}</td><td>{{ percent(row.varianceBps) }}</td></tr></tbody></table></div>
+        <ng-template #noRecipe><div class="compact-empty">No recipe cost records yet</div></ng-template>
+      </section>
+
+      <section *ngIf="profitTab === 'copilot'" class="profit-panel">
+        <div class="panel-heading"><div><span>{{ advanced?.copilotSource === 'openai_responses' ? 'AI MODEL • REAL DATA' : 'RULE-BASED • REAL DATA' }}</span><h2>Profit Copilot</h2></div><small>{{ advanced?.copilotModel || 'local-profit-policy-v1' }} · {{ advanced?.copilot?.length || 0 }} recommendations</small></div>
+        <div class="copilot-list" *ngIf="advanced?.copilot?.length; else noCopilot"><article *ngFor="let insight of advanced?.copilot"><div class="copilot-icon">↗</div><div><span>{{ titleCase(insight.kind.replace('_',' ')) }}</span><h3>{{ insight.title }}</h3><p>{{ insight.message }}</p></div><strong>{{ money(insight.impactPaise) }}</strong><button type="button" *ngIf="canManageProfit" (click)="queueCopilot(insight)">Add action</button></article></div>
+        <ng-template #noCopilot><div class="compact-empty">No recommendations yet</div></ng-template>
+      </section>
+
+      <section *ngIf="profitTab === 'actions'" class="profit-panel">
+        <div class="queue-toolbar"><div><span>WORK QUEUE</span><h2>Profit Action Queue</h2></div><select [(ngModel)]="actionStatus" (change)="loadActions()"><option value="active">Active</option><option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="completed">Completed</option><option value="dismissed">Dismissed</option></select><select [(ngModel)]="actionPriority" (change)="loadActions()"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select><button type="button" class="primary-button" *ngIf="canManageProfit" (click)="openActionDrawer()">New action</button></div>
+        <div class="queue-list" *ngIf="actions.length; else noActions"><article *ngFor="let action of actions"><span class="priority-dot" [class]="action.priority"></span><div><div class="queue-title"><h3>{{ action.title }}</h3><span class="status-pill" [class]="action.status">{{ titleCase(action.status) }}</span></div><p>{{ action.message }}</p><small>{{ titleCase(action.actionType.replace('_',' ')) }} · {{ formatDate(action.updatedAt) }}</small></div><strong>{{ money(action.impactPaise) }}</strong><div class="queue-actions" *ngIf="canManageProfit"><button type="button" *ngIf="action.status === 'pending'" (click)="transitionAction(action,'approve')" [disabled]="actionBusyId === action.id">Approve</button><button type="button" *ngIf="action.status === 'approved'" (click)="transitionAction(action,'complete')" [disabled]="actionBusyId === action.id">Complete</button><button type="button" *ngIf="action.status === 'pending' || action.status === 'approved'" (click)="transitionAction(action,'dismiss')" [disabled]="actionBusyId === action.id">Dismiss</button></div></article></div>
+        <ng-template #noActions><div class="compact-empty">No actions yet</div></ng-template>
+      </section>
+    </ng-container>
+  </section>
+
+  <aside class="action-drawer" *ngIf="actionDrawerOpen && canManageProfit" aria-label="Create profit action">
+    <header><div><span>PROFIT ACTION</span><h2>New action</h2></div><button type="button" aria-label="Close" (click)="closeActionDrawer()">×</button></header>
+    <div class="drawer-body">
+      <label>Action type<select [(ngModel)]="actionDraft.actionType"><option value="manual_profit_action">Manual profit action</option><option value="pricing_recommendation">Pricing recommendation</option><option value="discount_abuse">Discount review</option><option value="high_wastage">High wastage</option><option value="membership_liability_risk">Membership liability</option><option value="low_margin_service">Low-margin service</option><option value="high_expense">High expense</option></select></label>
+      <label>Title<input type="text" [ngModel]="actionDraft.title" (ngModelChange)="actionDraft.title = titleCase($event)" maxlength="120" /></label>
+      <label>Message<textarea [(ngModel)]="actionDraft.message" maxlength="500" rows="4"></textarea></label>
+      <label>Impact (paise)<input type="number" [(ngModel)]="actionDraft.impactPaise" min="0" /></label>
+      <label>Priority<select [(ngModel)]="actionDraft.priority"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+    </div>
+    <footer><button type="button" (click)="closeActionDrawer()">Cancel</button><button type="button" class="primary-button" (click)="createAction()" [disabled]="actionBusyId === 'create'">{{ actionBusyId === 'create' ? 'Saving...' : 'Create action' }}</button></footer>
+  </aside>
+</ng-template>

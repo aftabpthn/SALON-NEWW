@@ -65,7 +65,19 @@ pub struct ManagedAuthRole {
     pub id: String,
     pub name: String,
     pub permissions: Vec<String>,
+    pub denied_permissions: Vec<String>,
+    pub masked_fields: Vec<String>,
+    pub max_discount_paise: Option<i64>,
+    pub max_refund_paise: Option<i64>,
+    pub max_cash_movement_paise: Option<i64>,
     pub is_system: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthMaskOption {
+    pub code: &'static str,
+    pub label: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -73,7 +85,24 @@ pub struct ManagedAuthRole {
 pub struct AuthRoleManagementData {
     pub roles: Vec<ManagedAuthRole>,
     pub permission_options: Vec<AuthPermissionOption>,
+    pub mask_options: Vec<AuthMaskOption>,
 }
+
+#[derive(Default)]
+pub struct AuthRoleSecurityInput {
+    pub denied_permissions: Vec<String>,
+    pub masked_fields: Vec<String>,
+    pub max_discount_paise: Option<i64>,
+    pub max_refund_paise: Option<i64>,
+    pub max_cash_movement_paise: Option<i64>,
+}
+
+const AUTH_MASK_OPTIONS: &[(&str, &str)] = &[
+    ("client.contact", "Client phone and email"),
+    ("staff.payroll", "Payroll amounts"),
+    ("inventory.cost", "Inventory and purchase costs"),
+    ("finance.amounts", "Finance and report amounts"),
+];
 
 pub struct BranchAccessAssignment {
     pub branch_id: String,
@@ -112,6 +141,10 @@ pub async fn load_auth_roles(
                 group: permission.group,
             })
             .collect(),
+        mask_options: AUTH_MASK_OPTIONS
+            .iter()
+            .map(|(code, label)| AuthMaskOption { code, label })
+            .collect(),
     })
 }
 
@@ -120,11 +153,22 @@ pub async fn create_auth_role(
     tenant_id: &str,
     name: String,
     permissions: Vec<String>,
+    security: AuthRoleSecurityInput,
 ) -> Result<AuthRoleManagementData, AppError> {
-    let (name, permissions) = validate_auth_role(name, permissions)?;
-    staff_repository::create_auth_role(db, tenant_id, &name, serde_json::json!(permissions))
-        .await
-        .map_err(role_write_error)?;
+    let (name, permissions, security) = validate_auth_role(name, permissions, security)?;
+    staff_repository::create_auth_role(
+        db,
+        tenant_id,
+        &name,
+        serde_json::json!(permissions),
+        serde_json::json!(security.denied_permissions),
+        serde_json::json!(security.masked_fields),
+        security.max_discount_paise,
+        security.max_refund_paise,
+        security.max_cash_movement_paise,
+    )
+    .await
+    .map_err(role_write_error)?;
     load_auth_roles(db, tenant_id).await
 }
 
@@ -134,6 +178,7 @@ pub async fn update_auth_role(
     role_id: &str,
     name: String,
     permissions: Vec<String>,
+    security: AuthRoleSecurityInput,
 ) -> Result<AuthRoleManagementData, AppError> {
     let role = staff_repository::get_auth_role(db, tenant_id, role_id)
         .await
@@ -142,13 +187,18 @@ pub async fn update_auth_role(
     if role.is_system {
         return Err(AppError::forbidden("system roles cannot be edited"));
     }
-    let (name, permissions) = validate_auth_role(name, permissions)?;
+    let (name, permissions, security) = validate_auth_role(name, permissions, security)?;
     staff_repository::update_auth_role(
         db,
         tenant_id,
         role_id,
         &name,
         serde_json::json!(permissions),
+        serde_json::json!(security.denied_permissions),
+        serde_json::json!(security.masked_fields),
+        security.max_discount_paise,
+        security.max_refund_paise,
+        security.max_cash_movement_paise,
     )
     .await
     .map_err(role_write_error)?
@@ -159,7 +209,8 @@ pub async fn update_auth_role(
 fn validate_auth_role(
     name: String,
     permissions: Vec<String>,
-) -> Result<(String, Vec<String>), AppError> {
+    security: AuthRoleSecurityInput,
+) -> Result<(String, Vec<String>, AuthRoleSecurityInput), AppError> {
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if !(2..=60).contains(&name.chars().count())
         || !name
@@ -190,8 +241,75 @@ fn validate_auth_role(
         .iter()
         .filter(|permission| requested.contains(permission.code))
         .map(|permission| permission.code.to_string())
+        .collect::<Vec<_>>();
+    let denied = security
+        .denied_permissions
+        .iter()
+        .map(|permission| permission.trim())
+        .filter(|permission| !permission.is_empty())
+        .collect::<HashSet<_>>();
+    if denied.len() != security.denied_permissions.len()
+        || denied.iter().any(|permission| {
+            !TENANT_PERMISSION_CATALOG
+                .iter()
+                .any(|allowed| allowed.code == *permission)
+        })
+        || denied
+            .iter()
+            .any(|permission| permissions.iter().any(|allowed| allowed == permission))
+    {
+        return Err(AppError::validation(
+            "denied permissions must be unique, valid, and not allowed",
+        ));
+    }
+    let denied_permissions = TENANT_PERMISSION_CATALOG
+        .iter()
+        .filter(|permission| denied.contains(permission.code))
+        .map(|permission| permission.code.to_string())
         .collect();
-    Ok((name, permissions))
+    let masked = security
+        .masked_fields
+        .iter()
+        .map(|field| field.trim())
+        .filter(|field| !field.is_empty())
+        .collect::<HashSet<_>>();
+    if masked.len() != security.masked_fields.len()
+        || masked
+            .iter()
+            .any(|field| !AUTH_MASK_OPTIONS.iter().any(|(code, _)| code == field))
+    {
+        return Err(AppError::validation("one or more field masks are invalid"));
+    }
+    const MAX_ROLE_LIMIT_PAISE: i64 = 100_000_000_000;
+    for value in [
+        security.max_discount_paise,
+        security.max_refund_paise,
+        security.max_cash_movement_paise,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !(0..=MAX_ROLE_LIMIT_PAISE).contains(&value) {
+            return Err(AppError::validation(
+                "financial limits must be between zero and 100 crore rupees",
+            ));
+        }
+    }
+    Ok((
+        name,
+        permissions,
+        AuthRoleSecurityInput {
+            denied_permissions,
+            masked_fields: AUTH_MASK_OPTIONS
+                .iter()
+                .filter(|(code, _)| masked.contains(code))
+                .map(|(code, _)| (*code).to_string())
+                .collect(),
+            max_discount_paise: security.max_discount_paise,
+            max_refund_paise: security.max_refund_paise,
+            max_cash_movement_paise: security.max_cash_movement_paise,
+        },
+    ))
 }
 
 fn managed_auth_role(role: AuthRoleRecord) -> ManagedAuthRole {
@@ -205,8 +323,22 @@ fn managed_auth_role(role: AuthRoleRecord) -> ManagedAuthRole {
             .flatten()
             .filter_map(|permission| permission.as_str().map(str::to_string))
             .collect(),
+        denied_permissions: json_string_list(&role.denied_permissions_json),
+        masked_fields: json_string_list(&role.masked_fields_json),
+        max_discount_paise: role.max_discount_paise,
+        max_refund_paise: role.max_refund_paise,
+        max_cash_movement_paise: role.max_cash_movement_paise,
         is_system: role.is_system,
     }
+}
+
+fn json_string_list(value: &serde_json::Value) -> Vec<String> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.as_str().map(str::to_string))
+        .collect()
 }
 
 fn role_write_error(error: sqlx::Error) -> AppError {
@@ -1077,8 +1209,8 @@ mod tests {
 
     use super::{
         normalize_login_email, normalize_login_id, validate_auth_role, validate_branch_access,
-        validate_bulk_row, validate_configuration, validate_masters, BranchAccessAssignment,
-        LINKED_ACTIVE_USER_SQL,
+        validate_bulk_row, validate_configuration, validate_masters, AuthRoleSecurityInput,
+        BranchAccessAssignment, LINKED_ACTIVE_USER_SQL,
     };
     use crate::repositories::staff_configuration_repository::{
         AttendanceRuleInput, PayRateInput, ReplaceConfigurationInput, ReplaceStaffMastersInput,
@@ -1187,15 +1319,22 @@ mod tests {
 
     #[test]
     fn custom_role_rejects_unknown_or_duplicate_permissions() {
-        assert!(validate_auth_role("Regional Lead".into(), vec!["unknown".into()]).is_err());
         assert!(validate_auth_role(
             "Regional Lead".into(),
-            vec!["tenant.read".into(), "tenant.read".into()]
+            vec!["unknown".into()],
+            AuthRoleSecurityInput::default()
         )
         .is_err());
         assert!(validate_auth_role(
             "Regional Lead".into(),
-            vec!["appointments.read".into(), "clients.manage".into()]
+            vec!["tenant.read".into(), "tenant.read".into()],
+            AuthRoleSecurityInput::default()
+        )
+        .is_err());
+        assert!(validate_auth_role(
+            "Regional Lead".into(),
+            vec!["appointments.read".into(), "clients.manage".into()],
+            AuthRoleSecurityInput::default()
         )
         .is_ok());
         assert!(validate_auth_role(
@@ -1207,7 +1346,8 @@ mod tests {
                 "clients.audit.read".into(),
                 "clients.reviews.link".into(),
                 "purchases.approve".into(),
-            ]
+            ],
+            AuthRoleSecurityInput::default()
         )
         .is_ok());
     }

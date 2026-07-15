@@ -1207,6 +1207,24 @@ button.active {
   font-weight: 700;
 }
 
+.status-action-message,
+.board-action-error {
+  margin: 0 14px;
+  padding: 8px 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.board-action-error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b42318;
+}
+
 .booking strong {
   color: #334155;
   font-size: 11px;
@@ -1853,6 +1871,31 @@ button.active {
   grid-column: span 6;
 }
 
+.service-addons {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.service-addons label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-addons input {
+  width: auto;
+  min-height: auto;
+}
+
+.recurrence-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .service-card button {
   grid-column: span 2;
 }
@@ -2016,5 +2059,9 @@ button.active {
   .service-card .staff-field-wide,
   .service-card button {
     grid-column: auto;
+  }
+
+  .recurrence-fields {
+    grid-template-columns: 1fr;
   }
 }

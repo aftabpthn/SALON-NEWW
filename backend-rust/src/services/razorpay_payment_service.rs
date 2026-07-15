@@ -30,6 +30,15 @@ pub struct RemotePaymentLinkStatus {
 }
 
 #[derive(Debug, Clone)]
+pub struct RemoteSubscriptionStatus {
+    pub id: String,
+    pub status: String,
+    pub current_end: i64,
+    pub paid_count: i64,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone)]
 pub struct PaymentRefund {
     pub provider_refund_id: String,
     pub status: String,
@@ -181,6 +190,72 @@ pub async fn fetch_payment_link(
     Ok(RemotePaymentLinkStatus {
         status: parsed.status.unwrap_or_default(),
         amount_paid: parsed.amount_paid.unwrap_or(0),
+        payload,
+    })
+}
+
+pub async fn fetch_subscription(
+    settings: &Settings,
+    subscription_id: &str,
+) -> Result<RemoteSubscriptionStatus, AppError> {
+    if !subscription_id.trim().starts_with("sub_") {
+        return Err(AppError::validation(
+            "auto-renew payment reference must be a Razorpay subscription id",
+        ));
+    }
+    let (key_id, key_secret) = credentials(settings)?;
+    let response = reqwest::Client::new()
+        .get(format!(
+            "{RAZORPAY_API_BASE}/subscriptions/{subscription_id}"
+        ))
+        .basic_auth(key_id, Some(key_secret))
+        .send()
+        .await
+        .map_err(|_| {
+            AppError::service_unavailable(
+                "PAYMENT_PROVIDER_UNAVAILABLE",
+                "Razorpay subscription reconciliation failed",
+            )
+        })?;
+    let status = response.status();
+    let payload = response.json::<Value>().await.map_err(|_| {
+        AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            "Razorpay returned an invalid subscription response",
+        )
+    })?;
+    if !status.is_success() {
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            "Razorpay subscription reconciliation was rejected",
+        ));
+    }
+    let id = payload
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if id != subscription_id {
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            "Razorpay subscription response is incomplete",
+        ));
+    }
+    Ok(RemoteSubscriptionStatus {
+        id,
+        status: payload
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        current_end: payload
+            .get("current_end")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+        paid_count: payload
+            .get("paid_count")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
         payload,
     })
 }

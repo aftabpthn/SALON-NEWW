@@ -1,0 +1,450 @@
+<main class="command-center">
+  <header class="command-header">
+    <div>
+      <span class="eyebrow">Owner workspace</span>
+      <div class="title-row">
+        <h1>Command Center</h1>
+        <span class="live-pill" [ngClass]="liveState">
+          <i class="bi bi-database-check" aria-hidden="true"></i>
+          {{ liveStateLabel }}
+        </span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="branch-chip"><i class="bi bi-diagram-3" aria-hidden="true"></i>{{ branchLabel }}</span>
+      <button type="button" (click)="refresh()" [disabled]="loading">
+        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <section class="kpi-grid" aria-label="Executive metrics">
+    <article class="kpi-card">
+      <span class="icon-badge blue"><i class="bi bi-currency-rupee" aria-hidden="true"></i></span>
+      <div><span>Revenue today</span>@if (snapshotLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ money(snapshot.todaySalesPaise) }}</strong> }</div>
+    </article>
+    <article class="kpi-card">
+      <span class="icon-badge blue"><i class="bi bi-calendar2-check" aria-hidden="true"></i></span>
+      <div><span>Open bookings</span>@if (snapshotLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ snapshot.openAppointments }}</strong> }</div>
+    </article>
+    <article class="kpi-card">
+      <span class="icon-badge amber"><i class="bi bi-wallet2" aria-hidden="true"></i></span>
+      <div><span>Outstanding dues</span>@if (financeLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ money(outstandingPaise) }}</strong> }</div>
+    </article>
+    <article class="kpi-card">
+      <span class="icon-badge red"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i></span>
+      <div><span>Priority actions</span>@if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ actions.length }}</strong> }</div>
+    </article>
+    <article class="kpi-card">
+      <span class="icon-badge amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+      <div><span>Low stock</span>@if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ reorderSuggestions.length }}</strong> }</div>
+    </article>
+    <article class="kpi-card">
+      <span class="icon-badge red"><i class="bi bi-shield-exclamation" aria-hidden="true"></i></span>
+      <div><span>Security alerts</span>@if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ openAlerts }}</strong> }</div>
+    </article>
+  </section>
+
+  <section class="primary-grid">
+    <article class="panel overview-panel">
+      <header class="panel-header">
+        <div><span class="eyebrow">Business</span><h2>Executive overview</h2></div>
+        <span>Current <strong>30 days</strong></span>
+      </header>
+      <div class="overview-head"><span>Area</span><span>Current</span><span>Overall</span></div>
+      <div class="overview-row">
+        <span><i class="bi bi-cash-stack" aria-hidden="true"></i>Sales</span>
+        <strong>{{ snapshotLoading ? '—' : money(snapshot.todaySalesPaise) }}</strong>
+        <strong>{{ financeLoading ? '—' : money(profit?.metrics?.revenuePaise || 0) }}</strong>
+      </div>
+      <div class="overview-row">
+        <span><i class="bi bi-calendar3" aria-hidden="true"></i>Appointments</span>
+        <strong>{{ snapshotLoading ? '—' : snapshot.todayAppointments }}</strong>
+        <strong>{{ snapshotLoading ? '—' : snapshot.totalAppointments }}</strong>
+      </div>
+      <div class="overview-row">
+        <span><i class="bi bi-graph-up-arrow" aria-hidden="true"></i>Net profit</span>
+        <strong>{{ financeLoading ? '—' : money(profit?.metrics?.netProfitPaise || 0) }}</strong>
+        <strong>{{ financeLoading ? '—' : margin(profit?.metrics?.netMarginBps || 0) }}</strong>
+      </div>
+      <div class="overview-row">
+        <span><i class="bi bi-receipt" aria-hidden="true"></i>Dues</span>
+        <strong>{{ financeLoading ? '—' : dues.length + ' invoices' }}</strong>
+        <strong>{{ financeLoading ? '—' : money(outstandingPaise) }}</strong>
+      </div>
+    </article>
+
+    <article class="panel action-panel">
+      <header class="panel-header">
+        <div><span class="eyebrow">Today</span><h2>Action queue</h2></div>
+        <a routerLink="/reports">View all <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      </header>
+      @if (controlsLoading) {
+        <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading actions</div>
+      } @else if (errors.has('actions')) {
+        <div class="compact-state">Actions unavailable</div>
+      } @else if (visibleActions.length === 0) {
+        <div class="compact-state">No records yet</div>
+      } @else {
+        <div class="action-list">
+          @for (action of visibleActions; track action.id) {
+            <article>
+              <span class="priority-dot" [ngClass]="action.priority" aria-hidden="true"></span>
+              <div><strong>{{ action.title }}</strong><span>{{ action.message }}</span></div>
+              <b>{{ money(action.impactPaise) }}</b>
+            </article>
+          }
+        </div>
+      }
+    </article>
+  </section>
+
+  <section class="panel profit-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Finance</span><h2>Profit Intelligence</h2></div>
+      <a routerLink="/reports">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (financeLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading profit data</div>
+    } @else if (errors.has('profit') && errors.has('advanced')) {
+      <div class="compact-state">Profit data unavailable</div>
+    } @else {
+      <div class="profit-grid">
+        <section aria-label="Profit summary">
+          <h3>30-day summary</h3>
+          <dl class="metric-list">
+            <div><dt>Revenue</dt><dd>{{ money(profit?.metrics?.revenuePaise || 0) }}</dd></div>
+            <div><dt>Cost of goods</dt><dd>{{ money(profit?.metrics?.costOfGoodsPaise || 0) }}</dd></div>
+            <div><dt>Operating expense</dt><dd>{{ money(profit?.metrics?.operatingExpensePaise || 0) }}</dd></div>
+            <div class="total"><dt>Net profit</dt><dd>{{ money(profit?.metrics?.netProfitPaise || 0) }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Top profit contributors">
+          <h3>Top service profit</h3>
+          @if (topProfitContributors.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="rank-list">
+              @for (row of topProfitContributors; track row.entityId) {
+                <div><span>{{ row.entityName }}</span><strong>{{ money(row.netProfitPaise) }}</strong></div>
+              }
+            </div>
+          }
+        </section>
+        <section aria-label="Profit leaks">
+          <h3>Profit leaks</h3>
+          @if (topProfitLeaks.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="rank-list leaks">
+              @for (row of topProfitLeaks; track row.sourceId + row.kind) {
+                <div><span>{{ row.title }}</span><strong>{{ money(row.impactPaise) }}</strong></div>
+              }
+            </div>
+          }
+        </section>
+      </div>
+    }
+  </section>
+
+  <section class="panel staff-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Team</span><h2>Staff Control</h2></div>
+      <a routerLink="/staff/control-center">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (staffLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading staff data</div>
+    } @else if (errors.has('staff')) {
+      <div class="compact-state">{{ staffError }}</div>
+    } @else {
+      <div class="staff-grid">
+        <section aria-label="Staff summary">
+          <h3>30-day summary</h3>
+          <dl class="metric-list">
+            <div><dt>Staff</dt><dd>{{ staff?.kpis?.staffCount || 0 }}</dd></div>
+            <div><dt>Staff revenue</dt><dd>{{ money(staff?.kpis?.totalRevenuePaise || 0) }}</dd></div>
+            <div><dt>High-risk signals</dt><dd>{{ staff?.kpis?.highRiskSignals || 0 }}</dd></div>
+            <div><dt>Pending approvals</dt><dd>{{ staff?.kpis?.pendingApprovals || 0 }}</dd></div>
+            <div><dt>Training due</dt><dd>{{ staff?.kpis?.trainingDue || 0 }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Top staff">
+          <h3>Top staff</h3>
+          @if (topStaff.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="rank-list">
+              @for (row of topStaff; track row.staffId) {
+                <div><span>{{ row.staffName }}</span><strong>Score {{ row.score ?? '—' }}</strong></div>
+              }
+            </div>
+          }
+        </section>
+        <section aria-label="Staff attention queue">
+          <h3>Attention queue</h3>
+          <dl class="metric-list">
+            <div><dt>Risk signals</dt><dd>{{ staff?.attentionQueue?.riskSignals?.length || 0 }}</dd></div>
+            <div><dt>Approvals</dt><dd>{{ staff?.attentionQueue?.pendingApprovals?.length || 0 }}</dd></div>
+            <div><dt>Training assignments</dt><dd>{{ staff?.attentionQueue?.dueTraining?.length || 0 }}</dd></div>
+          </dl>
+        </section>
+      </div>
+    }
+  </section>
+
+  <section class="panel inventory-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Stock</span><h2>Inventory Autopilot</h2></div>
+      <a routerLink="/inventory/advanced-controls">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (controlsLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading inventory controls</div>
+    } @else if (errors.has('inventory') && errors.has('inventory-controls')) {
+      <div class="compact-state">Inventory controls unavailable</div>
+    } @else {
+      <div class="inventory-grid">
+        <section aria-label="Inventory control summary">
+          <h3>Control summary</h3>
+          <dl class="metric-list">
+            <div><dt>Critical</dt><dd>{{ inventoryControls?.summary?.critical || 0 }}</dd></div>
+            <div><dt>Warnings</dt><dd>{{ inventoryControls?.summary?.warnings || 0 }}</dd></div>
+            <div><dt>Pending approvals</dt><dd>{{ inventoryControls?.summary?.pendingApprovals || 0 }}</dd></div>
+            <div><dt>Expiry alerts</dt><dd>{{ inventoryControls?.summary?.expiryAlerts ?? '—' }}</dd></div>
+            <div><dt>Dead stock</dt><dd>{{ inventoryControls?.summary?.deadStock || 0 }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Reorder queue">
+          <h3>Reorder queue · {{ money(reorderValuePaise) }}</h3>
+          @if (topReorderSuggestions.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="rank-list">
+              @for (row of topReorderSuggestions; track row.productId) {
+                <div><span>{{ row.productName }}</span><strong>{{ row.suggestedQuantity }} units</strong></div>
+              }
+            </div>
+          }
+        </section>
+        <section aria-label="Inventory exceptions">
+          <h3>Exceptions</h3>
+          @if (topInventoryExceptions.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="rank-list leaks">
+              @for (row of topInventoryExceptions; track row.control + row.title) {
+                <div><span>{{ row.title }}</span><strong>{{ money(row.valuePaise) }}</strong></div>
+              }
+            </div>
+          }
+        </section>
+      </div>
+    }
+  </section>
+
+  <section class="panel payment-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Collections</span><h2>Payment Intelligence</h2></div>
+      <a routerLink="/pos/enterprise">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (paymentLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading payment controls</div>
+    } @else if (errors.has('payments') && errors.has('payment-risk') && errors.has('payment-providers')) {
+      <div class="compact-state">Payment intelligence unavailable</div>
+    } @else {
+      <div class="payment-grid">
+        <section aria-label="Payment summary">
+          <h3>30-day summary</h3>
+          <dl class="metric-list">
+            <div><dt>Collected</dt><dd>{{ money(collectedPaise) }}</dd></div>
+            <div><dt>Payments</dt><dd>{{ paymentCount }}</dd></div>
+            <div><dt>Invoice dues</dt><dd>{{ money(outstandingPaise) }}</dd></div>
+            <div><dt>Amount at risk</dt><dd>{{ money(paymentRisk?.amountAtRiskPaise || 0) }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Payment mix">
+          <h3>Payment mix</h3>
+          @if (topPaymentModes.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="rank-list">
+              @for (row of topPaymentModes; track row.method) {
+                <div><span>{{ label(row.method) }} · {{ row.paymentCount }}</span><strong>{{ money(row.amountPaise) }}</strong></div>
+              }
+            </div>
+          }
+        </section>
+        <section aria-label="Payment controls">
+          <h3>Controls</h3>
+          <dl class="metric-list">
+            <div><dt>Open risk cases</dt><dd>{{ paymentRisk?.openCount || 0 }}</dd></div>
+            <div><dt>High-risk cases</dt><dd>{{ paymentRisk?.highRiskCount || 0 }}</dd></div>
+            <div><dt>Cases reviewed</dt><dd>{{ paymentRisk?.caseCount || 0 }}</dd></div>
+            <div><dt>Providers ready</dt><dd>{{ readyProviderCount }}/{{ paymentProviders.length }}</dd></div>
+          </dl>
+        </section>
+      </div>
+    }
+  </section>
+
+  <section class="panel security-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Protection</span><h2>Security Center</h2></div>
+      <a routerLink="/security">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (controlsLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading security controls</div>
+    } @else if (errors.has('security')) {
+      <div class="compact-state">Security summary unavailable</div>
+    } @else {
+      <div class="security-grid">
+        <section aria-label="Threat controls">
+          <h3>Threat controls</h3>
+          <dl class="metric-list">
+            <div><dt>Open alerts</dt><dd>{{ security?.counts?.openAlerts || 0 }}</dd></div>
+            <div><dt>Active blocks</dt><dd>{{ security?.counts?.activeBlocks || 0 }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Access controls">
+          <h3>Access controls</h3>
+          <dl class="metric-list">
+            <div><dt>Active sessions</dt><dd>{{ security?.counts?.activeSessions || 0 }}</dd></div>
+            <div><dt>Session revocation</dt><dd>{{ security?.policy?.settings?.sessionRevocationEnabled ? 'Enabled' : 'Disabled' }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Audit controls">
+          <h3>Audit controls</h3>
+          <dl class="metric-list">
+            <div><dt>Audit events</dt><dd>{{ security?.counts?.auditEvents || 0 }}</dd></div>
+            <div><dt>Retention</dt><dd>{{ security?.policy?.settings?.auditRetentionDays || 0 }} days</dd></div>
+            <div><dt>Policy</dt><dd>{{ security?.policy?.persisted ? 'Saved' : 'Default' }}</dd></div>
+          </dl>
+        </section>
+      </div>
+    }
+  </section>
+
+  <section class="panel location-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Locations</span><h2>Multi-Branch Command Center</h2></div>
+      <div class="location-actions">
+        <button type="button" [disabled]="locationActionBusy || pendingLocationApprovals.length > 0 || !franchise?.centralBranchId" (click)="requestMasterSync()">Request master sync</button>
+        <a routerLink="/settings">Manage controls <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      </div>
+    </header>
+    @if (locationActionStatus) { <div class="inline-status">{{ locationActionStatus }}</div> }
+    @if (locationActionError) { <div class="inline-status error">{{ locationActionError }}</div> }
+    @if (locationLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading location controls</div>
+    } @else if (errors.has('franchise')) {
+      <div class="compact-state">Location controls unavailable</div>
+    } @else {
+      <div class="location-grid">
+        <section aria-label="Location network">
+          <h3>Network</h3>
+          <dl class="metric-list">
+            <div><dt>Active branches</dt><dd>{{ activeLocationCount }}/{{ locationBranches.length }}</dd></div>
+            <div><dt>Central branch</dt><dd>{{ centralLocation?.name || 'Not configured' }}</dd></div>
+            <div><dt>Hierarchy pending</dt><dd>{{ missingHierarchyCount }}</dd></div>
+            <div><dt>Attention items</dt><dd>{{ locationAttentionCount }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Sharing governance">
+          <h3>Sharing governance</h3>
+          <dl class="metric-list">
+            <div><dt>Membership sharing</dt><dd>{{ membershipSharingLabel }}</dd></div>
+            <div><dt>Inbound benefits</dt><dd>{{ membershipInboundLabel }}</dd></div>
+            <div><dt>Sharing scope</dt><dd>{{ membershipScopeLabel }}</dd></div>
+            <div><dt>Override fields</dt><dd>{{ franchise?.allowedOverrideFields?.length || 0 }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Franchise controls">
+          <h3>Franchise controls</h3>
+          <dl class="metric-list">
+            <div><dt>Service masters</dt><dd>{{ franchise?.centralMasters?.length || 0 }}</dd></div>
+            <div><dt>Product masters</dt><dd>{{ franchise?.centralProductMasters?.length || 0 }}</dd></div>
+            <div><dt>Royalty configured</dt><dd>{{ configuredRoyaltyCount }}</dd></div>
+            <div><dt>Royalty outstanding</dt><dd>{{ money(outstandingRoyaltyPaise) }}</dd></div>
+            <div><dt>Master sync gaps</dt><dd>{{ syncGapCount }}</dd></div>
+          </dl>
+        </section>
+      </div>
+
+      <div class="location-operations-grid">
+        <section aria-label="Location conflicts">
+          <h3>Conflicts</h3>
+          <div class="action-list">
+            @for (conflict of locationConflicts.slice(0, 6); track conflict.kind + conflict.branchId) {
+              <article><span class="priority-dot" [ngClass]="conflict.severity" aria-hidden="true"></span><div><strong>{{ conflict.branchName }}</strong><span>{{ conflict.message }}</span></div><b>{{ label(conflict.severity) }}</b></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+        <section aria-label="Location approval queue">
+          <h3>Approval queue</h3>
+          <div class="approval-list">
+            @for (approval of pendingLocationApprovals; track approval.id) {
+              <article><div><strong>{{ label(approval.action) }}</strong><span>{{ approval.createdAt | date:'dd/MM/yyyy HH:mm' }}</span></div><div class="row-actions"><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'rejected')">Reject</button><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'approved')">Approve</button></div></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+        <section aria-label="Location audit trail">
+          <h3>Audit</h3>
+          <div class="audit-list">
+            @for (event of locationAudit; track event.id) {
+              <article><strong>{{ label(event.eventType.replace('multi_branch.', '')) }}</strong><span>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }} · {{ event.actorUserId || 'System' }}</span></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+      </div>
+
+      @if (errors.has('multi-branch')) {
+        <div class="section-empty">Branch comparison unavailable</div>
+      } @else if (branchComparisons.length === 0) {
+        <div class="section-empty">No records yet</div>
+      } @else {
+        <div class="location-table-wrap">
+          <table>
+            <thead><tr><th>Branch</th><th>Hierarchy</th><th>Revenue (30d)</th><th>Sales</th><th>Appointments</th><th>Sharing</th><th>Sync gaps</th><th>Conflicts</th></tr></thead>
+            <tbody>
+              @for (branch of branchComparisons; track branch.branchId) {
+                <tr>
+                  <td><strong>{{ branch.branchName }}</strong><small>{{ branch.branchCode }} · {{ branch.active ? 'Active' : 'Inactive' }}</small></td>
+                  <td>{{ comparisonHierarchy(branch) }}</td>
+                  <td>{{ money(branch.revenuePaise) }}</td>
+                  <td>{{ branch.saleCount }}</td>
+                  <td>{{ branch.appointmentCount }}</td>
+                  <td>{{ branch.sharingEnabled ? (branch.acceptInbound ? 'Two-way' : 'Outbound') : (branch.acceptInbound ? 'Inbound' : 'Disabled') }}</td>
+                  <td>{{ branch.serviceSyncGap + branch.productSyncGap }}</td>
+                  <td><span class="state-badge" [class.inactive]="conflictCount(branch.branchId) > 0">{{ conflictCount(branch.branchId) }}</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  </section>
+
+  <section class="panel workspace-panel">
+    <header class="panel-header"><div><span class="eyebrow">Operations</span><h2>Workspaces</h2></div></header>
+    <div class="workspace-grid">
+      <a routerLink="/reports"><span class="icon-badge blue"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span><strong>Profit Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+      <a routerLink="/staff/control-center"><span class="icon-badge blue"><i class="bi bi-person-gear" aria-hidden="true"></i></span><strong>Staff Control</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+      <a routerLink="/inventory/advanced-controls"><span class="icon-badge blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span><strong>Inventory Autopilot</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+      <a routerLink="/pos/enterprise"><span class="icon-badge blue"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><strong>Payment Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+      <a routerLink="/security"><span class="icon-badge blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><strong>Security Center</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+      <a routerLink="/dashboard"><span class="icon-badge blue"><i class="bi bi-grid-1x2" aria-hidden="true"></i></span><strong>Operational Dashboard</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+    </div>
+  </section>
+
+  <footer class="load-state">
+    @if (loading) {
+      <span><span class="spinner" aria-hidden="true"></span>Loading live metrics</span>
+    } @else if (errors.size) {
+      <span><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{ errors.size }} data sources unavailable</span>
+    } @else {
+      <span><i class="bi bi-check-circle" aria-hidden="true"></i>All data sources connected</span>
+    }
+    <span>Updated {{ updatedLabel() }}</span>
+  </footer>
+</main>

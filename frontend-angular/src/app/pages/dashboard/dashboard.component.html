@@ -1,0 +1,243 @@
+<section class="dashboard-page">
+  <header class="dashboard-titlebar">
+    <div>
+      <span class="section-label">Overview</span>
+      <h1>Dashboard</h1>
+    </div>
+    <div class="title-actions">
+      <span class="data-state" [class.online]="status === 'ok' || status === 'healthy'">
+        <i class="bi bi-database-check" aria-hidden="true"></i>
+        {{ status === 'ok' || status === 'healthy' ? 'Live data' : 'API unavailable' }}
+      </span>
+      <button type="button" (click)="load()" [disabled]="loading || insightsLoading || activityLoading">
+        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <p class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Loading dashboard</p>
+  <p class="error-state" *ngIf="error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> {{ error }}</p>
+
+  <ng-container *ngIf="!loading && !error">
+    <section class="metric-strip" aria-label="Business summary">
+      <article>
+        <i class="bi bi-currency-rupee" aria-hidden="true"></i>
+        <span>Today's sales</span>
+        <strong>{{ snapshot.todaySalesPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong>
+      </article>
+      <article>
+        <i class="bi bi-calendar2-check" aria-hidden="true"></i>
+        <span>Today's appointments</span>
+        <strong>{{ snapshot.todayAppointments | number }}</strong>
+      </article>
+      <article>
+        <i class="bi bi-people" aria-hidden="true"></i>
+        <span>Total clients</span>
+        <strong>{{ snapshot.totalClients | number }}</strong>
+      </article>
+      <article>
+        <i class="bi bi-scissors" aria-hidden="true"></i>
+        <span>Total services</span>
+        <strong>{{ snapshot.totalServices | number }}</strong>
+      </article>
+    </section>
+
+    <p class="empty-state" *ngIf="!hasData && !insightsLoading && !activityLoading"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></p>
+
+    <section class="dashboard-grid">
+      <article class="panel appointment-panel">
+        <header class="panel-heading">
+          <div><span>Appointments</span><h2>Booking activity</h2></div>
+          <a routerLink="/appointments">View calendar <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        </header>
+        <div class="headline-value">
+          <strong>{{ snapshot.totalAppointments | number }}</strong>
+          <span>Total appointments</span>
+        </div>
+        <div class="progress-list">
+          <label>
+            <span>Today <b>{{ snapshot.todayAppointments | number }}</b></span>
+            <progress [value]="snapshot.todayAppointments" [max]="snapshot.totalAppointments || 1"></progress>
+          </label>
+          <label>
+            <span>Open <b>{{ snapshot.openAppointments | number }}</b></span>
+            <progress [value]="snapshot.openAppointments" [max]="snapshot.totalAppointments || 1"></progress>
+          </label>
+          <label>
+            <span>Completed in 7 days <b>{{ snapshot.recentCompletedAppointments | number }}</b></span>
+            <progress [value]="snapshot.recentCompletedAppointments" [max]="snapshot.totalAppointments || 1"></progress>
+          </label>
+        </div>
+      </article>
+
+      <article class="panel today-panel">
+        <header class="panel-heading"><div><span>Today</span><h2>Counter pulse</h2></div><i class="bi bi-activity" aria-hidden="true"></i></header>
+        <strong class="sales-total">{{ snapshot.todaySalesPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong>
+        <dl>
+          <div><dt>Appointments</dt><dd>{{ snapshot.todayAppointments | number }}</dd></div>
+          <div><dt>Open bookings</dt><dd>{{ snapshot.openAppointments | number }}</dd></div>
+          <div><dt>Open sales</dt><dd>{{ snapshot.openSales | number }}</dd></div>
+        </dl>
+      </article>
+
+      <article class="panel quick-panel">
+        <header class="panel-heading"><div><span>Workspace</span><h2>Quick access</h2></div></header>
+        <nav aria-label="Dashboard shortcuts">
+          <a routerLink="/appointments"><i class="bi bi-calendar3" aria-hidden="true"></i><span>Appointments</span><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+          <a routerLink="/pos"><i class="bi bi-receipt" aria-hidden="true"></i><span>POS billing</span><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+          <a routerLink="/clients"><i class="bi bi-people" aria-hidden="true"></i><span>Clients</span><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+          <a routerLink="/reports"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Reports</span><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+        </nav>
+      </article>
+
+      <article class="panel sales-insight-panel">
+        <header class="panel-heading">
+          <div><span>Sales</span><h2>Revenue trend</h2></div>
+          <div class="period-switch" aria-label="Dashboard period">
+            <button type="button" [disabled]="insightsLoading" [class.active]="periodDays === 7" [attr.aria-pressed]="periodDays === 7" (click)="setPeriod(7)">7 days</button>
+            <button type="button" [disabled]="insightsLoading" [class.active]="periodDays === 30" [attr.aria-pressed]="periodDays === 30" (click)="setPeriod(30)">30 days</button>
+          </div>
+        </header>
+        <p class="compact-empty" *ngIf="insightsLoading">Loading</p>
+        <p class="section-unavailable" *ngIf="!insightsLoading && sectionUnavailable('sales')">Sales data unavailable</p>
+        <ng-container *ngIf="!insightsLoading && !sectionUnavailable('sales')">
+          <div class="financial-summary">
+            <div><span>Total sales</span><strong>{{ sales.totalSalesPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Collected</span><strong>{{ sales.paidSalesPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+            <div><span>Outstanding</span><strong>{{ sales.outstandingSalesPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+          </div>
+          <div class="trend-list" *ngIf="salesTrend.length; else noSalesTrend">
+            <label *ngFor="let point of salesTrend">
+              <span>{{ formatDate(point.date) }}</span>
+              <progress class="money-progress" [value]="point.value" [max]="maxSalesTrend"></progress>
+              <b>{{ point.value / 100 | currency:'INR':'symbol':'1.0-0' }}</b>
+            </label>
+          </div>
+          <ng-template #noSalesTrend><p class="compact-empty">No records yet</p></ng-template>
+        </ng-container>
+      </article>
+
+      <article class="panel forecast-panel">
+        <header class="panel-heading">
+          <div><span>Analytics</span><h2>Revenue forecast</h2></div>
+          <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
+        </header>
+        <p class="compact-empty" *ngIf="insightsLoading">Loading</p>
+        <p class="section-unavailable" *ngIf="!insightsLoading && sectionUnavailable('forecast')">Forecast data unavailable</p>
+        <ng-container *ngIf="!insightsLoading && !sectionUnavailable('forecast') && revenueForecast as forecast">
+          <div class="headline-value">
+            <strong>{{ forecast.forecastTotalPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            <span>Next {{ forecast.forecastDays }} days</span>
+          </div>
+          <div class="trend-list" *ngIf="forecast.forecastTotalPaise > 0; else noRevenueForecast">
+            <label *ngFor="let point of forecast.forecast">
+              <span>{{ formatDate(point.date) }}</span>
+              <progress class="money-progress" [value]="point.valuePaise" [max]="maxForecastRevenue"></progress>
+              <b>{{ point.valuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</b>
+            </label>
+          </div>
+          <ng-template #noRevenueForecast><p class="compact-empty">No records yet</p></ng-template>
+        </ng-container>
+      </article>
+
+      <article class="panel appointment-insight-panel">
+        <header class="panel-heading">
+          <div><span>Appointments</span><h2>Trend &amp; status</h2></div>
+          <a routerLink="/appointment-reports">View report <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        </header>
+        <p class="compact-empty" *ngIf="insightsLoading">Loading</p>
+        <p class="section-unavailable" *ngIf="!insightsLoading && sectionUnavailable('appointments')">Appointment report unavailable</p>
+        <ng-container *ngIf="!insightsLoading && !sectionUnavailable('appointments')">
+          <div class="appointment-insight-body" *ngIf="appointmentTrend.length || appointmentStatuses.length; else noAppointmentTrend">
+            <div class="trend-list compact-trend">
+              <label *ngFor="let point of appointmentTrend">
+                <span>{{ formatDate(point.date) }}</span>
+                <progress [value]="point.value" [max]="maxAppointmentTrend"></progress>
+                <b>{{ point.value | number }}</b>
+              </label>
+            </div>
+            <div class="status-list">
+              <div *ngFor="let point of appointmentStatuses">
+                <span>{{ label(point.status) }}</span>
+                <b>{{ point.count | number }}</b>
+                <progress [value]="point.count" [max]="totalAppointmentStatuses || 1"></progress>
+              </div>
+            </div>
+          </div>
+          <ng-template #noAppointmentTrend><p class="compact-empty">No records yet</p></ng-template>
+        </ng-container>
+      </article>
+
+      <article class="panel activity-panel">
+        <header class="panel-heading">
+          <div><span>Appointments</span><h2>Recent activity</h2></div>
+          <a routerLink="/appointments/activities">View all <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        </header>
+        <p class="compact-empty" *ngIf="activityLoading">Loading</p>
+        <p class="section-unavailable" *ngIf="!activityLoading && sectionUnavailable('activity')">Activity data unavailable</p>
+        <div class="activity-list" *ngIf="!activityLoading && !sectionUnavailable('activity') && recentActivity.length; else noActivity">
+          <a routerLink="/appointments/activities" *ngFor="let row of recentActivity">
+            <i class="bi bi-calendar-check" aria-hidden="true"></i>
+            <span>
+              <strong>{{ row.clientName || bookingReference(row.appointmentId) }}</strong>
+              <small>{{ row.serviceNames || bookingReference(row.appointmentId) }}<ng-container *ngIf="row.staffName"> · {{ row.staffName }}</ng-container></small>
+            </span>
+            <em>{{ label(row.status) }}</em>
+            <time>{{ formatDateTime(row.lastUpdatedAt || row.appointmentStartAt) }}</time>
+          </a>
+        </div>
+        <ng-template #noActivity><p class="compact-empty" *ngIf="!activityLoading && !sectionUnavailable('activity')">No records yet</p></ng-template>
+      </article>
+
+      <article class="panel collections-panel">
+        <header class="panel-heading">
+          <div><span>Payments</span><h2>Collections &amp; dues</h2></div>
+          <a routerLink="/reports/invoices">View invoices <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        </header>
+        <p class="compact-empty" *ngIf="insightsLoading">Loading</p>
+        <section class="collection-block" *ngIf="!insightsLoading">
+          <div class="collection-title"><span>Payment modes</span><strong>{{ totalPaymentPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+          <p class="section-unavailable" *ngIf="sectionUnavailable('payments')">Payment data unavailable</p>
+          <div class="payment-list" *ngIf="!sectionUnavailable('payments') && paymentModes.length; else noPayments">
+            <div *ngFor="let mode of paymentModes | slice:0:5">
+              <i class="bi bi-wallet2" aria-hidden="true"></i>
+              <span>{{ label(mode.method) }}<small>{{ mode.paymentCount | number }} payments · {{ mode.invoiceCount | number }} invoices</small></span>
+              <strong>{{ mode.amountPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong>
+            </div>
+          </div>
+          <ng-template #noPayments><p class="compact-empty" *ngIf="!sectionUnavailable('payments')">No records yet</p></ng-template>
+        </section>
+        <section class="collection-block due-block" *ngIf="!insightsLoading">
+          <div class="collection-title"><span>Outstanding dues</span><strong>{{ totalDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+          <p class="section-unavailable" *ngIf="sectionUnavailable('dues')">Due data unavailable</p>
+          <div class="due-list" *ngIf="!sectionUnavailable('dues') && dues.length; else noDues">
+            <div *ngFor="let due of dues | slice:0:5">
+              <span><strong>{{ due.invoiceNumber || due.invoiceId }}</strong><small><ng-container *ngIf="due.clientName">{{ due.clientName }} · </ng-container>{{ due.ageingDays | number }} days</small></span>
+              <b>{{ due.balancePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</b>
+            </div>
+          </div>
+          <ng-template #noDues><p class="compact-empty" *ngIf="!sectionUnavailable('dues')">No records yet</p></ng-template>
+        </section>
+      </article>
+
+      <article class="panel snapshot-panel">
+        <header class="panel-heading">
+          <div><span>Business</span><h2>Current snapshot</h2></div>
+          <span class="updated-at" *ngIf="loadedAt">{{ loadedAt | date:'dd/MM/yyyy, HH:mm' }}</span>
+        </header>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Area</th><th>Current</th><th>Overall</th></tr></thead>
+            <tbody>
+              <tr><td><i class="bi bi-calendar2-week" aria-hidden="true"></i> Appointments</td><td>{{ snapshot.openAppointments | number }} open</td><td>{{ snapshot.totalAppointments | number }}</td></tr>
+              <tr><td><i class="bi bi-check2-circle" aria-hidden="true"></i> Completed</td><td>Last 7 days</td><td>{{ snapshot.recentCompletedAppointments | number }}</td></tr>
+              <tr><td><i class="bi bi-people" aria-hidden="true"></i> Clients</td><td>Saved records</td><td>{{ snapshot.totalClients | number }}</td></tr>
+              <tr><td><i class="bi bi-scissors" aria-hidden="true"></i> Services</td><td>Saved catalog</td><td>{{ snapshot.totalServices | number }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </ng-container>
+</section>

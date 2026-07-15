@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../../shared/services/api.service';
+import { PosRealtimeService } from '../../../core/services/pos-realtime.service';
+import { Subscription } from 'rxjs';
 
 interface HeldInvoice {
   id: string;
@@ -23,14 +25,21 @@ interface HeldInvoice {
   templateUrl: './pos-holds-page.component.html',
   styleUrls: ['./pos-holds-page.component.css'],
 })
-export class PosHoldsPageComponent implements OnInit {
+export class PosHoldsPageComponent implements OnInit, OnDestroy {
   holds: HeldInvoice[] = [];
   selected: HeldInvoice | null = null;
   search = '';
   error = '';
+  private liveUpdates?: Subscription;
 
-  constructor(private readonly api: ApiService, private readonly router: Router) {}
-  ngOnInit(): void { this.load(); }
+  constructor(private readonly api: ApiService, private readonly router: Router, private readonly realtime: PosRealtimeService) {}
+  ngOnInit(): void {
+    this.load();
+    this.liveUpdates = this.realtime.events().subscribe((event) => {
+      if (event.entityType === 'invoice') this.load();
+    });
+  }
+  ngOnDestroy(): void { this.liveUpdates?.unsubscribe(); }
 
   get filtered(): HeldInvoice[] {
     const term = this.search.trim().toLowerCase();

@@ -1,0 +1,215 @@
+<main class="booking-shell">
+  <aside class="booking-nav" aria-label="Booking navigation">
+    <div class="brand">{{ tenant.name || 'AuraShine' }}</div>
+    <button class="nav-item active" type="button"><i class="bi bi-calendar2-check"></i><span>Public Booking</span></button>
+    <button class="nav-item" type="button"><i class="bi bi-scissors"></i><span>Services</span></button>
+    <button class="nav-item" type="button"><i class="bi bi-people"></i><span>Staff</span></button>
+    <button class="nav-item" type="button"><i class="bi bi-calendar-week"></i><span>My Bookings</span></button>
+    <button class="nav-item nav-bottom" type="button"><i class="bi bi-gear"></i><span>Settings</span></button>
+  </aside>
+
+  <section class="booking-workspace">
+    <header class="booking-topbar">
+      <div>
+        <span class="section-label">Public Booking</span>
+        <h1>Book appointment</h1>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" class="utility" (click)="useMyLocation()" [disabled]="busy">
+          <i class="bi bi-geo-alt"></i><span>Nearby</span>
+        </button>
+        <label class="control-label">
+          <span>Branch</span>
+          <select [(ngModel)]="branchId" (ngModelChange)="loadCatalog()" [disabled]="busy">
+            <option *ngFor="let branch of branches" [value]="branch.id">
+              {{ branch.name }}{{ branch.distanceKm != null ? ' · ' + branch.distanceKm + ' km' : '' }}
+            </option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <p class="state error" *ngIf="error">{{ error }}</p>
+    <p class="state success" *ngIf="success">{{ success }}</p>
+
+    <div class="booking-filters" *ngIf="!loading && !success">
+      <label class="search-field">
+        <i class="bi bi-search"></i>
+        <input [(ngModel)]="serviceSearch" placeholder="Search services" />
+      </label>
+      <select [(ngModel)]="selectedCategory">
+        <option value="all">All Categories</option>
+        <option *ngFor="let category of serviceCategories" [value]="category">{{ category }}</option>
+      </select>
+      <select [(ngModel)]="staffMode">
+        <option value="any">Any Staff</option>
+        <option value="specific">Specific Staff</option>
+      </select>
+      <as-date-picker [(value)]="bookingDate" ariaLabel="Booking date" (valueChange)="selectedSlot = null; loadSlots()" />
+    </div>
+
+    <div class="loading-layout" *ngIf="loading">
+      <div class="empty-card"><span class="spinner"></span><b>Loading</b></div>
+    </div>
+
+    <div class="booking-grid" *ngIf="!loading && !success">
+      <section class="panel service-panel">
+        <header class="panel-head">
+          <h2>Services</h2>
+          <span>{{ selectedServiceIds.length }} selected</span>
+        </header>
+
+        <div class="service-list" *ngIf="filteredServices.length; else noServices">
+          <article class="service-row" *ngFor="let service of filteredServices" [class.selected]="selectedServiceIds.includes(service.id)">
+            <button type="button" class="service-toggle" (click)="toggleService(service.id)">
+              <span>
+                <b>{{ service.name }}</b>
+                <small>{{ service.category || 'Service' }}</small>
+              </span>
+              <span class="service-meta">{{ service.durationMinutes }} min · {{ money(servicePrice(service)) }}</span>
+            </button>
+
+            <div class="service-options" *ngIf="selectedServiceIds.includes(service.id)">
+              <label *ngIf="service.variants.length">
+                <span>Variant</span>
+                <select [ngModel]="selection(service.id).variantId" (ngModelChange)="setVariant(service.id, $event)">
+                  <option value="">Standard</option>
+                  <option *ngFor="let variant of service.variants" [value]="variant.id">
+                    {{ variant.name }} · {{ money(variant.priceDeltaPaise) }}
+                  </option>
+                </select>
+              </label>
+              <label class="addon-option" *ngFor="let addon of service.addons">
+                <input type="checkbox" [checked]="selection(service.id).addonIds.includes(addon.id)" (change)="toggleAddon(service.id, addon.id)" />
+                <span>{{ addon.name }} · {{ money(addon.pricePaise) }}</span>
+              </label>
+            </div>
+          </article>
+        </div>
+
+        <ng-template #noServices>
+          <div class="empty-card">
+            <i class="bi bi-inbox"></i>
+            <b>No records yet</b>
+          </div>
+        </ng-template>
+      </section>
+
+      <section class="panel slot-panel">
+        <header class="panel-head">
+          <div class="tab-row">
+            <button type="button" [class.active]="step <= 2" (click)="step = 2">Staff</button>
+            <button type="button" [class.active]="step >= 3" (click)="selectedServiceIds.length && loadSlots()">Slots</button>
+          </div>
+        </header>
+
+        <div class="staff-list" *ngIf="staffMode === 'specific'">
+          <button type="button" *ngFor="let person of staff" [class.selected]="staffId === person.id" (click)="staffId = person.id; selectedSlot = null; clearQuote()">
+            <i class="bi bi-person"></i>
+            <span><b>{{ person.name }}</b><small>{{ person.jobTitle || 'Staff' }}</small></span>
+          </button>
+          <div class="empty-card compact" *ngIf="!staff.length"><b>No records yet</b></div>
+        </div>
+
+        <div class="any-staff" *ngIf="staffMode === 'any'">
+          <i class="bi bi-magic"></i>
+          <span><b>Any available staff</b><small>{{ selectedStaffLabel }}</small></span>
+        </div>
+
+        <div class="date-strip">
+          <button type="button" class="icon-btn" disabled><i class="bi bi-chevron-left"></i></button>
+          <span><i class="bi bi-calendar3"></i>{{ bookingDate }}</span>
+          <button type="button" class="icon-btn" disabled><i class="bi bi-chevron-right"></i></button>
+        </div>
+
+        <div class="slot-list" *ngIf="slots.length; else noSlots">
+          <button type="button" *ngFor="let slot of slots" [class.selected]="selectedSlot === slot" (click)="chooseSlot(slot)">
+            {{ time(slot.startAt) }}
+          </button>
+        </div>
+
+        <ng-template #noSlots>
+          <div class="empty-card">
+            <span class="spinner" *ngIf="busy"></span>
+            <i class="bi bi-calendar2" *ngIf="!busy"></i>
+            <b>{{ busy ? 'Loading' : 'No records yet' }}</b>
+          </div>
+        </ng-template>
+      </section>
+
+      <aside class="panel summary-panel">
+        <header class="panel-head">
+          <h2>Booking Summary</h2>
+          <button type="button" class="icon-btn" disabled><i class="bi bi-x-lg"></i></button>
+        </header>
+
+        <section class="summary-section">
+          <h3>Services</h3>
+          <div *ngIf="selectedServices.length; else noSelection">
+            <p *ngFor="let service of selectedServices"><span>{{ service.name }}</span><b>{{ money(servicePrice(service)) }}</b></p>
+          </div>
+          <ng-template #noSelection>
+            <div class="skeleton short"></div>
+            <div class="skeleton"></div>
+          </ng-template>
+        </section>
+
+        <section class="summary-section">
+          <h3>Staff</h3>
+          <p><span><i class="bi bi-person"></i>{{ selectedStaffLabel }}</span></p>
+          <h3>Date & Time</h3>
+          <p><span><i class="bi bi-calendar3"></i>{{ selectedSlot ? time(selectedSlot.startAt) : 'Select a slot' }}</span></p>
+        </section>
+
+        <section class="summary-section">
+          <h3>Deposit</h3>
+          <p class="status-row"><span><i class="bi bi-credit-card"></i>{{ depositPaise ? money(depositPaise) : 'Deposit' }}</span><b>Pending</b></p>
+        </section>
+
+        <section class="summary-section">
+          <h3>OTP Verification</h3>
+          <label class="field">
+            <span>Mobile</span>
+            <input [(ngModel)]="mobile" inputmode="tel" placeholder="Mobile number" />
+          </label>
+          <div class="otp-row">
+            <input [(ngModel)]="otp" inputmode="numeric" maxlength="6" placeholder="OTP" />
+            <button type="button" (click)="sendOtp()" [disabled]="busy || !mobile.trim()">Send OTP</button>
+            <button type="button" class="primary" (click)="verifyOtp()" [disabled]="busy || !otp.trim()">Verify</button>
+          </div>
+          <small>{{ otpVerified ? 'Verified' : 'Pending verification' }}</small>
+        </section>
+
+        <section class="summary-section">
+          <h3>Payment Status</h3>
+          <p class="status-row"><span><i class="bi bi-wallet2"></i>Total {{ money(totalPaise) }}</span><b>Pending</b></p>
+        </section>
+
+        <footer class="summary-actions">
+          <button type="button" (click)="back()" [disabled]="step === 1 || busy">Back</button>
+          <button class="primary" type="button" (click)="continue()" [disabled]="!canContinue">{{ step === 5 ? 'Confirm' : 'Continue' }}</button>
+        </footer>
+      </aside>
+    </div>
+
+    <section class="mobile-app-panel" *ngIf="!loading && !success" aria-label="Customer app preview">
+      <header>
+        <h2>Customer App</h2>
+        <button type="button" class="icon-btn" disabled><i class="bi bi-bell"></i></button>
+      </header>
+      <div class="quick-actions">
+        <button type="button" disabled><i class="bi bi-wallet2"></i><span>Wallet</span></button>
+        <button type="button" disabled><i class="bi bi-gem"></i><span>Membership</span></button>
+        <button type="button" disabled><i class="bi bi-gift"></i><span>Gift Card</span></button>
+      </div>
+      <div class="mobile-card">
+        <b>Nearby</b>
+        <span>{{ branches.length ? branches.length + ' branch(es)' : 'No records yet' }}</span>
+      </div>
+      <div class="mobile-card">
+        <b>Booking Summary</b>
+        <span>{{ selectedServices.length ? selectedServices.length + ' service(s)' : 'No records yet' }}</span>
+      </div>
+    </section>
+  </section>
+</main>

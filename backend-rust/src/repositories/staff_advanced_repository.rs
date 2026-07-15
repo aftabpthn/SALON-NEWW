@@ -268,6 +268,14 @@ pub struct StaffMobileDeviceAuthRecord {
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct MobilePushSubscriptionRecord {
+    pub device_id: String,
+    pub push_enabled: bool,
+    pub push_registered_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct StaffMobileSyncRecord {
     pub id: String,
     pub idempotency_key: String,
@@ -996,6 +1004,26 @@ pub async fn create_biometric_gateway(
     .await
 }
 
+pub async fn list_biometric_gateways(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<BiometricGatewayRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT id,gateway_code,display_name,provider_scope,version_label,health_status,
+               last_seen_at,active,created_at
+        FROM staff_biometric_gateways
+        WHERE tenant_id=$1 AND branch_id=$2
+        ORDER BY active DESC,COALESCE(last_seen_at,created_at) DESC,gateway_code
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
 pub async fn biometric_gateway_auth(
     db: &PgPool,
     gateway_id: &str,
@@ -1425,6 +1453,33 @@ pub async fn mobile_device_auth(
     .bind(tenant_id)
     .bind(branch_id)
     .bind(device_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn save_mobile_push_subscription(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    device_id: &str,
+    token_ciphertext: Option<&str>,
+    token_fingerprint: Option<&str>,
+    enabled: bool,
+) -> Result<Option<MobilePushSubscriptionRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE staff_mobile_devices
+              SET push_token_ciphertext=$4,push_token_fingerprint=$5,push_enabled=$6,
+                  push_registered_at=CASE WHEN $6 THEN NOW() ELSE push_registered_at END,
+                  updated_at=NOW(),version=version+1
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE
+            RETURNING id AS device_id,push_enabled,push_registered_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(device_id)
+    .bind(token_ciphertext)
+    .bind(token_fingerprint)
+    .bind(enabled)
     .fetch_optional(db)
     .await
 }

@@ -13,6 +13,61 @@ AuraShine uses the Rust/Axum backend and PostgreSQL journal tables as the accoun
 - Automatic operational postings and manual journals use source/idempotency keys to prevent duplicates.
 - Locked accounting periods reject back-dated finance writes until an authorized reopen.
 
+## Micro P&L contract
+
+Micro P&L is an analytical projection inside the existing Reports surface, not a
+second accounting ledger or a standalone P&L page. PostgreSQL journals remain the
+official financial truth.
+
+- Grain: one POS sale line, with refund, deferred-revenue, inventory-cost, and
+  commission events linked by their real source identifiers.
+- Recognized revenue: immediate taxable revenue for service/product lines,
+  deferred-revenue recognition for membership/package lines, less the net-of-tax
+  value of recorded refund lines. Tax and tips are not operating revenue.
+- Phase 1 profit level: `contributionProfitPaise = recognizedRevenuePaise -
+  productCostPaise - staffCostPaise`.
+- `staffCostPaise` is recorded commission only in Phase 1. Salary/time cost and
+  allocated overhead are later profit levels and must not be labelled net profit.
+- Missing invoice journals, required inventory costs, or required commission
+  snapshots mark a line incomplete. Incomplete lines must not be presented as a
+  production-ready profit answer.
+- Reconciliation compares Micro P&L revenue and product cost to journal revenue
+  and COGS for the same authorized branches and business-date range.
+- Corrections use existing refund, return, and journal reversal events; Micro P&L
+  does not copy or mutate the source ledgers.
+
+Phase 1 APIs:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/profit-intelligence/micro-lines` | Paginated sale-line contribution facts and completeness status |
+| `GET` | `/profit-intelligence/reconciliation` | Ledger variance and missing-source diagnostics |
+
+### Phase 2 cost levels
+
+- Contribution profit subtracts inventory cost and immutable POS commission
+  snapshots from recognized revenue.
+- Controllable profit additionally subtracts staff-time cost and recorded
+  gateway/refund fees. Staff-time cost uses finalized or paid payroll salary
+  plus overtime divided by attendance-derived worked minutes; payroll commission
+  is excluded because the POS commission snapshot is already counted.
+- Package and membership redemptions recognize the exact immutable value carried
+  by their credit/redemption ledgers. The last redemption receives any integer
+  paise remainder.
+- Fully-loaded profit additionally subtracts journal-backed overhead. Allocation
+  rules are append-only versions using `service_minutes`,
+  `chair_resource_minutes`, `revenue_share`, `headcount`, or
+  `transaction_count`; rule account codes select the real journal expense pool.
+- Missing finalized payroll, gateway reconciliation/refund fee evidence, or an
+  applicable overhead rule keeps the fully-loaded line incomplete.
+
+Phase 2 rule APIs:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/profit-intelligence/allocation-rules` | List authorized branch rule versions |
+| `POST` | `/profit-intelligence/allocation-rules` | Create the next effective rule version |
+
 ## Balance Sheet API
 
 All routes are under `/api/v1` and require authenticated tenant and branch context.

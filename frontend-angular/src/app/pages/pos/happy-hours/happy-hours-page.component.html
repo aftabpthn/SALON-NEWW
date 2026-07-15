@@ -1,0 +1,502 @@
+<section class="happy-hours-page">
+  <header class="page-toolbar">
+    <div><span>POS OFFERS</span><h1>Happy Hours</h1></div>
+    <div class="toolbar-actions">
+      <a routerLink="/pos">Checkout</a>
+      <button class="primary" type="button" (click)="openCreate()">Add rule</button>
+    </div>
+  </header>
+
+  <p class="message" *ngIf="message">{{ message }}</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <nav class="tabs" aria-label="Happy Hours workspace">
+    <button type="button" [class.active]="tab === 'rules'" (click)="tab = 'rules'">Rules</button>
+    <button type="button" [class.active]="tab === 'control'" (click)="tab = 'control'">Control tower</button>
+    <button type="button" [class.active]="tab === 'branchLeaderboard'" (click)="tab = 'branchLeaderboard'">Branch leaderboard</button>
+    <button type="button" [class.active]="tab === 'clientReturns'" (click)="tab = 'clientReturns'">Client returns</button>
+    <button type="button" [class.active]="tab === 'elasticityPricing'" (click)="tab = 'elasticityPricing'">Elasticity pricing</button>
+    <button type="button" [class.active]="tab === 'ruleTools'" (click)="tab = 'ruleTools'">Conflict & simulation</button>
+    <button type="button" [class.active]="tab === 'governance'" (click)="tab = 'governance'">Governance</button>
+    <button type="button" [class.active]="tab === 'intelligence'" (click)="tab = 'intelligence'">Offer intelligence</button>
+    <button type="button" [class.active]="tab === 'coupons'" (click)="tab = 'coupons'">Coupons</button>
+    <button type="button" [class.active]="tab === 'calendar'" (click)="tab = 'calendar'">Promotion calendar</button>
+    <button type="button" [class.active]="tab === 'audiences'" (click)="tab = 'audiences'">Campaign audiences</button>
+    <button type="button" [class.active]="tab === 'campaignLinks'" (click)="tab = 'campaignLinks'">Campaign links</button>
+    <button type="button" [class.active]="tab === 'marketAware'" (click)="tab = 'marketAware'">Market-aware offers</button>
+    <button type="button" [class.active]="tab === 'contextAware'" (click)="tab = 'contextAware'">Adaptive offers</button>
+    <button type="button" [class.active]="tab === 'autoSunset'" (click)="tab = 'autoSunset'">Auto-sunset</button>
+  </nav>
+
+  <section class="rules-card" *ngIf="tab === 'rules'">
+    <header><h2>Rules</h2><button type="button" (click)="load()" [disabled]="loading || busy">Refresh</button></header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Days</th><th>Time</th><th>Discount</th><th>Scope</th><th>Margin</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let rule of rules">
+            <td><strong>{{ rule.name }}</strong></td>
+            <td>{{ dayLabel(rule.weekdays) }}</td>
+            <td>{{ rule.startTime | slice:0:5 }}–{{ rule.endTime | slice:0:5 }}</td>
+            <td>{{ rule.discountBps / 100 | number:'1.0-2' }}%</td>
+            <td>{{ scopeLabel(rule) }}</td>
+            <td>{{ rule.minMarginBps ? ((rule.minMarginBps / 100 | number:'1.0-2') + '%') : '—' }}</td>
+            <td><span class="status" [class.active]="rule.active">{{ rule.active ? 'Active' : 'Inactive' }}</span></td>
+            <td class="row-actions"><button type="button" (click)="openEdit(rule)">Edit</button><button type="button" (click)="toggle(rule)" [disabled]="busy">{{ rule.active ? 'Disable' : 'Enable' }}</button></td>
+          </tr>
+          <tr *ngIf="loading"><td class="empty" colspan="8">Loading...</td></tr>
+          <tr *ngIf="!loading && !rules.length"><td class="empty" colspan="8">No records yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'control'">
+    <header><h2>Offer performance</h2><button type="button" (click)="loadControlTower()" [disabled]="busy">Refresh</button></header>
+    <dl class="summary-strip" *ngIf="controlTower as tower">
+      <div><dt>Active rules</dt><dd>{{ tower.summary.activeRules }}/{{ tower.summary.totalRules }}</dd></div>
+      <div><dt>Live rules</dt><dd>{{ tower.summary.liveRules }}</dd></div>
+      <div><dt>Applications</dt><dd>{{ tower.summary.applications }}</dd></div>
+      <div><dt>Sales value</dt><dd>{{ money(tower.summary.salesValuePaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+      <div><dt>Discount</dt><dd>{{ money(tower.summary.discountPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+      <div><dt>Health</dt><dd>{{ tower.summary.measuredOffers ? tower.summary.averageHealthScore : 'Collecting' }}</dd></div>
+    </dl>
+    <div class="table-wrap" *ngIf="controlTower as tower; else noControlData">
+      <table>
+        <thead><tr><th>Offer</th><th>Lifecycle</th><th>Applications</th><th>Sales value</th><th>Discount</th><th>Reversed</th><th>Efficiency</th><th>Health</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let offer of tower.offers">
+            <td><strong>{{ offer.name }}</strong><small>{{ offer.roiStatus }}</small></td>
+            <td><span class="status" [class.active]="offer.lifecycleStage === 'live'">{{ offer.lifecycleStage }}</span></td>
+            <td>{{ offer.applications }}</td>
+            <td>{{ money(offer.salesValuePaise) | currency:'INR':'symbol':'1.0-2' }}</td>
+            <td>{{ money(offer.discountPaise) | currency:'INR':'symbol':'1.0-2' }}</td>
+            <td>{{ money(offer.reversedDiscountPaise) | currency:'INR':'symbol':'1.0-2' }}</td>
+            <td>{{ efficiency(offer.returnOnDiscountBps) }}</td>
+            <td><span class="health" [attr.data-status]="offer.healthStatus">{{ offer.healthStatus }}<ng-container *ngIf="offer.healthScore"> · {{ offer.healthScore }}</ng-container></span></td>
+          </tr>
+          <tr *ngIf="!tower.offers.length"><td class="empty" colspan="8">No records yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noControlData><p class="empty">No records yet</p></ng-template>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'branchLeaderboard'">
+    <header><h2>Branch leaderboard</h2><button type="button" (click)="loadBranchLeaderboard()" [disabled]="busy">Refresh</button></header>
+    <div class="market-toolbar">
+      <label><span>From</span><as-date-picker [value]="branchLeaderboardFilters.from" (valueChange)="branchLeaderboardFilters.from = $event" ariaLabel="Branch leaderboard from date"></as-date-picker></label>
+      <label><span>To</span><as-date-picker [value]="branchLeaderboardFilters.to" (valueChange)="branchLeaderboardFilters.to = $event" ariaLabel="Branch leaderboard to date"></as-date-picker></label>
+      <label><span>Sort</span><select [(ngModel)]="branchLeaderboardFilters.sort"><option value="score">Score</option><option value="revenue">Revenue</option><option value="efficiency">Efficiency</option><option value="repeat">Repeat rate</option></select></label>
+      <button type="button" (click)="loadBranchLeaderboard()" [disabled]="busy">Apply</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Rank</th><th>Branch</th><th>Score</th><th>Active offers</th><th>Applications</th><th>Clients</th><th>Repeat</th><th>Sales value</th><th>Net discount</th><th>Efficiency</th><th>Recommendation</th></tr></thead><tbody>
+      <tr *ngFor="let row of branchLeaderboard"><td><strong>#{{ row.rank }}</strong></td><td><strong>{{ row.branchName }}</strong><small>{{ row.branchId }}</small></td><td><span class="status" [class.active]="row.leaderboardGrade === 'excellent' || row.leaderboardGrade === 'good'">{{ row.leaderboardScore }} · {{ actionLabel(row.leaderboardGrade) }}</span></td><td>{{ row.activeOffers }}</td><td>{{ row.applications }}</td><td>{{ row.uniqueClients }}</td><td>{{ percent(row.repeatRateBps) }}</td><td>{{ money(row.salesValuePaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ money(row.netDiscountPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ efficiency(row.returnOnDiscountBps) }}</td><td>{{ row.recommendation }}</td></tr>
+      <tr *ngIf="!branchLeaderboard.length"><td class="empty" colspan="11">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'clientReturns'">
+    <header><h2>Client Return Tracker</h2><div class="row-actions"><button type="button" (click)="loadClientReturns()" [disabled]="busy">Refresh</button><button type="button" (click)="exportClientReturns()" [disabled]="!clientReturnTracker?.clients?.length">Export CSV</button></div></header>
+    <div class="market-toolbar">
+      <label><span>From</span><as-date-picker [value]="clientReturnFilters.from" (valueChange)="clientReturnFilters.from = $event" ariaLabel="Client returns from date"></as-date-picker></label>
+      <label><span>To</span><as-date-picker [value]="clientReturnFilters.to" (valueChange)="clientReturnFilters.to = $event" ariaLabel="Client returns to date"></as-date-picker></label>
+      <label><span>Return window</span><select [(ngModel)]="clientReturnFilters.returnWindowDays"><option value="7">7 days</option><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>
+      <label><span>Status</span><select [(ngModel)]="clientReturnFilters.status"><option value="">All</option><option value="returned">Returned</option><option value="pending">Pending</option><option value="at_risk">At risk</option><option value="unknown_client">Unknown client</option></select></label>
+      <label><span>Offer type</span><select [(ngModel)]="clientReturnFilters.offerType"><option value="">All</option><option value="rule">Happy Hour rule</option><option value="coupon">Coupon</option></select></label>
+      <button type="button" (click)="loadClientReturns()" [disabled]="busy">Apply</button>
+    </div>
+    <ng-container *ngIf="clientReturnTracker as tracker; else noClientReturnData">
+      <dl class="summary-strip">
+        <div><dt>Return rate</dt><dd>{{ percent(tracker.summary.returnRateBps) }}</dd></div>
+        <div><dt>Returned</dt><dd>{{ tracker.summary.returnedCount }}/{{ tracker.summary.offerUses }}</dd></div>
+        <div><dt>Clients</dt><dd>{{ tracker.summary.returnedClients }}/{{ tracker.summary.uniqueClients }}</dd></div>
+        <div><dt>Average return</dt><dd>{{ tracker.summary.averageDaysToReturn }} days</dd></div>
+        <div><dt>Return revenue</dt><dd>{{ money(tracker.summary.returnRevenuePaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>At risk</dt><dd>{{ tracker.summary.atRiskCount }}</dd></div>
+      </dl>
+      <div class="subsection-title"><strong>Offer return performance</strong></div>
+      <div class="table-wrap compact-table"><table><thead><tr><th>Offer</th><th>Type</th><th>Uses</th><th>Returned</th><th>At risk</th><th>Return rate</th><th>Return revenue</th></tr></thead><tbody>
+        <tr *ngFor="let row of tracker.offers"><td><strong>{{ row.offerTitle }}</strong></td><td>{{ actionLabel(row.offerType) }}</td><td>{{ row.offerUses }}</td><td>{{ row.returnedCount }}</td><td>{{ row.atRiskCount }}</td><td>{{ percent(row.returnRateBps) }}</td><td>{{ money(row.returnRevenuePaise) | currency:'INR':'symbol':'1.0-2' }}</td></tr>
+        <tr *ngIf="!tracker.offers.length"><td class="empty" colspan="7">No records yet</td></tr>
+      </tbody></table></div>
+      <div class="subsection-title"><strong>Client returns</strong></div>
+      <div class="table-wrap"><table><thead><tr><th>Client</th><th>Offer</th><th>Used</th><th>Discount</th><th>Status</th><th>Returned</th><th>Return revenue</th><th>Action</th></tr></thead><tbody>
+        <tr *ngFor="let row of tracker.clients"><td><strong>{{ row.clientName || row.clientId }}</strong><small>{{ row.clientId }}</small></td><td><strong>{{ row.offerTitle }}</strong><small>{{ actionLabel(row.offerType) }}</small></td><td>{{ displayDate(row.usedAt) }}</td><td>{{ money(row.discountPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td><span class="status" [class.active]="row.status === 'returned'">{{ actionLabel(row.status) }}</span></td><td>{{ displayDate(row.returnAt) }}<small *ngIf="row.daysToReturn !== null">{{ row.daysToReturn }} days</small></td><td>{{ money(row.returnAmountPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ row.recommendation }}</td></tr>
+        <tr *ngIf="!tracker.clients.length"><td class="empty" colspan="8">No records yet</td></tr>
+      </tbody></table></div>
+    </ng-container>
+    <ng-template #noClientReturnData><p class="empty">No records yet</p></ng-template>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'elasticityPricing'">
+    <header><h2>Elasticity + Profit Pricing</h2><button type="button" (click)="loadElasticityPricing()" [disabled]="busy">Refresh</button></header>
+    <div class="market-toolbar">
+      <label><span>From</span><as-date-picker [value]="elasticityFilters.from" (valueChange)="elasticityFilters.from = $event" ariaLabel="Elasticity pricing from date"></as-date-picker></label>
+      <label><span>To</span><as-date-picker [value]="elasticityFilters.to" (valueChange)="elasticityFilters.to = $event" ariaLabel="Elasticity pricing to date"></as-date-picker></label>
+      <label><span>Day</span><select [(ngModel)]="elasticityFilters.dayOfWeek"><option value="">All days</option><option *ngFor="let day of weekDays" [value]="day.value">{{ day.label }}</option></select></label>
+      <label><span>Hour</span><input type="number" min="0" max="23" step="1" placeholder="All" [(ngModel)]="elasticityFilters.hourSlot" /></label>
+      <label><span>Service</span><select [(ngModel)]="elasticityFilters.serviceId"><option value="">All services</option><option *ngFor="let service of services" [value]="service.id">{{ catalogName(service) }}</option></select></label>
+      <button type="button" (click)="loadElasticityPricing()" [disabled]="busy">Apply</button>
+    </div>
+    <ng-container *ngIf="elasticityPricing as pricing; else noElasticityData">
+      <dl class="summary-strip summary-four">
+        <div><dt>Status</dt><dd>{{ pricing.status }}</dd></div>
+        <div><dt>Ready services</dt><dd>{{ pricing.readyServiceCount }}/{{ pricing.serviceCount }}</dd></div>
+        <div><dt>Observed bands</dt><dd>{{ pricing.bandCount }}</dd></div>
+        <div><dt>Period</dt><dd>{{ displayDate(pricing.fromDate) }}–{{ displayDate(pricing.toDate) }}</dd></div>
+      </dl>
+      <div class="table-wrap"><table><thead><tr><th>Service</th><th>Discount</th><th>Samples</th><th>Units / slot</th><th>Demand lift</th><th>Elasticity</th><th>Revenue</th><th>Cost</th><th>Profit / slot</th><th>Margin</th><th>Guard</th></tr></thead><tbody>
+        <tr *ngFor="let row of pricing.rows"><td><strong>{{ row.serviceName }}</strong><small *ngIf="row.recommended">Recommended</small></td><td>{{ percent(row.discountBps) }}</td><td>{{ row.sampleCount }}</td><td>{{ row.averageUnitsPerSlot | number:'1.0-2' }}</td><td>{{ percent(row.demandLiftBps) }}</td><td>{{ row.elasticity | number:'1.0-2' }}</td><td>{{ money(row.revenuePaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ money(row.productCostPaise + row.staffCostPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ money(row.profitPerSlotPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ percent(row.marginBps) }}<small>Min {{ percent(row.minimumMarginBps) }}</small></td><td><span class="status" [class.active]="row.marginSafe">{{ row.marginSafe ? 'Safe' : 'Risk' }}</span></td></tr>
+        <tr *ngIf="!pricing.rows.length"><td class="empty" colspan="11">No records yet</td></tr>
+      </tbody></table></div>
+    </ng-container>
+    <ng-template #noElasticityData><p class="empty">No records yet</p></ng-template>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'ruleTools'">
+    <header><h2>Rule conflict detector</h2><div class="row-actions"><label class="inline-check"><input type="checkbox" [(ngModel)]="conflictActiveOnly" (change)="loadRuleConflicts()" /> Active only</label><button type="button" (click)="loadRuleConflicts()" [disabled]="busy">Refresh</button></div></header>
+    <dl class="summary-strip summary-three" *ngIf="ruleConflicts as data">
+      <div><dt>Rules checked</dt><dd>{{ data.summary.rulesChecked }}</dd></div>
+      <div><dt>Conflicts</dt><dd>{{ data.summary.conflictCount }}</dd></div>
+      <div><dt>High severity</dt><dd>{{ data.summary.highSeverityCount }}</dd></div>
+    </dl>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Rule</th><th>Conflicts with</th><th>Type</th><th>Days</th><th>Severity</th><th>Reason</th></tr></thead><tbody>
+      <tr *ngFor="let row of ruleConflicts?.conflicts"><td><strong>{{ row.ruleName }}</strong></td><td><strong>{{ row.conflictingRuleName }}</strong></td><td>{{ actionLabel(row.conflictType) }}</td><td>{{ dayLabel(row.overlappingWeekdays) }}</td><td><span class="status" [class.active]="row.severity === 'medium'">{{ row.severity }}</span></td><td>{{ row.reasons.join(' · ') }}</td></tr>
+      <tr *ngIf="!ruleConflicts?.conflicts?.length"><td class="empty" colspan="6">No conflicts found</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Simulation sandbox</strong></div>
+    <div class="market-toolbar simulation-toolbar">
+      <label><span>Service</span><select [(ngModel)]="simulationDraft.serviceId"><option value="">Select</option><option *ngFor="let service of services" [value]="service.id">{{ catalogName(service) }}</option></select></label>
+      <label><span>Client</span><select [(ngModel)]="simulationDraft.clientId"><option value="">No client</option><option *ngFor="let client of clients" [value]="client.id">{{ catalogName(client) }}</option></select></label>
+      <label><span>Day</span><select [(ngModel)]="simulationDraft.weekday"><option value="">Select</option><option *ngFor="let day of weekDays" [value]="day.value">{{ day.label }}</option></select></label>
+      <label><span>Time</span><input type="time" [(ngModel)]="simulationDraft.time" /></label>
+      <label><span>Quantity</span><input type="number" min="1" max="1000" step="1" placeholder="Required" [(ngModel)]="simulationDraft.quantity" /></label>
+      <button type="button" (click)="runSimulation()" [disabled]="busy">Run simulation</button>
+    </div>
+    <ng-container *ngIf="simulationResult as result">
+      <dl class="summary-strip summary-six">
+        <div><dt>Status</dt><dd>{{ actionLabel(result.status) }}</dd></div>
+        <div><dt>Rule</dt><dd>{{ result.ruleName || '—' }}</dd></div>
+        <div><dt>Gross</dt><dd>{{ money(result.grossPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Discount</dt><dd>{{ money(result.discountPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Payable</dt><dd>{{ money(result.payablePaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Margin</dt><dd>{{ result.marginBps === null ? 'Unknown' : percent(result.marginBps) }}</dd></div>
+      </dl>
+      <p class="market-reasons">{{ result.reason }}</p>
+    </ng-container>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'governance'">
+    <header><h2>Discount approvals</h2><button type="button" (click)="loadGovernance()" [disabled]="busy">Refresh</button></header>
+    <div class="market-toolbar governance-form">
+      <label><span>Inactive rule</span><select [(ngModel)]="approvalDraft.ruleId"><option value="">Select</option><option *ngFor="let rule of inactiveRules()" [value]="rule.id">{{ rule.name }} · {{ percent(rule.discountBps) }}</option></select></label>
+      <label><span>Note</span><input type="text" maxlength="500" [(ngModel)]="approvalDraft.note" /></label>
+      <button type="button" (click)="requestApproval()" [disabled]="busy">Request approval</button>
+    </div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Rule</th><th>Discount</th><th>Requested by</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of approvals"><td><strong>{{ row.ruleName }}</strong><small>{{ row.note || row.decisionNote }}</small></td><td>{{ percent(row.requestedDiscountBps) }}</td><td>{{ row.requestedBy }}<small>{{ row.requestedRole }}</small></td><td><span class="status" [class.active]="row.status === 'approved'">{{ actionLabel(row.status) }}</span></td><td>{{ displayDate(row.createdAt) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'pending'" (click)="decideApproval(row, 'approved')" [disabled]="busy">Approve</button><button type="button" *ngIf="row.status === 'pending'" (click)="decideApproval(row, 'rejected')" [disabled]="busy">Reject</button></td></tr>
+      <tr *ngIf="!approvals.length"><td class="empty" colspan="6">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Invoice discount approvals</strong></div>
+    <div class="market-toolbar governance-form">
+      <label><span>Invoice ID</span><input type="text" maxlength="120" [(ngModel)]="discountApprovalDraft.invoiceId" /></label>
+      <label><span>Reason</span><input type="text" maxlength="500" [(ngModel)]="discountApprovalDraft.reason" /></label>
+      <label><span>Status</span><select [(ngModel)]="discountApprovalStatus" (change)="loadDiscountApprovals()"><option value="">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="expired">Expired</option></select></label>
+      <button type="button" (click)="requestDiscountApproval()" [disabled]="busy">Request approval</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Discount</th><th>Requested by</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of discountApprovals"><td><strong>{{ row.invoiceNumber }}</strong><small>{{ row.reason || row.decisionNote }}</small></td><td>{{ money(row.discountAmountPaise) | currency:'INR':'symbol':'1.0-2' }}<small>{{ actionLabel(row.discountType) }}</small></td><td>{{ row.requestedBy }}<small>{{ row.requestedRole }}</small></td><td><span class="status" [class.active]="row.status === 'approved'">{{ actionLabel(row.status) }}</span></td><td>{{ displayDate(row.expiresAt) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'pending'" (click)="decideDiscountApproval(row, 'approved')" [disabled]="busy">Approve</button><button type="button" *ngIf="row.status === 'pending'" (click)="decideDiscountApproval(row, 'rejected')" [disabled]="busy">Reject</button></td></tr>
+      <tr *ngIf="!discountApprovals.length"><td class="empty" colspan="6">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Coupon abuse alerts</strong></div>
+    <div class="market-toolbar governance-actions">
+      <label><span>Status</span><select [(ngModel)]="couponAbuseStatus" (change)="loadCouponAbuseAlerts()"><option value="open">Open</option><option value="resolved">Resolved</option><option value="">All</option></select></label>
+      <button type="button" (click)="scanCouponAbuse()" [disabled]="busy">Scan</button>
+    </div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Coupon</th><th>Client</th><th>Uses</th><th>Discount</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of couponAbuseAlerts"><td><strong>{{ row.couponCode }}</strong></td><td>{{ row.clientName || row.clientId }}</td><td>{{ row.evidenceJson.usageCount || 0 }}</td><td>{{ money(row.evidenceJson.totalDiscountPaise || 0) | currency:'INR':'symbol':'1.0-2' }}</td><td><span class="health" data-status="at_risk">{{ row.severity }}</span></td><td>{{ actionLabel(row.status) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'open'" (click)="resolveCouponAbuse(row)" [disabled]="busy">Resolve</button></td></tr>
+      <tr *ngIf="!couponAbuseAlerts.length"><td class="empty" colspan="7">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Anomaly inbox</strong></div>
+    <div class="market-toolbar governance-actions">
+      <label><span>Status</span><select [(ngModel)]="anomalyStatus" (change)="loadAnomalies()"><option value="open">Open</option><option value="reviewed">Reviewed</option><option value="dismissed">Dismissed</option><option value="">All</option></select></label>
+      <button type="button" (click)="scanAnomalies()" [disabled]="busy">Scan</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Anomaly</th><th>Type</th><th>Severity</th><th>Status</th><th>Detected</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of anomalies"><td><strong>{{ row.title }}</strong><small>{{ row.description }}</small></td><td>{{ actionLabel(row.anomalyType) }}</td><td><span class="health" [attr.data-status]="row.severity === 'medium' || row.severity === 'low' ? 'monitor' : 'at_risk'">{{ row.severity }}</span></td><td>{{ actionLabel(row.status) }}</td><td>{{ displayDate(row.detectedAt) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'open'" (click)="reviewAnomaly(row, 'reviewed')" [disabled]="busy">Review</button><button type="button" *ngIf="row.status === 'open'" (click)="reviewAnomaly(row, 'dismissed')" [disabled]="busy">Dismiss</button></td></tr>
+      <tr *ngIf="!anomalies.length"><td class="empty" colspan="6">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Discount budget</strong></div>
+    <div class="market-toolbar governance-form">
+      <label><span>From</span><as-date-picker [value]="budgetDraft.periodStart" (valueChange)="budgetDraft.periodStart = $event" ariaLabel="Budget start date"></as-date-picker></label>
+      <label><span>To</span><as-date-picker [value]="budgetDraft.periodEnd" (valueChange)="budgetDraft.periodEnd = $event" ariaLabel="Budget end date"></as-date-picker></label>
+      <label><span>Budget</span><input type="number" min="0" step="0.01" placeholder="Required" [(ngModel)]="budgetDraft.budget" /></label>
+      <label><span>Alert threshold %</span><input type="number" min="0.01" max="100" step="0.01" placeholder="Required" [(ngModel)]="budgetDraft.alertThresholdPercent" /></label>
+      <label><span>Approval above %</span><input type="number" min="0.01" max="100" step="0.01" placeholder="Required" [(ngModel)]="budgetDraft.approvalAbovePercent" /></label>
+      <button type="button" (click)="saveBudget()" [disabled]="busy">Save budget</button>
+    </div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Period</th><th>Budget</th><th>Spent</th><th>Remaining</th><th>Used</th><th>Approval above</th><th>Status</th></tr></thead><tbody>
+      <tr *ngIf="budget as row"><td>{{ displayDate(row.periodStart) }}–{{ displayDate(row.periodEnd) }}</td><td>{{ money(row.budgetPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ money(row.spentPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ money(row.remainingPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ percent(row.usedBps) }}</td><td>{{ percent(row.approvalAboveBps) }}</td><td><span class="status" [class.active]="!row.thresholdReached">{{ row.exceeded ? 'Exceeded' : row.thresholdReached ? 'Threshold reached' : 'Within budget' }}</span></td></tr>
+      <tr *ngIf="!budget"><td class="empty" colspan="7">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Audit log</strong></div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Event</th><th>Actor</th><th>Outcome</th><th>Created</th></tr></thead><tbody>
+      <tr *ngFor="let row of auditLog"><td><strong>{{ actionLabel(row.eventType) }}</strong></td><td>{{ row.userId || 'System' }}</td><td>{{ row.outcome }}</td><td>{{ displayDate(row.createdAt) }}</td></tr>
+      <tr *ngIf="!auditLog.length"><td class="empty" colspan="4">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Webhooks</strong></div>
+    <div class="market-toolbar governance-form">
+      <label><span>Name</span><input type="text" maxlength="120" [(ngModel)]="webhookDraft.name" /></label>
+      <label><span>Endpoint</span><input type="url" [(ngModel)]="webhookDraft.endpointUrl" /></label>
+      <button type="button" (click)="saveWebhook()" [disabled]="busy">Add webhook</button>
+    </div>
+    <p class="market-reasons" *ngIf="webhookSecret"><strong>Signing secret:</strong> {{ webhookSecret }}</p>
+    <div class="table-wrap"><table><thead><tr><th>Webhook</th><th>Endpoint</th><th>Events</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of webhooks"><td><strong>{{ row.name }}</strong></td><td>{{ row.endpointUrl }}</td><td>{{ row.events.length }}</td><td><span class="status" [class.active]="row.active">{{ row.active ? 'Active' : 'Disabled' }}</span></td><td class="row-actions"><button type="button" (click)="testWebhook(row)" [disabled]="busy || !row.active">Test</button><button type="button" (click)="deactivateWebhook(row)" [disabled]="busy || !row.active">Disable</button></td></tr>
+      <tr *ngIf="!webhooks.length"><td class="empty" colspan="5">No records yet</td></tr>
+    </tbody></table></div>
+    <div class="subsection-title"><strong>Webhook deliveries</strong></div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Event</th><th>Status</th><th>Attempts</th><th>Response</th><th>Created</th></tr></thead><tbody>
+      <tr *ngFor="let row of webhookDeliveries"><td><strong>{{ actionLabel(row.eventType) }}</strong></td><td>{{ row.status }}</td><td>{{ row.attempts }}</td><td>{{ row.responseStatus || row.lastError || '—' }}</td><td>{{ displayDate(row.createdAt) }}</td></tr>
+      <tr *ngIf="!webhookDeliveries.length"><td class="empty" colspan="5">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'intelligence'">
+    <header><h2>Offer intelligence</h2><button type="button" (click)="loadIntelligence()" [disabled]="busy">Refresh</button></header>
+    <dl class="summary-strip summary-four" *ngIf="intelligence as data">
+      <div><dt>Fraud review</dt><dd>{{ data.summary.fraudReviewSignals }}</dd></div>
+      <div><dt>No-show risk</dt><dd>{{ data.summary.noShowRisks }}</dd></div>
+      <div><dt>Inventory actions</dt><dd>{{ data.summary.inventoryActions }}</dd></div>
+      <div><dt>Staff actions</dt><dd>{{ data.summary.staffActions }}</dd></div>
+    </dl>
+    <div class="intelligence-grid" *ngIf="intelligence as data; else noIntelligence">
+      <article class="signal-card">
+        <h3>Fraud review signals</h3>
+        <div class="signal-list">
+          <div *ngFor="let row of data.fraudReview"><strong>{{ row.subject }}</strong><span>{{ row.reason }}</span><small>{{ row.severity }} · {{ row.occurrences }} occurrences<span *ngIf="row.amountPaise"> · {{ money(row.amountPaise) | currency:'INR':'symbol':'1.0-2' }}</span></small></div>
+          <p class="empty" *ngIf="!data.fraudReview.length">No records yet</p>
+        </div>
+      </article>
+      <article class="signal-card">
+        <h3>No-show risk</h3>
+        <div class="table-wrap compact-table"><table><thead><tr><th>Client</th><th>No-show</th><th>Cancelled</th><th>Completed</th><th>Risk</th></tr></thead><tbody>
+          <tr *ngFor="let row of data.noShowRisks"><td><strong>{{ row.clientName }}</strong><small>{{ row.totalAppointments }} appointments</small></td><td>{{ row.noShowCount }}</td><td>{{ row.cancellationCount }}</td><td>{{ row.completedCount }}</td><td><span class="health" [attr.data-status]="row.riskLevel === 'low' ? 'healthy' : row.riskLevel === 'medium' ? 'monitor' : 'at_risk'">{{ row.riskLevel }} · {{ row.riskScore }}</span></td></tr>
+          <tr *ngIf="!data.noShowRisks.length"><td class="empty" colspan="5">No records yet</td></tr>
+        </tbody></table></div>
+      </article>
+      <article class="signal-card">
+        <h3>Inventory-aware offers</h3>
+        <div class="signal-list">
+          <div *ngFor="let row of data.inventoryOffers"><strong>{{ row.itemName }}</strong><span>Stock {{ row.stockQuantity }} · Reorder {{ row.reorderPoint }}</span><small>{{ actionLabel(row.recommendation) }}</small></div>
+          <p class="empty" *ngIf="!data.inventoryOffers.length">No records yet</p>
+        </div>
+      </article>
+      <article class="signal-card">
+        <h3>Staff-aware offers</h3>
+        <div class="signal-list">
+          <div *ngFor="let row of data.staffOffers"><strong>{{ row.staffName }}</strong><span>{{ row.scheduleStatus }} · {{ row.appointmentCount }} appointments</span><small>{{ row.scheduledMinutes ? percent(row.occupancyBps) + ' occupied · ' : '' }}{{ actionLabel(row.recommendation) }}</small></div>
+          <p class="empty" *ngIf="!data.staffOffers.length">No records yet</p>
+        </div>
+      </article>
+    </div>
+    <ng-template #noIntelligence><p class="empty">No records yet</p></ng-template>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'coupons'">
+    <header><h2>Coupons</h2><div class="row-actions"><button type="button" (click)="loadCoupons()" [disabled]="busy">Refresh</button><button class="primary" type="button" (click)="openCoupon()">Add coupon</button></div></header>
+    <div class="table-wrap"><table><thead><tr><th>Code</th><th>Discount</th><th>Minimum bill</th><th>Maximum discount</th><th>Validity</th><th>Usage</th><th>Status</th></tr></thead><tbody>
+      <tr *ngFor="let coupon of coupons"><td><strong>{{ coupon.code }}</strong></td><td>{{ couponDiscount(coupon) }}</td><td>{{ money(coupon.minSubtotalPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ coupon.maxDiscountPaise ? (money(coupon.maxDiscountPaise) | currency:'INR':'symbol':'1.0-2') : '—' }}</td><td>{{ displayDate(coupon.startsAt) }} – {{ displayDate(coupon.endsAt) }}</td><td>{{ coupon.usedCount }}<span *ngIf="coupon.usageLimit">/{{ coupon.usageLimit }}</span></td><td><span class="status" [class.active]="coupon.active">{{ coupon.active ? 'Active' : 'Inactive' }}</span></td></tr>
+      <tr *ngIf="!coupons.length"><td class="empty" colspan="7">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'calendar'">
+    <header><h2>Promotion calendar</h2><button type="button" (click)="load(); loadCoupons()" [disabled]="busy">Refresh</button></header>
+    <div class="table-wrap"><table><thead><tr><th>Promotion</th><th>Type</th><th>Schedule</th><th>Offer</th><th>Status</th></tr></thead><tbody>
+      <tr *ngFor="let rule of rules"><td><strong>{{ rule.name }}</strong></td><td>Happy Hour</td><td>{{ dayLabel(rule.weekdays) }} · {{ rule.startTime | slice:0:5 }}–{{ rule.endTime | slice:0:5 }}</td><td>{{ rule.discountBps / 100 | number:'1.0-2' }}%</td><td><span class="status" [class.active]="rule.active">{{ rule.active ? 'Active' : 'Inactive' }}</span></td></tr>
+      <tr *ngFor="let coupon of coupons"><td><strong>{{ coupon.code }}</strong></td><td>Coupon</td><td>{{ displayDate(coupon.startsAt) }} – {{ displayDate(coupon.endsAt) }}</td><td>{{ couponDiscount(coupon) }}</td><td><span class="status" [class.active]="coupon.active">{{ coupon.active ? 'Active' : 'Inactive' }}</span></td></tr>
+      <tr *ngIf="!rules.length && !coupons.length"><td class="empty" colspan="5">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'audiences'">
+    <header><h2>Campaign audiences</h2><div class="row-actions"><button type="button" (click)="loadAudiences()" [disabled]="busy">Refresh</button><button class="primary" type="button" (click)="openAudience()">Add audience</button></div></header>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Channel</th><th>Criteria</th><th>Last estimate</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let audience of audiences"><td><strong>{{ audience.name }}</strong></td><td>{{ audience.channel }}</td><td>{{ criteriaLabel(audience.criteria) }}</td><td>{{ audience.estimateCount }}</td><td><span class="status" [class.active]="audience.status === 'ready'">{{ audience.status }}</span></td><td class="row-actions"><button type="button" *ngIf="audience.status !== 'ready'" (click)="setAudienceStatus(audience, 'ready')" [disabled]="busy">Ready</button><button type="button" *ngIf="audience.status !== 'archived'" (click)="setAudienceStatus(audience, 'archived')" [disabled]="busy">Archive</button></td></tr>
+      <tr *ngIf="!audiences.length"><td class="empty" colspan="6">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'campaignLinks'">
+    <header><h2>Campaign links</h2><div class="row-actions"><button type="button" (click)="loadCampaignLinks()" [disabled]="busy">Refresh</button><button class="primary" type="button" (click)="openCampaignLink()">Link campaign</button></div></header>
+    <div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Audience</th><th>Happy Hour</th><th>Coupon</th><th>Channel</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let link of campaignLinks"><td><strong>{{ link.title }}</strong><small>{{ link.message }}</small></td><td>{{ link.audienceName }}</td><td>{{ link.ruleName }}</td><td>{{ link.couponCode || '—' }}</td><td>{{ link.channel }}</td><td><span class="status" [class.active]="link.status === 'ready'">{{ link.status }}</span></td><td class="row-actions"><button type="button" *ngIf="link.status !== 'ready'" (click)="setCampaignLinkStatus(link, 'ready')" [disabled]="busy">Ready</button><button type="button" *ngIf="link.status !== 'archived'" (click)="setCampaignLinkStatus(link, 'archived')" [disabled]="busy">Archive</button></td></tr>
+      <tr *ngIf="!campaignLinks.length"><td class="empty" colspan="7">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'marketAware'">
+    <header><h2>Market-aware offers</h2><div class="row-actions"><button type="button" (click)="loadMarketAware()" [disabled]="busy">Refresh</button><button class="primary" type="button" (click)="openMarketObservation()">Add observation</button></div></header>
+    <div class="market-toolbar">
+      <label><span>Service category</span><input type="text" [ngModel]="marketDraft.serviceCategory" (ngModelChange)="setMarketCategory($event)" /></label>
+      <label><span>Signal date</span><as-date-picker [value]="marketDraft.signalDate" (valueChange)="marketDraft.signalDate = $event" ariaLabel="Market signal date"></as-date-picker></label>
+      <label><span>Hour</span><input type="number" min="0" max="23" step="1" [(ngModel)]="marketDraft.hourSlot" /></label>
+      <label><span>Our price</span><input type="number" min="0.01" step="0.01" [(ngModel)]="marketDraft.ourPrice" /></label>
+      <label><span>Base discount %</span><input type="number" min="0" max="40" step="0.01" [(ngModel)]="marketDraft.baseDiscount" /></label>
+      <label><span>Maximum discount %</span><input type="number" min="0" max="40" step="0.01" [(ngModel)]="marketDraft.maxDiscount" /></label>
+      <div class="row-actions"><button type="button" (click)="evaluateMarketOffer()" [disabled]="busy">Evaluate</button><button class="primary" type="button" (click)="saveMarketSuggestion()" [disabled]="busy">Save suggestion</button></div>
+    </div>
+    <ng-container *ngIf="marketEvaluation as result">
+      <dl class="summary-strip">
+        <div><dt>Readiness</dt><dd>{{ actionLabel(result.status) }}</dd></div>
+        <div><dt>Benchmark</dt><dd>{{ actionLabel(result.benchmarkSource) }}</dd></div>
+        <div><dt>Market average</dt><dd>{{ result.marketAvgPaise ? (money(result.marketAvgPaise) | currency:'INR':'symbol':'1.0-2') : 'Collecting' }}</dd></div>
+        <div><dt>Position</dt><dd>{{ actionLabel(result.marketPosition) }}</dd></div>
+        <div><dt>Occupancy</dt><dd>{{ result.scheduledStaff ? percent(result.occupancyBps) : 'Collecting' }}</dd></div>
+        <div><dt>Suggested discount</dt><dd>{{ percent(result.suggestedDiscountBps) }}</dd></div>
+      </dl>
+      <p class="market-reasons">{{ result.reasons.join(' · ') }}</p>
+    </ng-container>
+    <div class="subsection-title"><strong>Saved suggestions</strong></div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Category</th><th>Signal</th><th>Benchmark</th><th>Position</th><th>Demand</th><th>Offer</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of marketSuggestions"><td><strong>{{ row.serviceCategory }}</strong><small>{{ actionLabel(row.campaignAngle) }}</small></td><td>{{ displayDate(row.signalDate) }} · {{ row.hourSlot }}:00</td><td>{{ actionLabel(row.benchmarkSource) }} · {{ money(row.marketAvgPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ actionLabel(row.marketPosition) }}<small>{{ percent(row.priceGapBps) }} gap</small></td><td>{{ row.appointmentCount }}/{{ row.scheduledStaff }} · {{ percent(row.occupancyBps) }}</td><td>{{ percent(row.suggestedDiscountBps) }}</td><td><span class="status" [class.active]="row.status === 'approved'">{{ row.status }}</span></td><td class="row-actions"><button type="button" *ngIf="row.status !== 'approved'" (click)="setMarketSuggestionStatus(row, 'approved')" [disabled]="busy">Approve</button><button type="button" *ngIf="row.status === 'approved'" (click)="setMarketSuggestionStatus(row, 'paused')" [disabled]="busy">Pause</button><button type="button" *ngIf="row.status !== 'archived'" (click)="setMarketSuggestionStatus(row, 'archived')" [disabled]="busy">Archive</button></td></tr>
+      <tr *ngIf="!marketSuggestions.length"><td class="empty" colspan="8">No records yet</td></tr>
+    </tbody></table></div>
+    <div class="subsection-title"><strong>Market observations</strong></div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Category</th><th>Competitor</th><th>Observed price</th><th>Observed date</th><th>Source</th></tr></thead><tbody>
+      <tr *ngFor="let row of marketObservations"><td><strong>{{ row.serviceCategory }}</strong></td><td>{{ row.competitorName }}</td><td>{{ money(row.observedPricePaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ displayDate(row.observedOn) }}</td><td><a *ngIf="row.sourceUrl; else noSource" [href]="row.sourceUrl" target="_blank" rel="noopener">Open</a><ng-template #noSource>—</ng-template></td></tr>
+      <tr *ngIf="!marketObservations.length"><td class="empty" colspan="5">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'contextAware'">
+    <header><h2>Adaptive offers</h2><button type="button" (click)="loadContextAware()" [disabled]="busy">Refresh</button></header>
+    <div class="market-toolbar">
+      <label><span>Offer type</span><select [(ngModel)]="contextOfferDraft.offerType"><option value="bundle">Bundle-aware</option><option value="channel">Channel-aware</option><option value="lead_time">Lead-time</option><option value="weather_event">Weather / event</option><option value="member_wallet">Member / wallet</option></select></label>
+      <label><span>Service category</span><input type="text" [ngModel]="contextOfferDraft.serviceCategory" (ngModelChange)="setContextCategory($event)" /></label>
+      <label><span>Signal date</span><as-date-picker [value]="contextOfferDraft.signalDate" (valueChange)="contextOfferDraft.signalDate = $event" ariaLabel="Context offer signal date"></as-date-picker></label>
+      <label><span>Hour</span><input type="number" min="0" max="23" step="1" [(ngModel)]="contextOfferDraft.hourSlot" /></label>
+      <label><span>Service price</span><input type="number" min="0.01" step="0.01" [(ngModel)]="contextOfferDraft.servicePrice" /></label>
+      <label><span>Base discount %</span><input type="number" min="0" max="40" step="0.01" [(ngModel)]="contextOfferDraft.baseDiscount" /></label>
+      <label><span>Maximum discount %</span><input type="number" min="0" max="40" step="0.01" [(ngModel)]="contextOfferDraft.maxDiscount" /></label>
+    </div>
+    <div class="market-toolbar context-fields" *ngIf="contextOfferDraft.offerType === 'bundle'">
+      <label><span>Selected services</span><input type="number" min="1" max="20" step="1" [(ngModel)]="contextOfferDraft.selectedServiceCount" /></label>
+      <label><span>Cart total</span><input type="number" min="0" step="0.01" [(ngModel)]="contextOfferDraft.cartTotal" /></label>
+    </div>
+    <div class="market-toolbar context-fields" *ngIf="contextOfferDraft.offerType === 'channel'">
+      <label><span>Source channel</span><select [(ngModel)]="contextOfferDraft.sourceChannel"><option value="">Select</option><option value="manual">Manual</option><option value="walk_in">Walk-in</option><option value="online_booking">Online booking</option><option value="whatsapp">WhatsApp</option><option value="google">Google</option><option value="instagram">Instagram</option><option value="referral">Referral</option></select></label>
+      <label><span>Channel fee %</span><input type="number" min="0" max="40" step="0.01" [(ngModel)]="contextOfferDraft.channelFee" /></label>
+    </div>
+    <div class="market-toolbar context-fields" *ngIf="contextOfferDraft.offerType === 'lead_time'">
+      <label><span>Booking lead minutes</span><input type="number" min="0" max="129600" step="1" [(ngModel)]="contextOfferDraft.bookingLeadMinutes" /></label>
+    </div>
+    <div class="market-toolbar context-fields" *ngIf="contextOfferDraft.offerType === 'weather_event'">
+      <label><span>Weather</span><select [(ngModel)]="contextOfferDraft.weatherCondition"><option value="normal">Normal</option><option value="rain">Rain</option><option value="storm">Storm</option><option value="heatwave">Heatwave</option><option value="cold">Cold</option><option value="pollution">Pollution</option></select></label>
+      <label><span>Temperature °C</span><input type="number" min="-50" max="60" step="1" [(ngModel)]="contextOfferDraft.temperatureCelsius" /></label>
+      <label><span>Rain probability %</span><input type="number" min="0" max="100" step="1" [(ngModel)]="contextOfferDraft.rainProbabilityPercent" /></label>
+      <label><span>Event</span><select [(ngModel)]="contextOfferDraft.eventType"><option value="none">None</option><option value="festival">Festival</option><option value="wedding">Wedding</option><option value="payday">Payday</option><option value="month_end">Month end</option><option value="local_event">Local event</option><option value="school_holiday">School holiday</option><option value="traffic">Traffic disruption</option><option value="strike">Strike</option></select></label>
+      <label><span>Event name</span><input type="text" [ngModel]="contextOfferDraft.eventName" (ngModelChange)="setContextEventName($event)" /></label>
+      <label><span>Expected footfall</span><input type="number" min="0" step="1" [(ngModel)]="contextOfferDraft.expectedFootfall" /></label>
+    </div>
+    <div class="market-toolbar context-fields" *ngIf="contextOfferDraft.offerType === 'member_wallet'">
+      <label><span>Client</span><select [(ngModel)]="contextOfferDraft.clientId"><option value="">Select</option><option *ngFor="let client of clients" [value]="client.id">{{ catalogName(client) }}</option></select></label>
+      <label><span>Cart total</span><input type="number" min="0" step="0.01" [(ngModel)]="contextOfferDraft.cartTotal" /></label>
+    </div>
+    <div class="context-actions"><button type="button" (click)="evaluateContextOffer()" [disabled]="busy">Evaluate</button><button class="primary" type="button" (click)="saveContextOfferSuggestion()" [disabled]="busy">Save suggestion</button></div>
+    <ng-container *ngIf="contextOfferEvaluation as result">
+      <dl class="summary-strip">
+        <div><dt>Readiness</dt><dd>{{ result.readiness }}</dd></div>
+        <div><dt>Type</dt><dd>{{ actionLabel(result.offerType) }}</dd></div>
+        <div><dt>Signal</dt><dd>{{ contextSignalLabel(result.offerType, result.context) }}</dd></div>
+        <div><dt>Occupancy</dt><dd>{{ result.context.scheduledStaff ? percent(result.context.occupancyBps) : 'Collecting' }}</dd></div>
+        <div><dt>Angle</dt><dd>{{ actionLabel(result.campaignAngle) }}</dd></div>
+        <div><dt>Suggested discount</dt><dd>{{ percent(result.suggestedDiscountBps) }}</dd></div>
+      </dl>
+      <p class="market-reasons">{{ result.reasons.join(' · ') }}</p>
+    </ng-container>
+    <div class="subsection-title"><strong>Saved suggestions</strong></div>
+    <div class="table-wrap"><table><thead><tr><th>Type</th><th>Category</th><th>Signal</th><th>Slot</th><th>Angle</th><th>Offer</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of contextOfferSuggestions"><td><strong>{{ actionLabel(row.offerType) }}</strong></td><td>{{ row.serviceCategory }}</td><td>{{ contextSignalLabel(row.offerType, row.context) }}</td><td>{{ displayDate(row.signalDate) }} · {{ row.hourSlot }}:00</td><td>{{ actionLabel(row.campaignAngle) }}</td><td>{{ percent(row.suggestedDiscountBps) }}</td><td><span class="status" [class.active]="row.status === 'approved'">{{ row.status }}</span></td><td class="row-actions"><button type="button" *ngIf="row.status !== 'approved'" (click)="setContextOfferSuggestionStatus(row, 'approved')" [disabled]="busy">Approve</button><button type="button" *ngIf="row.status === 'approved'" (click)="setContextOfferSuggestionStatus(row, 'paused')" [disabled]="busy">Pause</button><button type="button" *ngIf="row.status !== 'archived'" (click)="setContextOfferSuggestionStatus(row, 'archived')" [disabled]="busy">Archive</button></td></tr>
+      <tr *ngIf="!contextOfferSuggestions.length"><td class="empty" colspan="8">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="rules-card" *ngIf="tab === 'autoSunset'">
+    <header><h2>Auto-sunset</h2><div class="row-actions"><button type="button" (click)="scanAutoSunset(false)" [disabled]="busy">Scan</button><button class="primary" type="button" (click)="scanAutoSunset(true)" [disabled]="busy">Apply safe scan</button></div></header>
+    <div class="market-toolbar">
+      <label><span>Policy</span><select [(ngModel)]="autoSunsetPolicy.status"><option value="active">Active</option><option value="paused">Paused</option></select></label>
+      <label><span>Review no-end-date after</span><input type="number" min="1" max="365" step="1" [(ngModel)]="autoSunsetPolicy.reviewNoEndDateAfterDays" /></label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="autoSunsetPolicy.expirePastEndDate" /><span>Expire past end date</span></label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="autoSunsetPolicy.pauseCouponsAtUsageLimit" /><span>Pause at usage limit</span></label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="autoSunsetPolicy.autoApplyExpired" /><span>Auto-apply expired</span></label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="autoSunsetPolicy.autoApplyUsageLimit" /><span>Auto-apply usage limit</span></label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="autoSunsetPolicy.autoApplyStale" /><span>Auto-apply stale</span></label>
+      <button class="primary" type="button" (click)="saveAutoSunsetPolicy()" [disabled]="busy">Save policy</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Offer</th><th>Action</th><th>Severity</th><th>Reason</th><th>Status</th><th>Decided</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of autoSunsetDecisions"><td><strong>{{ row.offerName }}</strong><small>{{ row.offerType }}</small></td><td>{{ actionLabel(row.action) }}</td><td>{{ row.severity }}</td><td>{{ row.reason }}</td><td><span class="status" [class.active]="row.status === 'applied'">{{ row.status }}</span></td><td>{{ displayDate(row.decidedAt) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'suggested'" (click)="applyAutoSunsetDecision(row)" [disabled]="busy">Apply</button></td></tr>
+      <tr *ngIf="!autoSunsetDecisions.length"><td class="empty" colspan="7">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+</section>
+
+<div class="drawer-backdrop" *ngIf="drawerOpen" (click)="closeDrawer()"></div>
+<aside class="rule-drawer" *ngIf="drawerOpen" aria-label="Happy Hour rule form">
+  <header><strong>{{ drawerMode === 'coupon' ? 'Add coupon' : drawerMode === 'audience' ? 'Add audience' : drawerMode === 'campaignLink' ? 'Link campaign' : drawerMode === 'marketObservation' ? 'Add market observation' : (editingId ? 'Edit rule' : 'Add rule') }}</strong><button type="button" aria-label="Close" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+  <div class="drawer-body" *ngIf="drawerMode === 'rule'">
+    <label><span>Name</span><input type="text" [ngModel]="draft.name" (ngModelChange)="setName($event)" /></label>
+    <div class="two-fields"><label><span>Start time</span><input type="time" [(ngModel)]="draft.startTime" /></label><label><span>End time</span><input type="time" [(ngModel)]="draft.endTime" /></label></div>
+    <fieldset><legend>Days</legend><div class="day-grid"><label *ngFor="let day of weekDays"><input type="checkbox" [checked]="draft.weekdays.includes(day.value)" (change)="toggleDay(day.value)" /><span>{{ day.label }}</span></label></div></fieldset>
+    <label><span>Discount %</span><input type="number" min="0.01" max="100" step="0.01" [(ngModel)]="draft.discountPercent" /></label>
+    <label><span>Scope</span><select [ngModel]="draft.scope" (ngModelChange)="setScope($event)"><option value="all">All items</option><option value="service">Services</option><option value="product">Products</option></select></label>
+    <label *ngIf="draft.scope !== 'all'"><span>{{ draft.scope === 'service' ? 'Services' : 'Products' }}</span><select multiple [(ngModel)]="draft.eligibleItemIds"><option *ngFor="let item of availableItems()" [value]="item.id">{{ catalogName(item) }}</option></select></label>
+    <label><span>Client categories</span><input type="text" [ngModel]="draft.clientCategories" (ngModelChange)="setCategories($event)" placeholder="Comma separated" /></label>
+    <label><span>Minimum margin %</span><input type="number" min="0" max="100" step="0.01" [(ngModel)]="draft.minMarginPercent" /></label>
+    <label class="check-row"><input type="checkbox" [(ngModel)]="draft.blockOnUnknownCost" /><span>Block when cost is missing</span></label>
+    <label class="check-row"><input type="checkbox" [(ngModel)]="draft.active" /><span>Active</span></label>
+  </div>
+  <div class="drawer-body" *ngIf="drawerMode === 'coupon'">
+    <label><span>Code</span><input type="text" [ngModel]="couponDraft.code" (ngModelChange)="setCouponCode($event)" /></label>
+    <label><span>Discount type</span><select [(ngModel)]="couponDraft.discountType"><option value="percent">Percent</option><option value="amount">Amount</option></select></label>
+    <label><span>{{ couponDraft.discountType === 'percent' ? 'Discount %' : 'Discount amount' }}</span><input type="number" min="0.01" step="0.01" [(ngModel)]="couponDraft.discountValue" /></label>
+    <div class="two-fields"><label><span>Minimum bill</span><input type="number" min="0" step="0.01" [(ngModel)]="couponDraft.minSubtotal" /></label><label><span>Maximum discount</span><input type="number" min="0" step="0.01" [(ngModel)]="couponDraft.maxDiscount" /></label></div>
+    <div class="two-fields"><label><span>Start date</span><as-date-picker [value]="couponDraft.startDate" (valueChange)="couponDraft.startDate = $event" ariaLabel="Coupon start date"></as-date-picker></label><label><span>End date</span><as-date-picker [value]="couponDraft.endDate" (valueChange)="couponDraft.endDate = $event" ariaLabel="Coupon end date"></as-date-picker></label></div>
+    <label><span>Usage limit</span><input type="number" min="1" step="1" [(ngModel)]="couponDraft.usageLimit" /></label>
+    <label class="check-row"><input type="checkbox" [(ngModel)]="couponDraft.active" /><span>Active</span></label>
+  </div>
+  <div class="drawer-body" *ngIf="drawerMode === 'audience'">
+    <label><span>Name</span><input type="text" [ngModel]="audienceDraft.name" (ngModelChange)="setAudienceName($event)" /></label>
+    <div class="two-fields"><label><span>Channel</span><select [(ngModel)]="audienceDraft.channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select></label><label><span>Status</span><select [(ngModel)]="audienceDraft.status"><option value="draft">Draft</option><option value="ready">Ready</option></select></label></div>
+    <div class="two-fields"><label><span>Inactive days minimum</span><input type="number" min="0" step="1" [(ngModel)]="audienceDraft.inactiveDays" /></label><label><span>Visits minimum</span><input type="number" min="0" step="1" [(ngModel)]="audienceDraft.visitCount" /></label></div>
+    <label><span>Minimum spend</span><input type="number" min="0" step="0.01" [(ngModel)]="audienceDraft.minimumSpend" /></label>
+    <div class="two-fields"><label><span>Birthday month</span><input type="number" min="1" max="12" step="1" [(ngModel)]="audienceDraft.birthdayMonth" /></label><label><span>Client type</span><select [(ngModel)]="audienceDraft.clientType"><option value="">All</option><option value="new">New</option><option value="existing">Existing</option></select></label></div>
+    <button type="button" (click)="previewCampaignAudience()" [disabled]="busy">Preview audience</button>
+    <section class="preview-box" *ngIf="audiencePreview as preview"><strong>{{ preview.estimateCount }} eligible clients</strong><div *ngFor="let client of preview.sample"><span>{{ client.clientName }}</span><small>{{ client.visitCount }} visits · {{ money(client.totalSpendPaise) | currency:'INR':'symbol':'1.0-2' }} · {{ client.inactiveDays }} inactive days</small></div><p class="empty" *ngIf="!preview.sample.length">No records yet</p></section>
+  </div>
+  <div class="drawer-body" *ngIf="drawerMode === 'campaignLink'">
+    <label><span>Audience</span><select [(ngModel)]="campaignLinkDraft.audienceId"><option value="">Select</option><option *ngFor="let audience of readyAudiences()" [value]="audience.id">{{ audience.name }} · {{ audience.estimateCount }}</option></select></label>
+    <label><span>Happy Hour rule</span><select [(ngModel)]="campaignLinkDraft.ruleId"><option value="">Select</option><option *ngFor="let rule of activeRules()" [value]="rule.id">{{ rule.name }}</option></select></label>
+    <label><span>Coupon</span><select [(ngModel)]="campaignLinkDraft.couponId"><option value="">None</option><option *ngFor="let coupon of activeCoupons()" [value]="coupon.id">{{ coupon.code }}</option></select></label>
+    <label><span>Title</span><input type="text" [ngModel]="campaignLinkDraft.title" (ngModelChange)="setCampaignTitle($event)" /></label>
+    <label><span>Message</span><textarea rows="6" [(ngModel)]="campaignLinkDraft.message"></textarea></label>
+    <label><span>Status</span><select [(ngModel)]="campaignLinkDraft.status"><option value="draft">Draft</option><option value="ready">Ready</option></select></label>
+  </div>
+  <div class="drawer-body" *ngIf="drawerMode === 'marketObservation'">
+    <label><span>Service category</span><input type="text" [ngModel]="marketObservationDraft.serviceCategory" (ngModelChange)="setObservationCategory($event)" /></label>
+    <label><span>Competitor</span><input type="text" [ngModel]="marketObservationDraft.competitorName" (ngModelChange)="setCompetitorName($event)" /></label>
+    <label><span>Observed price</span><input type="number" min="0.01" step="0.01" [(ngModel)]="marketObservationDraft.observedPrice" /></label>
+    <label><span>Observed date</span><as-date-picker [value]="marketObservationDraft.observedOn" (valueChange)="marketObservationDraft.observedOn = $event" ariaLabel="Market observation date"></as-date-picker></label>
+    <label><span>Source URL</span><input type="url" [(ngModel)]="marketObservationDraft.sourceUrl" /></label>
+  </div>
+  <footer><button type="button" (click)="closeDrawer()" [disabled]="busy">Cancel</button><button class="primary" type="button" (click)="saveDrawer()" [disabled]="busy">{{ busy ? 'Saving...' : 'Save' }}</button></footer>
+</aside>

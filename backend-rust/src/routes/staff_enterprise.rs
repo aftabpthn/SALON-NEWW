@@ -1,6 +1,7 @@
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{header, HeaderMap, Response},
     routing::{get, post},
     Extension, Json, Router,
 };
@@ -27,6 +28,7 @@ use crate::{
             StaffSalesReport, StatutoryCalculationRequest, StatutoryRuleRequest, StatutorySummary,
             TipPayoutRequest, TrainingAssignmentRequest, VersionRequest,
         },
+        staff_payroll_service,
     },
     state::AppState,
 };
@@ -45,6 +47,7 @@ pub fn router() -> Router<AppState> {
         .route("/staff/approvals/:id/decision", post(decide_approval))
         .route("/staff/audit", get(list_audit))
         .route("/staff/self/dashboard", get(self_dashboard))
+        .route("/staff/self/payslips/:run_id", get(self_payslip))
         .route("/staff/tips", get(list_tips))
         .route("/staff/tips/summary", get(tip_summary))
         .route("/staff/tips/payouts", post(record_tip_payout))
@@ -110,6 +113,7 @@ pub fn router() -> Router<AppState> {
             "/staff/notifications/:id/delivery-result",
             post(record_notification_delivery),
         )
+        .route("/staff/notifications/:id/retry", post(retry_notification))
         .route("/staff/notification-delivery-logs", get(notification_logs))
         .route(
             "/staff-enterprise/command-center",
@@ -306,6 +310,30 @@ async fn self_dashboard(
     Ok(Json(ApiResponse::ok(
         staff_enterprise_service::self_dashboard(&s.db, &t, &b, &c.sub, q.date).await?,
     )))
+}
+
+async fn self_payslip(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    mobile(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let pdf =
+        staff_payroll_service::payslip_pdf(&state.db, &tenant_id, &branch_id, &run_id, &staff_id)
+            .await?;
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/pdf")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"payslip-{run_id}-{staff_id}.pdf\""),
+        )
+        .body(Body::from(pdf))
+        .map_err(|_| AppError::internal("failed to build payslip"))
 }
 async fn list_tips(
     State(s): State<AppState>,
@@ -819,6 +847,21 @@ async fn record_notification_delivery(
         &row.id,
     )
     .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn retry_notification(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<VersionRequest>,
+) -> ApiResult<StaffNotificationQueueRecord> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    let row =
+        staff_enterprise_service::retry_notification(&s.db, &t, &b, &id, request.version).await?;
+    audit(&s, &c, &b, "staff.notification.retry", &row.id).await;
     Ok(Json(ApiResponse::ok(row)))
 }
 

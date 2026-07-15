@@ -303,6 +303,119 @@ td {
   justify-self: start;
 }
 
+.staff-assignment-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--svc-line);
+  border-radius: 10px;
+}
+
+.pricing-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--svc-line);
+  border-radius: 10px;
+}
+
+.pricing-card legend {
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pricing-card > button {
+  justify-self: start;
+}
+
+.pricing-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+
+.variant-row,
+.addon-row {
+  grid-template-columns: minmax(150px, 1fr) 110px 110px 76px auto;
+}
+
+.staff-price-row {
+  grid-template-columns: minmax(180px, 1fr) 120px 76px auto;
+}
+
+.rule-row {
+  grid-template-columns: minmax(130px, 1fr) 100px 100px 100px 110px 90px 76px auto;
+}
+
+.active-check {
+  display: flex !important;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.active-check input {
+  width: 16px !important;
+  min-height: 16px;
+  margin: 0;
+}
+
+.staff-assignment-card legend {
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-assignment-list {
+  display: grid;
+  gap: 6px;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.staff-option {
+  display: grid !important;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px !important;
+  padding: 8px 10px;
+  border: 1px solid #e3eaf2;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.staff-option input {
+  width: 18px !important;
+  min-height: 18px;
+  margin: 0;
+}
+
+.staff-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.staff-option small,
+.staff-option em,
+.compact-empty {
+  color: var(--svc-muted);
+  font-size: 11px;
+}
+
+.staff-option em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.compact-empty {
+  padding: 12px;
+  text-align: center;
+}
+
 .consumption-card {
   display: grid;
   gap: 12px;
@@ -376,6 +489,10 @@ td {
 
   .service-flyout {
     width: calc(100vw - 50px);
+  }
+
+  .pricing-row {
+    grid-template-columns: 1fr;
   }
 }
 .form-error {

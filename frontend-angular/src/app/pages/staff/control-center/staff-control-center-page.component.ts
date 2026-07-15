@@ -47,14 +47,19 @@ export class StaffControlCenterPageComponent implements OnInit {
   coachingGoals: Row[] = [];
   training: Row[] = [];
   devices: Row[] = [];
+  gateways: Row[] = [];
   mappings: Row[] = [];
+  consents: Row[] = [];
   biometricExceptions: Row[] = [];
   mobileConflicts: Row[] = [];
   approvals: Row[] = [];
   auditRows: Row[] = [];
   notifications: Row[] = [];
+  notificationLogs: Row[] = [];
   tips: Row[] = [];
   compliance: Row | null = null;
+  selfService: Row | null = null;
+  rosterDraft: Row | null = null;
 
   async ngOnInit() {
     await this.refresh();
@@ -78,14 +83,18 @@ export class StaffControlCenterPageComponent implements OnInit {
       this.loadList('/staff/coach/goals', (value) => this.coachingGoals = value),
       this.loadList('/staff-enterprise/training', (value) => this.training = value),
       this.loadList('/staff/biometric/devices', (value) => this.devices = value),
+      this.loadList('/staff/biometric/gateways', (value) => this.gateways = value),
       this.loadList('/staff/biometric/mappings', (value) => this.mappings = value),
+      this.loadList('/staff/biometric/consents', (value) => this.consents = value),
       this.loadList('/staff/biometric/exceptions', (value) => this.biometricExceptions = value),
       this.loadList('/staff/mobile/conflicts?status=open', (value) => this.mobileConflicts = value),
       this.loadList('/staff/approvals?status=pending', (value) => this.approvals = value),
       this.loadList('/staff/audit?eventPrefix=staff.', (value) => this.auditRows = value),
       this.loadList('/staff/notifications', (value) => this.notifications = value),
+      this.loadList('/staff/notification-delivery-logs', (value) => this.notificationLogs = value),
       this.loadList(`/staff/tips/summary?${period}`, (value) => this.tips = value),
       this.loadOne(`/staff/payroll-compliance/summary?${period}`, (value) => this.compliance = value),
+      this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value),
     ];
     const results = await Promise.allSettled(requests);
     const failures = results.filter((result) => result.status === 'rejected');
@@ -104,6 +113,257 @@ export class StaffControlCenterPageComponent implements OnInit {
 
   async decideApproval(row: Row, decision: 'approved' | 'rejected') {
     await this.action(`/staff/approvals/${row['id']}/decision`, { decision, version: row['version'], notes: '' });
+  }
+
+  async createShiftSwap(row?: Row) {
+    const scheduleId = this.ask('Schedule ID', row?.['scheduleId']);
+    const toStaffId = this.ask('Target staff ID');
+    if (!scheduleId || !toStaffId) return;
+    await this.action('/staff/shift-swaps', { scheduleId, toStaffId, reason: this.askOptional('Reason') });
+  }
+
+  async createTransfer() {
+    const staffId = this.ask('Staff ID');
+    const targetBranchId = this.ask('Target branch ID');
+    const roleId = this.ask('Role ID');
+    const transferType = this.askChoice('Transfer type', ['deputation', 'permanent']);
+    if (!staffId || !targetBranchId || !roleId || !transferType) return;
+    const payload: Row = { staffId, targetBranchId, roleId, transferType, reason: this.askOptional('Reason') };
+    if (transferType === 'deputation') {
+      payload['validFrom'] = this.ask('Valid from YYYY-MM-DD', this.periodStart);
+      payload['validUntil'] = this.ask('Valid until YYYY-MM-DD', this.periodEnd);
+      if (!payload['validFrom'] || !payload['validUntil']) return;
+    }
+    await this.action('/staff/branch-transfers', payload);
+  }
+
+  async optimizeRoster() {
+    this.rosterDraft = await this.action<Row>('/staff/roster/optimize', { periodStart: this.periodStart, periodEnd: this.periodEnd }, false);
+  }
+
+  async applyRoster() {
+    if (!this.rosterDraft?.['id']) return;
+    await this.action(`/staff/roster/drafts/${this.rosterDraft['id']}/apply`, { version: this.rosterDraft['version'] || 1 });
+    this.rosterDraft = null;
+  }
+
+  async createLicense(row?: Row, status = 'pending') {
+    const staffId = String(row?.['staffId'] || this.ask('Staff ID') || '');
+    const skillName = String(row?.['skillName'] || this.ask('Skill name') || '');
+    if (!staffId || !skillName) return;
+    await this.action('/staff/skill-licenses', {
+      id: row?.['id'] || undefined,
+      staffId,
+      skillName,
+      issuer: row?.['issuer'] || this.askOptional('Issuer'),
+      licenseNumber: row?.['licenseNumber'] || this.askOptional('License number'),
+      issuedOn: row?.['issuedOn'] || this.askOptional('Issued on YYYY-MM-DD'),
+      expiresOn: row?.['expiresOn'] || this.askOptional('Expires on YYYY-MM-DD'),
+      verificationStatus: status,
+      documentUrl: row?.['documentUrl'] || this.askOptional('Document URL'),
+      notes: row?.['notes'] || this.askOptional('Notes'),
+      version: row?.['version'],
+    });
+  }
+
+  async createReview(row?: Row, status = 'draft') {
+    const staffId = String(row?.['staffId'] || this.ask('Staff ID') || '');
+    if (!staffId) return;
+    await this.action('/staff/performance-reviews', {
+      id: row?.['id'] || undefined,
+      staffId,
+      periodStart: row?.['periodStart'] || this.periodStart,
+      periodEnd: row?.['periodEnd'] || this.periodEnd,
+      score: Number((row?.['score'] ?? this.askOptional('Score 0-100')) || 0) || undefined,
+      strengths: row?.['strengths'] || this.askOptional('Strengths'),
+      improvementAreas: row?.['improvementAreas'] || this.askOptional('Improvement areas'),
+      goals: row?.['goals'] || this.askOptional('Goals'),
+      employeeComments: row?.['employeeComments'] || '',
+      status,
+      version: row?.['version'],
+    });
+  }
+
+  async assignTraining() {
+    const staffId = this.ask('Staff ID');
+    const title = this.ask('Training title');
+    if (!staffId || !title) return;
+    const dueDate = this.askOptional('Due date YYYY-MM-DD');
+    await this.action('/staff-enterprise/training/assign', {
+      staffId,
+      title,
+      description: this.askOptional('Description'),
+      priority: this.askChoice('Priority', ['medium', 'low', 'high', 'urgent']) || 'medium',
+      dueAt: dueDate ? `${dueDate}T23:59:00+05:30` : undefined,
+    });
+  }
+
+  async completeTraining(row: Row) {
+    await this.action(`/staff/tasks/${row['id']}`, {
+      staffId: row['staffId'],
+      title: row['title'],
+      description: row['description'] || '',
+      taskType: row['taskType'] || 'training',
+      priority: row['priority'] || 'medium',
+      dueAt: row['dueAt'] || undefined,
+      status: 'completed',
+      version: row['version'],
+    }, true, 'patch');
+  }
+
+  async completeCoachingAction(action: Row) {
+    await this.action(`/staff/coach/actions/${action['id']}/complete`, { version: action['version'] || 1 });
+  }
+
+  async createDevice() {
+    const provider = this.ask('Provider');
+    const deviceCode = this.ask('Device code');
+    const deviceName = this.ask('Device name');
+    if (!provider || !deviceCode || !deviceName) return;
+    await this.action('/staff/biometric/devices', { provider, deviceCode, deviceName, connectionMode: this.askOptional('Connection mode') });
+  }
+
+  async registerGateway() {
+    const gatewayCode = this.ask('Gateway code');
+    if (!gatewayCode) return;
+    const providers = (this.askOptional('Providers comma separated') || '').split(',').map((item) => item.trim()).filter(Boolean);
+    const row = await this.action<Row>('/staff/biometric/gateways', {
+      gatewayCode,
+      displayName: this.askOptional('Display name') || gatewayCode,
+      providers,
+      versionLabel: this.askOptional('Gateway version'),
+    });
+    if (row?.['apiKey']) window.alert(`Gateway API key - copy now: ${row['apiKey']}`);
+  }
+
+  async heartbeatGateway(row: Row) {
+    const apiKey = this.ask('Gateway API key');
+    if (!apiKey) return;
+    await this.actionWithHeaders(`/staff/biometric/gateways/${row['id']}/heartbeat`, { versionLabel: row['versionLabel'] || '' }, { 'x-gateway-api-key': apiKey });
+  }
+
+  async createMapping() {
+    const deviceId = this.ask('Device ID');
+    const staffId = this.ask('Staff ID');
+    const externalUserId = this.ask('External user ID');
+    if (!deviceId || !staffId || !externalUserId) return;
+    await this.action('/staff/biometric/mappings', { deviceId, staffId, externalUserId });
+  }
+
+  async approveMapping(row: Row) {
+    await this.action(`/staff/biometric/mappings/${row['id']}/approve`, { version: row['version'] || 1 });
+  }
+
+  async saveConsent(row?: Row, status: 'granted' | 'withdrawn' = 'granted') {
+    const staffId = String(row?.['staffId'] || this.ask('Staff ID') || '');
+    if (!staffId) return;
+    await this.action('/staff/biometric/consents', {
+      staffId,
+      purpose: row?.['purpose'] || this.askOptional('Purpose') || 'attendance',
+      status,
+      notes: row?.['notes'] || this.askOptional('Notes'),
+      version: row?.['version'],
+    });
+  }
+
+  async requestConsentDeletion(row: Row) {
+    await this.action(`/staff/biometric/consents/${row['id']}/deletion-request`, { version: row['version'] || 1 });
+  }
+
+  async registerMobileDevice() {
+    const staffId = this.ask('Staff ID');
+    const deviceUid = this.ask('Device UID');
+    const platform = this.askChoice('Platform', ['android', 'ios', 'web', 'windows']);
+    if (!staffId || !deviceUid || !platform) return;
+    const row = await this.action<Row>('/staff/mobile/devices', { staffId, deviceUid, platform });
+    if (row?.['syncToken']) window.alert(`Mobile sync token - copy now: ${row['syncToken']}`);
+  }
+
+  async syncMobileMutation() {
+    const deviceId = this.ask('Device ID');
+    const syncToken = this.ask('Device sync token');
+    const actionType = this.askChoice('Action type', ['clock_in', 'clock_out', 'leave_request', 'task_complete', 'service_start', 'service_complete']);
+    const rawPayload = this.askOptional('Payload JSON');
+    if (!deviceId || !syncToken || !actionType) return;
+    let payload: unknown = {};
+    if (rawPayload) {
+      try {
+        payload = JSON.parse(rawPayload);
+      } catch {
+        this.error = 'Payload JSON is invalid';
+        return;
+      }
+    }
+    await this.actionWithHeaders('/staff/mobile/sync', {
+      deviceId,
+      mutations: [{ idempotencyKey: crypto.randomUUID(), actionType, payload }],
+    }, { 'x-device-sync-token': syncToken });
+  }
+
+  async resolveConflict(row: Row) {
+    const resolution = this.askChoice('Resolution', ['server_wins', 'client_wins', 'manual']);
+    if (!resolution) return;
+    await this.action(`/staff/mobile/conflicts/${row['id']}/resolve`, { resolution, version: row['version'] || 1 });
+  }
+
+  async calculateCompliance() {
+    const payrollRunId = this.ask('Payroll run ID');
+    const staffId = this.ask('Staff ID');
+    if (!payrollRunId || !staffId) return;
+    await this.action('/staff/payroll-compliance/calculate', { payrollRunId, staffId });
+  }
+
+  async exportCompliance() {
+    const row = await this.action<Row>('/staff/payroll-compliance/export', { periodStart: this.periodStart, periodEnd: this.periodEnd }, false);
+    if (!row) return;
+    this.downloadJson(row, `staff-compliance-${this.periodStart}-${this.periodEnd}.json`);
+  }
+
+  async recordTipPayout(row?: Row) {
+    const staffId = String(row?.['staffId'] || this.ask('Staff ID') || '');
+    const payoutReference = this.ask('Payout reference');
+    const saleIds = (this.ask('Sale IDs comma separated') || '').split(',').map((id) => id.trim()).filter(Boolean);
+    if (!staffId || !payoutReference || saleIds.length === 0) return;
+    await this.action('/staff/tips/payouts', { staffId, periodStart: this.periodStart, periodEnd: this.periodEnd, payoutReference, saleIds });
+  }
+
+  async createTemplate() {
+    const notificationType = this.askChoice('Notification type', ['training', 'compliance', 'payroll', 'leave', 'schedule', 'approval']);
+    const title = this.ask('Title');
+    const bodyTemplate = this.ask('Body template');
+    if (!notificationType || !title || !bodyTemplate) return;
+    await this.action('/staff/notification-templates', { notificationType, title, bodyTemplate, languageCode: 'en', sensitive: ['payroll', 'compliance'].includes(notificationType) });
+  }
+
+  async savePreference() {
+    const staffId = this.ask('Staff ID');
+    if (!staffId) return;
+    await this.action(`/staff/${staffId}/notification-preferences`, {
+      whatsappOptIn: this.askChoice('WhatsApp opt-in', ['true', 'false']) !== 'false',
+      allowPayrollAmounts: this.askChoice('Allow payroll amounts', ['false', 'true']) === 'true',
+      languageCode: this.askOptional('Language code') || 'en',
+    }, true, 'put');
+  }
+
+  async approveNotification(row: Row) {
+    await this.action(`/staff/notifications/${row['id']}/approve`, { version: row['version'] || 1 });
+  }
+
+  async retryNotification(row: Row) {
+    await this.action(`/staff/notifications/${row['id']}/retry`, { version: row['version'] || 1 });
+  }
+
+  async recordNotificationDelivery(row: Row, status: 'sent' | 'failed') {
+    const provider = this.ask('Provider', row['channel'] === 'whatsapp' ? 'whatsapp_cloud' : row['channel']);
+    if (!provider) return;
+    await this.action(`/staff/notifications/${row['id']}/delivery-result`, {
+      version: row['version'] || 1,
+      provider,
+      providerMessageId: status === 'sent' ? this.ask('Provider message ID') : this.askOptional('Provider message ID'),
+      status,
+      errorMessage: status === 'failed' ? this.askOptional('Error') : '',
+      payload: {},
+    });
   }
 
   selectTab(tab: WorkspaceTab) { this.activeTab = tab; }
@@ -133,19 +393,43 @@ export class StaffControlCenterPageComponent implements OnInit {
     const date = new Date(String(value));
     return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('en-IN');
   }
-  statusClass(value: unknown) { return ['approved', 'verified', 'processed', 'online', 'completed', 'closed'].includes(String(value).toLowerCase()) ? 'good' : ['rejected', 'expired', 'offline', 'conflict'].includes(String(value).toLowerCase()) ? 'bad' : ''; }
+  statusClass(value: unknown) { return ['approved', 'verified', 'processed', 'online', 'completed', 'closed', 'sent', 'granted'].includes(String(value).toLowerCase()) ? 'good' : ['rejected', 'expired', 'offline', 'conflict', 'failed', 'withdrawn', 'deletion_requested'].includes(String(value).toLowerCase()) ? 'bad' : ''; }
   staffName(row: Row) { return row['staffName'] || row['fromStaffName'] || row['displayName'] || row['staffId'] || '—'; }
   trackById(_: number, row: Row) { return row['id'] || row['staffId'] || row['key']; }
 
-  private async action(path: string, payload: unknown) {
+  private async action<T = Row>(path: string, payload: unknown, reload = true, method: 'post' | 'put' | 'patch' = 'post'): Promise<T | null> {
     this.loading = true;
     this.error = '';
     try {
-      await firstValueFrom(this.api.post<ApiEnvelope<Row>>(path, payload));
-      await this.refresh();
+      const response = method === 'put'
+        ? await firstValueFrom(this.api.put<ApiEnvelope<T>>(path, payload))
+        : method === 'patch'
+          ? await firstValueFrom(this.api.patch<ApiEnvelope<T>>(path, payload))
+          : await firstValueFrom(this.api.post<ApiEnvelope<T>>(path, payload));
+      const data = this.unwrap(response, 'Action failed');
+      if (reload) await this.refresh();
+      else this.loading = false;
+      return data;
     } catch (error) {
       this.error = this.message(error, 'Action failed');
       this.loading = false;
+      return null;
+    }
+  }
+
+  private async actionWithHeaders<T = Row>(path: string, payload: unknown, headers: Record<string, string>, reload = true): Promise<T | null> {
+    this.loading = true;
+    this.error = '';
+    try {
+      const response = await firstValueFrom(this.api.postWithHeaders<ApiEnvelope<T>>(path, payload, headers));
+      const data = this.unwrap(response, 'Action failed');
+      if (reload) await this.refresh();
+      else this.loading = false;
+      return data;
+    } catch (error) {
+      this.error = this.message(error, 'Action failed');
+      this.loading = false;
+      return null;
     }
   }
 
@@ -169,6 +453,20 @@ export class StaffControlCenterPageComponent implements OnInit {
   }
 
   private isoDate(value: Date) { return value.toISOString().slice(0, 10); }
+  private ask(label: string, initial = '') { const value = window.prompt(label, String(initial || ''))?.trim(); return value || null; }
+  private askOptional(label: string) { return window.prompt(label, '')?.trim() || ''; }
+  private askChoice(label: string, values: string[]) {
+    const value = window.prompt(`${label}: ${values.join(' / ')}`, values[0])?.trim().toLowerCase();
+    return value && values.includes(value) ? value : null;
+  }
+  private downloadJson(value: unknown, filename: string) {
+    const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
   private message(error: unknown, fallback: string) {
     const candidate = error as { error?: { error?: { message?: string }; message?: string }; message?: string };
     return candidate?.error?.error?.message || candidate?.error?.message || candidate?.message || fallback;

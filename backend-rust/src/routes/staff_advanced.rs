@@ -14,9 +14,9 @@ use crate::{
         auth_repository::{self, AuthAuditInput},
         staff_advanced_repository::{
             BiometricConsentRecord, BiometricDeviceRecord, BiometricEventRecord,
-            BiometricMappingRecord, IncentiveRuleRecord, MobilePayrollSummary,
-            PayrollAdjustmentRuleRecord, PayrollStructureRecord, StaffMobileConflictRecord,
-            StaffTaskCommentRecord, StaffTaskRecord,
+            BiometricGatewayRecord, BiometricMappingRecord, IncentiveRuleRecord,
+            MobilePayrollSummary, PayrollAdjustmentRuleRecord, PayrollStructureRecord,
+            StaffMobileConflictRecord, StaffTaskCommentRecord, StaffTaskRecord,
         },
     },
     routes::context::tenant_branch,
@@ -26,9 +26,10 @@ use crate::{
             self, BiometricConsentRequest, BiometricDeviceRequest, BiometricEventRequest,
             BiometricGatewayRegistration, BiometricGatewayRequest, BiometricMappingRequest,
             IncentiveCopyRequest, IncentiveRuleRequest, MobileDashboardResponse,
-            MobileDeviceRegistration, MobileDeviceRequest, MobileSyncRequest, MobileSyncResponse,
-            MobileTodayResponse, PayrollAdjustmentRuleRequest, PayrollStructureRequest,
-            StaffPerformanceResponse, StaffTaskRequest,
+            MobileDeviceRegistration, MobileDeviceRequest, MobilePushSubscriptionRequest,
+            MobileSyncRequest, MobileSyncResponse, MobileTodayResponse,
+            PayrollAdjustmentRuleRequest, PayrollStructureRequest, StaffPerformanceResponse,
+            StaffTaskRequest,
         },
     },
     state::AppState,
@@ -68,7 +69,7 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/staff/biometric/gateways",
-            post(register_biometric_gateway),
+            get(list_biometric_gateways).post(register_biometric_gateway),
         )
         .route(
             "/staff/biometric/mappings",
@@ -97,6 +98,10 @@ pub fn router() -> Router<AppState> {
         .route("/staff/mobile/payroll", get(get_mobile_payroll))
         .route("/staff/mobile/targets", get(get_mobile_targets))
         .route("/staff/mobile/devices", post(register_mobile_device))
+        .route(
+            "/staff/mobile/devices/:id/push-subscription",
+            post(save_mobile_push_subscription),
+        )
         .route("/staff/mobile/sync", post(sync_mobile_mutations))
         .route("/staff/mobile/conflicts", get(list_mobile_conflicts))
         .route(
@@ -454,6 +459,18 @@ async fn register_biometric_gateway(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn list_biometric_gateways(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<BiometricGatewayRecord>> {
+    ensure_manager_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows =
+        staff_advanced_service::list_biometric_gateways(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
 async fn heartbeat_biometric_gateway(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -753,6 +770,28 @@ async fn sync_mobile_mutations(
         &tenant_id,
         &branch_id,
         &claims.sub,
+        device_sync_token(&headers)?,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn save_mobile_push_subscription(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(device_id): Path<String>,
+    Json(payload): Json<MobilePushSubscriptionRequest>,
+) -> ApiResult<crate::repositories::staff_advanced_repository::MobilePushSubscriptionRecord> {
+    ensure_mobile_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_advanced_service::save_mobile_push_subscription(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant_id,
+        &branch_id,
+        &device_id,
         device_sync_token(&headers)?,
         payload,
     )

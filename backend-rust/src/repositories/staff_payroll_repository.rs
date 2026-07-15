@@ -10,6 +10,7 @@ pub struct StaffSourceRecord {
     pub employee_code: Option<String>,
     pub pay_rate_type: Option<String>,
     pub pay_rate_paise: Option<i64>,
+    pub joining_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, FromRow)]
@@ -36,6 +37,7 @@ pub struct LeavePolicySource {
 #[derive(Debug, FromRow)]
 pub struct AttendanceSourceRecord {
     pub staff_id: String,
+    pub business_date: NaiveDate,
     pub status: String,
     pub worked_minutes: i32,
     pub overtime_minutes: i32,
@@ -45,6 +47,7 @@ pub struct AttendanceSourceRecord {
 #[derive(Debug, FromRow)]
 pub struct ScheduleSourceRecord {
     pub staff_id: String,
+    pub schedule_date: NaiveDate,
     pub status: String,
     pub scheduled_minutes: i64,
 }
@@ -74,6 +77,7 @@ pub struct PayrollItemDraft {
     pub attendance_days_x2: i32,
     pub paid_leave_days_x2: i32,
     pub weekly_off_days_x2: i32,
+    pub holiday_days_x2: i32,
     pub worked_minutes: i32,
     pub overtime_minutes: i32,
     pub earned_salary_paise: i64,
@@ -122,6 +126,7 @@ pub struct PayrollItemRecord {
     pub attendance_days_x2: i32,
     pub paid_leave_days_x2: i32,
     pub weekly_off_days_x2: i32,
+    pub holiday_days_x2: i32,
     pub worked_minutes: i32,
     pub overtime_minutes: i32,
     pub earned_salary_paise: i64,
@@ -163,6 +168,16 @@ pub struct AdjustmentInput {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffHolidayRecord {
+    pub id: String,
+    pub holiday_date: NaiveDate,
+    pub name: String,
+    pub is_paid: bool,
+    pub active: bool,
+}
+
 pub async fn staff_sources(
     db: &PgPool,
     tenant_id: &str,
@@ -176,8 +191,10 @@ pub async fn staff_sources(
                TRIM(CONCAT_WS(' ',s.first_name,NULLIF(s.last_name,''))) AS staff_name,
                s.employee_code,
                pay.rate_type AS pay_rate_type,
-               pay.amount_paise AS pay_rate_paise
+               pay.amount_paise AS pay_rate_paise,
+               profile.joining_date
         FROM staff s
+        LEFT JOIN staff_profiles profile ON profile.tenant_id=s.tenant_id AND profile.branch_id=s.branch_id AND profile.staff_id=s.id
         LEFT JOIN LATERAL (
           SELECT rate_type,amount_paise
           FROM staff_pay_rates pr
@@ -249,7 +266,7 @@ pub async fn attendance_sources(
     if staff_ids.is_empty() {
         return Ok(vec![]);
     }
-    sqlx::query_as("SELECT staff_id,status,worked_minutes,overtime_minutes,penalty_paise FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3) AND business_date BETWEEN $4 AND $5")
+    sqlx::query_as("SELECT staff_id,business_date,status,worked_minutes,overtime_minutes,penalty_paise FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3) AND business_date BETWEEN $4 AND $5")
         .bind(tenant_id).bind(branch_id).bind(staff_ids).bind(period_start).bind(period_end).fetch_all(db).await
 }
 
@@ -266,7 +283,7 @@ pub async fn schedule_sources(
     }
     sqlx::query_as(
         r#"
-        SELECT staff_id,status,
+        SELECT staff_id,schedule_date,status,
           (COALESCE(EXTRACT(EPOCH FROM (shift1_end-shift1_start))/60,0)
            + COALESCE(EXTRACT(EPOCH FROM (shift2_end-shift2_start))/60,0))::BIGINT AS scheduled_minutes
         FROM staff_schedules
@@ -369,7 +386,7 @@ pub async fn get_items(
     branch_id: &str,
     run_id: &str,
 ) -> Result<Vec<PayrollItemRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 ORDER BY staff_name,staff_id")
+    sqlx::query_as("SELECT id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 ORDER BY staff_name,staff_id")
         .bind(tenant_id).bind(branch_id).bind(run_id).fetch_all(db).await
 }
 
@@ -431,15 +448,15 @@ pub async fn replace_calculated_run(
             r#"
             INSERT INTO staff_payroll_items(
               tenant_id,branch_id,payroll_run_id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,
-              attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,worked_minutes,overtime_minutes,
+              attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,
               earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,
               deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status
-            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'calculated')
+            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,'calculated')
             "#,
         )
         .bind(tenant_id).bind(branch_id).bind(&run.id).bind(&item.staff_id).bind(&item.staff_name)
         .bind(&item.employee_code).bind(&item.pay_rate_type).bind(item.pay_rate_paise)
-        .bind(item.attendance_days_x2).bind(item.paid_leave_days_x2).bind(item.weekly_off_days_x2)
+        .bind(item.attendance_days_x2).bind(item.paid_leave_days_x2).bind(item.weekly_off_days_x2).bind(item.holiday_days_x2)
         .bind(item.worked_minutes).bind(item.overtime_minutes).bind(item.earned_salary_paise)
         .bind(item.overtime_paise).bind(item.commission_paise).bind(item.adjustment_paise)
         .bind(item.penalty_paise).bind(item.gross_paise).bind(item.deductions_paise).bind(item.net_paise)
@@ -451,6 +468,40 @@ pub async fn replace_calculated_run(
         .bind(serde_json::json!({"staffCount":items.len(),"invalidCount":invalid_count})).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(run)
+}
+
+pub async fn list_holidays(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<StaffHolidayRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,holiday_date,name,is_paid,active FROM staff_holidays WHERE tenant_id=$1 AND branch_id=$2 AND holiday_date BETWEEN $3 AND $4 AND active=TRUE ORDER BY holiday_date,name")
+        .bind(tenant_id).bind(branch_id).bind(from).bind(to).fetch_all(db).await
+}
+
+pub async fn upsert_holiday(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    holiday_date: NaiveDate,
+    name: &str,
+    is_paid: bool,
+    actor_user_id: &str,
+) -> Result<StaffHolidayRecord, sqlx::Error> {
+    sqlx::query_as("INSERT INTO staff_holidays(tenant_id,branch_id,holiday_date,name,is_paid,active,created_by) VALUES($1,$2,$3,$4,$5,TRUE,$6) ON CONFLICT(tenant_id,branch_id,holiday_date) DO UPDATE SET name=EXCLUDED.name,is_paid=EXCLUDED.is_paid,active=TRUE,updated_at=NOW() RETURNING id,holiday_date,name,is_paid,active")
+        .bind(tenant_id).bind(branch_id).bind(holiday_date).bind(name).bind(is_paid).bind(actor_user_id).fetch_one(db).await
+}
+
+pub async fn deactivate_holiday(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("UPDATE staff_holidays SET active=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE")
+        .bind(tenant_id).bind(branch_id).bind(id).execute(db).await?.rows_affected() == 1)
 }
 
 pub async fn update_adjustments(

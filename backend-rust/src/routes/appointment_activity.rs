@@ -175,15 +175,25 @@ pub(crate) async fn appointment_activity_register(
         timeline.sort_by_key(|row| row.created_at.clone());
     }
 
+    let mut invoice_reference_ids = appointment_ids.clone();
+    invoice_reference_ids.extend(appointment_map.values().filter_map(|appointment| {
+        appointment
+            .booking_group_id
+            .as_ref()
+            .filter(|group_id| !group_id.trim().is_empty())
+            .cloned()
+    }));
+    invoice_reference_ids.sort();
+    invoice_reference_ids.dedup();
     let sales_by_reference: HashMap<String, (String, String, i64, i64, String)> = sqlx::query(
         "SELECT DISTINCT ON (reference_id) reference_id, id, invoice_number, total_paise, paid_paise, status
          FROM pos_sales
-         WHERE tenant_id=$1 AND branch_id=$2 AND reference_id = ANY($3)
+         WHERE tenant_id=$1 AND branch_id=$2 AND source='appointment' AND reference_id = ANY($3)
          ORDER BY reference_id, created_at DESC",
     )
     .bind(&tenant_id)
     .bind(scope_for_query(&headers, query.tenant_id.as_deref(), query.branch_id.as_deref()).1)
-    .bind(&appointment_ids)
+    .bind(&invoice_reference_ids)
     .fetch_all(&state.db)
     .await
     .map_err(|_| ApiError::internal("failed to load appointment invoices"))?
@@ -201,23 +211,6 @@ pub(crate) async fn appointment_activity_register(
         )
     })
     .collect();
-    let sales_by_booking_group: HashMap<String, (String, String, i64, i64, String)> =
-        appointment_map
-            .values()
-            .filter_map(|appointment| {
-                appointment
-                    .booking_group_id
-                    .as_ref()
-                    .filter(|group_id| !group_id.is_empty())
-                    .and_then(|group_id| {
-                        sales_by_reference
-                            .get(&appointment.id)
-                            .cloned()
-                            .map(|sale| (group_id.clone(), sale))
-                    })
-            })
-            .collect();
-
     let mut rows = Vec::new();
     for appointment in appointment_map.values() {
         let timeline = actions_by_appointment
@@ -250,7 +243,7 @@ pub(crate) async fn appointment_activity_register(
             appointment
                 .booking_group_id
                 .as_ref()
-                .and_then(|group_id| sales_by_booking_group.get(group_id))
+                .and_then(|group_id| sales_by_reference.get(group_id))
         });
         let (invoice_id, invoice_number, total, paid, invoice_status) = invoice
             .cloned()

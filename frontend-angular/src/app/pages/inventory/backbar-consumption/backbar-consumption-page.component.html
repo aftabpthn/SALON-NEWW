@@ -1,0 +1,52 @@
+<section class="page-shell">
+  <header class="page-head">
+    <h1>Backbar Consumption</h1>
+    <div class="head-actions">
+      <as-date-picker ariaLabel="Backbar usage date" [(value)]="filterDate"></as-date-picker>
+      <select aria-label="Filter by staff" [(ngModel)]="filterStaff"><option value="">All staff</option><option *ngFor="let row of staff" [value]="row.id">{{ staffName(row) }}</option></select>
+      <button type="button" (click)="load()">Refresh</button>
+      <button class="primary" type="button" (click)="openRecord()">Record usage</button>
+    </div>
+  </header>
+
+  <p class="message error" *ngIf="error">{{ error }}</p><p class="message success" *ngIf="notice">{{ notice }}</p>
+  <div class="loading" *ngIf="loading">Loading…</div>
+
+  <nav class="tabs" *ngIf="!loading" aria-label="Backbar views">
+    <button type="button" [class.active]="activeTab === 'usage'" (click)="activeTab = 'usage'">Usage</button>
+    <button type="button" [class.active]="activeTab === 'daily'" (click)="activeTab = 'daily'">Daily Control</button>
+    <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">Variance</button>
+    <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">Approvals</button>
+    <button type="button" [class.active]="activeTab === 'audit'" (click)="activeTab = 'audit'">Audit</button>
+  </nav>
+
+  <section class="kpis" *ngIf="!loading">
+    <article class="blue"><i aria-hidden="true">ML</i><span>Expected usage</span><strong>{{ quantity(expectedTotal) }}</strong></article>
+    <article class="orange"><i aria-hidden="true">ML</i><span>Actual usage</span><strong>{{ quantity(actualTotal) }}</strong></article>
+    <article class="teal"><i class="bi bi-plus-minus" aria-hidden="true"></i><span>Variance</span><strong>{{ quantity(varianceTotal) }}</strong></article>
+    <article class="green"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Pending approvals</span><strong>{{ pendingApprovals }}</strong></article>
+  </section>
+
+  <section class="table-card" *ngIf="!loading">
+    <header><h2>{{ tableTitle }}</h2><div><select aria-label="Filter workflow" [(ngModel)]="workflow"><option value="">All workflows</option><option value="recorded">Manual</option><option value="pending_approval">Pending approval</option><option value="rejected">Rejected</option><option value="auto_consumed">Automatic</option></select><button type="button" [disabled]="!visibleUsage.length" (click)="exportCsv()">Export CSV</button></div></header>
+    <div class="table-scroll" *ngIf="visibleUsage.length; else empty"><table><thead><tr><th>Date</th><th>Product</th><th>Invoice / Source</th><th>Service</th><th>Staff</th><th>Expected</th><th>Actual</th><th>Variance</th><th>Status</th><th *ngIf="activeTab === 'audit'">Notes</th><th *ngIf="activeTab === 'approvals' && canReview">Actions</th></tr></thead>
+      <tbody><tr *ngFor="let row of visibleUsage"><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.source }}</td><td>{{ row.serviceName || '—' }}</td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td><td *ngIf="activeTab === 'audit'">{{ row.reviewNote || row.notes || '—' }}</td><td *ngIf="activeTab === 'approvals' && canReview"><div class="row-actions"><button type="button" [disabled]="saving" (click)="review(row, 'approve')">Approve</button><button class="danger" type="button" [disabled]="saving" (click)="review(row, 'reject')">Reject</button></div></td></tr></tbody>
+    </table></div>
+    <ng-template #empty><div class="empty-state">No records yet</div></ng-template>
+    <footer>Showing {{ visibleUsage.length }} usage records</footer>
+  </section>
+</section>
+
+<div class="drawer-backdrop" *ngIf="drawerOpen" (click)="closeRecord()"></div>
+<aside class="drawer" *ngIf="drawerOpen" role="dialog" aria-modal="true" aria-labelledby="backbar-title">
+  <header><h2 id="backbar-title">Record backbar usage</h2><button class="icon-button" type="button" aria-label="Close" (click)="closeRecord()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+  <div class="drawer-body">
+    <p class="message error" *ngIf="error">{{ error }}</p>
+    <label>Service<select [(ngModel)]="draft.serviceId" (ngModelChange)="serviceChanged()"><option value="">No service</option><option *ngFor="let row of services" [value]="row.id">{{ row.name }}</option></select></label>
+    <label>Product<select required [(ngModel)]="draft.inventoryItemId"><option value="">Select product</option><option *ngFor="let row of availableItems" [value]="row.id">{{ row.name }} · {{ row.stockQuantity }} {{ row.unit }}</option></select></label>
+    <label>Staff<select [(ngModel)]="draft.staffId"><option value="">No staff</option><option *ngFor="let row of staff" [value]="row.id">{{ staffName(row) }}</option></select></label>
+    <div class="quantity-grid"><label>Expected<input [value]="expectedQuantity || '—'" readonly /></label><label>Actual quantity<input required type="number" min="1" step="1" [(ngModel)]="draft.actualQuantity" /></label></div>
+    <label>Notes<textarea maxlength="500" [(ngModel)]="draft.notes"></textarea></label>
+  </div>
+  <footer><button type="button" (click)="closeRecord()">Cancel</button><button class="primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? 'Saving…' : 'Record usage' }}</button></footer>
+</aside>

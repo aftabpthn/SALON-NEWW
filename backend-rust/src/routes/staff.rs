@@ -8,6 +8,7 @@ use axum::{
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::Row;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -131,6 +132,7 @@ pub struct StaffResponse {
     pub home_phone: String,
     pub work_phone: String,
     pub job_title: String,
+    pub service_ids: Vec<String>,
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -374,6 +376,13 @@ pub struct AuthRoleWriteRequest {
     pub name: String,
     #[serde(default)]
     pub permissions: Vec<String>,
+    #[serde(default)]
+    pub denied_permissions: Vec<String>,
+    #[serde(default)]
+    pub masked_fields: Vec<String>,
+    pub max_discount_paise: Option<i64>,
+    pub max_refund_paise: Option<i64>,
+    pub max_cash_movement_paise: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -420,22 +429,82 @@ async fn list_staff(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let page = query.page.unwrap_or(1).max(1);
     let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
-    let q = query.q.unwrap_or_default();
+    let q = query.q.as_deref().unwrap_or("").trim();
+    let filters = staff_repository::StaffListFilters {
+        query: q,
+        job: query.job.as_deref().unwrap_or("").trim(),
+        active: query.active,
+    };
 
-    let rows = staff_repository::list(
+    let rows = staff_repository::list_filtered(
         &state.db,
         &tenant_id,
         &branch_id,
-        &q,
+        &filters,
+        "created_at",
+        "DESC",
         page_size,
         (page - 1) * page_size,
     )
     .await
     .map_err(|_| AppError::internal("failed to list staff"))?;
 
-    Ok(Json(ApiResponse::ok(
-        rows.into_iter().map(StaffResponse::from).collect(),
-    )))
+    let rows = staff_responses_with_service_ids(&state, &tenant_id, &branch_id, rows).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn staff_responses_with_service_ids(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    rows: Vec<StaffRecord>,
+) -> Result<Vec<StaffResponse>, AppError> {
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let staff_ids = rows
+        .iter()
+        .map(|staff| staff.id.clone())
+        .collect::<Vec<_>>();
+    let service_rows = sqlx::query(
+        "SELECT staff_id, service_id
+         FROM staff_service_assignments
+         WHERE tenant_id=$1 AND branch_id=$2 AND staff_id = ANY($3::TEXT[])
+         UNION
+         SELECT staff_id, item_id AS service_id
+         FROM staff_catalog_assignments
+         WHERE tenant_id=$1 AND branch_id=$2 AND item_type='service' AND staff_id = ANY($3::TEXT[])",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&staff_ids)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load staff service assignments"))?;
+
+    let mut service_ids_by_staff: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for row in service_rows {
+        let staff_id = row.try_get::<String, _>("staff_id").unwrap_or_default();
+        let service_id = row.try_get::<String, _>("service_id").unwrap_or_default();
+        if !staff_id.is_empty() && !service_id.is_empty() {
+            service_ids_by_staff
+                .entry(staff_id)
+                .or_default()
+                .push(service_id);
+        }
+    }
+
+    Ok(rows
+        .into_iter()
+        .map(|staff| {
+            let mut response = StaffResponse::from(staff);
+            response.service_ids = service_ids_by_staff
+                .remove(&response.id)
+                .unwrap_or_default();
+            response
+        })
+        .collect())
 }
 
 async fn list_staff_page(
@@ -471,8 +540,9 @@ async fn list_staff_page(
     )
     .map_err(|_| AppError::internal("failed to list staff"))?;
 
+    let items = staff_responses_with_service_ids(&state, &tenant_id, &branch_id, rows).await?;
     Ok(Json(ApiResponse::ok(StaffListPage {
-        items: rows.into_iter().map(StaffResponse::from).collect(),
+        items,
         total,
         page,
         page_size,
@@ -1322,9 +1392,20 @@ async fn create_auth_role(
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let role_name = payload.name.clone();
-    let roles =
-        staff_service::create_auth_role(&state.db, &tenant_id, payload.name, payload.permissions)
-            .await?;
+    let roles = staff_service::create_auth_role(
+        &state.db,
+        &tenant_id,
+        payload.name,
+        payload.permissions,
+        staff_service::AuthRoleSecurityInput {
+            denied_permissions: payload.denied_permissions,
+            masked_fields: payload.masked_fields,
+            max_discount_paise: payload.max_discount_paise,
+            max_refund_paise: payload.max_refund_paise,
+            max_cash_movement_paise: payload.max_cash_movement_paise,
+        },
+    )
+    .await?;
     audit_auth_role_change(
         &state, &claims, &tenant_id, &branch_id, "created", None, role_name,
     )
@@ -1348,6 +1429,13 @@ async fn update_auth_role(
         &role_id,
         payload.name,
         payload.permissions,
+        staff_service::AuthRoleSecurityInput {
+            denied_permissions: payload.denied_permissions,
+            masked_fields: payload.masked_fields,
+            max_discount_paise: payload.max_discount_paise,
+            max_refund_paise: payload.max_refund_paise,
+            max_cash_movement_paise: payload.max_cash_movement_paise,
+        },
     )
     .await?;
     audit_auth_role_change(
@@ -1702,6 +1790,7 @@ impl From<StaffRecord> for StaffResponse {
             home_phone: record.home_phone,
             work_phone: record.work_phone,
             job_title: record.job_title,
+            service_ids: Vec::new(),
             active: record.active,
             created_at: record.created_at,
             updated_at: record.updated_at,

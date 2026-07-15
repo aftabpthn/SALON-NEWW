@@ -10,7 +10,9 @@ dist/
 .angular/
 target/
 .codex-target/
+.codex-target-*/
 target_noblock/
+out-tsc/
 __pycache__/
 .venv/
 venv/
@@ -21,6 +23,8 @@ venv/
 .codex/
 .codex-runtime/
 .codex-video-review/
+.claude/
+artifacts/
 tmp_zip_extract/
 *.log
 *.err
@@ -28,6 +32,7 @@ tmp_zip_extract/
 # Generated graph caches and snapshots
 graphify-out/cache/
 graphify-out/[0-9][0-9][0-9][0-9]-*/
+graphify-out/*.tmp.json
 
 # OS/editor files
 .DS_Store

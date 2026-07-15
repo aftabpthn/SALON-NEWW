@@ -10,24 +10,33 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, Postgres, Transaction};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::cash_drawer_repository,
+    repositories::happy_hours_repository,
+    repositories::inventory_repository,
     repositories::invoice_settings_repository,
     repositories::payment_methods_repository::{
         self, CreatePaymentMethod, PaymentMethodRecord, UpdatePaymentMethod,
     },
+    repositories::pos_enterprise_repository,
     routes::context::tenant_branch,
     services::accounting_service,
     services::auth_service::AuthClaims,
+    services::client_service,
+    services::happy_hours_service,
+    services::inventory_adjustment_service,
     services::invoice_delivery,
     services::invoice_numbering_service,
     services::invoice_pdf::{self, InvoicePdfLayout},
+    services::membership_service,
+    services::payment_gateway_service,
     services::razorpay_payment_service,
+    services::security_service,
     services::wallet_service,
-    state::AppState,
+    state::{AppState, AppointmentEvent},
 };
 
 pub fn router() -> Router<AppState> {
@@ -92,6 +101,18 @@ pub fn router() -> Router<AppState> {
         .route(
             "/pos/invoices/:id/payment-links",
             get(list_pos_payment_links).post(create_pos_payment_link),
+        )
+        .route(
+            "/pos/invoices/:id/payment-instruments",
+            get(list_invoice_payment_instruments),
+        )
+        .route(
+            "/pos/invoices/:id/disputes",
+            get(list_invoice_payment_disputes),
+        )
+        .route(
+            "/pos/payment-instruments/:id/revoke",
+            post(revoke_payment_instrument),
         )
         .route(
             "/pos/invoices/:id/payment-links/:link_id/reconcile",
@@ -199,6 +220,141 @@ pub fn router() -> Router<AppState> {
             get(list_happy_hour_rules).post(create_happy_hour_rule),
         )
         .route(
+            "/pos/happy-hours/rules/:id",
+            axum::routing::patch(update_happy_hour_rule),
+        )
+        .route(
+            "/pos/happy-hours/control-tower",
+            get(get_happy_hours_control_tower),
+        )
+        .route(
+            "/pos/happy-hours/branch-leaderboard",
+            get(get_happy_hour_branch_leaderboard),
+        )
+        .route(
+            "/pos/happy-hours/client-returns",
+            get(get_happy_hour_client_returns),
+        )
+        .route(
+            "/pos/happy-hours/elasticity-pricing",
+            get(get_happy_hour_elasticity_pricing),
+        )
+        .route(
+            "/pos/happy-hours/rule-conflicts",
+            get(get_happy_hour_rule_conflicts),
+        )
+        .route("/pos/happy-hours/simulate", post(simulate_happy_hour_rule))
+        .route(
+            "/pos/happy-hours/approvals",
+            get(list_happy_hour_approvals).post(request_happy_hour_approval),
+        )
+        .route(
+            "/pos/happy-hours/approvals/:id",
+            axum::routing::patch(decide_happy_hour_approval),
+        )
+        .route(
+            "/pos/happy-hours/discount-approvals",
+            get(list_discount_approvals).post(request_discount_approval),
+        )
+        .route(
+            "/pos/happy-hours/discount-approvals/:id",
+            axum::routing::patch(decide_discount_approval),
+        )
+        .route(
+            "/pos/happy-hours/coupon-abuse/alerts",
+            get(list_coupon_abuse_alerts),
+        )
+        .route(
+            "/pos/happy-hours/coupon-abuse/scan",
+            post(scan_coupon_abuse),
+        )
+        .route(
+            "/pos/happy-hours/coupon-abuse/alerts/:id",
+            axum::routing::patch(resolve_coupon_abuse_alert),
+        )
+        .route("/pos/happy-hours/anomalies", get(list_happy_hour_anomalies))
+        .route(
+            "/pos/happy-hours/anomalies/scan",
+            post(scan_happy_hour_anomalies),
+        )
+        .route(
+            "/pos/happy-hours/anomalies/:id",
+            axum::routing::patch(review_happy_hour_anomaly),
+        )
+        .route(
+            "/pos/happy-hours/budget",
+            get(get_happy_hour_budget).post(save_happy_hour_budget),
+        )
+        .route("/pos/happy-hours/audit", get(get_happy_hour_audit))
+        .route(
+            "/pos/happy-hours/intelligence",
+            get(get_happy_hours_intelligence),
+        )
+        .route(
+            "/pos/happy-hours/audiences",
+            get(list_happy_hour_audiences).post(save_happy_hour_audience),
+        )
+        .route(
+            "/pos/happy-hours/audiences/preview",
+            post(preview_happy_hour_audience),
+        )
+        .route(
+            "/pos/happy-hours/audiences/:id/status",
+            axum::routing::patch(update_happy_hour_audience_status),
+        )
+        .route(
+            "/pos/happy-hours/campaign-links",
+            get(list_happy_hour_campaign_links).post(save_happy_hour_campaign_link),
+        )
+        .route(
+            "/pos/happy-hours/campaign-links/:id/status",
+            axum::routing::patch(update_happy_hour_campaign_link_status),
+        )
+        .route(
+            "/pos/happy-hours/market-aware/observations",
+            get(list_happy_hour_market_observations).post(save_happy_hour_market_observation),
+        )
+        .route(
+            "/pos/happy-hours/market-aware/evaluate",
+            post(evaluate_happy_hour_market_offer),
+        )
+        .route(
+            "/pos/happy-hours/market-aware/suggestions",
+            get(list_happy_hour_market_suggestions).post(save_happy_hour_market_suggestion),
+        )
+        .route(
+            "/pos/happy-hours/market-aware/suggestions/:id/status",
+            axum::routing::patch(update_happy_hour_market_suggestion_status),
+        )
+        .route(
+            "/pos/happy-hours/context-aware/evaluate",
+            post(evaluate_happy_hour_context_offer),
+        )
+        .route(
+            "/pos/happy-hours/context-aware/suggestions",
+            get(list_happy_hour_context_suggestions).post(save_happy_hour_context_suggestion),
+        )
+        .route(
+            "/pos/happy-hours/context-aware/suggestions/:id/status",
+            axum::routing::patch(update_happy_hour_context_suggestion_status),
+        )
+        .route(
+            "/pos/happy-hours/auto-sunset/policy",
+            get(get_happy_hour_auto_sunset_policy).post(save_happy_hour_auto_sunset_policy),
+        )
+        .route(
+            "/pos/happy-hours/auto-sunset/decisions",
+            get(list_happy_hour_auto_sunset_decisions),
+        )
+        .route(
+            "/pos/happy-hours/auto-sunset/scan",
+            post(scan_happy_hour_auto_sunset),
+        )
+        .route(
+            "/pos/happy-hours/auto-sunset/decisions/:id/apply",
+            post(apply_happy_hour_auto_sunset_decision),
+        )
+        .route(
             "/pos/invoice-outbox/process-due",
             post(process_due_invoice_outbox),
         )
@@ -222,7 +378,7 @@ pub struct PosListQuery {
     pub page_size: Option<i64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PosSalePayload {
     pub client_id: Option<String>,
@@ -242,6 +398,7 @@ pub struct PosSalePayload {
     pub coupon_code: Option<String>,
     pub coupon_discount_paise: Option<i64>,
     pub coupon_discount: Option<f64>,
+    pub reward_discount_paise: Option<i64>,
     pub tip_paise: Option<i64>,
     pub tip_total: Option<f64>,
     pub round_to_nearest_rupee: Option<bool>,
@@ -250,6 +407,10 @@ pub struct PosSalePayload {
     pub buyer_gstin: Option<String>,
     pub place_of_supply_state_code: Option<String>,
     pub reverse_charge: Option<bool>,
+    pub cash_drawer_till_id: Option<String>,
+    pub terminal_id: Option<String>,
+    #[serde(alias = "wallet_credit_paise")]
+    pub wallet_credit_paise: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -257,6 +418,12 @@ pub struct PosSalePayload {
 struct OfflineCheckoutRequest {
     operation_id: String,
     checkout: PosSalePayload,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FinalizeRequest {
+    cash_drawer_till_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -270,7 +437,7 @@ struct OfflineCheckoutOperation {
     updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PosSaleLineInput {
     pub line_type: Option<String>,
@@ -303,7 +470,7 @@ pub struct PosSaleLineInput {
     pub sac_code: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PosPaymentInput {
     pub method: Option<String>,
@@ -315,11 +482,50 @@ pub struct PosPaymentInput {
     pub label: Option<String>,
     pub notes: Option<String>,
     pub idempotency_key: Option<String>,
+    pub cash_drawer_till_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AppointmentPosDraft {
+    pub sale_id: String,
+    pub total_paise: i64,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NoShowChargeResult {
+    pub sale_id: String,
+    pub amount_paise: i64,
+    pub payment_link: Option<PosPaymentLinkResponse>,
+    pub activation_required: bool,
+}
+
+pub(crate) fn appointment_service_line(
+    service_id: String,
+    service_name: String,
+    staff_id: String,
+    price_paise: i64,
+    gst_percent: i32,
+    sac_code: String,
+) -> PosSaleLineInput {
+    PosSaleLineInput {
+        line_type: Some("service".to_string()),
+        item_id: Some(service_id),
+        item_name: Some(service_name),
+        staff_id: Some(staff_id),
+        quantity: Some(1),
+        unit_price_paise: Some(price_paise),
+        tax_percent: Some(gst_percent),
+        hsn_sac_code: Some(sac_code),
+        ..PosSaleLineInput::default()
+    }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PosPaymentLinkRequest {
+    pub provider: Option<String>,
     pub amount_paise: Option<i64>,
     pub expires_at: Option<DateTime<Utc>>,
     pub idempotency_key: Option<String>,
@@ -355,6 +561,27 @@ struct InvoiceComplianceRecord {
     e_way_bill_status: String,
     eligibility: Value,
     updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InvoiceComplianceDetails {
+    #[serde(flatten)]
+    record: InvoiceComplianceRecord,
+    jobs: Vec<ComplianceJobStatus>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+struct ComplianceJobStatus {
+    document_type: String,
+    status: String,
+    attempt_count: i32,
+    provider_reference: String,
+    last_error: String,
+    next_attempt_at: DateTime<Utc>,
+    submitted_at: Option<DateTime<Utc>>,
+    result: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -539,6 +766,7 @@ pub struct InvoiceLifecycleRequest {
     pub idempotency_key: Option<String>,
     pub lines: Option<Vec<InvoiceRefundLineInput>>,
     pub restock: Option<bool>,
+    pub mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -575,6 +803,61 @@ struct HappyHourRuleRequest {
     min_margin_bps: Option<i32>,
     block_on_unknown_cost: Option<bool>,
     active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AutoSunsetScanRequest {
+    apply: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AutoSunsetListQuery {
+    status: Option<String>,
+    severity: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct BranchLeaderboardQuery {
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    sort: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ClientReturnQuery {
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    return_window_days: Option<i32>,
+    status: Option<String>,
+    offer_type: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ElasticityPricingQuery {
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    day_of_week: Option<i32>,
+    hour_slot: Option<i32>,
+    service_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RuleConflictQuery {
+    active_only: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct GovernanceListQuery {
+    status: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -628,6 +911,10 @@ struct DeliveryStatusRequest {
 #[derive(Debug, FromRow)]
 struct OutboxDispatchRow {
     id: String,
+    tenant_id: String,
+    branch_id: String,
+    client_id: String,
+    channel: String,
     payload_json: String,
 }
 
@@ -833,6 +1120,9 @@ pub struct PosClientKpiResponse {
     pub membership_assigned_at: Option<DateTime<Utc>>,
     pub membership_expires_at: Option<DateTime<Utc>>,
     pub has_active_membership: bool,
+    pub membership_discount_percent: i32,
+    pub membership_service_ids: Value,
+    pub reward_points_balance: i32,
     pub membership_credits: Value,
     pub package_credits: Value,
 }
@@ -950,6 +1240,36 @@ pub struct PosPaymentLinkResponse {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+struct ClientPaymentInstrumentResponse {
+    id: String,
+    provider: String,
+    method_type: String,
+    brand: String,
+    last4: String,
+    expiry_month: Option<i16>,
+    expiry_year: Option<i16>,
+    recurring_enabled: bool,
+    status: String,
+    last_used_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+struct PaymentDisputeResponse {
+    id: String,
+    provider: String,
+    provider_dispute_id: String,
+    amount_paise: i64,
+    currency: String,
+    reason: String,
+    status: String,
+    evidence_due_at: Option<DateTime<Utc>>,
+    opened_at: DateTime<Utc>,
+    resolved_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, FromRow)]
 struct PosCouponRow {
     pub code: String,
@@ -975,6 +1295,9 @@ struct PosClientKpiRow {
     pub membership_name: String,
     pub membership_assigned_at: Option<DateTime<Utc>>,
     pub membership_expires_at: Option<DateTime<Utc>>,
+    pub membership_discount_percent: i32,
+    pub membership_service_ids: Value,
+    pub reward_points_balance: i32,
     pub package_credits: Value,
     pub membership_credits: Value,
 }
@@ -988,12 +1311,16 @@ struct ClientPackageCreditRow {
     pub package_name: String,
     pub service_id: String,
     pub service_name: String,
+    pub expires_at: Option<NaiveDate>,
 }
 
 #[derive(Debug, FromRow)]
 struct ClientMembershipCreditRow {
+    pub source_branch_id: String,
     pub credit_owner_id: String,
     pub remaining_qty: i32,
+    pub unit_value_paise: i64,
+    pub issued_value_paise: i64,
     pub membership_id: String,
     pub membership_name: String,
     pub service_id: String,
@@ -1535,6 +1862,7 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         coupon_code: Some(sale.coupon_code.clone()),
         coupon_discount_paise: Some(sale.coupon_discount_paise),
         coupon_discount: None,
+        reward_discount_paise: None,
         tip_paise: Some(sale.tip_paise),
         tip_total: None,
         round_to_nearest_rupee: Some(sale.round_off_paise != 0),
@@ -1543,6 +1871,9 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         buyer_gstin: None,
         place_of_supply_state_code: None,
         reverse_charge: None,
+        cash_drawer_till_id: None,
+        terminal_id: None,
+        wallet_credit_paise: None,
     }
 }
 
@@ -1901,6 +2232,9 @@ fn client_kpi_response(row: PosClientKpiRow) -> PosClientKpiResponse {
         membership_assigned_at: row.membership_assigned_at,
         membership_expires_at: row.membership_expires_at,
         has_active_membership: row.membership_assigned_at.is_some(),
+        membership_discount_percent: row.membership_discount_percent,
+        membership_service_ids: row.membership_service_ids,
+        reward_points_balance: row.reward_points_balance,
         membership_credits: row.membership_credits,
         package_credits: row.package_credits,
     }
@@ -1915,6 +2249,17 @@ async fn read_client_kpi(
     if client_id.trim().is_empty() {
         return Ok(None);
     }
+
+    let membership_settings = sqlx::query_scalar::<_, Value>(
+        "SELECT settings_json FROM membership_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load membership settings"))?
+    .unwrap_or_else(|| serde_json::json!({}));
+    let membership_policy = membership_pos_policy(&membership_settings);
 
     let row = sqlx::query_as::<_, PosClientKpiRow>(
         r#"
@@ -1941,6 +2286,17 @@ async fn read_client_kpi(
           COALESCE(m.name, '') AS membership_name,
           cm.assigned_at AS membership_assigned_at,
           cm.expires_at AS membership_expires_at,
+          COALESCE(m.discount_percent, 0)::INTEGER AS membership_discount_percent,
+          COALESCE(m.service_ids_json, '[]'::jsonb) AS membership_service_ids,
+          COALESCE((
+            SELECT mrl.balance_after
+              FROM membership_reward_ledger mrl
+             WHERE mrl.tenant_id = $1
+               AND mrl.branch_id = $2
+               AND mrl.client_id = c.id
+             ORDER BY mrl.created_at DESC, mrl.id DESC
+             LIMIT 1
+          ), 0)::INTEGER AS reward_points_balance,
           COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
               'id', cmc.id,
@@ -1952,15 +2308,16 @@ async fn read_client_kpi(
               'pendingQty', cmc.remaining_qty,
               'totalQty', cmc.total_qty,
               'expiresAt', cmc.expires_at,
+              'sourceBranchId', cmc.branch_id,
+              'crossLocation', cmc.branch_id <> $2,
               'staffId', ''
             ) ORDER BY cmc.expires_at NULLS LAST, cmc.membership_name, cmc.service_name)
               FROM client_membership_credits cmc
              WHERE cmc.tenant_id = $1
-               AND cmc.branch_id = $2
-               AND (cmc.client_id = c.id OR EXISTS (SELECT 1 FROM membership_family_members fm JOIN client_memberships fcm ON fcm.id=fm.client_membership_id AND fcm.active=TRUE WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.member_client_id=c.id AND fm.owner_client_id=cmc.client_id AND fm.active=TRUE))
+               AND ((cmc.branch_id = $2 AND (cmc.client_id = c.id OR ($4 AND EXISTS (SELECT 1 FROM membership_family_members fm JOIN client_memberships fcm ON fcm.id=fm.client_membership_id AND fcm.active=TRUE WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.member_client_id=c.id AND fm.owner_client_id=cmc.client_id AND fm.active=TRUE)))) OR membership_cross_location_allowed($1,cmc.branch_id,$2,cmc.client_id,c.id,'service_credit'))
                AND cmc.active = TRUE
                AND cmc.remaining_qty > 0
-               AND (cmc.expires_at IS NULL OR cmc.expires_at >= CURRENT_DATE)
+               AND (NOT $5 OR cmc.expires_at IS NULL OR cmc.expires_at >= CURRENT_DATE)
           ), '[]'::jsonb) AS membership_credits,
           COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
@@ -1983,25 +2340,25 @@ async fn read_client_kpi(
                AND cpc.client_id = c.id
                AND cpc.active = TRUE
                AND cpc.remaining_qty > 0
-               AND (cpc.expires_at IS NULL OR cpc.expires_at >= CURRENT_DATE)
+               AND (cpc.expires_at IS NULL OR cpc.expires_at >= CURRENT_DATE OR COALESCE((SELECT ps.settings_json#>>'{expiryRenewal,expiredPendingAction}' FROM package_settings ps WHERE ps.tenant_id=$1 AND ps.branch_id=$2),'block') IN ('allow','approval'))
           ), '[]'::jsonb) AS package_credits
         FROM clients c
         LEFT JOIN LATERAL (
           SELECT membership_id, assigned_at, expires_at
             FROM client_memberships
            WHERE tenant_id = $1
-             AND branch_id = $2
-             AND (client_id = c.id OR EXISTS (SELECT 1 FROM membership_family_members fm WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.member_client_id=c.id AND fm.client_membership_id=client_memberships.id AND fm.active=TRUE))
+             AND ((branch_id = $2 AND (client_id = c.id OR ($4 AND EXISTS (SELECT 1 FROM membership_family_members fm WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.member_client_id=c.id AND fm.client_membership_id=client_memberships.id AND fm.active=TRUE)))) OR membership_cross_location_allowed($1,branch_id,$2,client_id,c.id,'discount'))
              AND active = TRUE
              AND assigned_at <= NOW()
              AND (expires_at IS NULL OR expires_at >= NOW())
-           ORDER BY assigned_at DESC
+           ORDER BY (branch_id = $2) DESC, assigned_at DESC
            LIMIT 1
         ) cm ON TRUE
         LEFT JOIN memberships m
-          ON m.tenant_id = $1
-         AND m.branch_id = $2
+         ON m.tenant_id = $1
+         AND m.branch_id = cm.branch_id
          AND m.id = cm.membership_id
+         AND m.active = TRUE
         WHERE c.tenant_id = $1
           AND c.branch_id = $2
           AND c.id = $3
@@ -2011,6 +2368,8 @@ async fn read_client_kpi(
     .bind(tenant_id)
     .bind(branch_id)
     .bind(client_id.trim())
+    .bind(membership_policy.allow_family)
+    .bind(membership_policy.block_expired)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to load client KPI"))?;
@@ -2063,12 +2422,13 @@ fn normalize_line_type(value: String) -> Result<String, AppError> {
         "" => "service",
         "service" | "services" | "svc" => "service",
         "product" | "products" | "retail" | "retail_product" => "product",
-        "manual" | "misc" | "other" => "custom",
+        "custom" | "manual" | "misc" | "other" => "custom",
         "membership" => "membership",
         "package" => "package",
         "gift_card" | "giftcard" | "gift-card" => "gift_card",
         "package_redeem" | "package-redeem" => "package_redeem",
         "membership_redeem" | "membership-redeem" => "membership_redeem",
+        "redemption" => "redemption",
         _ => return Err(AppError::validation("line type must be service, product, custom, membership, package, gift_card, or redemption")),
     };
     Ok(line_type.to_string())
@@ -2077,6 +2437,8 @@ fn normalize_line_type(value: String) -> Result<String, AppError> {
 fn normalize_discount_type(value: String) -> String {
     match value.trim().to_lowercase().as_str() {
         "percent" | "percentage" => "percent".to_string(),
+        "membership" => "membership".to_string(),
+        "membership_stacked" => "membership_stacked".to_string(),
         _ => "amount".to_string(),
     }
 }
@@ -2212,6 +2574,7 @@ fn normalize_staff_splits(raw: Value, fallback_staff_id: &str) -> Result<Value, 
     }
 
     let mut total = 0i64;
+    let mut staff_ids = HashSet::new();
     let mut rows = Vec::with_capacity(items.len());
     for item in items {
         let staff_id = item
@@ -2240,6 +2603,11 @@ fn normalize_staff_splits(raw: Value, fallback_staff_id: &str) -> Result<Value, 
                 "each staff split needs staffId and 1-100 percent",
             ));
         }
+        if !staff_ids.insert(staff_id) {
+            return Err(AppError::validation(
+                "staffSplits cannot contain duplicate staff",
+            ));
+        }
         total += percent;
         rows.push(serde_json::json!({
             "staffId": staff_id,
@@ -2251,6 +2619,23 @@ fn normalize_staff_splits(raw: Value, fallback_staff_id: &str) -> Result<Value, 
         return Err(AppError::validation("staff split total must be 100"));
     }
     Ok(Value::Array(rows))
+}
+
+#[cfg(test)]
+mod staff_split_tests {
+    use super::normalize_staff_splits;
+
+    #[test]
+    fn staff_splits_reject_duplicate_staff() {
+        assert!(normalize_staff_splits(
+            serde_json::json!([
+                {"staffId": "staff-1", "percent": 50},
+                {"staffId": "staff-1", "percent": 50}
+            ]),
+            "",
+        )
+        .is_err());
+    }
 }
 
 fn requested_bill_discount_paise(
@@ -2562,6 +2947,142 @@ fn calculate_pos(payload: &PosSalePayload) -> Result<PosCalculation, AppError> {
         round_off_paise: rounded_total.saturating_sub(before_round),
         total_paise: rounded_total.max(0),
     })
+}
+
+fn booked_service_price(snapshot: &Value, service_id: &str) -> Option<i64> {
+    snapshot
+        .get(service_id)
+        .and_then(Value::as_i64)
+        .filter(|price| *price >= 0)
+}
+
+fn apply_appointment_booked_prices(
+    payload: &mut PosSalePayload,
+    booked_prices: Vec<(String, String, i64)>,
+) -> Result<(), AppError> {
+    let fallback_staff_id = payload.staff_id.clone().unwrap_or_default();
+    let Some(lines) = payload.lines.as_mut().or(payload.items.as_mut()) else {
+        return Ok(());
+    };
+    let mut prices_by_service_staff: HashMap<(String, String), VecDeque<i64>> = HashMap::new();
+    for (service_id, staff_id, price_paise) in booked_prices {
+        prices_by_service_staff
+            .entry((service_id, staff_id))
+            .or_default()
+            .push_back(price_paise);
+    }
+
+    for line in lines {
+        let line_type = line
+            .line_type
+            .as_deref()
+            .or(line.item_type.as_deref())
+            .or(line.kind.as_deref())
+            .unwrap_or("service")
+            .trim()
+            .to_ascii_lowercase();
+        if !matches!(line_type.as_str(), "" | "service" | "services" | "svc") {
+            continue;
+        }
+        let service_id = line
+            .item_id
+            .as_deref()
+            .or(line.id.as_deref())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let staff_id = line
+            .staff_id
+            .as_deref()
+            .or(line.assigned_staff_id.as_deref())
+            .unwrap_or(&fallback_staff_id)
+            .trim()
+            .to_string();
+        let Some(prices) = prices_by_service_staff.get_mut(&(service_id, staff_id)) else {
+            continue;
+        };
+        let quantity = line.quantity.unwrap_or(1).max(0) as usize;
+        let matched_quantity = quantity.min(prices.len());
+        if matched_quantity == 0 {
+            continue;
+        }
+        if matched_quantity != quantity {
+            return Err(AppError::validation(
+                "booked and additional appointment services must remain separate lines",
+            ));
+        }
+        let Some(price_paise) = prices.pop_front() else {
+            continue;
+        };
+        for _ in 1..matched_quantity {
+            if prices.pop_front() != Some(price_paise) {
+                return Err(AppError::validation(
+                    "appointment services booked at different prices must remain separate lines",
+                ));
+            }
+        }
+        line.unit_price_paise = Some(price_paise);
+        line.price_paise = None;
+        line.unit_price = None;
+        line.price = None;
+    }
+    Ok(())
+}
+
+async fn hydrate_appointment_booked_prices(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    payload: &mut PosSalePayload,
+) -> Result<(), AppError> {
+    if normalize_pos_source(payload.source.clone()) != "appointment" {
+        return Ok(());
+    }
+    let reference_id = canonical_appointment_reference(
+        state,
+        tenant_id,
+        branch_id,
+        payload.reference_id.as_deref().unwrap_or_default(),
+    )
+    .await?;
+    payload.source = Some("appointment".to_string());
+    payload.reference_id = Some(reference_id.clone());
+
+    let rows = sqlx::query_as::<_, (String, String, Value, i64)>(
+        r#"
+        SELECT booked.service_id,
+               appointment.staff_id,
+               appointment.booked_service_prices_json,
+               catalogue.price_paise::BIGINT
+          FROM appointments appointment
+          CROSS JOIN LATERAL jsonb_array_elements_text(
+            COALESCE(NULLIF(appointment.service_ids_json, ''), '[]')::jsonb
+          ) WITH ORDINALITY AS booked(service_id, ordinal)
+          JOIN services catalogue
+            ON catalogue.id = booked.service_id
+           AND catalogue.tenant_id = appointment.tenant_id
+           AND catalogue.branch_id = appointment.branch_id
+         WHERE appointment.tenant_id=$1
+           AND appointment.branch_id=$2
+           AND (appointment.id=$3 OR appointment.booking_group_id=$3)
+           AND appointment.status NOT IN ('cancelled', 'no-show')
+         ORDER BY appointment.start_at, appointment.created_at, booked.ordinal
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&reference_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load appointment booked prices"))?;
+    let booked_prices = rows
+        .into_iter()
+        .map(|(service_id, staff_id, snapshot, current_price)| {
+            let price = booked_service_price(&snapshot, &service_id).unwrap_or(current_price);
+            (service_id, staff_id, price)
+        })
+        .collect();
+    apply_appointment_booked_prices(payload, booked_prices)
 }
 
 async fn hydrate_pos_tax_metadata(
@@ -3273,7 +3794,7 @@ async fn get_invoice_compliance(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
-) -> ApiResult<InvoiceComplianceRecord> {
+) -> ApiResult<InvoiceComplianceDetails> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let record = sqlx::query_as::<_, InvoiceComplianceRecord>(
         "SELECT e_invoice_status, e_way_bill_status, eligibility_json AS eligibility, updated_at FROM pos_invoice_compliance WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
@@ -3281,7 +3802,19 @@ async fn get_invoice_compliance(
     .bind(&tenant_id).bind(&branch_id).bind(&id).fetch_optional(&state.db).await
     .map_err(|_| AppError::internal("failed to load invoice compliance"))?
     .ok_or_else(|| AppError::not_found("invoice compliance was not evaluated"))?;
-    Ok(Json(ApiResponse::ok(record)))
+    let jobs = sqlx::query_as::<_, ComplianceJobStatus>(
+        "SELECT document_type, status, attempt_count, provider_reference, last_error, next_attempt_at, submitted_at, result_json AS result FROM pos_compliance_jobs WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 ORDER BY created_at, id",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load compliance jobs"))?;
+    Ok(Json(ApiResponse::ok(InvoiceComplianceDetails {
+        record,
+        jobs,
+    })))
 }
 
 #[derive(FromRow)]
@@ -3939,6 +4472,28 @@ async fn record_pos_invoice_action(
             "invoice delivery channel must be whatsapp or email",
         ));
     }
+    if matches!(action.as_str(), "send" | "resend" | "whatsapp" | "email") {
+        let client_id = sqlx::query_scalar::<_, String>(
+            "SELECT client_id FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to verify invoice client consent"))?
+        .ok_or_else(|| AppError::not_found("invoice was not found"))?;
+        if !client_service::communication_allowed(
+            &state.db, &tenant_id, &branch_id, &client_id, &channel,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to verify client consent"))?
+        {
+            return Err(AppError::conflict(
+                "client consent is required before outbound communication",
+            ));
+        }
+    }
     let status = if matches!(action.as_str(), "send" | "resend" | "whatsapp" | "email") {
         "queued"
     } else {
@@ -4111,7 +4666,7 @@ async fn dispatch_invoice_outbox(
     branch_id: &str,
 ) -> Result<(u64, u64), AppError> {
     let rows = sqlx::query_as::<_, OutboxDispatchRow>(
-        "WITH due AS (SELECT id FROM pos_invoice_outbox WHERE ($1='' OR tenant_id=$1) AND ($2='' OR branch_id=$2) AND status IN ('queued','failed') AND next_attempt_at <= NOW() ORDER BY next_attempt_at LIMIT 20 FOR UPDATE SKIP LOCKED) UPDATE pos_invoice_outbox outbox SET status='processing', attempts=outbox.attempts+1, updated_at=NOW() FROM due WHERE outbox.id=due.id RETURNING outbox.id, outbox.payload_json::text AS payload_json",
+        "WITH due AS (SELECT id FROM pos_invoice_outbox WHERE ($1='' OR tenant_id=$1) AND ($2='' OR branch_id=$2) AND status='queued' AND attempts<5 AND next_attempt_at <= NOW() ORDER BY next_attempt_at LIMIT 20 FOR UPDATE SKIP LOCKED) UPDATE pos_invoice_outbox outbox SET status='processing', attempts=outbox.attempts+1, updated_at=NOW() FROM due WHERE outbox.id=due.id RETURNING outbox.id,outbox.tenant_id,outbox.branch_id,(SELECT sale.client_id FROM pos_sales sale WHERE sale.id=outbox.sale_id AND sale.tenant_id=outbox.tenant_id AND sale.branch_id=outbox.branch_id) AS client_id,outbox.channel,outbox.payload_json::text AS payload_json",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -4122,6 +4677,22 @@ async fn dispatch_invoice_outbox(
     let mut sent = 0;
     let mut failed = 0;
     for row in rows {
+        if !client_service::communication_allowed(
+            &state.db,
+            &row.tenant_id,
+            &row.branch_id,
+            &row.client_id,
+            &row.channel,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to recheck client consent"))?
+        {
+            sqlx::query("UPDATE pos_invoice_outbox SET status='blocked',last_error='client consent missing or withdrawn',updated_at=NOW() WHERE id=$1")
+                .bind(&row.id).execute(&state.db).await
+                .map_err(|_| AppError::internal("failed to block invoice delivery"))?;
+            failed += 1;
+            continue;
+        }
         let payload = serde_json::from_str::<Value>(&row.payload_json)
             .map_err(|_| AppError::internal("invalid invoice delivery payload"))?;
         match invoice_delivery::deliver(&state.settings, &payload).await {
@@ -4183,7 +4754,7 @@ async fn schedule_due_invoice_reminders_for_scope(
     branch_id: &str,
 ) -> Result<u64, AppError> {
     let inserted = sqlx::query(
-        "INSERT INTO pos_invoice_outbox (tenant_id, branch_id, sale_id, channel, recipient, template_version, payload_json, idempotency_key, scheduled_for, next_attempt_at) SELECT ps.tenant_id, ps.branch_id, ps.id, 'whatsapp', c.phone, 'due-reminder-v1', jsonb_build_object('invoiceId', ps.id, 'invoiceNumber', ps.invoice_number, 'duePaise', ps.total_paise-ps.paid_paise, 'channel', 'whatsapp', 'recipient', c.phone, 'templateVersion', 'due-reminder-v1'), 'due:' || ps.id || ':' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD'), NOW(), NOW() FROM pos_sales ps JOIN clients c ON c.id=ps.client_id AND c.tenant_id=ps.tenant_id AND c.branch_id=ps.branch_id WHERE ($1='' OR ps.tenant_id=$1) AND ($2='' OR ps.branch_id=$2) AND ps.paid_paise < ps.total_paise AND ps.status NOT IN ('draft','voided','cancelled','refunded') AND COALESCE(ps.finalized_at, ps.created_at)::DATE <= CURRENT_DATE - 7 AND COALESCE(c.phone, '') <> '' ON CONFLICT DO NOTHING",
+        "INSERT INTO pos_invoice_outbox (tenant_id, branch_id, sale_id, channel, recipient, template_version, payload_json, idempotency_key, scheduled_for, next_attempt_at) SELECT ps.tenant_id, ps.branch_id, ps.id, 'whatsapp', c.phone, 'due-reminder-v1', jsonb_build_object('invoiceId', ps.id, 'invoiceNumber', ps.invoice_number, 'duePaise', ps.total_paise-ps.paid_paise, 'channel', 'whatsapp', 'recipient', c.phone, 'templateVersion', 'due-reminder-v1'), 'due:' || ps.id || ':' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD'), NOW(), NOW() FROM pos_sales ps JOIN clients c ON c.id=ps.client_id AND c.tenant_id=ps.tenant_id AND c.branch_id=ps.branch_id WHERE ($1='' OR ps.tenant_id=$1) AND ($2='' OR ps.branch_id=$2) AND ps.paid_paise < ps.total_paise AND ps.status NOT IN ('draft','voided','cancelled','refunded') AND COALESCE(ps.finalized_at, ps.created_at)::DATE <= CURRENT_DATE - 7 AND COALESCE(c.phone, '') <> '' AND c.whatsapp_opt_in IS TRUE AND c.merged_into_client_id IS NULL ON CONFLICT DO NOTHING",
     )
     .bind(tenant_id).bind(branch_id).execute(&state.db).await
     .map_err(|_| AppError::internal("failed to schedule due reminders"))?;
@@ -4236,11 +4807,726 @@ async fn list_happy_hour_rules(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
+async fn get_happy_hours_control_tower(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<happy_hours_service::HappyHourControlTowerResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result = happy_hours_service::control_tower(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn get_happy_hour_branch_leaderboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<BranchLeaderboardQuery>,
+) -> ApiResult<Vec<happy_hours_service::BranchLeaderboardRow>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = happy_hours_service::branch_leaderboard(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.from,
+        query.to,
+        query.sort.as_deref().unwrap_or("score"),
+        query.limit.unwrap_or(50),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn get_happy_hour_client_returns(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ClientReturnQuery>,
+) -> ApiResult<happy_hours_service::ClientReturnTrackerResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = query.status.unwrap_or_default().trim().to_lowercase();
+    let offer_type = query.offer_type.unwrap_or_default().trim().to_lowercase();
+    let result = happy_hours_service::client_return_tracker(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.from,
+        query.to,
+        query.return_window_days.unwrap_or(30),
+        &status,
+        &offer_type,
+        query.limit.unwrap_or(200),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn get_happy_hour_elasticity_pricing(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ElasticityPricingQuery>,
+) -> ApiResult<happy_hours_service::ElasticityPricingResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let service_id = query.service_id.unwrap_or_default().trim().to_string();
+    let result = happy_hours_service::elasticity_pricing(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.from,
+        query.to,
+        query.day_of_week,
+        query.hour_slot,
+        Some(&service_id),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn get_happy_hour_rule_conflicts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<RuleConflictQuery>,
+) -> ApiResult<happy_hours_service::RuleConflictResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result = happy_hours_service::rule_conflicts(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.active_only.unwrap_or(true),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn simulate_happy_hour_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::HappyHourSimulationRequest>,
+) -> ApiResult<happy_hours_service::HappyHourSimulationResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result =
+        happy_hours_service::simulate_rule(&state.db, &tenant_id, &branch_id, payload).await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_happy_hour_approvals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<GovernanceListQuery>,
+) -> ApiResult<Vec<happy_hours_repository::HappyHourApprovalRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = query.status.unwrap_or_default().trim().to_ascii_lowercase();
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::list_approvals(&state.db, &tenant_id, &branch_id, &status).await?,
+    )))
+}
+
+async fn request_happy_hour_approval(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::ApprovalRequest>,
+) -> ApiResult<happy_hours_repository::HappyHourApprovalRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::request_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn decide_happy_hour_approval(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::ApprovalDecisionRequest>,
+) -> ApiResult<happy_hours_repository::HappyHourApprovalRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::decide_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            &id,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn list_discount_approvals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<GovernanceListQuery>,
+) -> ApiResult<Vec<happy_hours_repository::DiscountApprovalRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = query.status.unwrap_or_default().trim().to_ascii_lowercase();
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::list_discount_approvals(&state.db, &tenant_id, &branch_id, &status)
+            .await?,
+    )))
+}
+
+async fn request_discount_approval(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::DiscountApprovalRequest>,
+) -> ApiResult<happy_hours_repository::DiscountApprovalRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::request_discount_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn decide_discount_approval(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::ApprovalDecisionRequest>,
+) -> ApiResult<happy_hours_repository::DiscountApprovalRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::decide_discount_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            &id,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn list_coupon_abuse_alerts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<GovernanceListQuery>,
+) -> ApiResult<Vec<happy_hours_repository::CouponAbuseAlertRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = query.status.unwrap_or_default().trim().to_ascii_lowercase();
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::list_coupon_abuse_alerts(&state.db, &tenant_id, &branch_id, &status)
+            .await?,
+    )))
+}
+
+async fn scan_coupon_abuse(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<happy_hours_service::CouponAbuseScanResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::scan_coupon_abuse(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?,
+    )))
+}
+
+async fn resolve_coupon_abuse_alert(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::CouponAbuseResolutionRequest>,
+) -> ApiResult<happy_hours_repository::CouponAbuseAlertRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::resolve_coupon_abuse_alert(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &id,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn list_happy_hour_anomalies(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<GovernanceListQuery>,
+) -> ApiResult<Vec<happy_hours_repository::HappyHourAnomalyRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = query.status.unwrap_or_default().trim().to_ascii_lowercase();
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::list_anomalies(&state.db, &tenant_id, &branch_id, &status).await?,
+    )))
+}
+
+async fn scan_happy_hour_anomalies(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<happy_hours_service::AnomalyScanResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::scan_anomalies(&state.db, &tenant_id, &branch_id, &claims.sub).await?,
+    )))
+}
+
+async fn review_happy_hour_anomaly(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::AnomalyReviewRequest>,
+) -> ApiResult<happy_hours_repository::HappyHourAnomalyRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::review_anomaly(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &id,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn get_happy_hour_budget(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Option<happy_hours_service::BudgetResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::current_budget(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn save_happy_hour_budget(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::BudgetWriteRequest>,
+) -> ApiResult<happy_hours_service::BudgetResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::save_budget(&state.db, &tenant_id, &branch_id, &claims.sub, payload)
+            .await?,
+    )))
+}
+
+async fn get_happy_hour_audit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::security_repository::SecurityAuditRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        happy_hours_service::audit_log(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn get_happy_hours_intelligence(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<happy_hours_service::HappyHourIntelligenceResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result = happy_hours_service::intelligence(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_happy_hour_audiences(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<happy_hours_service::AudienceResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = happy_hours_service::list_audiences(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn preview_happy_hour_audience(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::AudienceWriteRequest>,
+) -> ApiResult<happy_hours_service::AudiencePreviewResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result =
+        happy_hours_service::preview_audience(&state.db, &tenant_id, &branch_id, &payload).await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn save_happy_hour_audience(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::AudienceWriteRequest>,
+) -> ApiResult<happy_hours_service::AudienceResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::save_audience(&state.db, &tenant_id, &branch_id, payload).await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_happy_hour_audience_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::StatusRequest>,
+) -> ApiResult<happy_hours_service::AudienceResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = happy_hours_service::set_audience_status(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &payload.status,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_happy_hour_campaign_links(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<happy_hours_service::CampaignLinkResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = happy_hours_service::list_campaign_links(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn save_happy_hour_campaign_link(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::CampaignLinkWriteRequest>,
+) -> ApiResult<happy_hours_service::CampaignLinkResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::save_campaign_link(&state.db, &tenant_id, &branch_id, payload).await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_happy_hour_campaign_link_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::StatusRequest>,
+) -> ApiResult<happy_hours_service::CampaignLinkResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = happy_hours_service::set_campaign_link_status(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &payload.status,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_happy_hour_market_observations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<happy_hours_service::MarketObservationResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows =
+        happy_hours_service::list_market_observations(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn save_happy_hour_market_observation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::MarketObservationWriteRequest>,
+) -> ApiResult<happy_hours_service::MarketObservationResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::save_market_observation(&state.db, &tenant_id, &branch_id, payload)
+            .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn evaluate_happy_hour_market_offer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::MarketEvaluationRequest>,
+) -> ApiResult<happy_hours_service::MarketEvaluationResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result =
+        happy_hours_service::evaluate_market_offer(&state.db, &tenant_id, &branch_id, payload)
+            .await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_happy_hour_market_suggestions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<happy_hours_service::MarketSuggestionResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows =
+        happy_hours_service::list_market_suggestions(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn save_happy_hour_market_suggestion(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::MarketEvaluationRequest>,
+) -> ApiResult<happy_hours_service::MarketSuggestionResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::save_market_suggestion(&state.db, &tenant_id, &branch_id, payload)
+            .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_happy_hour_market_suggestion_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::StatusRequest>,
+) -> ApiResult<happy_hours_service::MarketSuggestionResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = happy_hours_service::set_market_suggestion_status(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &payload.status,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn evaluate_happy_hour_context_offer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::ContextOfferEvaluationRequest>,
+) -> ApiResult<happy_hours_service::ContextOfferEvaluationResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result =
+        happy_hours_service::evaluate_context_offer(&state.db, &tenant_id, &branch_id, payload)
+            .await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_happy_hour_context_suggestions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<happy_hours_service::ContextOfferSuggestionResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows =
+        happy_hours_service::list_context_offer_suggestions(&state.db, &tenant_id, &branch_id)
+            .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn save_happy_hour_context_suggestion(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::ContextOfferEvaluationRequest>,
+) -> ApiResult<happy_hours_service::ContextOfferSuggestionResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = happy_hours_service::save_context_offer_suggestion(
+        &state.db, &tenant_id, &branch_id, payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_happy_hour_context_suggestion_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<happy_hours_service::StatusRequest>,
+) -> ApiResult<happy_hours_service::ContextOfferSuggestionResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = happy_hours_service::set_context_offer_suggestion_status(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &payload.status,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn get_happy_hour_auto_sunset_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<happy_hours_service::AutoSunsetPolicyResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::get_auto_sunset_policy(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn save_happy_hour_auto_sunset_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<happy_hours_service::AutoSunsetPolicyRequest>,
+) -> ApiResult<happy_hours_service::AutoSunsetPolicyResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::save_auto_sunset_policy(&state.db, &tenant_id, &branch_id, payload)
+            .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_happy_hour_auto_sunset_decisions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AutoSunsetListQuery>,
+) -> ApiResult<Vec<happy_hours_service::AutoSunsetDecisionResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = happy_hours_service::list_auto_sunset_decisions(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.status.as_deref().unwrap_or(""),
+        query.severity.as_deref().unwrap_or(""),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn scan_happy_hour_auto_sunset(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<AutoSunsetScanRequest>,
+) -> ApiResult<happy_hours_service::AutoSunsetScanResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = happy_hours_service::scan_auto_sunset(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        payload.apply.unwrap_or(false),
+        "manual",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn apply_happy_hour_auto_sunset_decision(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<happy_hours_service::AutoSunsetDecisionResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        happy_hours_service::apply_auto_sunset_decision(&state.db, &tenant_id, &branch_id, &id)
+            .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn create_happy_hour_rule(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<HappyHourRuleRequest>,
 ) -> ApiResult<HappyHourRuleRow> {
+    let min_margin_bps = validate_happy_hour_rule(&payload)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let approval_required = payload.active.unwrap_or(true)
+        && happy_hours_service::rule_requires_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            payload.discount_bps,
+        )
+        .await?;
+    let row = sqlx::query_as::<_, HappyHourRuleRow>("INSERT INTO pos_happy_hour_rules (tenant_id, branch_id, name, start_time, end_time, weekdays, discount_bps, eligible_line_types, eligible_item_ids, eligible_client_categories, min_margin_bps, block_on_unknown_cost, active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, name, start_time, end_time, weekdays, discount_bps, eligible_line_types, eligible_item_ids, eligible_client_categories, min_margin_bps, block_on_unknown_cost, active")
+        .bind(&tenant_id).bind(&branch_id).bind(payload.name.trim()).bind(payload.start_time).bind(payload.end_time).bind(payload.weekdays).bind(payload.discount_bps)
+        .bind(normalize_happy_hour_filter(payload.eligible_line_types)).bind(normalize_happy_hour_filter(payload.eligible_item_ids)).bind(normalize_happy_hour_filter(payload.eligible_client_categories))
+        .bind(min_margin_bps).bind(payload.block_on_unknown_cost.unwrap_or(true)).bind(payload.active.unwrap_or(true) && !approval_required)
+        .fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to save happy hour rule"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "happy_hours.rule.created",
+        serde_json::json!({"ruleId":row.id,"discountBps":row.discount_bps,"active":row.active}),
+    )
+    .await?;
+    if approval_required {
+        happy_hours_service::request_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            happy_hours_service::ApprovalRequest {
+                rule_id: row.id.clone(),
+                note: Some("Discount exceeds branch approval threshold".into()),
+            },
+        )
+        .await?;
+    }
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_happy_hour_rule(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<HappyHourRuleRequest>,
+) -> ApiResult<HappyHourRuleRow> {
+    let min_margin_bps = validate_happy_hour_rule(&payload)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let approval_required = payload.active.unwrap_or(true)
+        && happy_hours_service::rule_requires_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            payload.discount_bps,
+        )
+        .await?;
+    let row = sqlx::query_as::<_, HappyHourRuleRow>("UPDATE pos_happy_hour_rules SET name=$4, start_time=$5, end_time=$6, weekdays=$7, discount_bps=$8, eligible_line_types=$9, eligible_item_ids=$10, eligible_client_categories=$11, min_margin_bps=$12, block_on_unknown_cost=$13, active=$14, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id, name, start_time, end_time, weekdays, discount_bps, eligible_line_types, eligible_item_ids, eligible_client_categories, min_margin_bps, block_on_unknown_cost, active")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).bind(payload.name.trim()).bind(payload.start_time).bind(payload.end_time).bind(payload.weekdays).bind(payload.discount_bps)
+        .bind(normalize_happy_hour_filter(payload.eligible_line_types)).bind(normalize_happy_hour_filter(payload.eligible_item_ids)).bind(normalize_happy_hour_filter(payload.eligible_client_categories))
+        .bind(min_margin_bps).bind(payload.block_on_unknown_cost.unwrap_or(true)).bind(payload.active.unwrap_or(true) && !approval_required)
+        .fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to update happy hour rule"))?
+        .ok_or_else(|| AppError::not_found("happy hour rule was not found"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "happy_hours.rule.updated",
+        serde_json::json!({"ruleId":row.id,"discountBps":row.discount_bps,"active":row.active}),
+    )
+    .await?;
+    if approval_required {
+        happy_hours_service::request_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            happy_hours_service::ApprovalRequest {
+                rule_id: row.id.clone(),
+                note: Some("Discount exceeds branch approval threshold".into()),
+            },
+        )
+        .await?;
+    }
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+fn validate_happy_hour_rule(payload: &HappyHourRuleRequest) -> Result<i32, AppError> {
     let min_margin_bps = payload.min_margin_bps.unwrap_or(0);
     if payload.name.trim().is_empty()
         || payload.weekdays.is_empty()
@@ -4250,13 +5536,40 @@ async fn create_happy_hour_rule(
     {
         return Err(AppError::validation("happy hour rule values are invalid"));
     }
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let row = sqlx::query_as::<_, HappyHourRuleRow>("INSERT INTO pos_happy_hour_rules (tenant_id, branch_id, name, start_time, end_time, weekdays, discount_bps, eligible_line_types, eligible_item_ids, eligible_client_categories, min_margin_bps, block_on_unknown_cost, active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, name, start_time, end_time, weekdays, discount_bps, eligible_line_types, eligible_item_ids, eligible_client_categories, min_margin_bps, block_on_unknown_cost, active")
-        .bind(&tenant_id).bind(&branch_id).bind(payload.name.trim()).bind(payload.start_time).bind(payload.end_time).bind(payload.weekdays).bind(payload.discount_bps)
-        .bind(normalize_happy_hour_filter(payload.eligible_line_types)).bind(normalize_happy_hour_filter(payload.eligible_item_ids)).bind(normalize_happy_hour_filter(payload.eligible_client_categories))
-        .bind(min_margin_bps).bind(payload.block_on_unknown_cost.unwrap_or(true)).bind(payload.active.unwrap_or(true))
-        .fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to save happy hour rule"))?;
-    Ok(Json(ApiResponse::ok(row)))
+    Ok(min_margin_bps)
+}
+
+#[cfg(test)]
+mod happy_hour_rule_tests {
+    use super::{validate_happy_hour_rule, HappyHourRuleRequest};
+    use chrono::NaiveTime;
+
+    fn request() -> HappyHourRuleRequest {
+        HappyHourRuleRequest {
+            name: "Afternoon Offer".to_string(),
+            start_time: NaiveTime::from_hms_opt(14, 0, 0).unwrap(),
+            end_time: NaiveTime::from_hms_opt(17, 0, 0).unwrap(),
+            weekdays: vec![1, 2, 3, 4, 5],
+            discount_bps: 1_000,
+            eligible_line_types: Some(vec!["service".to_string()]),
+            eligible_item_ids: None,
+            eligible_client_categories: None,
+            min_margin_bps: Some(2_500),
+            block_on_unknown_cost: Some(true),
+            active: Some(true),
+        }
+    }
+
+    #[test]
+    fn happy_hour_rule_validation_guards_api_bounds() {
+        assert_eq!(validate_happy_hour_rule(&request()).unwrap(), 2_500);
+        let mut invalid = request();
+        invalid.weekdays = vec![7];
+        assert!(validate_happy_hour_rule(&invalid).is_err());
+        invalid = request();
+        invalid.discount_bps = 0;
+        assert!(validate_happy_hour_rule(&invalid).is_err());
+    }
 }
 
 fn normalize_invoice_action_channel(action: &str, raw_channel: Option<&str>) -> String {
@@ -4308,6 +5621,7 @@ async fn resume_pos_invoice(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit invoice resume"))?;
+    state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "invoice.resumed");
     Ok(Json(ApiResponse::ok(
         load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?,
     )))
@@ -4315,15 +5629,17 @@ async fn resume_pos_invoice(
 
 async fn create_pos_sale(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<PosSalePayload>,
 ) -> ApiResult<PosSaleDetailsResponse> {
-    let details = persist_pos_sale(&state, headers, payload).await?;
+    let details = persist_pos_sale(&state, headers, payload, claims.max_discount_paise).await?;
     Ok(Json(ApiResponse::ok(details)))
 }
 
 async fn sync_offline_checkout(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(mut request): Json<OfflineCheckoutRequest>,
 ) -> ApiResult<PosSaleDetailsResponse> {
@@ -4334,6 +5650,13 @@ async fn sync_offline_checkout(
             "operationId must be at least 10 characters",
         ));
     }
+    let (sale_source, sale_reference) =
+        offline_checkout_sale_reference(&request.checkout, &operation_id)?;
+    let sale_reference = if sale_source == "appointment" {
+        canonical_appointment_reference(&state, &tenant_id, &branch_id, &sale_reference).await?
+    } else {
+        sale_reference
+    };
     let existing = sqlx::query_as::<_, OfflineCheckoutOperation>("SELECT operation_id, sale_id, status, last_error, created_at, updated_at FROM offline_checkout_operations WHERE tenant_id=$1 AND branch_id=$2 AND operation_id=$3")
         .bind(&tenant_id).bind(&branch_id).bind(&operation_id).fetch_optional(&state.db).await
         .map_err(|_| AppError::internal("failed to read offline checkout operation"))?;
@@ -4351,9 +5674,9 @@ async fn sync_offline_checkout(
             .bind(&tenant_id).bind(&branch_id).bind(&operation_id).execute(&state.db).await
             .map_err(|_| AppError::internal("failed to reserve offline checkout operation"))?;
     }
-    request.checkout.source = Some("offline_sync".to_string());
-    request.checkout.reference_id = Some(operation_id.clone());
-    match persist_pos_sale(&state, headers, request.checkout).await {
+    request.checkout.source = Some(sale_source.clone());
+    request.checkout.reference_id = Some(sale_reference.clone());
+    match persist_pos_sale(&state, headers, request.checkout, claims.max_discount_paise).await {
         Ok(details) => {
             sqlx::query("UPDATE offline_checkout_operations SET sale_id=$4, status='completed', last_error='', updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND operation_id=$3")
                 .bind(&tenant_id).bind(&branch_id).bind(&operation_id).bind(&details.sale.id).execute(&state.db).await
@@ -4361,8 +5684,8 @@ async fn sync_offline_checkout(
             Ok(Json(ApiResponse::ok(details)))
         }
         Err(error) => {
-            if let Some(sale_id) = sqlx::query_scalar::<_, String>("SELECT id FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND source='offline_sync' AND reference_id=$3")
-                .bind(&tenant_id).bind(&branch_id).bind(&operation_id).fetch_optional(&state.db).await
+            if let Some(sale_id) = sqlx::query_scalar::<_, String>("SELECT id FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND source=$3 AND reference_id=$4")
+                .bind(&tenant_id).bind(&branch_id).bind(&sale_source).bind(&sale_reference).fetch_optional(&state.db).await
                 .map_err(|_| AppError::internal("failed to recover offline checkout replay"))? {
                 sqlx::query("UPDATE offline_checkout_operations SET sale_id=$4, status='completed', last_error='', updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND operation_id=$3")
                     .bind(&tenant_id).bind(&branch_id).bind(&operation_id).bind(&sale_id).execute(&state.db).await
@@ -4384,15 +5707,61 @@ fn valid_offline_operation_id(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
 
+fn offline_checkout_sale_reference(
+    checkout: &PosSalePayload,
+    operation_id: &str,
+) -> Result<(String, String), AppError> {
+    let source = normalize_pos_source(checkout.source.clone());
+    if source == "appointment" {
+        let appointment_id = checkout.reference_id.as_deref().unwrap_or("").trim();
+        if appointment_id.is_empty() {
+            return Err(AppError::validation(
+                "offline appointment checkout requires referenceId",
+            ));
+        }
+        return Ok((source, appointment_id.to_string()));
+    }
+    Ok(("offline_sync".to_string(), operation_id.to_string()))
+}
+
 #[cfg(test)]
 mod offline_checkout_tests {
-    use super::valid_offline_operation_id;
+    use super::{offline_checkout_sale_reference, valid_offline_operation_id, PosSalePayload};
 
     #[test]
     fn offline_operation_id_is_replay_safe() {
         assert!(valid_offline_operation_id("device-abc-123"));
         assert!(!valid_offline_operation_id("short"));
         assert!(!valid_offline_operation_id("contains space"));
+    }
+
+    #[test]
+    fn offline_appointment_reference_is_preserved() {
+        let appointment = PosSalePayload {
+            source: Some("Appointment".to_string()),
+            reference_id: Some("appointment-123".to_string()),
+            ..PosSalePayload::default()
+        };
+        assert_eq!(
+            offline_checkout_sale_reference(&appointment, "device-operation-123").unwrap(),
+            ("appointment".to_string(), "appointment-123".to_string())
+        );
+        assert_eq!(
+            offline_checkout_sale_reference(&PosSalePayload::default(), "device-operation-123")
+                .unwrap(),
+            (
+                "offline_sync".to_string(),
+                "device-operation-123".to_string()
+            )
+        );
+        assert!(offline_checkout_sale_reference(
+            &PosSalePayload {
+                source: Some("appointment".to_string()),
+                ..PosSalePayload::default()
+            },
+            "device-operation-123"
+        )
+        .is_err());
     }
 }
 
@@ -4411,29 +5780,32 @@ async fn get_offline_checkout(
 
 async fn create_pos_invoice(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<PosSalePayload>,
 ) -> ApiResult<PosSaleDetailsResponse> {
-    let details = persist_pos_sale(&state, headers, payload).await?;
+    let details = persist_pos_sale(&state, headers, payload, claims.max_discount_paise).await?;
     Ok(Json(ApiResponse::ok(details)))
 }
 
 async fn create_pos_invoice_draft(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(mut payload): Json<PosSalePayload>,
 ) -> ApiResult<PosSaleDetailsResponse> {
     payload.status = Some("draft".to_string());
-    let details = persist_pos_sale(&state, headers, payload).await?;
+    let details = persist_pos_sale(&state, headers, payload, claims.max_discount_paise).await?;
     Ok(Json(ApiResponse::ok(details)))
 }
 
 async fn create_pos_checkout(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<PosSalePayload>,
 ) -> ApiResult<PosCheckoutResponse> {
-    let details = persist_pos_sale(&state, headers, payload).await?;
+    let details = persist_pos_sale(&state, headers, payload, claims.max_discount_paise).await?;
     Ok(Json(ApiResponse::ok(PosCheckoutResponse {
         invoice: details.sale.clone(),
         sale: details.sale,
@@ -4446,6 +5818,7 @@ async fn create_pos_checkout(
 
 async fn add_pos_invoice_line(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<PosSaleLineInput>,
@@ -4470,6 +5843,7 @@ async fn add_pos_invoice_line(
         &sale,
         drafts,
         "invoice.line_added",
+        claims.max_discount_paise,
     )
     .await?;
     let details = load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?;
@@ -4478,6 +5852,7 @@ async fn add_pos_invoice_line(
 
 async fn update_pos_invoice_line(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path((id, line_id)): Path<(String, String)>,
     Json(payload): Json<PosSaleLineInput>,
@@ -4517,6 +5892,7 @@ async fn update_pos_invoice_line(
         &sale,
         drafts,
         "invoice.line_updated",
+        claims.max_discount_paise,
     )
     .await?;
     let details = load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?;
@@ -4525,6 +5901,7 @@ async fn update_pos_invoice_line(
 
 async fn delete_pos_invoice_line(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path((id, line_id)): Path<(String, String)>,
 ) -> ApiResult<PosSaleDetailsResponse> {
@@ -4562,6 +5939,7 @@ async fn delete_pos_invoice_line(
         &sale,
         drafts,
         "invoice.line_deleted",
+        claims.max_discount_paise,
     )
     .await?;
     let details = load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?;
@@ -4774,12 +6152,287 @@ fn normalize_happy_hour_filter(values: Option<Vec<String>>) -> Vec<String> {
         .collect()
 }
 
+fn normalize_pos_source(source: Option<String>) -> String {
+    let source = source.unwrap_or_else(|| "manual".to_string());
+    match source.trim().to_ascii_lowercase().as_str() {
+        "appointment" => "appointment".to_string(),
+        "appointment_no_show" | "appointment-no-show" => "appointment_no_show".to_string(),
+        "membership_auto_renew" | "membership-auto-renew" => "membership_auto_renew".to_string(),
+        "membership_plan_change" | "membership-plan-change" => "membership_plan_change".to_string(),
+        "membership_renewal" | "membership-renewal" => "membership_renewal".to_string(),
+        "offline_sync" | "offline-sync" => "offline_sync".to_string(),
+        _ => source.trim().to_string(),
+    }
+}
+
+fn replayable_pos_reference(source: &str, reference_id: &str) -> bool {
+    !reference_id.trim().is_empty()
+        && matches!(
+            source,
+            "appointment"
+                | "appointment_no_show"
+                | "offline_sync"
+                | "membership_auto_renew"
+                | "membership_plan_change"
+                | "membership_renewal"
+        )
+}
+
+pub(crate) async fn canonical_appointment_reference(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    appointment_id: &str,
+) -> Result<String, AppError> {
+    let appointment_id = appointment_id.trim();
+    if appointment_id.is_empty() {
+        return Err(AppError::validation(
+            "appointment source requires referenceId",
+        ));
+    }
+
+    sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE(NULLIF(a.booking_group_id, ''), a.id)
+           FROM appointments a
+          WHERE a.id=$1 AND a.tenant_id=$2 AND a.branch_id=$3",
+    )
+    .bind(appointment_id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to resolve appointment invoice reference"))
+    .map(|reference| reference.unwrap_or_else(|| appointment_id.to_string()))
+}
+
+pub(crate) async fn find_appointment_pos_sale(
+    state: &AppState,
+    headers: &HeaderMap,
+    reference_id: &str,
+) -> Result<Option<AppointmentPosDraft>, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(headers)?;
+    sqlx::query_as::<_, (String, i64, String)>(
+        "SELECT id, total_paise, status
+           FROM pos_sales
+          WHERE tenant_id=$1 AND branch_id=$2 AND source='appointment' AND reference_id=$3
+          LIMIT 1",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(reference_id)
+    .fetch_optional(&state.db)
+    .await
+    .map(|row| {
+        row.map(|(sale_id, total_paise, status)| AppointmentPosDraft {
+            sale_id,
+            total_paise,
+            status,
+        })
+    })
+    .map_err(|_| AppError::internal("failed to load appointment invoice"))
+}
+
+pub(crate) async fn create_or_resume_appointment_draft(
+    state: &AppState,
+    headers: HeaderMap,
+    reference_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    lines: Vec<PosSaleLineInput>,
+) -> Result<AppointmentPosDraft, AppError> {
+    if let Some(existing) = find_appointment_pos_sale(state, &headers, reference_id).await? {
+        return Ok(existing);
+    }
+
+    let details = persist_pos_sale(
+        state,
+        headers,
+        PosSalePayload {
+            client_id: Some(client_id.to_string()),
+            staff_id: Some(staff_id.to_string()),
+            source: Some("appointment".to_string()),
+            reference_id: Some(reference_id.to_string()),
+            lines: Some(lines),
+            payments: Some(Vec::new()),
+            status: Some("draft".to_string()),
+            ..PosSalePayload::default()
+        },
+        None,
+    )
+    .await?;
+
+    Ok(AppointmentPosDraft {
+        sale_id: details.sale.id,
+        total_paise: details.sale.total_paise,
+        status: details.sale.status,
+    })
+}
+
+pub(crate) async fn create_auto_renew_sale(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    membership_id: &str,
+    membership_name: &str,
+    amount_paise: i64,
+    attempt_id: &str,
+    provider_reference: &str,
+) -> Result<String, AppError> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "x-tenant-id",
+        tenant_id
+            .parse()
+            .map_err(|_| AppError::validation("invalid tenant id"))?,
+    );
+    headers.insert(
+        "x-branch-id",
+        branch_id
+            .parse()
+            .map_err(|_| AppError::validation("invalid branch id"))?,
+    );
+    let details = persist_pos_sale(
+        state,
+        headers,
+        PosSalePayload {
+            client_id: Some(client_id.to_string()),
+            source: Some("membership_auto_renew".to_string()),
+            reference_id: Some(attempt_id.to_string()),
+            lines: Some(vec![PosSaleLineInput {
+                line_type: Some("membership".to_string()),
+                item_id: Some(membership_id.to_string()),
+                item_name: Some(membership_name.to_string()),
+                quantity: Some(1),
+                unit_price_paise: Some(amount_paise),
+                ..PosSaleLineInput::default()
+            }]),
+            payments: Some(vec![PosPaymentInput {
+                method: Some("bank_transfer".to_string()),
+                amount_paise: Some(amount_paise),
+                method_reference: Some(provider_reference.to_string()),
+                label: Some("Razorpay Auto-renew".to_string()),
+                notes: Some("Verified Razorpay subscription cycle".to_string()),
+                idempotency_key: Some(format!("membership-auto-renew-{attempt_id}")),
+                ..PosPaymentInput::default()
+            }]),
+            status: Some("finalized".to_string()),
+            ..PosSalePayload::default()
+        },
+        None,
+    )
+    .await?;
+    Ok(details.sale.id)
+}
+
+pub(crate) async fn create_no_show_charge(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    appointment_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    amount_paise: i64,
+    provider: &str,
+    idempotency_key: &str,
+) -> Result<NoShowChargeResult, AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation(
+            "amountPaise must be greater than zero",
+        ));
+    }
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "x-tenant-id",
+        tenant_id
+            .parse()
+            .map_err(|_| AppError::validation("invalid tenant id"))?,
+    );
+    headers.insert(
+        "x-branch-id",
+        branch_id
+            .parse()
+            .map_err(|_| AppError::validation("invalid branch id"))?,
+    );
+    let details = persist_pos_sale(
+        state,
+        headers,
+        PosSalePayload {
+            client_id: Some(client_id.to_string()),
+            staff_id: Some(staff_id.to_string()),
+            source: Some("appointment_no_show".to_string()),
+            reference_id: Some(appointment_id.to_string()),
+            lines: Some(vec![PosSaleLineInput {
+                line_type: Some("custom".to_string()),
+                item_name: Some("No-show fee".to_string()),
+                quantity: Some(1),
+                unit_price_paise: Some(amount_paise),
+                ..PosSaleLineInput::default()
+            }]),
+            payments: Some(Vec::new()),
+            status: Some("open".to_string()),
+            ..PosSalePayload::default()
+        },
+        None,
+    )
+    .await?;
+    if details.sale.total_paise != amount_paise {
+        return Err(AppError::conflict(
+            "an existing no-show invoice has a different amount",
+        ));
+    }
+    let provider = provider.trim().to_ascii_lowercase();
+    if !matches!(provider.as_str(), "razorpay" | "cashfree" | "phonepe") {
+        return Err(AppError::validation(
+            "provider must be razorpay, cashfree, or phonepe",
+        ));
+    }
+    if idempotency_key.trim().is_empty() {
+        return Err(AppError::validation(
+            "idempotencyKey is required when creating a no-show charge",
+        ));
+    }
+    let configured = state.settings.payment_provider_enabled(&provider)
+        && state
+            .settings
+            .payment_provider_webhook_configured(&provider);
+    let payment_link = if configured {
+        Some(
+            create_payment_link_for_invoice(
+                state,
+                tenant_id,
+                branch_id,
+                &details.sale.id,
+                PosPaymentLinkRequest {
+                    provider: Some(provider),
+                    amount_paise: Some(amount_paise),
+                    expires_at: None,
+                    idempotency_key: Some(idempotency_key.to_string()),
+                },
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    Ok(NoShowChargeResult {
+        sale_id: details.sale.id,
+        amount_paise,
+        payment_link,
+        activation_required: !configured,
+    })
+}
+
 async fn persist_pos_sale(
     state: &AppState,
     headers: HeaderMap,
     mut payload: PosSalePayload,
+    max_discount_paise: Option<i64>,
 ) -> Result<PosSaleDetailsResponse, AppError> {
+    let checkout_started = std::time::Instant::now();
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let cash_drawer_till_id = payload.cash_drawer_till_id.clone().unwrap_or_default();
+    hydrate_appointment_booked_prices(state, &tenant_id, &branch_id, &mut payload).await?;
     hydrate_pos_tax_metadata(state, &tenant_id, &branch_id, &mut payload).await?;
     resolve_coupon_discount(state, &tenant_id, &branch_id, &mut payload).await?;
     let gst_context = gst_context_from_payload(state, &tenant_id, &branch_id, &payload).await?;
@@ -4829,15 +6482,29 @@ async fn persist_pos_sale(
     } else {
         base_calculation
     };
+    if apply_membership_benefits(state, &tenant_id, &branch_id, &mut payload, &calculation).await? {
+        calculation = calculate_pos(&payload)?;
+    }
     apply_gst_context(
         &mut calculation,
         &gst_context,
         payload.round_to_nearest_rupee.unwrap_or(false),
     );
-    enforce_discount_rules(state, &tenant_id, &branch_id, &calculation).await?;
+    enforce_discount_rules(
+        state,
+        &tenant_id,
+        &branch_id,
+        &calculation,
+        max_discount_paise,
+    )
+    .await?;
 
-    let (paid, prepared_payments) =
-        prepare_pos_payments(payload.payments.take(), calculation.total_paise)?;
+    let wallet_credit_paise = payload.wallet_credit_paise.unwrap_or(0);
+    let (paid, prepared_payments) = prepare_pos_payments(
+        payload.payments.take(),
+        calculation.total_paise,
+        wallet_credit_paise,
+    )?;
     validate_active_payment_modes(state, &tenant_id, &branch_id, &prepared_payments).await?;
 
     let sale_id = uuid::Uuid::new_v4().to_string();
@@ -4845,24 +6512,76 @@ async fn persist_pos_sale(
         .client_id
         .or(payload.customer_id)
         .unwrap_or_default();
+    if wallet_credit_paise > 0 && client_id.trim().is_empty() {
+        return Err(AppError::validation(
+            "client is required when collecting an advance",
+        ));
+    }
     let staff_id = payload.staff_id.unwrap_or_default();
-    let source = payload.source.unwrap_or_else(|| "manual".to_string());
+    let source = normalize_pos_source(payload.source);
     let reference_id = payload.reference_id.unwrap_or_default();
+    if source == "appointment" && reference_id.trim().is_empty() {
+        return Err(AppError::validation(
+            "appointment source requires referenceId",
+        ));
+    }
+    let reference_id = if source == "appointment" {
+        canonical_appointment_reference(state, &tenant_id, &branch_id, &reference_id).await?
+    } else {
+        reference_id
+    };
     let invoice_type = payload
         .invoice_type
         .unwrap_or_else(|| "tax_invoice".to_string());
     let invoice_type = invoice_type.trim().to_ascii_lowercase();
     let status =
         status_for_invoice_create(payload.status.as_deref(), calculation.total_paise, paid);
+    if status == "draft" && wallet_credit_paise > 0 {
+        return Err(AppError::validation(
+            "client advance can only be applied when finalizing an invoice",
+        ));
+    }
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start pos invoice transaction"))?;
+    if replayable_pos_reference(&source, &reference_id) {
+        let lock_key = format!("{tenant_id}|{branch_id}|{reference_id}");
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(lock_key)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| AppError::internal("failed to lock pos reference"))?;
+        if let Some(existing_id) = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM pos_sales
+              WHERE tenant_id=$1 AND branch_id=$2 AND source=$3 AND reference_id=$4
+              LIMIT 1",
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(&source)
+        .bind(&reference_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to check pos reference"))?
+        {
+            tx.rollback()
+                .await
+                .map_err(|_| AppError::internal("failed to finish pos reference retry"))?;
+            return load_pos_sale_details(state, &tenant_id, &branch_id, &existing_id).await;
+        }
+    }
     let business_date = sqlx::query_scalar::<_, NaiveDate>("SELECT CURRENT_DATE")
         .fetch_one(&mut *tx)
         .await
         .map_err(|_| AppError::internal("failed to resolve invoice business date"))?;
+    let day_locked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pos_day_locks WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status='locked')")
+        .bind(&tenant_id).bind(&branch_id).bind(business_date).fetch_one(&mut *tx).await
+        .map_err(|_| AppError::internal("failed to validate POS business day"))?;
+    if day_locked {
+        return Err(AppError::conflict("POS business day is locked"));
+    }
     let invoice_sequence = invoice_numbering_service::allocate(
         &mut tx,
         &tenant_id,
@@ -4872,6 +6591,15 @@ async fn persist_pos_sale(
     )
     .await?;
     let invoice_number = invoice_sequence.invoice_number.clone();
+    let terminal_id = payload.terminal_id.as_deref().unwrap_or_default().trim();
+    if !terminal_id.is_empty() {
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pos_terminals WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='active')")
+            .bind(&tenant_id).bind(&branch_id).bind(terminal_id).fetch_one(&mut *tx).await
+            .map_err(|_| AppError::internal("failed to validate POS terminal"))?;
+        if !valid {
+            return Err(AppError::validation("active POS terminal was not found"));
+        }
+    }
 
     let sale = sqlx::query_as::<_, PosSaleRow>(
         r#"
@@ -4881,9 +6609,9 @@ async fn persist_pos_sale(
             tip_paise, round_off_paise, total_paise, paid_paise,
             status, source, reference_id, package_redemptions, invoice_type, business_date,
             seller_gstin, seller_state_code, buyer_gstin, place_of_supply_state_code, tax_mode, reverse_charge,
-            cgst_paise, sgst_paise, igst_paise, fiscal_year, invoice_number_sequence_id, finalized_at, created_at, updated_at
+            cgst_paise, sgst_paise, igst_paise, fiscal_year, invoice_number_sequence_id, terminal_id, finalized_at, created_at, updated_at
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,CASE WHEN $17 = 'draft' THEN NULL ELSE NOW() END,NOW(),NOW())
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NULLIF($34,''),CASE WHEN $17 = 'draft' THEN NULL ELSE NOW() END,NOW(),NOW())
         RETURNING id, tenant_id, branch_id, client_id, staff_id, invoice_number,
                   subtotal_paise, bill_discount_paise, coupon_code, coupon_discount_paise, discount_paise, tax_paise,
                   tip_paise, round_off_paise, total_paise, paid_paise,
@@ -4907,8 +6635,8 @@ async fn persist_pos_sale(
     .bind(calculation.total_paise)
     .bind(paid)
     .bind(&status)
-    .bind(source)
-    .bind(reference_id)
+    .bind(&source)
+    .bind(&reference_id)
     .bind(&package_redemptions)
     .bind(&invoice_type)
     .bind(business_date)
@@ -4923,6 +6651,7 @@ async fn persist_pos_sale(
     .bind(calculation.igst_paise)
     .bind(&invoice_sequence.fiscal_year)
     .bind(&invoice_sequence.sequence_id)
+    .bind(terminal_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to create pos sale"))?;
@@ -4998,6 +6727,11 @@ async fn persist_pos_sale(
         .await?;
     }
     if status != "draft" {
+        pos_enterprise_repository::snapshot_staff_commissions(
+            &mut tx, &tenant_id, &branch_id, &sale_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to snapshot staff commission"))?;
         let movements =
             consume_inventory_for_sale(&mut tx, &tenant_id, &branch_id, &sale_id).await?;
         if movements > 0 {
@@ -5021,10 +6755,20 @@ async fn persist_pos_sale(
         &sale.client_id,
         &sale_id,
         status != "draft",
+        &cash_drawer_till_id,
         prepared_payments,
     )
     .await?;
     if status != "draft" {
+        wallet_service::credit_pos_advance(
+            &mut tx,
+            &tenant_id,
+            &branch_id,
+            &sale.client_id,
+            &sale_id,
+            wallet_credit_paise,
+        )
+        .await?;
         accounting_service::post_invoice(
             &mut tx,
             &tenant_id,
@@ -5039,16 +6783,33 @@ async fn persist_pos_sale(
             sale.round_off_paise,
         )
         .await?;
+        let mut invoice_balance_paise = sale.total_paise;
         for payment in &payment_rows {
-            accounting_service::post_payment(
-                &mut tx,
-                &tenant_id,
-                &branch_id,
-                &payment.id,
-                &payment.method,
-                payment.amount_paise,
-            )
-            .await?;
+            let invoice_payment_paise = payment.amount_paise.min(invoice_balance_paise);
+            let advance_paise = payment.amount_paise - invoice_payment_paise;
+            if invoice_payment_paise > 0 {
+                accounting_service::post_payment(
+                    &mut tx,
+                    &tenant_id,
+                    &branch_id,
+                    &payment.id,
+                    &payment.method,
+                    invoice_payment_paise,
+                )
+                .await?;
+                invoice_balance_paise -= invoice_payment_paise;
+            }
+            if advance_paise > 0 {
+                accounting_service::post_pos_advance(
+                    &mut tx,
+                    &tenant_id,
+                    &branch_id,
+                    &payment.id,
+                    &payment.method,
+                    advance_paise,
+                )
+                .await?;
+            }
         }
     }
     if status != "draft" && !sale.client_id.trim().is_empty() {
@@ -5097,6 +6858,16 @@ async fn persist_pos_sale(
             &package_redemptions,
         )
         .await?;
+        post_membership_rewards(
+            &mut tx,
+            &tenant_id,
+            &branch_id,
+            &sale.client_id,
+            &sale.staff_id,
+            &sale_id,
+            sale.total_paise,
+        )
+        .await?;
     }
 
     if status != "draft" {
@@ -5118,14 +6889,42 @@ async fn persist_pos_sale(
         .await?;
     }
 
+    let appointment_events = if status == "draft" {
+        Vec::new()
+    } else {
+        sync_appointment_billing_tx(&mut tx, &sale, &sale.status).await?
+    };
+
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit pos invoice"))?;
+    state.publish_pos_event(&tenant_id, &branch_id, "invoice", &sale_id, event_type);
+    if status != "draft" {
+        if let Err(error) = happy_hours_service::scan_coupon_abuse_for_sale(
+            &state.db, &tenant_id, &branch_id, &sale_id,
+        )
+        .await
+        {
+            tracing::warn!(sale_id = %sale_id, error = ?error, "coupon abuse scan deferred");
+        }
+    }
+    for event in appointment_events {
+        let _ = state.appointment_events.send(event);
+    }
 
     let lines = read_lines(state, &tenant_id, &branch_id, &sale_id).await?;
     let client_kpi = read_client_kpi(state, &tenant_id, &branch_id, &sale.client_id).await?;
     let response = sale_response(sale, lines.len() as i64);
     let payment_split = payment_split_response(&payment_rows, response.total_paise);
+    tracing::info!(
+        target: "pos.checkout",
+        tenant_id = %tenant_id,
+        branch_id = %branch_id,
+        sale_id = %sale_id,
+        status = %response.status,
+        checkout_duration_ms = checkout_started.elapsed().as_millis() as u64,
+        "POS checkout completed"
+    );
     Ok(PosSaleDetailsResponse {
         sale: response.clone(),
         invoice: response,
@@ -5138,6 +6937,7 @@ async fn persist_pos_sale(
 
 async fn replace_pos_invoice_draft(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(mut payload): Json<PosSalePayload>,
@@ -5147,6 +6947,11 @@ async fn replace_pos_invoice_draft(
     if existing.status != "draft" {
         return Err(AppError::validation("only held invoices can be updated"));
     }
+    if existing.source == "appointment" {
+        payload.source = Some(existing.source.clone());
+        payload.reference_id = Some(existing.reference_id.clone());
+    }
+    hydrate_appointment_booked_prices(&state, &tenant_id, &branch_id, &mut payload).await?;
     hydrate_pos_tax_metadata(&state, &tenant_id, &branch_id, &mut payload).await?;
     resolve_coupon_discount(&state, &tenant_id, &branch_id, &mut payload).await?;
     let gst_context = gst_context_from_payload(&state, &tenant_id, &branch_id, &payload).await?;
@@ -5157,14 +6962,34 @@ async fn replace_pos_invoice_draft(
             .unwrap_or_else(|| Value::Array(Vec::new())),
     )?;
     let mut calculation = calculate_pos(&payload)?;
+    if apply_membership_benefits(&state, &tenant_id, &branch_id, &mut payload, &calculation).await?
+    {
+        calculation = calculate_pos(&payload)?;
+    }
     apply_gst_context(
         &mut calculation,
         &gst_context,
         payload.round_to_nearest_rupee.unwrap_or(false),
     );
-    enforce_discount_rules(&state, &tenant_id, &branch_id, &calculation).await?;
-    let (paid, prepared_payments) =
-        prepare_pos_payments(payload.payments.take(), calculation.total_paise)?;
+    enforce_discount_rules(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &calculation,
+        claims.max_discount_paise,
+    )
+    .await?;
+    let wallet_credit_paise = payload.wallet_credit_paise.unwrap_or(0);
+    let (paid, prepared_payments) = prepare_pos_payments(
+        payload.payments.take(),
+        calculation.total_paise,
+        wallet_credit_paise,
+    )?;
+    if wallet_credit_paise > 0 {
+        return Err(AppError::validation(
+            "client advance can only be applied when finalizing an invoice",
+        ));
+    }
     validate_active_payment_modes(&state, &tenant_id, &branch_id, &prepared_payments).await?;
 
     let client_id = payload
@@ -5172,8 +6997,21 @@ async fn replace_pos_invoice_draft(
         .or(payload.customer_id)
         .unwrap_or_default();
     let staff_id = payload.staff_id.unwrap_or_default();
-    let source = payload.source.unwrap_or_else(|| "manual".to_string());
-    let reference_id = payload.reference_id.unwrap_or_default();
+    let source = if existing.source == "appointment" {
+        existing.source.clone()
+    } else {
+        normalize_pos_source(payload.source)
+    };
+    let reference_id = if existing.source == "appointment" {
+        existing.reference_id.clone()
+    } else {
+        payload.reference_id.unwrap_or_default()
+    };
+    if source == "appointment" && reference_id.trim().is_empty() {
+        return Err(AppError::validation(
+            "appointment source requires referenceId",
+        ));
+    }
     let mut tx = state
         .db
         .begin()
@@ -5224,6 +7062,7 @@ async fn replace_pos_invoice_draft(
         &sale.client_id,
         &id,
         false,
+        "",
         prepared_payments,
     )
     .await?;
@@ -5231,6 +7070,13 @@ async fn replace_pos_invoice_draft(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit held invoice"))?;
+    state.publish_pos_event(
+        &tenant_id,
+        &branch_id,
+        "invoice",
+        &id,
+        "invoice.draft_updated",
+    );
 
     let lines = read_lines(&state, &tenant_id, &branch_id, &id).await?;
     let client_kpi = read_client_kpi(&state, &tenant_id, &branch_id, &sale.client_id).await?;
@@ -5249,7 +7095,11 @@ async fn replace_pos_invoice_draft(
 fn prepare_pos_payments(
     payments: Option<Vec<PosPaymentInput>>,
     total_paise: i64,
+    wallet_credit_paise: i64,
 ) -> Result<(i64, Vec<PreparedPayment>), AppError> {
+    if wallet_credit_paise < 0 {
+        return Err(AppError::validation("walletCreditPaise cannot be negative"));
+    }
     let mut paid = 0i64;
     let mut prepared = Vec::new();
     for payment in payments.unwrap_or_default() {
@@ -5276,12 +7126,59 @@ fn prepare_pos_payments(
             idempotency_key: payment.idempotency_key.unwrap_or_default(),
         });
     }
-    if paid > total_paise {
+    let expected_advance_paise = paid.saturating_sub(total_paise);
+    if wallet_credit_paise != expected_advance_paise {
         return Err(AppError::validation(
-            "payment total cannot exceed sale total",
+            "walletCreditPaise must equal the collected amount above the invoice total",
         ));
     }
-    Ok((paid, prepared))
+    if wallet_credit_paise > 0 {
+        let mut invoice_balance_paise = total_paise;
+        for payment in &prepared {
+            let invoice_payment_paise = payment.amount_paise.min(invoice_balance_paise);
+            let advance_paise = payment.amount_paise - invoice_payment_paise;
+            if advance_paise > 0
+                && !matches!(
+                    payment.method.as_str(),
+                    "cash" | "upi" | "card" | "bank_transfer"
+                )
+            {
+                return Err(AppError::validation(
+                    "client advance requires cash, UPI, card, or bank transfer",
+                ));
+            }
+            invoice_balance_paise -= invoice_payment_paise;
+        }
+    }
+    Ok((paid.min(total_paise), prepared))
+}
+
+#[cfg(test)]
+mod pos_advance_payment_tests {
+    use super::{prepare_pos_payments, PosPaymentInput};
+
+    fn payment(method: &str, amount_paise: i64) -> PosPaymentInput {
+        PosPaymentInput {
+            method: Some(method.to_string()),
+            amount_paise: Some(amount_paise),
+            ..PosPaymentInput::default()
+        }
+    }
+
+    #[test]
+    fn external_overpayment_is_split_into_invoice_and_wallet_advance() {
+        let (invoice_paid, payments) =
+            prepare_pos_payments(Some(vec![payment("cash", 1_500)]), 1_000, 500)
+                .expect("allocated advance should be accepted");
+        assert_eq!(invoice_paid, 1_000);
+        assert_eq!(payments[0].amount_paise, 1_500);
+    }
+
+    #[test]
+    fn unallocated_or_internal_overpayment_is_rejected() {
+        assert!(prepare_pos_payments(Some(vec![payment("cash", 1_500)]), 1_000, 0).is_err());
+        assert!(prepare_pos_payments(Some(vec![payment("gift_card", 1_500)]), 1_000, 500).is_err());
+    }
 }
 
 async fn validate_active_payment_modes(
@@ -5320,10 +7217,16 @@ async fn enforce_discount_rules(
     tenant_id: &str,
     branch_id: &str,
     calculation: &PosCalculation,
+    max_role_discount_paise: Option<i64>,
 ) -> Result<(), AppError> {
     if calculation.discount_paise <= 0 {
         return Ok(());
     }
+    security_service::enforce_role_limit(
+        max_role_discount_paise,
+        calculation.discount_paise,
+        "discount",
+    )?;
     let rules = sqlx::query_as::<_, (String, i64, i64, i64)>(
         r#"
         SELECT rule_type, max_discount_bps, max_discount_paise, min_payable_paise
@@ -5377,10 +7280,17 @@ async fn insert_pos_payments(
     client_id: &str,
     sale_id: &str,
     settle_internal: bool,
+    requested_till_id: &str,
     payments: Vec<PreparedPayment>,
 ) -> Result<Vec<PosPaymentResponse>, AppError> {
     if settle_internal && payments.iter().any(|payment| payment.method == "cash") {
-        ensure_cash_drawer_open(tx, tenant_id, branch_id).await?;
+        if let Some(till_id) =
+            ensure_cash_drawer_open(tx, tenant_id, branch_id, requested_till_id).await?
+        {
+            sqlx::query("UPDATE pos_sales SET cash_drawer_till_id=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(tenant_id).bind(branch_id).bind(sale_id).bind(till_id).execute(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to assign cash till"))?;
+        }
     }
     let mut rows = Vec::with_capacity(payments.len());
     for payment in payments {
@@ -5411,7 +7321,8 @@ async fn ensure_cash_drawer_open(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
-) -> Result<(), AppError> {
+    requested_till_id: &str,
+) -> Result<Option<String>, AppError> {
     let open = cash_drawer_repository::is_open_for_update(
         tx,
         tenant_id,
@@ -5420,13 +7331,29 @@ async fn ensure_cash_drawer_open(
     )
     .await
     .map_err(|_| AppError::internal("failed to validate cash drawer"))?;
-    if open {
-        Ok(())
-    } else {
-        Err(AppError::validation(
+    if !open {
+        return Err(AppError::validation(
             "an open cash drawer is required before accepting cash payment",
-        ))
+        ));
     }
+    let tills = cash_drawer_repository::open_till_ids_for_cash(
+        tx,
+        tenant_id,
+        branch_id,
+        Utc::now().date_naive(),
+        requested_till_id.trim(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to validate cash till"))?;
+    if !requested_till_id.trim().is_empty() && tills.is_empty() {
+        return Err(AppError::validation("selected cash till is not open"));
+    }
+    if requested_till_id.trim().is_empty() && tills.len() > 1 {
+        return Err(AppError::validation(
+            "cashDrawerTillId is required when multiple tills are open",
+        ));
+    }
+    Ok(tills.into_iter().next())
 }
 
 async fn update_pos_sale(
@@ -5530,15 +7457,40 @@ async fn create_pos_payment_link(
     Path(id): Path<String>,
     Json(payload): Json<PosPaymentLinkRequest>,
 ) -> ApiResult<PosPaymentLinkResponse> {
-    if !state.settings.razorpay_payment_links_enabled()
-        || !state.settings.razorpay_webhook_configured()
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let payment_link =
+        create_payment_link_for_invoice(&state, &tenant_id, &branch_id, &id, payload).await?;
+    Ok(Json(ApiResponse::ok(payment_link)))
+}
+
+async fn create_payment_link_for_invoice(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    payload: PosPaymentLinkRequest,
+) -> Result<PosPaymentLinkResponse, AppError> {
+    let provider = payload
+        .provider
+        .as_deref()
+        .unwrap_or("razorpay")
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(provider.as_str(), "razorpay" | "cashfree" | "phonepe") {
+        return Err(AppError::validation(
+            "provider must be razorpay, cashfree, or phonepe",
+        ));
+    }
+    if !state.settings.payment_provider_enabled(&provider)
+        || !state
+            .settings
+            .payment_provider_webhook_configured(&provider)
     {
         return Err(AppError::service_unavailable(
             "PAYMENT_PROVIDER_NOT_CONFIGURED",
-            "Razorpay payment links and signed webhook must be configured",
+            format!("{provider} credentials and signed webhook must be configured"),
         ));
     }
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let idempotency_key = payload
         .idempotency_key
         .unwrap_or_default()
@@ -5561,7 +7513,7 @@ async fn create_pos_payment_link(
         .await
         .map_err(|_| AppError::internal("failed to start payment link transaction"))?;
     if let Some(existing) =
-        read_payment_link_by_idempotency(&mut tx, &tenant_id, &branch_id, &idempotency_key).await?
+        read_payment_link_by_idempotency(&mut tx, tenant_id, branch_id, &idempotency_key).await?
     {
         if existing.sale_id != id {
             return Err(AppError::conflict(
@@ -5571,7 +7523,7 @@ async fn create_pos_payment_link(
         tx.rollback()
             .await
             .map_err(|_| AppError::internal("failed to finish duplicate payment link request"))?;
-        return Ok(Json(ApiResponse::ok(payment_link_response(existing))));
+        return Ok(payment_link_response(existing));
     }
 
     let sale_query = format!(
@@ -5580,8 +7532,8 @@ async fn create_pos_payment_link(
     );
     let sale = sqlx::query_as::<_, PosSaleRow>(&sale_query)
         .bind(&id)
-        .bind(&tenant_id)
-        .bind(&branch_id)
+        .bind(tenant_id)
+        .bind(branch_id)
         .fetch_optional(&mut *tx)
         .await
         .map_err(|_| AppError::internal("failed to validate pos invoice"))?
@@ -5611,16 +7563,17 @@ async fn create_pos_payment_link(
         INSERT INTO pos_payment_links (
             id, tenant_id, branch_id, sale_id, provider, provider_reference,
             amount_paise, status, expires_at, idempotency_key, payload_json, created_at
-        ) VALUES ($1,$2,$3,$4,'razorpay',$5,$6,'pending',$7,$8,'{}'::jsonb,NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',$8,$9,'{}'::jsonb,NOW())
         ON CONFLICT DO NOTHING
         RETURNING id, sale_id, provider, provider_link_id,
                   provider_reference, amount_paise, status, link_url, expires_at, created_at, updated_at
         "#,
     )
     .bind(&link_id)
-    .bind(&tenant_id)
-    .bind(&branch_id)
-    .bind(&id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(&provider)
     .bind(&provider_reference)
     .bind(amount_paise)
     .bind(payload.expires_at.clone())
@@ -5632,13 +7585,13 @@ async fn create_pos_payment_link(
         Some(link) => link,
         None => {
             let existing =
-                read_payment_link_by_idempotency(&mut tx, &tenant_id, &branch_id, &idempotency_key)
+                read_payment_link_by_idempotency(&mut tx, tenant_id, branch_id, &idempotency_key)
                     .await?;
             tx.rollback().await.map_err(|_| {
                 AppError::internal("failed to finish duplicate payment link request")
             })?;
             return existing
-                .map(|link| Json(ApiResponse::ok(payment_link_response(link))))
+                .map(payment_link_response)
                 .ok_or_else(|| AppError::conflict("payment link reservation already exists"));
         }
     };
@@ -5646,9 +7599,21 @@ async fn create_pos_payment_link(
         .await
         .map_err(|_| AppError::internal("failed to reserve payment link"))?;
 
-    let provider_link = razorpay_payment_service::create_payment_link(
+    let customer = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ',first_name,NULLIF(middle_name,''),NULLIF(last_name,''))),''),'Customer'),phone,email FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&sale.client_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load payment-link client"))?
+    .unwrap_or_else(|| ("Customer".to_string(), String::new(), String::new()));
+
+    let provider_link = payment_gateway_service::create_payment_link(
         &state.settings,
-        razorpay_payment_service::CreatePaymentLink {
+        &provider,
+        payment_gateway_service::CreatePaymentLink {
             reference_id: provider_reference,
             amount_paise,
             description: format!("Invoice {}", sale.invoice_number),
@@ -5659,6 +7624,9 @@ async fn create_pos_payment_link(
                 "tenantId": tenant_id,
                 "branchId": branch_id,
             }),
+            customer_name: customer.0,
+            customer_phone: customer.1,
+            customer_email: customer.2,
         },
     )
     .await;
@@ -5669,8 +7637,8 @@ async fn create_pos_payment_link(
             let _ = sqlx::query(
                 "UPDATE pos_payment_links SET status='failed', updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending'",
             )
-            .bind(&tenant_id)
-            .bind(&branch_id)
+            .bind(tenant_id)
+            .bind(branch_id)
             .bind(&inserted.id)
             .execute(&state.db)
             .await;
@@ -5687,17 +7655,17 @@ async fn create_pos_payment_link(
                   provider_reference, amount_paise, status, link_url, expires_at, created_at, updated_at
         "#,
     )
-    .bind(&tenant_id)
-    .bind(&branch_id)
+    .bind(tenant_id)
+    .bind(branch_id)
     .bind(&inserted.id)
     .bind(&provider_link.provider_link_id)
     .bind(&provider_link.short_url)
     .bind(provider_payload)
     .fetch_one(&state.db)
     .await
-    .map_err(|_| AppError::internal("failed to save Razorpay payment link"))?;
+    .map_err(|_| AppError::internal("failed to save provider payment link"))?;
 
-    Ok(Json(ApiResponse::ok(payment_link_response(updated))))
+    Ok(payment_link_response(updated))
 }
 
 async fn list_pos_payment_links(
@@ -5720,37 +7688,155 @@ async fn list_pos_payment_links(
     )))
 }
 
+async fn list_invoice_payment_instruments(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<ClientPaymentInstrumentResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = sqlx::query_as::<_, ClientPaymentInstrumentResponse>(
+        r#"
+        SELECT instrument.id, instrument.provider, instrument.method_type, instrument.brand,
+               instrument.last4, instrument.expiry_month, instrument.expiry_year,
+               instrument.recurring_enabled, instrument.status, instrument.last_used_at
+          FROM client_payment_instruments instrument
+          JOIN pos_sales sale
+            ON sale.tenant_id=instrument.tenant_id
+           AND sale.branch_id=instrument.branch_id
+           AND sale.client_id=instrument.client_id
+         WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.id=$3
+         ORDER BY instrument.status='active' DESC, instrument.last_used_at DESC NULLS LAST,
+                  instrument.created_at DESC
+        "#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to list saved payment instruments"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn list_invoice_payment_disputes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<PaymentDisputeResponse>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = sqlx::query_as::<_, PaymentDisputeResponse>(
+        r#"
+        SELECT id, provider, provider_dispute_id, amount_paise, currency, reason,
+               status, evidence_due_at, opened_at, resolved_at
+          FROM payment_disputes
+         WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3
+         ORDER BY opened_at DESC
+        "#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to list payment disputes"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn revoke_payment_instrument(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start payment instrument transaction"))?;
+    let instrument = sqlx::query_as::<_, (String, String)>(
+        r#"
+        UPDATE client_payment_instruments
+           SET status='revoked', recurring_enabled=FALSE, revoked_at=NOW(), updated_at=NOW()
+         WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status<>'revoked'
+         RETURNING client_id, provider_instrument_id
+        "#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to revoke payment instrument"))?
+    .ok_or_else(|| AppError::not_found("active payment instrument was not found"))?;
+    sqlx::query(
+        r#"
+        UPDATE client_memberships
+           SET auto_renew_enabled=FALSE, auto_renew_status='paused', updated_at=NOW()
+         WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3
+           AND auto_renew_payment_reference=$4 AND active=TRUE
+        "#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&instrument.0)
+    .bind(&instrument.1)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to pause linked auto-renewal"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit payment instrument revocation"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "payments.instrument.revoked",
+        serde_json::json!({"instrumentId":id,"clientId":instrument.0}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"id":id,"status":"revoked"}),
+    )))
+}
+
 async fn reconcile_pos_payment_link(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((sale_id, link_id)): Path<(String, String)>,
 ) -> ApiResult<Value> {
-    if !state.settings.razorpay_payment_links_enabled() {
-        return Err(AppError::service_unavailable(
-            "PAYMENT_PROVIDER_NOT_CONFIGURED",
-            "Razorpay payment links are not configured",
-        ));
-    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let link = read_payment_link(&state, &tenant_id, &branch_id, &sale_id, &link_id).await?;
-    if link.provider != "razorpay" || link.provider_link_id.is_empty() {
+    if !state.settings.payment_provider_enabled(&link.provider) {
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_NOT_CONFIGURED",
+            format!("{} payment provider is not configured", link.provider),
+        ));
+    }
+    if link.provider_link_id.is_empty() {
         return Err(AppError::validation(
-            "payment link is not ready for Razorpay reconciliation",
+            "payment link is not ready for provider reconciliation",
         ));
     }
     let run_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO pos_payment_reconciliation_runs (id, tenant_id, branch_id, provider, status, result_json) VALUES ($1,$2,$3,'razorpay','pending','{}'::jsonb)",
+        "INSERT INTO pos_payment_reconciliation_runs (id, tenant_id, branch_id, provider, status, result_json) VALUES ($1,$2,$3,$4,'pending','{}'::jsonb)",
     )
     .bind(&run_id)
     .bind(&tenant_id)
     .bind(&branch_id)
+    .bind(&link.provider)
     .execute(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to start payment reconciliation"))?;
 
-    let remote =
-        razorpay_payment_service::fetch_payment_link(&state.settings, &link.provider_link_id).await;
+    let remote = payment_gateway_service::fetch_payment_link(
+        &state.settings,
+        &link.provider,
+        &link.provider_link_id,
+    )
+    .await;
     let remote = match remote {
         Ok(value) => value,
         Err(error) => {
@@ -5863,6 +7949,706 @@ async fn read_payment_link(
     .ok_or_else(|| AppError::not_found("payment link was not found"))
 }
 
+fn appointment_billing_transition(
+    current_status: &str,
+    sale_status: &str,
+) -> Result<Option<(&'static str, &'static str, &'static str)>, AppError> {
+    let (target_status, action, reason) = if sale_status.eq_ignore_ascii_case("paid") {
+        ("paid", "PAID", "POS invoice paid")
+    } else {
+        ("billed", "BILLED", "POS invoice linked")
+    };
+
+    match current_status {
+        "completed" => Ok(Some((target_status, action, reason))),
+        "billed" if target_status == "paid" => Ok(Some((target_status, action, reason))),
+        "billed" if target_status == "billed" => Ok(None),
+        "paid" if target_status == "paid" => Ok(None),
+        "paid" => Err(AppError::conflict(
+            "paid appointment cannot be linked to an unpaid invoice",
+        )),
+        _ => Err(AppError::conflict(
+            "appointment must be completed before invoice finalize",
+        )),
+    }
+}
+
+fn appointment_invoice_covers_services(
+    required: &HashMap<(String, String), i64>,
+    invoiced: &HashMap<(String, String), i64>,
+) -> bool {
+    required
+        .iter()
+        .all(|(service, quantity)| invoiced.get(service).copied().unwrap_or_default() >= *quantity)
+}
+
+fn appointment_invoice_covers_booked_prices(
+    required: &HashMap<(String, String, i64), i64>,
+    invoiced: &HashMap<(String, String, i64), i64>,
+) -> bool {
+    required
+        .iter()
+        .all(|(service, quantity)| invoiced.get(service).copied().unwrap_or_default() >= *quantity)
+}
+
+async fn sync_appointment_billing_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    sale: &PosSaleRow,
+    sale_status: &str,
+) -> Result<Vec<AppointmentEvent>, AppError> {
+    if sale.source != "appointment" {
+        return Ok(Vec::new());
+    }
+    let reference_id = sale.reference_id.trim();
+    if reference_id.is_empty() {
+        return Err(AppError::validation(
+            "appointment invoice reference is missing",
+        ));
+    }
+
+    let appointments = sqlx::query_as::<_, (String, String, String, String, String, Value)>(
+        "SELECT a.id, a.status, a.client_id, a.staff_id, a.service_ids_json,
+                a.booked_service_prices_json
+           FROM appointments a
+          WHERE a.tenant_id=$2 AND a.branch_id=$3
+            AND a.status NOT IN ('cancelled', 'no-show')
+            AND (a.id=$1 OR a.booking_group_id=$1)
+          ORDER BY a.start_at, a.id
+          FOR UPDATE",
+    )
+    .bind(reference_id)
+    .bind(&sale.tenant_id)
+    .bind(&sale.branch_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to lock linked appointments"))?;
+    if appointments.is_empty() {
+        return Err(AppError::not_found("linked appointment was not found"));
+    }
+    if appointments
+        .iter()
+        .any(|(_, _, client_id, _, _, _)| client_id != &sale.client_id)
+    {
+        return Err(AppError::conflict(
+            "booking group appointments must match the invoice client",
+        ));
+    }
+
+    let mut required_services: HashMap<(String, String), i64> = HashMap::new();
+    let mut required_booked_prices: HashMap<(String, String, i64), i64> = HashMap::new();
+    for (_, _, _, staff_id, service_ids_json, price_snapshot) in &appointments {
+        let service_ids: Vec<String> = serde_json::from_str(service_ids_json)
+            .map_err(|_| AppError::internal("linked appointment services are invalid"))?;
+        for service_id in service_ids {
+            if !service_id.trim().is_empty() {
+                *required_services
+                    .entry((service_id.clone(), staff_id.clone()))
+                    .or_default() += 1;
+                if let Some(price_paise) = booked_service_price(price_snapshot, &service_id) {
+                    *required_booked_prices
+                        .entry((service_id, staff_id.clone(), price_paise))
+                        .or_default() += 1;
+                }
+            }
+        }
+    }
+    if required_services.is_empty() {
+        return Err(AppError::conflict(
+            "linked appointment has no service to invoice",
+        ));
+    }
+    let invoiced_rows = sqlx::query_as::<_, (String, String, i64, i64)>(
+        "SELECT item_id, staff_id, unit_price_paise, SUM(quantity)::BIGINT
+           FROM pos_sale_lines
+          WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='service'
+          GROUP BY item_id, staff_id, unit_price_paise",
+    )
+    .bind(&sale.tenant_id)
+    .bind(&sale.branch_id)
+    .bind(&sale.id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to validate appointment invoice services"))?;
+    let mut invoiced_services = HashMap::new();
+    let mut invoiced_booked_prices = HashMap::new();
+    for (service_id, staff_id, price_paise, quantity) in invoiced_rows {
+        *invoiced_services
+            .entry((service_id.clone(), staff_id.clone()))
+            .or_default() += quantity;
+        *invoiced_booked_prices
+            .entry((service_id, staff_id, price_paise))
+            .or_default() += quantity;
+    }
+    if !appointment_invoice_covers_services(&required_services, &invoiced_services) {
+        return Err(AppError::conflict(
+            "invoice must retain every appointment service and staff assignment",
+        ));
+    }
+    if !appointment_invoice_covers_booked_prices(&required_booked_prices, &invoiced_booked_prices) {
+        return Err(AppError::conflict(
+            "invoice must retain every appointment booked base price",
+        ));
+    }
+
+    let transitions = appointments
+        .iter()
+        .map(|(_, status, _, _, _, _)| appointment_billing_transition(status, sale_status))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut events = Vec::new();
+    for ((appointment_id, current_status, client_id, staff_id, _, _), transition) in
+        appointments.into_iter().zip(transitions)
+    {
+        let Some((target_status, action, reason)) = transition else {
+            continue;
+        };
+        sqlx::query(
+            "UPDATE appointments
+                SET status=$4, version=version+1, updated_at=NOW()
+              WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
+        )
+        .bind(&appointment_id)
+        .bind(&sale.tenant_id)
+        .bind(&sale.branch_id)
+        .bind(target_status)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to update linked appointment"))?;
+
+        let old_data = serde_json::json!({ "status": current_status.clone() });
+        let new_data = serde_json::json!({
+            "status": target_status,
+            "saleId": sale.id.clone(),
+            "invoiceNumber": sale.invoice_number.clone(),
+        });
+        let changes = serde_json::json!([{
+            "field": "status",
+            "oldValue": current_status.clone(),
+            "newValue": target_status,
+        }]);
+        sqlx::query(
+            "INSERT INTO appointment_activity (
+                id, tenant_id, branch_id, appointment_id, client_id, staff_id, action, action_group,
+                old_status, new_status, changed_by, changed_by_role, source, reason,
+                old_data, new_data, changes, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,'billing',$8,$9,'system','system','pos',$10,$11::jsonb,$12::jsonb,$13::jsonb,NOW())",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&sale.tenant_id)
+        .bind(&sale.branch_id)
+        .bind(&appointment_id)
+        .bind(&client_id)
+        .bind(staff_id)
+        .bind(action)
+        .bind(&current_status)
+        .bind(target_status)
+        .bind(reason)
+        .bind(old_data.to_string())
+        .bind(new_data.to_string())
+        .bind(changes.to_string())
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to record appointment invoice activity"))?;
+
+        events.push(AppointmentEvent {
+            tenant_id: sale.tenant_id.clone(),
+            branch_id: sale.branch_id.clone(),
+            client_id: client_id.to_string(),
+            entity_type: "appointment".to_string(),
+            entity_id: appointment_id,
+            action: action.to_string(),
+        });
+    }
+
+    Ok(events)
+}
+
+#[cfg(test)]
+mod appointment_pos_handoff_tests {
+    use super::{
+        apply_appointment_booked_prices, appointment_invoice_covers_booked_prices,
+        appointment_invoice_covers_services, sync_appointment_billing_tx, PosSaleLineInput,
+        PosSalePayload, PosSaleRow,
+    };
+    use chrono::Utc;
+    use serde_json::Value;
+    use sqlx::PgPool;
+    use std::collections::HashMap;
+
+    #[test]
+    fn appointment_invoice_requires_every_service_and_staff_pair() {
+        let required = HashMap::from([
+            (("service-1".to_string(), "staff-1".to_string()), 1),
+            (("service-2".to_string(), "staff-2".to_string()), 2),
+        ]);
+        let complete = HashMap::from([
+            (("service-1".to_string(), "staff-1".to_string()), 1),
+            (("service-2".to_string(), "staff-2".to_string()), 2),
+        ]);
+        let wrong_staff = HashMap::from([
+            (("service-1".to_string(), "staff-1".to_string()), 1),
+            (("service-2".to_string(), "staff-1".to_string()), 2),
+        ]);
+        let missing_quantity = HashMap::from([
+            (("service-1".to_string(), "staff-1".to_string()), 1),
+            (("service-2".to_string(), "staff-2".to_string()), 1),
+        ]);
+
+        assert!(appointment_invoice_covers_services(&required, &complete));
+        assert!(!appointment_invoice_covers_services(
+            &required,
+            &wrong_staff
+        ));
+        assert!(!appointment_invoice_covers_services(
+            &required,
+            &missing_quantity
+        ));
+    }
+
+    #[test]
+    fn appointment_price_hydration_preserves_discount_and_rejects_wrong_base_price() {
+        let required_prices =
+            HashMap::from([(("service-1".to_string(), "staff-1".to_string(), 1_000), 1)]);
+        let wrong_prices =
+            HashMap::from([(("service-1".to_string(), "staff-1".to_string(), 1_500), 1)]);
+        assert!(!appointment_invoice_covers_booked_prices(
+            &required_prices,
+            &wrong_prices
+        ));
+
+        let mut payload = PosSalePayload {
+            staff_id: Some("staff-1".to_string()),
+            lines: Some(vec![PosSaleLineInput {
+                line_type: Some("service".to_string()),
+                item_id: Some("service-1".to_string()),
+                staff_id: Some("staff-1".to_string()),
+                quantity: Some(1),
+                unit_price_paise: Some(1_500),
+                discount_paise: Some(100),
+                ..PosSaleLineInput::default()
+            }]),
+            ..PosSalePayload::default()
+        };
+        apply_appointment_booked_prices(
+            &mut payload,
+            vec![("service-1".to_string(), "staff-1".to_string(), 1_000)],
+        )
+        .expect("booked price should hydrate");
+        let line = &payload.lines.as_ref().expect("lines should remain")[0];
+        assert_eq!(line.unit_price_paise, Some(1_000));
+        assert_eq!(line.discount_paise, Some(100));
+    }
+
+    async fn create_handoff_schema(pool: &PgPool) {
+        for statement in [
+            "CREATE TABLE services (
+                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+                price_paise INTEGER NOT NULL DEFAULT 0
+            )",
+            "CREATE TABLE appointments (
+                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+                client_id TEXT NOT NULL, staff_id TEXT NOT NULL DEFAULT '',
+                booking_group_id TEXT NOT NULL DEFAULT '', service_ids_json TEXT NOT NULL DEFAULT '[]',
+                start_at TIMESTAMPTZ NOT NULL, end_at TIMESTAMPTZ NOT NULL,
+                status TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+            "CREATE TABLE pos_sales (
+                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+                client_id TEXT NOT NULL DEFAULT '', staff_id TEXT NOT NULL DEFAULT '',
+                invoice_number TEXT NOT NULL DEFAULT '', total_paise BIGINT NOT NULL DEFAULT 0,
+                paid_paise BIGINT NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'open', source TEXT NOT NULL DEFAULT 'manual',
+                reference_id TEXT NOT NULL DEFAULT ''
+            )",
+            "CREATE UNIQUE INDEX uq_pos_sales_appointment_reference
+                ON pos_sales (tenant_id, branch_id, source, reference_id)
+                WHERE source='appointment' AND reference_id<>''",
+            "CREATE TABLE pos_sale_lines (
+                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+                sale_id TEXT NOT NULL, line_type TEXT NOT NULL, item_id TEXT NOT NULL,
+                item_name TEXT NOT NULL, staff_id TEXT NOT NULL DEFAULT '',
+                quantity BIGINT NOT NULL DEFAULT 0, unit_price_paise BIGINT NOT NULL DEFAULT 0
+            )",
+            "CREATE TABLE appointment_activity (
+                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+                appointment_id TEXT NOT NULL, client_id TEXT NOT NULL, staff_id TEXT NOT NULL,
+                action TEXT NOT NULL, action_group TEXT NOT NULL, old_status TEXT NOT NULL,
+                new_status TEXT NOT NULL, changed_by TEXT NOT NULL, changed_by_role TEXT NOT NULL,
+                source TEXT NOT NULL, reason TEXT NOT NULL, old_data JSONB NOT NULL,
+                new_data JSONB NOT NULL, changes JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )",
+        ] {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .expect("handoff test schema should be created");
+        }
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0074_appointment_booked_price_snapshot.sql"
+        ))
+        .execute(pool)
+        .await
+        .expect("booked-price migration should apply");
+    }
+
+    fn sale_fixture(
+        id: &str,
+        tenant_id: &str,
+        branch_id: &str,
+        client_id: &str,
+        reference_id: &str,
+    ) -> PosSaleRow {
+        PosSaleRow {
+            id: id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            branch_id: branch_id.to_string(),
+            client_id: client_id.to_string(),
+            staff_id: String::new(),
+            invoice_number: format!("INV-{id}"),
+            subtotal_paise: 0,
+            bill_discount_paise: 0,
+            coupon_code: String::new(),
+            coupon_discount_paise: 0,
+            discount_paise: 0,
+            tax_paise: 0,
+            tip_paise: 0,
+            round_off_paise: 0,
+            total_paise: 0,
+            paid_paise: 0,
+            status: "open".to_string(),
+            source: "appointment".to_string(),
+            reference_id: reference_id.to_string(),
+            package_redemptions: Value::Array(Vec::new()),
+            invoice_type: "tax_invoice".to_string(),
+            finalized_at: None,
+            created_at: Utc::now(),
+            updated_at: None,
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn appointment_pos_handoff_is_atomic_and_idempotent(pool: PgPool) {
+        create_handoff_schema(&pool).await;
+        let tenant_id = "handoff-tenant";
+        let branch_id = "handoff-branch";
+        let group_id = "handoff-group";
+        let first_appointment_id = "handoff-appointment-1";
+        let second_appointment_id = "handoff-appointment-2";
+        let cancelled_appointment_id = "handoff-appointment-cancelled";
+        let sale_id = "handoff-sale";
+
+        sqlx::query(
+            "INSERT INTO services (id, tenant_id, branch_id, price_paise) VALUES
+                ('service-1',$1,$2,1000), ('service-2',$1,$2,2000),
+                ('service-3',$1,$2,3000), ('rollback-service-1',$1,$2,1100),
+                ('rollback-service-2',$1,$2,2200)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .execute(&pool)
+        .await
+        .expect("service price fixtures should be created");
+
+        sqlx::query(
+             r#"INSERT INTO appointments (
+                id, tenant_id, branch_id, client_id, staff_id, booking_group_id,
+                service_ids_json, start_at, end_at, status
+             ) VALUES
+                ($1,$4,$5,'client-1','staff-1',$6,'["service-1"]',NOW(),NOW() + INTERVAL '1 hour','completed'),
+                ($2,$4,$5,'client-1','staff-2',$6,'["service-2"]',NOW(),NOW() + INTERVAL '2 hours','completed'),
+                ($3,$4,$5,'client-1','staff-3',$6,'["service-3"]',NOW(),NOW() + INTERVAL '3 hours','cancelled')"#,
+        )
+        .bind(first_appointment_id)
+        .bind(second_appointment_id)
+        .bind(cancelled_appointment_id)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(group_id)
+        .execute(&pool)
+        .await
+        .expect("booking group fixtures should be created");
+        sqlx::query("UPDATE services SET price_paise=price_paise+5000 WHERE tenant_id=$1 AND branch_id=$2 AND id IN ('service-1','service-2','service-3')")
+            .bind(tenant_id)
+            .bind(branch_id)
+            .execute(&pool)
+            .await
+            .expect("catalogue prices should change after booking");
+        sqlx::query("UPDATE appointments SET service_ids_json=service_ids_json WHERE id=$1")
+            .bind(first_appointment_id)
+            .execute(&pool)
+            .await
+            .expect("ordinary appointment edit should preserve the snapshot");
+        let captured_price = sqlx::query_scalar::<_, i64>(
+            "SELECT (booked_service_prices_json ->> 'service-1')::BIGINT FROM appointments WHERE id=$1",
+        )
+        .bind(first_appointment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("booked price should load");
+        assert_eq!(
+            captured_price, 1000,
+            "catalogue edits must not reprice a booking"
+        );
+        sqlx::query(
+            "INSERT INTO pos_sales (
+                id, tenant_id, branch_id, client_id, staff_id, invoice_number,
+                total_paise, status, source, reference_id
+             ) VALUES ($1,$2,$3,'client-1','staff-1','INV-HANDOFF-1',10000,'open','appointment',$4)",
+        )
+        .bind(sale_id)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(group_id)
+        .execute(&pool)
+        .await
+        .expect("sale fixture should be created");
+        sqlx::query(
+            "INSERT INTO pos_sale_lines (
+                id, tenant_id, branch_id, sale_id, line_type, item_id, item_name, staff_id, quantity, unit_price_paise
+             ) VALUES
+                ('handoff-line-1',$1,$2,$3,'service','service-1','Service 1','staff-1',1,1000),
+                ('handoff-line-2',$1,$2,$3,'service','service-2','Service 2','staff-2',1,2000)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(sale_id)
+        .execute(&pool)
+        .await
+        .expect("sale line fixtures should be created");
+
+        let duplicate = sqlx::query(
+            "INSERT INTO pos_sales (
+                id, tenant_id, branch_id, client_id, invoice_number, source, reference_id
+             ) VALUES ('handoff-sale-duplicate',$1,$2,'client-1','INV-HANDOFF-2','appointment',$3)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(group_id)
+        .execute(&pool)
+        .await;
+        assert!(duplicate.is_err(), "booking group reference must be unique");
+
+        let sale = sale_fixture(sale_id, tenant_id, branch_id, "client-1", group_id);
+        let mut success_tx = pool
+            .begin()
+            .await
+            .expect("success transaction should start");
+        let events = sync_appointment_billing_tx(&mut success_tx, &sale, "open")
+            .await
+            .expect("first handoff should succeed");
+        assert_eq!(events.len(), 2);
+        success_tx
+            .commit()
+            .await
+            .expect("success transaction should commit");
+
+        let statuses = sqlx::query_as::<_, (String, String)>(
+            "SELECT id, status FROM appointments WHERE booking_group_id=$1 ORDER BY id",
+        )
+        .bind(group_id)
+        .fetch_all(&pool)
+        .await
+        .expect("booking group statuses should load");
+        assert_eq!(
+            statuses,
+            vec![
+                (first_appointment_id.to_string(), "billed".to_string()),
+                (second_appointment_id.to_string(), "billed".to_string()),
+                (
+                    cancelled_appointment_id.to_string(),
+                    "cancelled".to_string()
+                ),
+            ]
+        );
+
+        let mut retry_tx = pool.begin().await.expect("retry transaction should start");
+        let retry_events = sync_appointment_billing_tx(&mut retry_tx, &sale, "open")
+            .await
+            .expect("retry should succeed");
+        assert!(retry_events.is_empty());
+        retry_tx
+            .commit()
+            .await
+            .expect("retry transaction should commit");
+        let billed_events = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM appointment_activity WHERE appointment_id IN ($1,$2)",
+        )
+        .bind(first_appointment_id)
+        .bind(second_appointment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("activity count should load");
+        assert_eq!(billed_events, 2);
+
+        let mut paid_tx = pool
+            .begin()
+            .await
+            .expect("payment transaction should start");
+        let paid_events = sync_appointment_billing_tx(&mut paid_tx, &sale, "paid")
+            .await
+            .expect("paid handoff should succeed");
+        assert_eq!(paid_events.len(), 2);
+        paid_tx
+            .commit()
+            .await
+            .expect("payment transaction should commit");
+        let paid_statuses = sqlx::query_scalar::<_, String>(
+            "SELECT status FROM appointments WHERE id IN ($1,$2) ORDER BY id",
+        )
+        .bind(first_appointment_id)
+        .bind(second_appointment_id)
+        .fetch_all(&pool)
+        .await
+        .expect("paid appointment statuses should load");
+        assert_eq!(paid_statuses, vec!["paid".to_string(), "paid".to_string()]);
+
+        let rollback_group_id = "handoff-rollback-group";
+        let rollback_first_id = "handoff-rollback-appointment-1";
+        let rollback_second_id = "handoff-rollback-appointment-2";
+        sqlx::query(
+            r#"INSERT INTO appointments (
+                id, tenant_id, branch_id, client_id, staff_id, booking_group_id,
+                service_ids_json, start_at, end_at, status
+             ) VALUES
+                ($1,$3,$4,'client-2','staff-1',$5,'["rollback-service-1"]',NOW(),NOW() + INTERVAL '1 hour','completed'),
+                ($2,$3,$4,'client-2','staff-2',$5,'["rollback-service-2"]',NOW(),NOW() + INTERVAL '2 hours','completed')"#,
+        )
+        .bind(rollback_first_id)
+        .bind(rollback_second_id)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(rollback_group_id)
+        .execute(&pool)
+        .await
+        .expect("rollback booking group fixtures should be created");
+        sqlx::query(
+            "INSERT INTO pos_sales (
+                id, tenant_id, branch_id, client_id, staff_id, invoice_number,
+                total_paise, status, source, reference_id
+             ) VALUES ('handoff-rollback-sale',$1,$2,'client-2','staff-2','INV-HANDOFF-3',20000,'open','appointment',$3)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(rollback_group_id)
+        .execute(&pool)
+        .await
+        .expect("rollback sale fixture should be created");
+        sqlx::query(
+            "INSERT INTO pos_sale_lines (
+                id, tenant_id, branch_id, sale_id, line_type, item_id, item_name, staff_id, quantity, unit_price_paise
+             ) VALUES
+                ('handoff-rollback-line-1',$1,$2,'handoff-rollback-sale','service','rollback-service-1','Rollback Service 1','staff-1',1,1100),
+                ('handoff-rollback-line-2',$1,$2,'handoff-rollback-sale','service','rollback-service-2','Rollback Service 2','staff-2',1,9999)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .execute(&pool)
+        .await
+        .expect("incomplete rollback sale line fixture should be created");
+        let rollback_sale = sale_fixture(
+            "handoff-rollback-sale",
+            tenant_id,
+            branch_id,
+            "client-2",
+            rollback_group_id,
+        );
+        let mut rollback_tx = pool
+            .begin()
+            .await
+            .expect("rollback transaction should start");
+        let rollback_result =
+            sync_appointment_billing_tx(&mut rollback_tx, &rollback_sale, "open").await;
+        assert!(
+            rollback_result.is_err(),
+            "wrong booked base price must reject the handoff"
+        );
+        rollback_tx
+            .rollback()
+            .await
+            .expect("handoff transaction should roll back");
+
+        let rollback_statuses = sqlx::query_scalar::<_, String>(
+            "SELECT status FROM appointments WHERE id IN ($1,$2) ORDER BY id",
+        )
+        .bind(rollback_first_id)
+        .bind(rollback_second_id)
+        .fetch_all(&pool)
+        .await
+        .expect("rollback appointment statuses should load");
+        let rollback_events = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM appointment_activity WHERE appointment_id IN ($1,$2)",
+        )
+        .bind(rollback_first_id)
+        .bind(rollback_second_id)
+        .fetch_one(&pool)
+        .await
+        .expect("rollback activity count should load");
+        assert_eq!(
+            rollback_statuses,
+            vec!["completed".to_string(), "completed".to_string()]
+        );
+        assert_eq!(rollback_events, 0);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn concurrent_checkout_writers_are_serialized(pool: PgPool) {
+        create_handoff_schema(&pool).await;
+        sqlx::query("INSERT INTO pos_sales (id,tenant_id,branch_id,invoice_number,total_paise,paid_paise,status) VALUES ('concurrent-sale','tenant-1','branch-1','INV-CONCURRENT',1000,0,'open')")
+            .execute(&pool).await.expect("sale fixture should be created");
+
+        let mut first = pool.begin().await.expect("first transaction should start");
+        sqlx::query_scalar::<_, i64>(
+            "SELECT paid_paise FROM pos_sales WHERE id='concurrent-sale' FOR UPDATE",
+        )
+        .fetch_one(&mut *first)
+        .await
+        .expect("first writer should lock sale");
+
+        let second_pool = pool.clone();
+        let (attempted_tx, attempted_rx) = tokio::sync::oneshot::channel();
+        let second = tokio::spawn(async move {
+            let mut tx = second_pool
+                .begin()
+                .await
+                .expect("second transaction should start");
+            attempted_tx.send(()).expect("attempt signal should send");
+            let observed = sqlx::query_scalar::<_, i64>(
+                "SELECT paid_paise FROM pos_sales WHERE id='concurrent-sale' FOR UPDATE",
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .expect("second writer should lock after first commit");
+            sqlx::query("UPDATE pos_sales SET paid_paise=1000 WHERE id='concurrent-sale'")
+                .execute(&mut *tx)
+                .await
+                .expect("second writer should update");
+            tx.commit().await.expect("second transaction should commit");
+            observed
+        });
+
+        attempted_rx.await.expect("second writer should start");
+        tokio::task::yield_now().await;
+        sqlx::query("UPDATE pos_sales SET paid_paise=500 WHERE id='concurrent-sale'")
+            .execute(&mut *first)
+            .await
+            .expect("first writer should update");
+        first
+            .commit()
+            .await
+            .expect("first transaction should commit");
+
+        assert_eq!(second.await.expect("second writer should finish"), 500);
+        let final_paid = sqlx::query_scalar::<_, i64>(
+            "SELECT paid_paise FROM pos_sales WHERE id='concurrent-sale'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("final payment should load");
+        assert_eq!(final_paid, 1000);
+    }
+}
+
 async fn add_pos_payment(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -5870,6 +8656,7 @@ async fn add_pos_payment(
     Json(payload): Json<PosPaymentInput>,
 ) -> ApiResult<PosPaymentResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let requested_till_id = payload.cash_drawer_till_id.clone().unwrap_or_default();
     let amount = payload
         .amount_paise
         .unwrap_or_else(|| rupees_to_paise(payload.amount.unwrap_or(0.0)))
@@ -5930,6 +8717,12 @@ async fn add_pos_payment(
             "payments cannot be added to paid, cancelled, or voided sales",
         ));
     }
+    if sale.status == "draft" {
+        happy_hours_service::ensure_discount_approval_for_finalize(
+            &state.db, &tenant_id, &branch_id, &id,
+        )
+        .await?;
+    }
 
     if !idempotency_key.is_empty() {
         if let Some(existing) = sqlx::query_as::<_, PosPaymentRow>("SELECT id, tenant_id, branch_id, sale_id, method, amount_paise, method_reference, label, notes, created_at FROM pos_payments WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND idempotency_key=$4")
@@ -5943,7 +8736,13 @@ async fn add_pos_payment(
         return Err(AppError::validation("Payment amount exceeds sale balance"));
     }
     if method == "cash" {
-        ensure_cash_drawer_open(&mut tx, &tenant_id, &branch_id).await?;
+        if let Some(till_id) =
+            ensure_cash_drawer_open(&mut tx, &tenant_id, &branch_id, &requested_till_id).await?
+        {
+            sqlx::query("UPDATE pos_sales SET cash_drawer_till_id=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(&tenant_id).bind(&branch_id).bind(&id).bind(till_id).execute(&mut *tx).await
+                .map_err(|_| AppError::internal("failed to assign cash till"))?;
+        }
     }
 
     let payment_id = uuid::Uuid::new_v4().to_string();
@@ -6036,6 +8835,59 @@ async fn add_pos_payment(
             sale.round_off_paise,
         )
         .await?;
+        if !sale.client_id.trim().is_empty() {
+            grant_package_credits_for_existing_sale(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &sale.client_id,
+                &id,
+            )
+            .await?;
+            grant_membership_credits_for_existing_sale(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &sale.client_id,
+                &id,
+            )
+            .await?;
+            issue_gift_cards_for_existing_sale(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &sale.client_id,
+                &id,
+            )
+            .await?;
+            consume_membership_redemption_lines_for_existing_sale(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &sale.client_id,
+                &id,
+            )
+            .await?;
+            consume_package_redemptions(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &sale.client_id,
+                &id,
+                &sale.package_redemptions,
+            )
+            .await?;
+            post_membership_rewards(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &sale.client_id,
+                &sale.staff_id,
+                &id,
+                sale.total_paise,
+            )
+            .await?;
+        }
     }
     accounting_service::post_payment(
         &mut tx,
@@ -6066,9 +8918,21 @@ async fn add_pos_payment(
         consume_coupon_usage(&mut tx, &tenant_id, &branch_id, &sale.coupon_code).await?;
     }
 
+    let appointment_events = sync_appointment_billing_tx(&mut tx, &sale, &new_status).await?;
+
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit payment"))?;
+    state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "payment.recorded");
+    if let Err(error) =
+        happy_hours_service::scan_coupon_abuse_for_sale(&state.db, &tenant_id, &branch_id, &id)
+            .await
+    {
+        tracing::warn!(sale_id = %id, error = ?error, "coupon abuse scan deferred");
+    }
+    for event in appointment_events {
+        let _ = state.appointment_events.send(event);
+    }
 
     Ok(Json(ApiResponse::ok(payment_response(inserted))))
 }
@@ -6077,21 +8941,15 @@ async fn finalize_pos_invoice(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    payload: Option<Json<FinalizeRequest>>,
 ) -> ApiResult<PosSaleDetailsResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-
-    let sale_query = format!(
-        "{} WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
-        sale_select_sql()
-    );
-    let sale = sqlx::query_as::<_, PosSaleRow>(&sale_query)
-        .bind(&id)
-        .bind(&tenant_id)
-        .bind(&branch_id)
-        .fetch_optional(&state.db)
+    let mut tx = state
+        .db
+        .begin()
         .await
-        .map_err(|_| AppError::internal("failed to load pos invoice"))?
-        .ok_or_else(|| AppError::not_found("pos invoice was not found"))?;
+        .map_err(|_| AppError::internal("failed to start finalize transaction"))?;
+    let sale = load_sale_for_update(&mut tx, &tenant_id, &branch_id, &id).await?;
 
     if matches!(sale.status.as_str(), "voided" | "cancelled") {
         return Err(AppError::validation(
@@ -6099,9 +8957,17 @@ async fn finalize_pos_invoice(
         ));
     }
     if sale.finalized_at.is_some() {
+        tx.rollback()
+            .await
+            .map_err(|_| AppError::internal("failed to finish invoice retry"))?;
         let details = load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?;
         return Ok(Json(ApiResponse::ok(details)));
     }
+
+    happy_hours_service::ensure_discount_approval_for_finalize(
+        &state.db, &tenant_id, &branch_id, &id,
+    )
+    .await?;
 
     let line_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
@@ -6109,7 +8975,7 @@ async fn finalize_pos_invoice(
     .bind(&tenant_id)
     .bind(&branch_id)
     .bind(&id)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to validate invoice lines"))?;
 
@@ -6121,11 +8987,6 @@ async fn finalize_pos_invoice(
 
     let apply_package_effects = sale.finalized_at.is_none();
     let finalized_status = status_for_finalize(sale.total_paise, sale.paid_paise);
-    let mut tx = state
-        .db
-        .begin()
-        .await
-        .map_err(|_| AppError::internal("failed to start finalize transaction"))?;
 
     let draft_payments = sqlx::query_as::<_, PosPaymentRow>("SELECT id, tenant_id, branch_id, sale_id, method, amount_paise, method_reference, label, notes, created_at FROM pos_payments WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 ORDER BY created_at, id")
         .bind(&tenant_id).bind(&branch_id).bind(&id).fetch_all(&mut *tx).await.map_err(|_| AppError::internal("failed to load draft payments"))?;
@@ -6145,7 +9006,17 @@ async fn finalize_pos_invoice(
         .iter()
         .any(|payment| payment.method == "cash")
     {
-        ensure_cash_drawer_open(&mut tx, &tenant_id, &branch_id).await?;
+        let requested_till_id = payload
+            .as_ref()
+            .and_then(|value| value.cash_drawer_till_id.as_deref())
+            .unwrap_or("");
+        if let Some(till_id) =
+            ensure_cash_drawer_open(&mut tx, &tenant_id, &branch_id, requested_till_id).await?
+        {
+            sqlx::query("UPDATE pos_sales SET cash_drawer_till_id=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(&tenant_id).bind(&branch_id).bind(&id).bind(till_id).execute(&mut *tx).await
+                .map_err(|_| AppError::internal("failed to assign cash till"))?;
+        }
     }
 
     let finalized = sqlx::query_as::<_, PosSaleRow>(
@@ -6242,6 +9113,9 @@ async fn finalize_pos_invoice(
         )
         .await?;
     }
+    pos_enterprise_repository::snapshot_staff_commissions(&mut tx, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to snapshot staff commission"))?;
     if apply_package_effects && !finalized.client_id.trim().is_empty() {
         grant_package_credits_for_existing_sale(
             &mut tx,
@@ -6284,6 +9158,16 @@ async fn finalize_pos_invoice(
             &finalized.package_redemptions,
         )
         .await?;
+        post_membership_rewards(
+            &mut tx,
+            &tenant_id,
+            &branch_id,
+            &finalized.client_id,
+            &finalized.staff_id,
+            &id,
+            finalized.total_paise,
+        )
+        .await?;
     }
 
     let compliance_sale = sqlx::query_as::<_, ComplianceSaleRow>(
@@ -6310,9 +9194,23 @@ async fn finalize_pos_invoice(
     )
     .await?;
 
+    let appointment_events =
+        sync_appointment_billing_tx(&mut tx, &finalized, &finalized.status).await?;
+    consume_coupon_usage(&mut tx, &tenant_id, &branch_id, &finalized.coupon_code).await?;
+
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit invoice finalize"))?;
+    state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "invoice.finalized");
+    if let Err(error) =
+        happy_hours_service::scan_coupon_abuse_for_sale(&state.db, &tenant_id, &branch_id, &id)
+            .await
+    {
+        tracing::warn!(sale_id = %id, error = ?error, "coupon abuse scan deferred");
+    }
+    for event in appointment_events {
+        let _ = state.appointment_events.send(event);
+    }
 
     let lines = read_lines(&state, &tenant_id, &branch_id, &id).await?;
     let payments = read_payments(&state, &tenant_id, &branch_id, &id).await?;
@@ -6397,6 +9295,7 @@ async fn void_pos_invoice(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit invoice void"))?;
+    state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "invoice.voided");
     Ok(Json(ApiResponse::ok(
         load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?,
     )))
@@ -6562,40 +9461,45 @@ async fn restock_returned_product(
             "only valid product return lines can be restocked",
         ));
     }
-    let sale_movement = sqlx::query_as::<_, (String, i64)>(
-        "SELECT inventory_item_id, unit_cost_paise FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND sale_line_id=$4 AND movement_type='sale'",
+    let sale_movement = sqlx::query_as::<_, (String, String, i64)>(
+        "SELECT id, inventory_item_id, unit_cost_paise FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND sale_line_id=$4 AND movement_type='sale'",
     )
     .bind(tenant_id).bind(branch_id).bind(sale_id).bind(&line.sale_line_id)
     .fetch_optional(&mut **tx).await
     .map_err(|_| AppError::internal("failed to validate product inventory movement"))?
     .ok_or_else(|| AppError::validation("product line was not deducted from inventory and cannot be restocked"))?;
-    if sale_movement.0 != line.item_id {
+    if sale_movement.1 != line.item_id {
         return Err(AppError::internal(
             "product return inventory reference mismatch",
         ));
     }
-    let _ = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(&line.item_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(|_| AppError::internal("failed to lock returned inventory item"))?
-    .ok_or_else(|| AppError::not_found("returned inventory item was not found"))?;
+    let item = inventory_repository::lock_for_adjustment(tx, tenant_id, branch_id, &line.item_id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock returned inventory item"))?
+        .ok_or_else(|| AppError::not_found("returned inventory item was not found"))?;
     let created = sqlx::query_scalar::<_, String>(
         "INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, refund_id, movement_type, quantity_delta, unit_cost_paise) VALUES ($1,$2,$3,$4,$5,$6,'return',$7,$8) ON CONFLICT DO NOTHING RETURNING id",
     )
     .bind(tenant_id).bind(branch_id).bind(&line.item_id).bind(sale_id).bind(&line.sale_line_id).bind(refund_id)
-    .bind(line.quantity as i32).bind(sale_movement.1)
+    .bind(line.quantity as i32).bind(sale_movement.2)
     .fetch_optional(&mut **tx).await
     .map_err(|_| AppError::internal("failed to write inventory return ledger"))?;
-    if created.is_some() {
+    if let Some(return_ledger_id) = created {
         sqlx::query("UPDATE inventory_items SET stock_quantity=stock_quantity+$4, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
             .bind(tenant_id).bind(branch_id).bind(&line.item_id).bind(line.quantity as i32)
             .execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to restock returned product"))?;
+        if item.batch_tracked {
+            inventory_adjustment_service::restore_sale_batches(
+                tx,
+                tenant_id,
+                branch_id,
+                &sale_movement.0,
+                &return_ledger_id,
+                line.quantity as i32,
+            )
+            .await?;
+        }
     }
     Ok(())
 }
@@ -6608,6 +9512,17 @@ async fn refund_pos_invoice(
     Json(payload): Json<InvoiceLifecycleRequest>,
 ) -> ApiResult<PosSaleDetailsResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.session_id,
+        payload.mfa_code.as_deref(),
+        "pos.refund",
+    )
+    .await?;
     let reason = payload.reason.unwrap_or_default();
     require_lifecycle_reason(&reason, "refund")?;
     let notes = payload.notes.unwrap_or_default();
@@ -6682,6 +9597,7 @@ async fn refund_pos_invoice(
     if amount > remaining {
         return Err(AppError::validation("refund amount exceeds paid balance"));
     }
+    security_service::enforce_role_limit(claims.max_refund_paise, amount, "refund")?;
     let next_refunded = refunded.saturating_add(amount);
     let next_status = if next_refunded >= sale.paid_paise {
         "refunded"
@@ -6767,12 +9683,25 @@ async fn refund_pos_invoice(
     }
     sqlx::query("UPDATE pos_sales SET status=$4, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
         .bind(&tenant_id).bind(&branch_id).bind(&id).bind(next_status).execute(&mut *tx).await.map_err(|_| AppError::internal("failed to update refund status"))?;
+    membership_service::reverse_rewards_for_refund(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        &sale.client_id,
+        &sale.staff_id,
+        &id,
+        &refund_id,
+        next_refunded,
+        sale.total_paise,
+    )
+    .await?;
     accounting_service::post_refund(&mut tx, &tenant_id, &branch_id, &refund_id, amount).await?;
     reverse_happy_hour_lock(&mut tx, &tenant_id, &branch_id, &id, amount).await?;
     insert_pos_event_with_actor(&mut tx, &tenant_id, &branch_id, &id, &claims.sub, "invoice.refunded", serde_json::json!({ "invoiceNumber": sale.invoice_number, "amountPaise": amount, "creditNoteNumber": credit_note_number, "gatewayRefundPaise": amount.saturating_sub(gateway_remaining), "manualSettlementPaise": gateway_remaining, "returnedLineCount": refund_lines.len(), "restockedLineCount": refund_lines.iter().filter(|line| line.restock).count(), "status": next_status, "reason": reason })).await?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit invoice refund"))?;
+    state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "invoice.refunded");
     Ok(Json(ApiResponse::ok(
         load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?,
     )))
@@ -7441,38 +10370,10 @@ async fn service_inventory_consumption(
     let Some(recipe) = recipe else {
         return Ok(HashMap::new());
     };
-    let entries = serde_json::from_str::<Value>(&recipe)
-        .ok()
-        .and_then(|value| value.as_array().cloned())
-        .unwrap_or_default();
-    let mut quantities = HashMap::new();
-    for entry in entries {
-        let item_id = ["itemId", "productId", "inventoryItemId"]
-            .iter()
-            .find_map(|key| entry.get(*key).and_then(Value::as_str))
-            .unwrap_or("")
-            .trim();
-        let quantity = entry
-            .get("quantity")
-            .or_else(|| entry.get("qty"))
-            .and_then(|value| {
-                value
-                    .as_i64()
-                    .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
-            })
-            .unwrap_or(0);
-        if item_id.is_empty() || quantity <= 0 {
-            return Err(AppError::validation(
-                "service inventory recipe contains an invalid item",
-            ));
-        }
-        let total = service_quantity.saturating_mul(quantity);
-        quantities
-            .entry(item_id.to_string())
-            .and_modify(|current: &mut i64| *current = current.saturating_add(total))
-            .or_insert(total);
-    }
-    Ok(quantities)
+    Ok(inventory_adjustment_service::recipe_quantities(&recipe)?
+        .into_iter()
+        .map(|(item_id, quantity)| (item_id, service_quantity.saturating_mul(quantity)))
+        .collect())
 }
 
 async fn deduct_inventory_item(
@@ -7493,13 +10394,14 @@ async fn deduct_inventory_item(
     if existing.is_some() {
         return Ok(false);
     }
-    let (stock_quantity, unit_cost_paise) = sqlx::query_as::<_, (i32, i64)>(
-        "SELECT stock_quantity, unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE",
-    )
-    .bind(tenant_id).bind(branch_id).bind(inventory_item_id)
-    .fetch_optional(&mut **tx).await
-    .map_err(|_| AppError::internal("failed to lock inventory item"))?
-    .ok_or_else(|| AppError::validation("inventory item is not available for POS consumption"))?;
+    let item =
+        inventory_repository::lock_for_adjustment(tx, tenant_id, branch_id, inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock inventory item"))?
+            .filter(|item| item.active)
+            .ok_or_else(|| {
+                AppError::validation("inventory item is not available for POS consumption")
+            })?;
     let already_posted = sqlx::query_scalar::<_, String>(
         "SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND sale_line_id=$4 AND movement_type='sale'",
     )
@@ -7509,7 +10411,7 @@ async fn deduct_inventory_item(
     if already_posted.is_some() {
         return Ok(false);
     }
-    if stock_quantity < quantity {
+    if item.stock_quantity < quantity {
         return Err(AppError::validation(
             "insufficient inventory for POS checkout",
         ));
@@ -7518,11 +10420,20 @@ async fn deduct_inventory_item(
         "INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, movement_type, quantity_delta, unit_cost_paise) VALUES ($1,$2,$3,$4,$5,'sale',$6,$7) ON CONFLICT DO NOTHING RETURNING id",
     )
     .bind(tenant_id).bind(branch_id).bind(inventory_item_id).bind(sale_id).bind(sale_line_id)
-    .bind(-quantity).bind(unit_cost_paise).fetch_optional(&mut **tx).await
+    .bind(-quantity).bind(item.unit_cost_paise).fetch_optional(&mut **tx).await
     .map_err(|_| AppError::internal("failed to write inventory ledger"))?;
     if ledger_id.is_none() {
         return Ok(false);
     }
+    inventory_adjustment_service::allocate_fefo_batches(
+        tx,
+        tenant_id,
+        branch_id,
+        &item,
+        ledger_id.as_deref().unwrap_or_default(),
+        quantity,
+    )
+    .await?;
     sqlx::query(
         "UPDATE inventory_items SET stock_quantity=stock_quantity-$4, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
     )
@@ -7740,14 +10651,21 @@ async fn load_sale_for_update(
         "{} WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 FOR UPDATE",
         sale_select_sql()
     );
-    sqlx::query_as::<_, PosSaleRow>(&sale_query)
+    let sale = sqlx::query_as::<_, PosSaleRow>(&sale_query)
         .bind(sale_id)
         .bind(tenant_id)
         .bind(branch_id)
         .fetch_optional(&mut **tx)
         .await
         .map_err(|_| AppError::internal("failed to lock pos invoice"))?
-        .ok_or_else(|| AppError::not_found("pos invoice was not found"))
+        .ok_or_else(|| AppError::not_found("pos invoice was not found"))?;
+    let day_locked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pos_day_locks l JOIN pos_sales s ON s.tenant_id=l.tenant_id AND s.branch_id=l.branch_id AND s.business_date=l.business_date WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND l.status='locked')")
+        .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to validate POS business day"))?;
+    if day_locked {
+        return Err(AppError::conflict("POS business day is locked"));
+    }
+    Ok(sale)
 }
 
 fn lifecycle_table(table: &str) -> Result<&'static str, AppError> {
@@ -7860,9 +10778,11 @@ async fn replace_invoice_lines(
     sale: &PosSaleRow,
     drafts: Vec<LineDraft>,
     event_type: &str,
+    max_discount_paise: Option<i64>,
 ) -> Result<(), AppError> {
     let line_count = drafts.len();
     let mut payload = line_payload_for_recalc(sale, &drafts);
+    hydrate_appointment_booked_prices(state, tenant_id, branch_id, &mut payload).await?;
     resolve_coupon_discount(state, tenant_id, branch_id, &mut payload).await?;
     let gst_context = gst_context_from_sale(state, tenant_id, branch_id, &sale.id).await?;
     let mut calculation = calculate_pos(&payload)?;
@@ -7871,7 +10791,14 @@ async fn replace_invoice_lines(
         &gst_context,
         payload.round_to_nearest_rupee.unwrap_or(false),
     );
-    enforce_discount_rules(state, tenant_id, branch_id, &calculation).await?;
+    enforce_discount_rules(
+        state,
+        tenant_id,
+        branch_id,
+        &calculation,
+        max_discount_paise,
+    )
+    .await?;
 
     if sale.paid_paise > calculation.total_paise {
         return Err(AppError::validation(
@@ -8242,6 +11169,345 @@ async fn load_pos_package_settings(
     .unwrap_or_else(|| serde_json::json!({})))
 }
 
+async fn load_pos_membership_settings(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Value, AppError> {
+    Ok(sqlx::query_scalar::<_, Value>(
+        "SELECT settings_json FROM membership_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load membership settings"))?
+    .unwrap_or_else(|| serde_json::json!({})))
+}
+
+fn reward_points_in_payload(payload: &PosSalePayload) -> i64 {
+    payload
+        .lines
+        .as_ref()
+        .or(payload.items.as_ref())
+        .into_iter()
+        .flatten()
+        .filter(|line| {
+            line.line_type
+                .as_deref()
+                .or(line.item_type.as_deref())
+                .or(line.kind.as_deref())
+                .is_some_and(|value| value.eq_ignore_ascii_case("redemption"))
+                && line
+                    .item_id
+                    .as_deref()
+                    .or(line.id.as_deref())
+                    .is_some_and(|value| value.eq_ignore_ascii_case("reward_points"))
+        })
+        .fold(0i64, |sum, line| {
+            sum.saturating_add(line.quantity.unwrap_or(0).max(0))
+        })
+}
+
+fn reward_discount_for_points(points: i64, point_value_paise: i64) -> Option<i64> {
+    (points > 0 && point_value_paise > 0)
+        .then(|| points.checked_mul(point_value_paise))
+        .flatten()
+}
+
+fn membership_discount_paise(gross_paise: i64, discount_percent: i32) -> i64 {
+    gross_paise
+        .max(0)
+        .saturating_mul(i64::from(discount_percent.clamp(0, 100)))
+        .saturating_add(50)
+        / 100
+}
+
+async fn apply_membership_benefits(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    payload: &mut PosSalePayload,
+    current: &PosCalculation,
+) -> Result<bool, AppError> {
+    let points = reward_points_in_payload(payload);
+    let has_marked_discount = payload
+        .lines
+        .as_ref()
+        .or(payload.items.as_ref())
+        .into_iter()
+        .flatten()
+        .any(|line| {
+            matches!(
+                line.discount_type.as_deref(),
+                Some("membership" | "membership_stacked")
+            )
+        });
+    let client_id = payload
+        .client_id
+        .as_deref()
+        .or(payload.customer_id.as_deref())
+        .unwrap_or("")
+        .trim();
+    if client_id.is_empty() {
+        if points > 0 || has_marked_discount {
+            return Err(AppError::validation(
+                "active membership is required for benefits",
+            ));
+        }
+        return Ok(false);
+    }
+
+    let settings = membership_service::membership_settings(&state.db, tenant_id, branch_id).await?;
+    let eligibility =
+        membership_service::client_eligibility(&state.db, tenant_id, branch_id, client_id).await?;
+    let Some(eligibility) = eligibility else {
+        if points > 0 || has_marked_discount {
+            return Err(AppError::validation(
+                "active membership is required for benefits",
+            ));
+        }
+        return Ok(false);
+    };
+    let rewards_enabled =
+        package_setting_bool(&settings, &["creditsBenefits", "rewardPointsEnabled"], true);
+    let discounts_enabled = package_setting_bool(
+        &settings,
+        &["creditsBenefits", "discountBenefitsEnabled"],
+        true,
+    );
+    let allow_stacking = package_setting_bool(
+        &settings,
+        &["creditsBenefits", "allowBenefitStacking"],
+        false,
+    );
+    if points > 0 && !rewards_enabled {
+        return Err(AppError::validation("reward redemption is disabled"));
+    }
+    let other_discount_paise = current
+        .discount_paise
+        .saturating_sub(payload.reward_discount_paise.unwrap_or(0).max(0));
+    if points > 0 && !allow_stacking && other_discount_paise > 0 {
+        return Err(AppError::validation(
+            "reward points cannot be combined with other discounts",
+        ));
+    }
+
+    let service_ids = eligibility
+        .service_ids
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect::<HashSet<_>>();
+    let fallback_staff_id = payload.staff_id.clone().unwrap_or_default();
+    let apply_discount = discounts_enabled
+        && eligibility.discount_percent > 0
+        && (allow_stacking || (points == 0 && current.discount_paise == 0));
+    let mut changed = false;
+    if let Some(lines) = payload.lines.as_mut().or(payload.items.as_mut()) {
+        for line in lines {
+            let source = line.discount_type.as_deref().unwrap_or("");
+            let marked = matches!(source, "membership" | "membership_stacked");
+            let normalized = normalize_line(line.clone(), &fallback_staff_id)?;
+            let eligible_service = normalized.line_type == "service"
+                && (service_ids.is_empty() || service_ids.contains(&normalized.item_id));
+            if marked {
+                if !discounts_enabled || !eligible_service {
+                    return Err(AppError::validation("membership discount is not eligible"));
+                }
+                if source == "membership_stacked" && !allow_stacking {
+                    return Err(AppError::validation(
+                        "membership benefit stacking is disabled",
+                    ));
+                }
+                let expected = membership_discount_paise(
+                    normalized
+                        .quantity
+                        .saturating_mul(normalized.unit_price_paise),
+                    eligibility.discount_percent,
+                );
+                if (source == "membership" && normalized.item_discount_paise != expected)
+                    || (source == "membership_stacked" && normalized.item_discount_paise < expected)
+                {
+                    return Err(AppError::validation(
+                        "membership discount amount is invalid",
+                    ));
+                }
+                continue;
+            }
+            if !apply_discount || !eligible_service {
+                continue;
+            }
+            let gross = normalized
+                .quantity
+                .saturating_mul(normalized.unit_price_paise);
+            let benefit = membership_discount_paise(gross, eligibility.discount_percent);
+            let combined = if allow_stacking {
+                normalized.item_discount_paise.saturating_add(benefit)
+            } else {
+                benefit
+            }
+            .min(gross);
+            line.discount_paise = Some(combined);
+            line.discount_amount_paise = None;
+            line.discount_value = None;
+            line.discount_type = Some(if allow_stacking && normalized.item_discount_paise > 0 {
+                "membership_stacked".to_string()
+            } else {
+                "membership".to_string()
+            });
+            changed = true;
+        }
+    }
+
+    if points > 0 {
+        let point_value = package_setting(&settings, &["creditsBenefits", "rewardPointValuePaise"])
+            .and_then(Value::as_i64)
+            .unwrap_or(100);
+        let reward_discount = reward_discount_for_points(points, point_value)
+            .ok_or_else(|| AppError::validation("reward point value must be greater than zero"))?;
+        let reward_already_applied = payload.reward_discount_paise.is_some();
+        if payload
+            .reward_discount_paise
+            .is_some_and(|value| value != reward_discount)
+        {
+            return Err(AppError::validation("reward discount amount is invalid"));
+        }
+        let after_service = calculate_pos(payload)?;
+        if reward_already_applied && after_service.bill_discount_paise < reward_discount {
+            return Err(AppError::validation("reward discount amount is invalid"));
+        }
+        let available = after_service
+            .subtotal_paise
+            .saturating_sub(after_service.discount_paise)
+            .saturating_add(if reward_already_applied {
+                reward_discount
+            } else {
+                0
+            });
+        if reward_discount > available {
+            return Err(AppError::validation("reward points exceed bill amount"));
+        }
+        if !reward_already_applied {
+            payload.bill_discount_paise = Some(
+                after_service
+                    .bill_discount_paise
+                    .saturating_add(reward_discount),
+            );
+            payload.discount_paise = None;
+            payload.discount = None;
+            payload.discount_mode = None;
+        }
+        payload.reward_discount_paise = Some(reward_discount);
+        changed = true;
+    }
+    Ok(changed)
+}
+
+async fn has_active_membership_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    allow_family: bool,
+) -> Result<bool, AppError> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM client_memberships cm JOIN memberships m ON m.id=cm.membership_id AND m.tenant_id=cm.tenant_id AND m.branch_id=cm.branch_id AND m.active=TRUE WHERE cm.tenant_id=$1 AND ((cm.branch_id=$2 AND (cm.client_id=$3 OR ($4 AND EXISTS(SELECT 1 FROM membership_family_members fm WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.client_membership_id=cm.id AND fm.member_client_id=$3 AND fm.active=TRUE)))) OR membership_cross_location_allowed($1,cm.branch_id,$2,cm.client_id,$3,'discount')) AND cm.active=TRUE AND cm.assigned_at<=NOW() AND (cm.expires_at IS NULL OR cm.expires_at>=NOW()))")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(allow_family).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to validate membership eligibility"))
+}
+
+async fn post_membership_rewards(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    sale_id: &str,
+    total_paise: i64,
+) -> Result<(), AppError> {
+    let settings = sqlx::query_scalar::<_, Value>(
+        "SELECT settings_json FROM membership_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load membership reward settings"))?
+    .unwrap_or_else(|| serde_json::json!({}));
+    let enabled = settings
+        .pointer("/creditsBenefits/rewardPointsEnabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let rate = settings
+        .pointer("/creditsBenefits/rewardPointsPer100Rupees")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .clamp(0, i64::from(i32::MAX));
+    let redeemed = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(quantity),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='redemption' AND item_id='reward_points'")
+        .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to load reward redemption"))?;
+    let has_membership_discount = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND discount_type IN ('membership','membership_stacked'))")
+        .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to validate membership discount"))?;
+    let eligible = has_active_membership_tx(
+        tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        package_setting_bool(&settings, &["redemptionRules", "allowFamilySharing"], true),
+    )
+    .await?;
+    if (redeemed > 0 || has_membership_discount) && !eligible {
+        return Err(AppError::validation(
+            "active membership is required for benefits",
+        ));
+    }
+    if !eligible {
+        return Ok(());
+    }
+    if !enabled && redeemed > 0 {
+        return Err(AppError::validation("reward redemption is disabled"));
+    }
+    sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(client_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to lock reward balance"))?;
+    let mut balance = sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to load reward balance"))?.unwrap_or(0);
+    if redeemed > i64::from(balance) {
+        return Err(AppError::validation(
+            "reward points balance is insufficient",
+        ));
+    }
+    if redeemed > 0 {
+        balance -= redeemed as i32;
+        sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'redeemed',$5,$6,$7,'POS reward redemption') ON CONFLICT DO NOTHING")
+            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(redeemed as i32).bind(balance).bind(staff_id).execute(&mut **tx).await
+            .map_err(|_| AppError::internal("failed to post reward redemption"))?;
+    }
+    let earned = reward_points_for_sale(total_paise, rate);
+    if enabled && earned > 0 {
+        balance = balance.saturating_add(earned.min(i64::from(i32::MAX)) as i32);
+        sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'earned',$5,$6,$7,'POS sale reward') ON CONFLICT DO NOTHING")
+            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(earned.min(i64::from(i32::MAX)) as i32).bind(balance).bind(staff_id).execute(&mut **tx).await
+            .map_err(|_| AppError::internal("failed to post earned rewards"))?;
+    }
+    Ok(())
+}
+
+fn reward_points_for_sale(total_paise: i64, points_per_100_rupees: i64) -> i64 {
+    total_paise
+        .max(0)
+        .saturating_mul(points_per_100_rupees.max(0))
+        / 10_000
+}
+
 fn package_setting<'a>(settings: &'a Value, path: &[&str]) -> Option<&'a Value> {
     path.iter().try_fold(settings, |value, key| value.get(*key))
 }
@@ -8259,10 +11525,104 @@ fn package_setting_i32(settings: &Value, path: &[&str], fallback: i32) -> i32 {
         .clamp(0, i32::MAX as i64) as i32
 }
 
+#[derive(Clone, Copy)]
+struct MembershipPosPolicy {
+    sales_enabled: bool,
+    visible_in_pos: bool,
+    free_enabled: bool,
+    paid_enabled: bool,
+    allow_due: bool,
+    tax_applicable: bool,
+    tax_inclusive: bool,
+    expiry_enabled: bool,
+    default_validity_days: i32,
+    block_expired: bool,
+    allow_partial: bool,
+    allow_family: bool,
+    require_staff: bool,
+}
+
+fn membership_pos_policy(settings: &Value) -> MembershipPosPolicy {
+    let expired_action = package_setting(settings, &["renewalExpiry", "expiredBenefitAction"])
+        .and_then(Value::as_str)
+        .unwrap_or("block");
+    MembershipPosPolicy {
+        sales_enabled: package_setting_bool(
+            settings,
+            &["membershipCatalog", "membershipSalesEnabled"],
+            true,
+        ),
+        visible_in_pos: package_setting_bool(
+            settings,
+            &["membershipCatalog", "visibleInPos"],
+            true,
+        ),
+        free_enabled: package_setting_bool(
+            settings,
+            &["membershipCatalog", "freeMembershipEnabled"],
+            true,
+        ),
+        paid_enabled: package_setting_bool(
+            settings,
+            &["membershipCatalog", "paidMembershipEnabled"],
+            true,
+        ),
+        allow_due: package_setting_bool(
+            settings,
+            &["paymentBilling", "allowDueOnMembershipSale"],
+            true,
+        ),
+        tax_applicable: package_setting_bool(
+            settings,
+            &["paymentBilling", "membershipTaxApplicable"],
+            true,
+        ),
+        tax_inclusive: package_setting_bool(
+            settings,
+            &["paymentBilling", "taxInclusiveMembershipPrice"],
+            false,
+        ),
+        expiry_enabled: package_setting_bool(
+            settings,
+            &["renewalExpiry", "expiryDaysEnabled"],
+            true,
+        ),
+        default_validity_days: package_setting_i32(
+            settings,
+            &["renewalExpiry", "defaultValidityDays"],
+            365,
+        ),
+        block_expired: package_setting_bool(
+            settings,
+            &["redemptionRules", "blockRedemptionWhenExpired"],
+            true,
+        ) || expired_action == "block",
+        allow_partial: package_setting_bool(
+            settings,
+            &["redemptionRules", "allowPartialCredits"],
+            true,
+        ),
+        allow_family: package_setting_bool(
+            settings,
+            &["redemptionRules", "allowFamilySharing"],
+            true,
+        ),
+        require_staff: package_setting_bool(
+            settings,
+            &["redemptionRules", "requireStaffConfirmation"],
+            true,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod package_credit_value_tests {
-    use super::allocate_package_credit_values;
+    use super::{
+        allocate_package_credit_values, membership_discount_paise, membership_pos_policy,
+        reward_discount_for_points, reward_points_for_sale,
+    };
     use serde_json::json;
+    use sqlx::PgPool;
 
     #[test]
     fn allocates_the_exact_sold_value_across_immutable_credits() {
@@ -8277,6 +11637,81 @@ mod package_credit_value_tests {
         assert_eq!(credits.iter().map(|row| row.3).sum::<i64>(), 10_001);
         assert_eq!(credits[0].2, 2);
         assert_eq!(credits[1].2, 1);
+    }
+
+    #[test]
+    fn calculates_reward_points_from_paise_without_float_rounding() {
+        assert_eq!(reward_points_for_sale(25_000, 4), 10);
+        assert_eq!(reward_points_for_sale(-100, 4), 0);
+        assert_eq!(reward_discount_for_points(25, 100), Some(2_500));
+        assert_eq!(reward_discount_for_points(25, 0), None);
+        assert_eq!(membership_discount_paise(10_005, 20), 2_001);
+    }
+
+    #[test]
+    fn membership_pos_policy_preserves_saved_redemption_rules() {
+        let policy = membership_pos_policy(&json!({
+            "membershipCatalog": { "membershipSalesEnabled": false, "visibleInPos": false },
+            "renewalExpiry": { "expiredBenefitAction": "allow" },
+            "redemptionRules": {
+                "blockRedemptionWhenExpired": false,
+                "allowPartialCredits": false,
+                "allowFamilySharing": false,
+                "requireStaffConfirmation": true
+            }
+        }));
+        assert!(!policy.sales_enabled);
+        assert!(!policy.visible_in_pos);
+        assert!(!policy.block_expired);
+        assert!(!policy.allow_partial);
+        assert!(!policy.allow_family);
+        assert!(policy.require_staff);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn pos_cross_location_policy_enforces_saved_tenant_branch_settings(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE TABLE branches(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,region_name TEXT NOT NULL DEFAULT '',zone_name TEXT NOT NULL DEFAULT '',cluster_name TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE);
+            CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,normalized_phone TEXT NOT NULL DEFAULT '',phone_verified_at TIMESTAMPTZ,active BOOLEAN NOT NULL DEFAULT TRUE,merged_into_client_id TEXT);
+            CREATE TABLE membership_settings(tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,settings_json JSONB NOT NULL DEFAULT '{}',PRIMARY KEY(tenant_id,branch_id));
+            INSERT INTO branches VALUES('source','tenant-1','West','Mumbai','Central',TRUE),('target','tenant-1','West','Mumbai','Central',TRUE),('other','tenant-2','West','Mumbai','Central',TRUE);
+            INSERT INTO clients VALUES('source-client','tenant-1','source','919999999999',NOW(),TRUE,NULL),('target-client','tenant-1','target','919999999999',NOW(),TRUE,NULL),('other-client','tenant-2','other','919999999999',NOW(),TRUE,NULL);
+            INSERT INTO membership_settings VALUES
+              ('tenant-1','source','{"crossLocation":{"enabled":true,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true}}'),
+              ('tenant-1','target','{"crossLocation":{"acceptInbound":true}}'),
+              ('tenant-2','other','{"crossLocation":{"acceptInbound":true}}');
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0154_membership_cross_location_policy.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let allowed: bool = sqlx::query_scalar(
+            "SELECT membership_cross_location_allowed('tenant-1','source','target','source-client','target-client','discount')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let cross_tenant: bool = sqlx::query_scalar(
+            "SELECT membership_cross_location_allowed('tenant-1','source','other','source-client','other-client','discount')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(allowed);
+        assert!(!cross_tenant);
+        sqlx::query(r#"UPDATE membership_settings SET settings_json='{"crossLocation":{"acceptInbound":false}}' WHERE tenant_id='tenant-1' AND branch_id='target'"#)
+            .execute(&pool).await.unwrap();
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "SELECT membership_cross_location_allowed('tenant-1','source','target','source-client','target-client','discount')",
+        )
+        .fetch_one(&pool).await.unwrap());
     }
 }
 
@@ -8338,6 +11773,47 @@ async fn grant_package_credits(
     }
     let default_validity_days =
         package_setting_i32(&settings, &["expiryRenewal", "defaultExpiryDays"], 0);
+    if !package_lines.is_empty() {
+        let (total_paise, paid_paise, discounted) = sqlx::query_as::<_, (i64, i64, bool)>("SELECT ps.total_paise,ps.paid_paise,EXISTS(SELECT 1 FROM pos_sale_lines psl WHERE psl.tenant_id=ps.tenant_id AND psl.branch_id=ps.branch_id AND psl.sale_id=ps.id AND psl.line_type='package' AND psl.discount_paise>0) FROM pos_sales ps WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.id=$3")
+            .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
+            .map_err(|_| AppError::internal("failed to validate package payment settings"))?;
+        if !package_setting_bool(&settings, &["pricingPayment", "allowDue"], true)
+            && paid_paise < total_paise
+        {
+            return Err(AppError::validation(
+                "due payment is disabled for package sales",
+            ));
+        }
+        if !package_setting_bool(&settings, &["pricingPayment", "allowDiscount"], true)
+            && discounted
+        {
+            return Err(AppError::validation(
+                "discount is disabled for package sales",
+            ));
+        }
+        let tax_applicable =
+            package_setting_bool(&settings, &["pricingPayment", "taxApplicable"], true);
+        let tax_inclusive =
+            package_setting_bool(&settings, &["pricingPayment", "taxInclusive"], false);
+        let (taxed_when_disabled, invalid_inclusive_total) = sqlx::query_as::<_, (i64, i64)>(
+            r#"SELECT
+                 COUNT(*) FILTER (WHERE psl.gst_paise<>0)::BIGINT,
+                 COUNT(*) FILTER (
+                   WHERE ABS((psl.line_total_paise + ((psl.discount_paise*(100+psl.tax_percent))/100)) - (p.price_paise*psl.quantity)) > GREATEST(2,psl.quantity)
+                 )::BIGINT
+               FROM pos_sale_lines psl
+               JOIN packages p ON p.id=psl.item_id AND p.tenant_id=psl.tenant_id AND p.branch_id=psl.branch_id
+              WHERE psl.tenant_id=$1 AND psl.branch_id=$2 AND psl.sale_id=$3 AND psl.line_type='package'"#,
+        )
+        .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to validate package tax settings"))?;
+        if !tax_applicable && taxed_when_disabled > 0 {
+            return Err(AppError::validation("tax is disabled for package sales"));
+        }
+        if tax_applicable && tax_inclusive && invalid_inclusive_total > 0 {
+            return Err(AppError::validation("package price must include tax"));
+        }
+    }
     sqlx::query("DELETE FROM client_package_credits WHERE tenant_id=$1 AND branch_id=$2 AND source_sale_id=$3")
         .bind(tenant_id)
         .bind(branch_id)
@@ -8420,7 +11896,7 @@ async fn grant_membership_credits_for_sale_lines(
         .filter(|line| {
             line.line_type == "membership" && !line.item_id.trim().is_empty() && line.quantity > 0
         })
-        .map(|line| (line.item_id.clone(), line.quantity))
+        .map(|line| (line.item_id.clone(), line.quantity, line.taxable_paise))
         .collect::<Vec<_>>();
     grant_membership_credits(
         tx,
@@ -8440,8 +11916,8 @@ async fn grant_membership_credits_for_existing_sale(
     client_id: &str,
     sale_id: &str,
 ) -> Result<(), AppError> {
-    let membership_lines = sqlx::query_as::<_, (String, i64)>(
-        "SELECT item_id, quantity FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='membership' AND item_id <> ''",
+    let membership_lines = sqlx::query_as::<_, (String, i64, i64)>(
+        "SELECT item_id, quantity, taxable_paise FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='membership' AND item_id <> ''",
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -8466,8 +11942,68 @@ async fn grant_membership_credits(
     branch_id: &str,
     client_id: &str,
     sale_id: &str,
-    membership_lines: &[(String, i64)],
+    membership_lines: &[(String, i64, i64)],
 ) -> Result<(), AppError> {
+    let settings = load_pos_membership_settings(tx, tenant_id, branch_id).await?;
+    let policy = membership_pos_policy(&settings);
+    if !membership_lines.is_empty() {
+        let (total_paise, paid_paise, source, reference_id) =
+            sqlx::query_as::<_, (i64, i64, String, String)>(
+                "SELECT total_paise,paid_paise,source,reference_id FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(sale_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|_| AppError::internal("failed to validate membership sale settings"))?;
+        if !policy.sales_enabled {
+            return Err(AppError::validation("membership sales are disabled"));
+        }
+        if !policy.visible_in_pos && !membership_internal_checkout_source(&source) {
+            return Err(AppError::validation("membership sales are hidden in POS"));
+        }
+        if !policy.allow_due && paid_paise < total_paise {
+            return Err(AppError::validation(
+                "due payment is disabled for membership sales",
+            ));
+        }
+        let (free_lines, paid_lines, taxed_when_disabled, invalid_inclusive_total) =
+            sqlx::query_as::<_, (i64, i64, i64, i64)>(
+                r#"SELECT
+                     COUNT(*) FILTER (WHERE m.price_paise=0)::BIGINT,
+                     COUNT(*) FILTER (WHERE m.price_paise>0)::BIGINT,
+                     COUNT(*) FILTER (WHERE psl.gst_paise<>0)::BIGINT,
+                     COUNT(*) FILTER (
+                       WHERE ABS((psl.line_total_paise + ((psl.discount_paise*(100+psl.tax_percent))/100)) - (m.price_paise*psl.quantity)) > GREATEST(2,psl.quantity)
+                     )::BIGINT
+                   FROM pos_sale_lines psl
+                   JOIN memberships m ON m.id=psl.item_id AND m.tenant_id=psl.tenant_id AND m.branch_id=psl.branch_id
+                  WHERE psl.tenant_id=$1 AND psl.branch_id=$2 AND psl.sale_id=$3 AND psl.line_type='membership'"#,
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(sale_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|_| AppError::internal("failed to validate membership pricing settings"))?;
+        if !policy.free_enabled && free_lines > 0 {
+            return Err(AppError::validation("free membership sales are disabled"));
+        }
+        if !policy.paid_enabled && paid_lines > 0 {
+            return Err(AppError::validation("paid membership sales are disabled"));
+        }
+        if !policy.tax_applicable && taxed_when_disabled > 0 {
+            return Err(AppError::validation("tax is disabled for membership sales"));
+        }
+        if policy.tax_applicable
+            && policy.tax_inclusive
+            && reference_id.is_empty()
+            && invalid_inclusive_total > 0
+        {
+            return Err(AppError::validation("membership price must include tax"));
+        }
+    }
     sqlx::query("DELETE FROM client_membership_credits WHERE tenant_id=$1 AND branch_id=$2 AND source_sale_id=$3")
         .bind(tenant_id)
         .bind(branch_id)
@@ -8476,7 +12012,7 @@ async fn grant_membership_credits(
         .await
         .map_err(|_| AppError::internal("failed to refresh membership credits"))?;
 
-    for (membership_id, line_qty) in membership_lines {
+    for (membership_id, line_qty, line_value_paise) in membership_lines {
         let membership = sqlx::query_as::<_, (String, i32, Value, i64)>(
             "SELECT name, COALESCE(validity_days, 0) AS validity_days, COALESCE(service_ids_json, '[]'::jsonb) AS service_ids_json, price_paise FROM memberships WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
         )
@@ -8491,8 +12027,15 @@ async fn grant_membership_credits(
         else {
             continue;
         };
+        let validity_days = if !policy.expiry_enabled {
+            0
+        } else if validity_days > 0 {
+            validity_days
+        } else {
+            policy.default_validity_days
+        };
 
-        let previous = sqlx::query_as::<_, (String,String,i64,bool,String)>("SELECT cm.id,cm.membership_id,m.price_paise,cm.auto_renew_enabled,cm.auto_renew_status FROM client_memberships cm JOIN memberships m ON m.id=cm.membership_id AND m.tenant_id=cm.tenant_id AND m.branch_id=cm.branch_id WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.client_id=$3 AND cm.active=TRUE ORDER BY cm.assigned_at DESC LIMIT 1 FOR UPDATE")
+        let previous = sqlx::query_as::<_, (String,String,i64,bool,String,String,i64)>("SELECT cm.id,cm.membership_id,m.price_paise,cm.auto_renew_enabled,cm.auto_renew_status,cm.auto_renew_payment_reference,cm.auto_renew_provider_cycle_end FROM client_memberships cm JOIN memberships m ON m.id=cm.membership_id AND m.tenant_id=cm.tenant_id AND m.branch_id=cm.branch_id WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.client_id=$3 AND cm.active=TRUE ORDER BY cm.assigned_at DESC LIMIT 1 FOR UPDATE")
             .bind(tenant_id)
             .bind(branch_id)
             .bind(client_id)
@@ -8507,7 +12050,7 @@ async fn grant_membership_credits(
             .await
             .map_err(|_| AppError::internal("failed to update client memberships"))?;
         let client_membership_id = sqlx::query_scalar::<_, String>(
-            "INSERT INTO client_memberships (tenant_id, branch_id, client_id, membership_id, assigned_at, expires_at, active, source_sale_id, auto_renew_enabled, auto_renew_status, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),CASE WHEN $5 > 0 THEN NOW() + ($5::INT * INTERVAL '1 day') ELSE NULL END,TRUE,$6,$7,$8,NOW(),NOW()) RETURNING id",
+            "INSERT INTO client_memberships (tenant_id, branch_id, client_id, membership_id, assigned_at, expires_at, active, source_sale_id, auto_renew_enabled, auto_renew_status, auto_renew_payment_reference, auto_renew_provider_cycle_end, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),CASE WHEN $5 > 0 THEN NOW() + ($5::INT * INTERVAL '1 day') ELSE NULL END,TRUE,$6,$7,$8,$9,$10,NOW(),NOW()) RETURNING id",
         )
         .bind(tenant_id)
         .bind(branch_id)
@@ -8517,6 +12060,8 @@ async fn grant_membership_credits(
         .bind(sale_id)
         .bind(previous.as_ref().is_some_and(|row| row.3))
         .bind(previous.as_ref().map(|row| row.4.as_str()).unwrap_or("disabled"))
+        .bind(previous.as_ref().map(|row| row.5.as_str()).unwrap_or(""))
+        .bind(previous.as_ref().map(|row| row.6).unwrap_or(0))
         .fetch_one(&mut **tx)
         .await
             .map_err(|_| AppError::internal("failed to assign client membership"))?;
@@ -8540,11 +12085,10 @@ async fn grant_membership_credits(
         )
         .await?;
 
-        for (service_id, service_name, service_qty) in package_service_rows(&services_json) {
-            let total_qty =
-                service_qty.saturating_mul((*line_qty).clamp(1, i32::MAX as i64) as i32);
+        let credits = allocate_package_credit_values(*line_value_paise, *line_qty, &services_json);
+        for (service_id, service_name, total_qty, issued_value_paise, unit_value_paise) in credits {
             sqlx::query(
-                "INSERT INTO client_membership_credits (tenant_id, branch_id, client_id, membership_id, membership_name, service_id, service_name, total_qty, remaining_qty, expires_at, source_sale_id, active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,CASE WHEN $9 > 0 THEN (CURRENT_DATE + ($9::INT * INTERVAL '1 day'))::DATE ELSE NULL END,$10,TRUE,NOW(),NOW())",
+                "INSERT INTO client_membership_credits (tenant_id, branch_id, client_id, membership_id, membership_name, service_id, service_name, total_qty, remaining_qty, unit_value_paise, issued_value_paise, expires_at, source_sale_id, active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,CASE WHEN $11 > 0 THEN (CURRENT_DATE + ($11::INT * INTERVAL '1 day'))::DATE ELSE NULL END,$12,TRUE,NOW(),NOW())",
             )
             .bind(tenant_id)
             .bind(branch_id)
@@ -8554,6 +12098,8 @@ async fn grant_membership_credits(
             .bind(&service_id)
             .bind(&service_name)
             .bind(total_qty)
+            .bind(unit_value_paise)
+            .bind(issued_value_paise)
             .bind(validity_days)
             .bind(sale_id)
             .execute(&mut **tx)
@@ -8562,6 +12108,13 @@ async fn grant_membership_credits(
         }
     }
     Ok(())
+}
+
+fn membership_internal_checkout_source(source: &str) -> bool {
+    matches!(
+        source,
+        "membership_auto_renew" | "membership_plan_change" | "membership_renewal"
+    )
 }
 
 async fn complete_membership_operation(
@@ -8599,7 +12152,7 @@ async fn complete_membership_operation(
             }
         }
     }
-    sqlx::query("UPDATE membership_auto_renew_attempts SET status='completed',source_sale_id=$4,error_message='',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status IN ('payment_required','checkout_ready','failed')")
+    sqlx::query("UPDATE membership_auto_renew_attempts SET status='completed',source_sale_id=$4,error_message='',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status IN ('queued','payment_required','checkout_ready','failed')")
         .bind(tenant_id).bind(branch_id).bind(&reference).bind(sale_id).execute(&mut **tx).await.map_err(|_|AppError::internal("failed to complete auto-renew attempt"))?;
     sqlx::query("UPDATE client_memberships SET auto_renew_status=CASE WHEN auto_renew_enabled THEN 'active' ELSE 'disabled' END,auto_renew_failure_count=0,next_renewal_at=expires_at,pending_membership_id=NULL,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
         .bind(tenant_id).bind(branch_id).bind(new_client_membership_id).execute(&mut **tx).await.map_err(|_|AppError::internal("failed to finish membership renewal state"))?;
@@ -8621,7 +12174,7 @@ fn membership_lifecycle_event(
 
 #[cfg(test)]
 mod membership_lifecycle_tests {
-    use super::membership_lifecycle_event;
+    use super::{membership_lifecycle_event, normalize_pos_source, replayable_pos_reference};
 
     #[test]
     fn records_assignment_or_renewal_once_per_pos_sale() {
@@ -8638,6 +12191,22 @@ mod membership_lifecycle_tests {
             membership_lifecycle_event(Some(("old", 200)), "new", 100),
             "downgraded"
         );
+    }
+
+    #[test]
+    fn membership_checkout_references_are_replay_safe() {
+        let source = normalize_pos_source(Some("membership-renewal".to_string()));
+        assert_eq!(source, "membership_renewal");
+        assert!(replayable_pos_reference(&source, "client-membership-1"));
+        assert!(replayable_pos_reference(
+            "membership_plan_change",
+            "change-1"
+        ));
+        assert!(replayable_pos_reference(
+            "membership_auto_renew",
+            "attempt-1"
+        ));
+        assert!(!replayable_pos_reference("membership", ""));
     }
 }
 
@@ -8694,6 +12263,13 @@ async fn consume_membership_redemptions(
     sale_id: &str,
     rows: &[(String, i32, String)],
 ) -> Result<(), AppError> {
+    let settings = load_pos_membership_settings(tx, tenant_id, branch_id).await?;
+    let policy = membership_pos_policy(&settings);
+    if policy.require_staff && rows.iter().any(|row| row.2.trim().is_empty()) {
+        return Err(AppError::validation(
+            "staff confirmation is required for membership redemption",
+        ));
+    }
     sqlx::query(
         "DELETE FROM pos_membership_redemptions WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
     )
@@ -8706,12 +12282,14 @@ async fn consume_membership_redemptions(
 
     for (credit_id, quantity, staff_id) in rows {
         let credit = sqlx::query_as::<_, ClientMembershipCreditRow>(
-            "SELECT client_id AS credit_owner_id,remaining_qty, membership_id, membership_name, service_id, service_name FROM client_membership_credits WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND (client_id=$4 OR EXISTS (SELECT 1 FROM membership_family_members fm JOIN client_memberships cm ON cm.id=fm.client_membership_id AND cm.active=TRUE WHERE fm.tenant_id=$2 AND fm.branch_id=$3 AND fm.member_client_id=$4 AND fm.owner_client_id=client_membership_credits.client_id AND fm.active=TRUE)) AND active=TRUE AND remaining_qty > 0 AND (expires_at IS NULL OR expires_at >= CURRENT_DATE) FOR UPDATE",
+            "SELECT branch_id AS source_branch_id,client_id AS credit_owner_id,remaining_qty,unit_value_paise,issued_value_paise,membership_id,membership_name,service_id,service_name FROM client_membership_credits WHERE id=$1 AND tenant_id=$2 AND ((branch_id=$3 AND (client_id=$4 OR ($5 AND EXISTS (SELECT 1 FROM membership_family_members fm JOIN client_memberships cm ON cm.id=fm.client_membership_id AND cm.active=TRUE WHERE fm.tenant_id=$2 AND fm.branch_id=$3 AND fm.member_client_id=$4 AND fm.owner_client_id=client_membership_credits.client_id AND fm.active=TRUE)))) OR membership_cross_location_allowed($2,branch_id,$3,client_id,$4,'service_credit')) AND active=TRUE AND remaining_qty > 0 AND (NOT $6 OR expires_at IS NULL OR expires_at >= CURRENT_DATE) FOR UPDATE",
         )
         .bind(credit_id)
         .bind(tenant_id)
         .bind(branch_id)
         .bind(client_id)
+        .bind(policy.allow_family)
+        .bind(policy.block_expired)
         .fetch_optional(&mut **tx)
         .await
         .map_err(|_| AppError::internal("failed to load membership credit"))?
@@ -8721,18 +12299,38 @@ async fn consume_membership_redemptions(
                 "membership redeem quantity is not available",
             ));
         }
+        if !policy.allow_partial && *quantity != credit.remaining_qty {
+            return Err(AppError::validation(
+                "partial membership redemption is disabled",
+            ));
+        }
         let remaining = credit.remaining_qty - *quantity;
+        let redeemed_before = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(redeemed_value_paise),0)::BIGINT FROM pos_membership_redemptions WHERE tenant_id=$1 AND client_membership_credit_id=$2")
+            .bind(tenant_id).bind(credit_id).fetch_one(&mut **tx).await
+            .map_err(|_| AppError::internal("failed to total membership redemption value"))?;
+        let remaining_value = credit
+            .issued_value_paise
+            .saturating_sub(redeemed_before)
+            .max(0);
+        let redeemed_value = if *quantity == credit.remaining_qty {
+            remaining_value
+        } else {
+            credit
+                .unit_value_paise
+                .saturating_mul(i64::from(*quantity))
+                .min(remaining_value)
+        };
         sqlx::query("UPDATE client_membership_credits SET remaining_qty=$5, active=$6, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND client_id=$4")
             .bind(credit_id)
             .bind(tenant_id)
-            .bind(branch_id)
+            .bind(&credit.source_branch_id)
             .bind(&credit.credit_owner_id)
             .bind(remaining)
             .bind(remaining > 0)
             .execute(&mut **tx)
             .await
             .map_err(|_| AppError::internal("failed to consume membership credit"))?;
-        sqlx::query("INSERT INTO pos_membership_redemptions (tenant_id, branch_id, sale_id, client_id, client_membership_credit_id, membership_id, membership_name, service_id, service_name, staff_id, quantity, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())")
+        sqlx::query("INSERT INTO pos_membership_redemptions (tenant_id, branch_id, sale_id, client_id, client_membership_credit_id, membership_id, membership_name, service_id, service_name, staff_id, quantity, unit_value_paise, redeemed_value_paise, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())")
             .bind(tenant_id)
             .bind(branch_id)
             .bind(sale_id)
@@ -8744,6 +12342,8 @@ async fn consume_membership_redemptions(
             .bind(&credit.service_name)
             .bind(staff_id)
             .bind(quantity)
+            .bind(credit.unit_value_paise)
+            .bind(redeemed_value)
             .execute(&mut **tx)
             .await
             .map_err(|_| AppError::internal("failed to save membership redemption"))?;
@@ -8871,6 +12471,20 @@ async fn consume_package_redemptions(
         package_setting_bool(&settings, &["creditsRedemption", "allowPartial"], true);
     let block_expired =
         package_setting_bool(&settings, &["creditsRedemption", "blockWhenExpired"], true);
+    let expired_action = settings
+        .pointer("/expiryRenewal/expiredPendingAction")
+        .and_then(Value::as_str)
+        .unwrap_or(if block_expired { "block" } else { "allow" });
+    let allow_cross_service = package_setting_bool(
+        &settings,
+        &["creditsRedemption", "allowCrossService"],
+        false,
+    );
+    let require_staff = package_setting_bool(
+        &settings,
+        &["creditsRedemption", "requireStaffConfirmation"],
+        true,
+    );
 
     sqlx::query(
         "DELETE FROM pos_package_redemptions WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
@@ -8887,12 +12501,11 @@ async fn consume_package_redemptions(
         let quantity = package_redemption_i32(row, &["quantity"]);
         let credit = sqlx::query_as::<_, ClientPackageCreditRow>(
             r#"
-            SELECT remaining_qty, unit_value_paise, issued_value_paise, package_id, package_name, service_id, service_name
+            SELECT remaining_qty, unit_value_paise, issued_value_paise, package_id, package_name, service_id, service_name, expires_at
               FROM client_package_credits
              WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND client_id=$4
                AND active=TRUE
                AND remaining_qty > 0
-               AND ($5=FALSE OR expires_at IS NULL OR expires_at >= CURRENT_DATE)
              FOR UPDATE
             "#,
         )
@@ -8900,7 +12513,6 @@ async fn consume_package_redemptions(
         .bind(tenant_id)
         .bind(branch_id)
         .bind(client_id)
-        .bind(block_expired)
         .fetch_optional(&mut **tx)
         .await
         .map_err(|_| AppError::internal("failed to load package credit"))?
@@ -8914,6 +12526,40 @@ async fn consume_package_redemptions(
         if !allow_partial && quantity != credit.remaining_qty {
             return Err(AppError::validation(
                 "partial package redemption is disabled",
+            ));
+        }
+        let requested_service_id = package_redemption_string(row, &["serviceId"]);
+        if !allow_cross_service
+            && !requested_service_id.is_empty()
+            && requested_service_id != credit.service_id
+        {
+            return Err(AppError::validation(
+                "cross-service package redemption is disabled",
+            ));
+        }
+        let staff_id = package_redemption_string(row, &["staffId"]);
+        if credit
+            .expires_at
+            .is_some_and(|date| date < chrono::Utc::now().date_naive())
+        {
+            match expired_action {
+                "allow" => {}
+                "approval" if !staff_id.is_empty() => {}
+                "approval" => {
+                    return Err(AppError::validation(
+                        "staff approval is required for expired package redemption",
+                    ))
+                }
+                _ => {
+                    return Err(AppError::validation(
+                        "expired package redemption is blocked",
+                    ))
+                }
+            }
+        }
+        if require_staff && staff_id.is_empty() {
+            return Err(AppError::validation(
+                "staff confirmation is required for package redemption",
             ));
         }
 
@@ -8964,13 +12610,29 @@ async fn consume_package_redemptions(
         .bind(&credit.package_name)
         .bind(&credit.service_id)
         .bind(&credit.service_name)
-        .bind(package_redemption_string(row, &["staffId"]))
+        .bind(staff_id)
         .bind(quantity)
         .bind(credit.unit_value_paise)
         .bind(redeemed_value)
         .execute(&mut **tx)
         .await
         .map_err(|_| AppError::internal("failed to save package redemption"))?;
+        sqlx::query(
+            r#"WITH selected AS (
+                 SELECT id FROM appointment_package_reservations
+                  WHERE tenant_id=$1 AND branch_id=$2 AND client_package_credit_id=$3 AND status='reserved'
+                  ORDER BY created_at FOR UPDATE LIMIT $4
+               )
+               UPDATE appointment_package_reservations SET status='redeemed',updated_at=NOW()
+                WHERE id IN (SELECT id FROM selected)"#,
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(&credit_id)
+        .bind(i64::from(quantity))
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to reconcile package booking reservation"))?;
     }
 
     Ok(())

@@ -9,15 +9,17 @@ type DeskTab = 'overview' | 'catalog' | 'active' | 'lifecycle' | 'family' | 'sel
 type PlanType = 'discount' | 'prepaid_credit' | 'visit_pack' | 'service_credit' | 'combo' | 'unlimited' | 'family' | 'corporate' | 'tiered';
 type Membership = { id: string; name: string; code: string; planType: PlanType; pricePaise: number; pointsRequired: number; discountPercent: number; validityDays: number; notes: string; serviceIds: string[]; benefitRules: Record<string, unknown>; active: boolean };
 type ActiveMembership = { id: string; clientId: string; clientName: string; membershipId: string; membershipName: string; pricePaise: number; discountPercent: number; sourceSaleId: string; assignedAt: string; expiresAt?: string; active: boolean; status: string; remainingCredits: number; autoRenewEnabled: boolean; autoRenewStatus: string; pendingMembershipId?: string };
-type Membership360Overview = { membership: ActiveMembership; client: { id: string; name: string; phone: string; email: string; walletBalancePaise: number } };
 type LifecycleRow = { id: string; clientMembershipId: string; clientName: string; membershipName: string; eventType: string; sourceSaleId: string; reason: string; createdAt: string };
+type MembershipWalletCredit = { membershipId: string; membershipName: string; serviceId: string; serviceName: string; totalQty: number; remainingQty: number; expiresAt?: string };
+type Membership360Overview = { membership: ActiveMembership; client: { id: string; name: string; phone: string; email: string; walletBalancePaise: number }; wallet: MembershipWalletCredit[]; ledger: LifecycleRow[] };
 type RenewalRow = { id: string; clientName: string; membershipName: string; expiresAt: string; daysUntilExpiry: number; autoRenewStatus: string; failureCount: number };
 type MembershipReport = { activeMembers: number; expiredMembers: number; cancelledMembers: number; creditLiability: number; membershipSalesPaise: number; redeemedCredits: number; atRiskMembers: number; autoRenewFailed: number; commissionPaise: number };
 type PlanChange = { id: string; clientName: string; fromMembershipName: string; targetMembershipName: string; changeType: string; effectiveAt: string; chargePaise: number; creditPaise: number; status: string; createdAt: string };
 type FamilyMember = { id: string; clientMembershipId: string; ownerName: string; memberName: string; membershipName: string; relationship: string; createdAt: string };
-type SelfServiceRequest = { id: string; clientMembershipId: string; clientName: string; membershipName: string; requestType: string; targetMembershipName: string; reason: string; status: string; createdAt: string };
+type SelfServiceRequest = { id: string; clientMembershipId: string; clientName: string; membershipName: string; requestType: string; targetMembershipName: string; reason: string; creditDelta: number; serviceId: string; paymentReference: string; status: string; createdAt: string };
 type AutoRenewAttempt = { id: string; clientMembershipId: string; clientName: string; membershipName: string; attemptNumber: number; status: string; errorMessage: string; nextRetryAt?: string; createdAt: string };
 type CheckoutIntent = { clientId: string; planId: string; pricePaise: number; referenceId: string };
+type StatusLink = { token: string };
 type Service = { id: string; name: string; active: boolean };
 type Client = { id: string; firstName: string; lastName: string; phone: string; active: boolean };
 type Reminder = { id: string; clientMembershipId?: string; clientId: string; clientName: string; membershipName: string; reminderType: string; dueOn: string; daysBefore: number; status: string; message: string; approvedBy: string; approvedAt?: string; createdAt: string };
@@ -27,13 +29,18 @@ type RiskSignal = { id: string; code: string; riskLevel: string; riskScore: numb
 type RiskReport = { metrics: { total: number; pending: number; reviewed: number; critical: number; high: number; medium: number; low: number }; signals: RiskSignal[] };
 type RewardEntry = { id: string; clientId: string; clientName: string; sourceSaleId: string; transactionType: string; points: number; balanceAfter: number; expiresAt?: string; staffId: string; note: string; createdAt: string };
 type RewardsRoi = { metrics: { totalRewardClients: number; totalPointsEarned: number; totalPointsRedeemed: number; rewardUsersRevenuePaise: number; nonRewardUsersRevenuePaise: number } };
+type LoyaltyTier = { code: string; name: string; minimumPoints: number | string };
+type EnterpriseReport = { metrics: { membershipSalesPaise: number; commissionPaise: number; serviceCostPaise: number; redeemedValuePaise: number; netProfitPaise: number; contributionPaise: number; creditLiability: number }; customerSales: Array<{ clientId: string; clientName: string; saleCount: number; revenuePaise: number }>; redemption: Array<{ clientId: string; clientName: string; membershipName: string; serviceName: string; quantity: number; visitCount: number }>; profitability: Array<{ membershipId: string; membershipName: string; soldCount: number; revenuePaise: number; commissionPaise: number; redeemedCredits: number; redeemedValuePaise: number; serviceCostPaise: number; netProfitPaise: number }> };
 type MembershipSettings = {
   membershipCatalog: { membershipSalesEnabled: boolean; visibleInPos: boolean; visibleOnline: boolean; freeMembershipEnabled: boolean; paidMembershipEnabled: boolean };
-  creditsBenefits: { serviceCreditsEnabled: boolean; walletCreditsEnabled: boolean; rewardPointsEnabled: boolean; discountBenefitsEnabled: boolean; allowBenefitStacking: boolean };
+  creditsBenefits: { serviceCreditsEnabled: boolean; walletCreditsEnabled: boolean; rewardPointsEnabled: boolean; rewardPointsPer100Rupees: number | string; rewardPointValuePaise: number | string; discountBenefitsEnabled: boolean; allowBenefitStacking: boolean };
   renewalExpiry: { autoRenewEnabled: boolean; expiryDaysEnabled: boolean; defaultValidityDays: number; renewalReminderDays: number; expiredBenefitAction: string };
   paymentBilling: { allowDueOnMembershipSale: boolean; membershipTaxApplicable: boolean; taxInclusiveMembershipPrice: boolean; invoiceMembershipSnapshot: boolean };
   redemptionRules: { blockRedemptionWhenExpired: boolean; requireStaffConfirmation: boolean; allowPartialCredits: boolean; allowFamilySharing: boolean };
+  crossLocation: { enabled: boolean; acceptInbound: boolean; scope: 'tenant' | 'region' | 'zone' | 'cluster'; allowDiscounts: boolean; allowServiceCredits: boolean };
   notificationsRisk: { renewalReminder: boolean; lowCreditReminder: boolean; ownerAlertForHighBalance: boolean; highBalanceThreshold: number };
+  loyaltyTiers: { enabled: boolean; tiers: LoyaltyTier[] };
+  referrals: { enabled: boolean; referrerRewardPoints: number | string; referredRewardPoints: number | string };
   defaults: { defaultStatus: string; defaultMembershipType: string };
 };
 
@@ -90,6 +97,7 @@ export class MembershipsPageComponent implements OnInit {
   rewardAlerts: Array<{ clientName: string; riskLevel: string; alertType: string }> = [];
   settings = this.defaultSettings();
   report: MembershipReport = { activeMembers: 0, expiredMembers: 0, cancelledMembers: 0, creditLiability: 0, membershipSalesPaise: 0, redeemedCredits: 0, atRiskMembers: 0, autoRenewFailed: 0, commissionPaise: 0 };
+  enterpriseReport: EnterpriseReport = this.emptyEnterpriseReport();
   services: Service[] = [];
   clients: Client[] = [];
   selectedMember: ActiveMembership | null = null;
@@ -108,7 +116,8 @@ export class MembershipsPageComponent implements OnInit {
   editingId = '';
   form = this.blankForm();
   sellForm = { clientId: '', planId: '' };
-  workflowForm = { targetMembershipId: '', effectiveAt: 'now', memberClientId: '', relationship: '', requestType: 'renew', reason: '' };
+  workflowForm = { targetMembershipId: '', effectiveAt: 'now', memberClientId: '', relationship: '', requestType: 'renew', reason: '', creditDelta: '' as string | number, serviceId: '', paymentReference: '' };
+  selfServiceLink = '';
 
   ngOnInit() { void this.loadWorkspace(); }
 
@@ -152,7 +161,7 @@ export class MembershipsPageComponent implements OnInit {
   openSell() { this.sellForm = { clientId: '', planId: '' }; this.error = ''; this.sellDrawerOpen = true; }
   openPlanChange(effectiveAt = 'now') { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, targetMembershipId: '', effectiveAt, reason: '' }; this.workflowDrawer = 'change'; this.error = ''; }
   openFamily() { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, memberClientId: '', relationship: '' }; this.workflowDrawer = 'family'; this.error = ''; }
-  openRequest() { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, requestType: 'renew', targetMembershipId: '', reason: '' }; this.workflowDrawer = 'request'; this.error = ''; }
+  openRequest() { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, requestType: 'renew', targetMembershipId: '', reason: '', creditDelta: '', serviceId: '', paymentReference: '' }; this.workflowDrawer = 'request'; this.error = ''; }
   async openMembership360(item: ActiveMembership) {
     this.selectMember(item); this.member360Open = true; this.member360Loading = true; this.member360 = null; this.error = '';
     try {
@@ -256,8 +265,10 @@ export class MembershipsPageComponent implements OnInit {
 
   async submitSelfServiceRequest() {
     if (!this.selectedMember) return;
+    if (this.workflowForm.requestType === 'credit_adjustment' && (!this.workflowForm.serviceId || Number(this.workflowForm.creditDelta) === 0)) { this.error = 'Service and non-zero credit adjustment required'; return; }
+    if (this.workflowForm.requestType === 'payment_method_update' && !this.workflowForm.paymentReference.trim()) { this.error = 'Payment reference required'; return; }
     try {
-      const result = await firstValueFrom(this.api.post<ApiEnvelope<SelfServiceRequest>>('/membership-enterprise/self-service', { clientMembershipId: this.selectedMember.id, requestType: this.workflowForm.requestType, targetMembershipId: this.workflowForm.targetMembershipId || null, reason: this.workflowForm.reason }));
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<SelfServiceRequest>>('/membership-enterprise/self-service', { clientMembershipId: this.selectedMember.id, requestType: this.workflowForm.requestType, targetMembershipId: this.workflowForm.targetMembershipId || null, reason: this.workflowForm.reason, creditDelta: Number(this.workflowForm.creditDelta || 0), serviceId: this.workflowForm.serviceId, paymentReference: this.workflowForm.paymentReference.trim() }));
       if (!result.success) throw new Error(result.error?.message || 'Request create failed');
       await this.loadSelfServiceRequests(); this.closeDrawer(); this.message = 'Self-service request created';
     } catch (error) { this.error = error instanceof Error ? error.message : 'Request create failed'; }
@@ -280,6 +291,27 @@ export class MembershipsPageComponent implements OnInit {
       if (!result.success || !result.data) throw new Error(result.error?.message || 'Retry failed');
       await this.navigateCheckout(result.data.checkout);
     } catch (error) { this.error = error instanceof Error ? error.message : 'Retry failed'; }
+  }
+  async processDueAutoRenewals() {
+    this.saving = true; this.error = '';
+    try { const result = await firstValueFrom(this.api.post<ApiEnvelope<{ processed: number }>>('/membership-enterprise/auto-renew/process-due', {})); this.message = `${result.data?.processed || 0} auto-renewals processed`; await Promise.all([this.loadAutoRenew(), this.loadAutoRenewAttempts()]); }
+    catch (error) { this.error = error instanceof Error ? error.message : 'Auto-renew processing failed'; }
+    finally { this.saving = false; }
+  }
+  async createSelfServiceLink(share = false) {
+    if (!this.selectedMember) return;
+    this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StatusLink>>(`/membership-enterprise/client/${this.selectedMember.clientId}/self-service/status-link`, { clientMembershipId: this.selectedMember.id }));
+      if (!result.data?.token) throw new Error('Status link could not be created');
+      this.selfServiceLink = `${location.origin}/membership-status/${result.data.token}`;
+      if (share) {
+        const phone = this.clients.find((client) => client.id === this.selectedMember?.clientId)?.phone.replace(/\D/g, '') || '';
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(`Membership status and renewal: ${this.selfServiceLink}`)}`, '_blank', 'noopener');
+      } else {
+        await navigator.clipboard.writeText(this.selfServiceLink); this.message = 'Membership link copied';
+      }
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Status link could not be created'; }
   }
 
   async generateReminders() {
@@ -318,6 +350,15 @@ export class MembershipsPageComponent implements OnInit {
     finally { this.saving = false; }
   }
 
+  addLoyaltyTier() {
+    const index = this.settings.loyaltyTiers.tiers.length + 1;
+    this.settings.loyaltyTiers.tiers.push({ code: `tier_${index}`, name: `Tier ${index}`, minimumPoints: '' });
+  }
+
+  removeLoyaltyTier(index: number) {
+    if (this.settings.loyaltyTiers.tiers.length > 1) this.settings.loyaltyTiers.tiers.splice(index, 1);
+  }
+
   async exportReport(format: 'csv' | 'pdf') {
     try {
       const blob = await firstValueFrom(this.api.getBlob(`/membership-enterprise/reports/export?format=${format}`));
@@ -327,7 +368,7 @@ export class MembershipsPageComponent implements OnInit {
 
   async loadWorkspace() {
     this.loading = true; this.error = '';
-    await Promise.all([this.loadMemberships(), this.loadActiveMemberships(), this.loadLifecycle(), this.loadAutoRenew(), this.loadPlanChanges(), this.loadFamilyMembers(), this.loadSelfServiceRequests(), this.loadAutoRenewAttempts(), this.loadReminders(), this.loadCommission(), this.loadRisk(), this.loadRewards(), this.loadSettings(), this.loadReport(), this.loadServices(), this.loadClients()]);
+    await Promise.all([this.loadMemberships(), this.loadActiveMemberships(), this.loadLifecycle(), this.loadAutoRenew(), this.loadPlanChanges(), this.loadFamilyMembers(), this.loadSelfServiceRequests(), this.loadAutoRenewAttempts(), this.loadReminders(), this.loadCommission(), this.loadRisk(), this.loadRewards(), this.loadSettings(), this.loadReport(), this.loadEnterpriseReport(), this.loadServices(), this.loadClients()]);
     this.loading = false;
   }
 
@@ -345,10 +386,12 @@ export class MembershipsPageComponent implements OnInit {
   private async loadRewards() { try { const [ledger, roi, expiring, alerts] = await Promise.all([firstValueFrom(this.api.get<ApiEnvelope<RewardEntry[]>>('/membership-enterprise/rewards/ledger')), firstValueFrom(this.api.get<ApiEnvelope<RewardsRoi>>('/membership-enterprise/rewards/roi')), firstValueFrom(this.api.get<ApiEnvelope<Array<{ clientName: string; pointsExpiring: number; expiryDate: string; daysLeft: number }>>>('/membership-enterprise/rewards/expiring?days=30')), firstValueFrom(this.api.get<ApiEnvelope<Array<{ clientName: string; riskLevel: string; alertType: string }>>>('/membership-enterprise/rewards/abuse-alerts'))]); this.rewardLedger = ledger.success && Array.isArray(ledger.data) ? ledger.data : []; if (roi.success && roi.data) this.rewardRoi = roi.data; this.expiringRewards = expiring.success && Array.isArray(expiring.data) ? expiring.data : []; this.rewardAlerts = alerts.success && Array.isArray(alerts.data) ? alerts.data : []; } catch { this.rewardLedger = []; this.expiringRewards = []; this.rewardAlerts = []; } }
   private async loadSettings() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<MembershipSettings>>('/membership-enterprise/settings')); if (result.success && result.data) this.settings = result.data; } catch { this.settings = this.defaultSettings(); } }
   private async loadReport() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<MembershipReport>>('/membership-enterprise/reports/lifecycle')); if (result.success && result.data) this.report = result.data; } catch { /* empty report stays truthful */ } }
+  private async loadEnterpriseReport() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<EnterpriseReport>>('/membership-enterprise/reports/enterprise')); if (result.success && result.data) this.enterpriseReport = { ...this.emptyEnterpriseReport(), ...result.data, metrics: { ...this.emptyEnterpriseReport().metrics, ...result.data.metrics }, profitability: Array.isArray(result.data.profitability) ? result.data.profitability : [] }; } catch { this.enterpriseReport = this.emptyEnterpriseReport(); } }
+  private emptyEnterpriseReport(): EnterpriseReport { return { metrics: { membershipSalesPaise: 0, commissionPaise: 0, serviceCostPaise: 0, redeemedValuePaise: 0, netProfitPaise: 0, contributionPaise: 0, creditLiability: 0 }, customerSales: [], redemption: [], profitability: [] }; }
   private async loadServices() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Service[]>>('/services')); this.services = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.services = []; } }
   private async loadClients() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')); this.clients = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.clients = []; } }
   private blankForm() { return { name: '', code: '', planType: 'discount' as PlanType, specialOfferPrice: '' as string | number, actualPrice: '' as string | number, pointsRequired: '' as string | number, discountPercent: '' as string | number, validityDays: '' as string | number, creditAmount: '' as string | number, familyLimit: '' as string | number, gstPercent: '' as string | number, notes: '', serviceIds: [] as string[], mobileVisible: false, bookingPageVisible: false, birthdayBenefit: false, anniversaryBenefit: false, priorityBooking: false, active: true }; }
-  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
+  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
   private navigateCheckout(intent: CheckoutIntent) { return this.router.navigate(['/pos'], { queryParams: { clientId: intent.clientId, membershipId: intent.planId, unitPricePaise: intent.pricePaise, reference: intent.referenceId || null } }); }
   private number(value: string | number) { return Math.max(0, Number(value) || 0); }
 }

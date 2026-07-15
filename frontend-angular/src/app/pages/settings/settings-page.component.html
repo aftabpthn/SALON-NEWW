@@ -10,12 +10,395 @@
       <strong>{{ item.title }}</strong>
       <a *ngIf="item.route; else settingAction" [routerLink]="item.route">Open</a>
       <ng-template #settingAction>
-        <button *ngIf="item.panel; else locked" type="button" (click)="openPanel('appointments')">Configure</button>
+        <button *ngIf="item.panel; else locked" type="button" (click)="item.panel && openPanel(item.panel)">Configure</button>
       </ng-template>
       <ng-template #locked>
         <button type="button" disabled>Open</button>
       </ng-template>
     </article>
+  </section>
+
+  <section class="settings-panel" *ngIf="activePanel === 'branches'" aria-label="Branch management">
+    <header>
+      <h2>Branches</h2>
+      <div class="panel-actions branch-panel-actions">
+        <input type="search" placeholder="Search branches" aria-label="Search branches" [(ngModel)]="branchSearch" />
+        <button type="button" (click)="newBranch()">New branch</button>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+
+    <div class="role-layout">
+      <nav class="role-list" aria-label="Branches">
+        <button
+          type="button"
+          *ngFor="let branch of filteredBranches; trackBy: trackByBranchId"
+          [class.is-active]="selectedBranchId === branch.id"
+          (click)="selectBranch(branch)"
+        >
+          <b>{{ branch.name }}</b>
+          <small>{{ branch.code }} · {{ branch.active ? 'Active' : 'Inactive' }}</small>
+          <small *ngIf="branch.regionName">{{ branch.regionName }}<ng-container *ngIf="branch.zoneName"> · {{ branch.zoneName }}</ng-container><ng-container *ngIf="branch.clusterName"> · {{ branch.clusterName }}</ng-container></small>
+        </button>
+        <span *ngIf="branchesLoading">Loading…</span>
+        <span *ngIf="!branchesLoading && !filteredBranches.length">No branches yet</span>
+      </nav>
+
+      <section class="setting-block role-editor">
+        <h3>{{ selectedBranchId ? 'Edit branch' : 'New branch' }}</h3>
+        <div class="form-grid">
+          <label>
+            Branch name
+            <input
+              [ngModel]="branchName"
+              (ngModelChange)="branchName = titleCase($event)"
+              placeholder="Branch name"
+            />
+          </label>
+          <label>
+            Branch code
+            <input
+              [ngModel]="branchCode"
+              (ngModelChange)="branchCode = $event.toUpperCase()"
+              placeholder="Branch code"
+            />
+          </label>
+          <label>
+            Region
+            <input [ngModel]="branchRegion" (ngModelChange)="branchRegion = titleCase($event)" placeholder="Region" />
+          </label>
+          <label>
+            Zone
+            <input [ngModel]="branchZone" (ngModelChange)="branchZone = titleCase($event)" placeholder="Zone" />
+          </label>
+          <label>
+            Cluster
+            <input [ngModel]="branchCluster" (ngModelChange)="branchCluster = titleCase($event)" placeholder="Cluster" />
+          </label>
+          <label>
+            Address
+            <input [ngModel]="branchAddress" (ngModelChange)="branchAddress = titleCase($event)" placeholder="Address" />
+          </label>
+          <label>
+            Latitude
+            <input type="number" min="-90" max="90" step="0.000001" [(ngModel)]="branchLatitude" placeholder="Latitude" />
+          </label>
+          <label>
+            Longitude
+            <input type="number" min="-180" max="180" step="0.000001" [(ngModel)]="branchLongitude" placeholder="Longitude" />
+          </label>
+          <label>
+            Booking deposit %
+            <input type="number" min="0" max="100" step="1" [(ngModel)]="branchDepositPercent" placeholder="Deposit %" />
+          </label>
+        </div>
+        <footer>
+          <button
+            class="primary"
+            type="button"
+            [disabled]="branchSaving || branchesLoading || !branchName.trim() || !branchCode.trim()"
+            (click)="saveBranch()"
+          >{{ branchSaving ? 'Saving…' : 'Save branch' }}</button>
+          <button
+            *ngIf="selectedBranch"
+            type="button"
+            [disabled]="branchSaving || branchesLoading"
+            (click)="toggleBranchStatus()"
+          >{{ selectedBranch.active ? 'Deactivate' : 'Activate' }}</button>
+          <span class="status" [class.error]="!!branchError">{{ branchStatus || branchError }}</span>
+        </footer>
+      </section>
+    </div>
+  </section>
+
+  <section class="settings-panel" *ngIf="activePanel === 'ai'" aria-label="AI governance">
+    <header><h2>AI governance</h2><div class="panel-actions"><button type="button" (click)="closePanel()">Close</button></div></header>
+    <span class="status" *ngIf="aiGovernanceLoading">Loading…</span>
+    <span class="status error" *ngIf="aiGovernanceError">{{ aiGovernanceError }}</span>
+    <section class="setting-block" *ngIf="!aiGovernanceLoading">
+      <h3>Receptionist controls</h3>
+      <div class="toggle-grid">
+        <label><input type="checkbox" [(ngModel)]="aiGovernance.enabled" /><span><b>AI receptionist</b></span></label>
+        <label><input type="checkbox" [(ngModel)]="aiGovernance.requireBookingConfirmation" disabled /><span><b>Booking confirmation required</b></span></label>
+        <label><input type="checkbox" [(ngModel)]="aiGovernance.redactSensitiveData" /><span><b>Redact sensitive transcript data</b></span></label>
+      </div>
+      <div class="form-grid">
+        <label>Transcript retention days<input type="number" min="1" max="3650" [(ngModel)]="aiGovernance.transcriptRetentionDays" /></label>
+        <label>Prompt version<input [(ngModel)]="aiGovernance.promptVersion" maxlength="80" /></label>
+        <label>Public booking URL<input type="url" [(ngModel)]="aiGovernance.bookingUrl" placeholder="https://booking.example.com/book/salon" /></label>
+      </div>
+      <div class="override-grid">
+        <label *ngFor="let channel of ['web','whatsapp','voice']"><input type="checkbox" [checked]="hasAiChannel(channel)" (change)="toggleAiChannel(channel)" /><span>{{ channel | titlecase }}</span></label>
+      </div>
+      <footer><button class="primary" type="button" [disabled]="aiGovernanceSaving || !aiGovernance.allowedChannels.length" (click)="saveAiGovernance()">{{ aiGovernanceSaving ? 'Saving…' : 'Save governance' }}</button><span class="status">{{ aiGovernanceStatus }}</span></footer>
+    </section>
+  </section>
+
+  <section class="settings-panel" *ngIf="activePanel === 'clientForms'" aria-label="Client form settings">
+    <header><h2>Client form settings</h2><div class="panel-actions"><button type="button" (click)="closePanel()">Close</button></div></header>
+    <span class="status" *ngIf="clientFormSettingsLoading">Loading…</span>
+    <span class="status error" *ngIf="clientFormSettingsError">{{ clientFormSettingsError }}</span>
+    <ng-container *ngIf="!clientFormSettingsLoading">
+      <section class="setting-block">
+        <h3>Fields</h3>
+        <div class="franchise-table client-form-settings-table" *ngIf="clientFormSettings.fields.length; else noClientFormFields">
+          <div class="franchise-table-head client-form-setting-columns"><span>Field</span><span>Default</span><span>Mandatory</span><span>Book now</span></div>
+          <div class="franchise-table-row client-form-setting-columns" *ngFor="let field of clientFormSettings.fields; trackBy: trackByClientFormField">
+            <span><b>{{ field.label }}</b><small>{{ field.key }}</small></span>
+            <label><input type="checkbox" [(ngModel)]="field.default" [disabled]="!!field.lockedDefault" /></label>
+            <label><input type="checkbox" [(ngModel)]="field.mandatory" [disabled]="!!field.lockedMandatory" /></label>
+            <label><input type="checkbox" [(ngModel)]="field.displayOnBookNow" /></label>
+          </div>
+        </div>
+        <ng-template #noClientFormFields><span class="resource-empty">No fields yet</span></ng-template>
+      </section>
+      <section class="setting-block" *ngFor="let group of clientFormSettingGroups; trackBy: trackByClientFormGroup">
+        <h3>{{ group.label }}</h3>
+        <div class="toggle-grid">
+          <label *ngFor="let rule of clientFormRules(group.key)"><input type="checkbox" [(ngModel)]="clientFormSettings.settings[group.key][rule]" /><span><b>{{ clientFormRuleLabel(rule) }}</b></span></label>
+        </div>
+      </section>
+      <section class="setting-block">
+        <footer><button class="primary" type="button" [disabled]="clientFormSettingsSaving" (click)="saveClientFormSettings()">{{ clientFormSettingsSaving ? 'Saving…' : 'Save settings' }}</button><span class="status">{{ clientFormSettingsStatus }}</span></footer>
+      </section>
+    </ng-container>
+  </section>
+
+  <section class="settings-panel franchise-panel" *ngIf="activePanel === 'franchise'" aria-label="Franchise controls">
+    <header>
+      <h2>Franchise controls</h2>
+      <div class="panel-actions">
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+
+    <span class="status" *ngIf="franchiseLoading">Loading…</span>
+    <span class="status error" *ngIf="franchiseError">{{ franchiseError }}</span>
+
+    <ng-container *ngIf="!franchiseLoading">
+      <section class="setting-block franchise-policy">
+        <h3>Central masters</h3>
+        <div class="form-grid">
+          <label>Central branch<select [(ngModel)]="franchiseCentralBranchId"><option value="">Select branch</option><option *ngFor="let branch of branches; trackBy: trackByBranchId" [value]="branch.id" [disabled]="!branch.active">{{ branch.name }} · {{ branch.code }}</option></select></label>
+        </div>
+        <div class="override-grid">
+          <label *ngFor="let field of franchiseOverrideOptions"><input type="checkbox" [checked]="hasFranchiseOverride(field)" (change)="toggleFranchiseOverride(field)" /><span>{{ franchiseLabel(field) }}</span></label>
+        </div>
+        <footer>
+          <button class="primary" type="button" [disabled]="franchiseSaving || !franchiseCentralBranchId" (click)="saveFranchiseControls()">{{ franchiseSaving ? 'Saving…' : 'Save controls' }}</button>
+          <button type="button" [disabled]="franchiseSaving || !franchiseCentralBranchId || franchiseCentralBranchId !== franchisePersistedCentralBranchId" (click)="publishCentralMasters()">Publish masters</button>
+          <span class="status">{{ franchiseStatus }}</span>
+        </footer>
+      </section>
+
+      <section class="setting-block franchise-policy" aria-label="Membership sharing policy">
+        <h3>Membership sharing</h3>
+        <span class="status" *ngIf="sharingLoading">Loading…</span>
+        <span class="status error" *ngIf="sharingError">{{ sharingError }}</span>
+        <ng-container *ngIf="sharingLoaded">
+          <div class="override-grid">
+            <label><input type="checkbox" [(ngModel)]="sharingPolicy.enabled" /><span>Share benefits</span></label>
+            <label><input type="checkbox" [(ngModel)]="sharingPolicy.acceptInbound" /><span>Accept inbound</span></label>
+            <label><input type="checkbox" [(ngModel)]="sharingPolicy.allowDiscounts" /><span>Discounts</span></label>
+            <label><input type="checkbox" [(ngModel)]="sharingPolicy.allowServiceCredits" /><span>Service credits</span></label>
+          </div>
+          <div class="form-grid">
+            <label>Sharing scope<select [(ngModel)]="sharingPolicy.scope"><option value="tenant">All locations</option><option value="region">Region</option><option value="zone">Zone</option><option value="cluster">Cluster</option></select></label>
+          </div>
+          <footer>
+            <button class="primary" type="button" [disabled]="sharingSaving" (click)="saveSharingPolicy()">{{ sharingSaving ? 'Saving…' : 'Save sharing' }}</button>
+            <span class="status">{{ sharingStatus }}</span>
+          </footer>
+        </ng-container>
+      </section>
+
+      <section class="setting-block">
+        <h3>Central service masters</h3>
+        <div class="franchise-table" *ngIf="franchiseMasters.length; else noFranchiseMasters">
+          <div class="franchise-table-head"><span>Service</span><span>Duration</span><span>Price</span><span>Linked branches</span></div>
+          <div class="franchise-table-row" *ngFor="let master of franchiseMasters">
+            <span><b>{{ master.name }}</b><small>{{ master.category || 'Uncategorized' }} · {{ master.active ? 'Active' : 'Inactive' }}</small></span>
+            <span>{{ master.durationMinutes }} min</span>
+            <span>{{ formatPaise(master.pricePaise) }}</span>
+            <span>{{ master.linkedBranchCount }}</span>
+          </div>
+        </div>
+        <ng-template #noFranchiseMasters><span class="resource-empty">No central service masters yet</span></ng-template>
+      </section>
+
+      <section class="setting-block">
+        <h3>Central product masters</h3>
+        <div class="franchise-table" *ngIf="franchiseProductMasters.length; else noFranchiseProducts">
+          <div class="franchise-table-head"><span>Product</span><span>SKU</span><span>Status</span><span>Linked branches</span></div>
+          <div class="franchise-table-row" *ngFor="let master of franchiseProductMasters">
+            <span><b>{{ master.name }}</b><small>{{ master.category || 'Uncategorized' }}</small></span>
+            <span>{{ master.sku || '—' }}</span>
+            <span>{{ master.active ? 'Active' : 'Inactive' }}</span>
+            <span>{{ master.linkedBranchCount }}</span>
+          </div>
+        </div>
+        <ng-template #noFranchiseProducts><span class="resource-empty">No central product masters yet</span></ng-template>
+      </section>
+
+      <section class="setting-block">
+        <h3>Branch royalties</h3>
+        <div class="franchise-table" *ngIf="branches.length; else noRoyaltyBranches">
+          <div class="franchise-table-head royalty-columns"><span>Branch</span><span>Royalty %</span><span>Minimum ₹</span><span>Hierarchy</span></div>
+          <div class="franchise-table-row royalty-columns" *ngFor="let branch of branches; trackBy: trackByBranchId">
+            <span><b>{{ branch.name }}</b><small>{{ branch.code }}</small></span>
+            <label><input type="number" min="0" max="100" step="0.01" [(ngModel)]="royaltyDrafts[branch.id].percent" aria-label="Royalty percent" /></label>
+            <label><input type="number" min="0" step="0.01" [(ngModel)]="royaltyDrafts[branch.id].minimumRupees" aria-label="Minimum royalty rupees" /></label>
+            <span>{{ branch.regionName || 'Unassigned' }}<small *ngIf="branch.zoneName">{{ branch.zoneName }}<ng-container *ngIf="branch.clusterName"> · {{ branch.clusterName }}</ng-container></small></span>
+          </div>
+        </div>
+        <ng-template #noRoyaltyBranches><span class="resource-empty">No branches yet</span></ng-template>
+      </section>
+
+      <section class="setting-block">
+        <div class="royalty-toolbar">
+          <h3>Royalty statements</h3>
+          <label>Period<input type="month" [(ngModel)]="royaltyPeriod" /></label>
+          <button type="button" [disabled]="franchiseSaving || !royaltyPeriod" (click)="generateRoyalties()">Generate</button>
+        </div>
+        <div class="franchise-table" *ngIf="royaltyStatements.length; else noRoyaltyStatements">
+          <div class="franchise-table-head statement-columns"><span>Branch</span><span>Period</span><span>Gross sales</span><span>Royalty</span><span>Status</span><span>Action</span></div>
+          <div class="franchise-table-row statement-columns" *ngFor="let statement of royaltyStatements">
+            <span><b>{{ statement.branchName }}</b></span>
+            <span>{{ statement.periodStart | date:'dd/MM/yyyy' }}</span>
+            <span>{{ formatPaise(statement.grossSalesPaise) }}</span>
+            <span><b>{{ formatPaise(statement.royaltyPaise) }}</b><small>{{ statement.royaltyBps / 100 }}%</small></span>
+            <span class="royalty-status" [class.is-paid]="statement.status === 'paid'">{{ franchiseLabel(statement.status) }}</span>
+            <span><button type="button" *ngIf="statement.status === 'posted'" [disabled]="franchiseSaving" (click)="payRoyalty(statement)">Mark paid</button><small *ngIf="statement.status === 'paid'">Paid</small></span>
+          </div>
+        </div>
+        <ng-template #noRoyaltyStatements><span class="resource-empty">No royalty statements yet</span></ng-template>
+      </section>
+    </ng-container>
+  </section>
+
+  <section class="settings-panel role-settings-panel" *ngIf="activePanel === 'roles'" aria-label="Roles and permissions">
+    <header>
+      <h2>Roles & permissions</h2>
+      <div class="panel-actions">
+        <button type="button" (click)="newRole()">New role</button>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+
+    <div class="role-layout">
+      <nav class="role-list" aria-label="Authentication roles">
+        <button
+          type="button"
+          *ngFor="let role of roles; trackBy: trackByRoleId"
+          [class.is-active]="selectedRoleId === role.id"
+          (click)="selectRole(role)"
+        >
+          <b>{{ role.name }}</b>
+          <small *ngIf="role.isSystem">System</small>
+        </button>
+        <span *ngIf="rolesLoading">Loading…</span>
+        <span *ngIf="!rolesLoading && !roles.length">No roles yet</span>
+      </nav>
+
+      <section class="setting-block role-editor">
+        <label>
+          Role name
+          <input
+            [disabled]="!!selectedRole?.isSystem"
+            [ngModel]="roleName"
+            (ngModelChange)="roleName = titleCase($event)"
+            placeholder="Role name"
+          />
+        </label>
+
+        <div class="permission-toolbar">
+          <input type="search" placeholder="Search permissions" aria-label="Search permissions" [(ngModel)]="permissionSearch" />
+          <span>{{ rolePermissions.length }} selected</span>
+        </div>
+
+        <div class="permission-list">
+          <section class="permission-group" *ngFor="let group of permissionGroups; trackBy: trackByPermissionGroup">
+            <h4>{{ group.name }}</h4>
+            <div class="permission-option" *ngFor="let permission of group.permissions; trackBy: trackByPermissionCode">
+              <span><b>{{ permission.label }}</b><small>{{ permission.code }}</small></span>
+              <div class="permission-decisions">
+                <label><input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasRolePermission(permission.code)" (change)="toggleRolePermission(permission.code)" />Allow</label>
+                <label><input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasDeniedPermission(permission.code)" (change)="toggleDeniedPermission(permission.code)" />Deny</label>
+              </div>
+            </div>
+          </section>
+          <span *ngIf="!permissionGroups.length">No permissions found</span>
+        </div>
+
+        <section class="role-policy-block" *ngIf="maskOptions.length">
+          <h4>Field masking</h4>
+          <div class="mask-options">
+            <label *ngFor="let mask of maskOptions">
+              <input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasRoleMask(mask.code)" (change)="toggleRoleMask(mask.code)" />
+              <span><b>{{ mask.label }}</b><small>{{ mask.code }}</small></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="role-policy-block">
+          <h4>Financial limits</h4>
+          <div class="role-limit-grid">
+            <label><span>Discount limit</span><input type="number" min="0" step="0.01" [disabled]="!!selectedRole?.isSystem" [(ngModel)]="roleMaxDiscount" placeholder="Unlimited" /></label>
+            <label><span>Refund limit</span><input type="number" min="0" step="0.01" [disabled]="!!selectedRole?.isSystem" [(ngModel)]="roleMaxRefund" placeholder="Unlimited" /></label>
+            <label><span>Cash movement limit</span><input type="number" min="0" step="0.01" [disabled]="!!selectedRole?.isSystem" [(ngModel)]="roleMaxCashMovement" placeholder="Unlimited" /></label>
+          </div>
+        </section>
+
+        <footer>
+          <button
+            *ngIf="!selectedRole?.isSystem"
+            class="primary"
+            type="button"
+            [disabled]="rolesSaving || rolesLoading || !roleName.trim() || !rolePermissions.length"
+            (click)="saveRole()"
+          >{{ rolesSaving ? 'Saving…' : 'Save role' }}</button>
+          <span class="status" [class.error]="!!roleError">{{ roleStatus || roleError }}</span>
+        </footer>
+      </section>
+    </div>
+  </section>
+
+  <section class="settings-panel appointment-settings-panel" *ngIf="activePanel === 'services'" aria-label="Service settings">
+    <header>
+      <h2>Service settings</h2>
+      <div class="panel-actions">
+        <a routerLink="/services">Open services</a>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+
+    <section class="setting-block">
+      <h3>Defaults</h3>
+      <div class="form-grid">
+        <label>Duration minutes<input type="number" min="5" max="480" [(ngModel)]="serviceSettings.pricingDuration.defaultDurationMinutes" /></label>
+        <label>GST %<input type="number" min="0" max="100" [(ngModel)]="serviceSettings.defaults.defaultGstRate" /></label>
+        <label>Status<select [(ngModel)]="serviceSettings.defaults.defaultStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+      </div>
+    </section>
+
+    <section class="setting-block">
+      <h3>Rules</h3>
+      <div class="toggle-grid">
+        <label class="toggle-card"><b>Add-ons enabled</b><input type="checkbox" [(ngModel)]="serviceSettings.serviceCatalog.serviceAddonsEnabled" /></label>
+        <label class="toggle-card"><b>Staff assignment required</b><input type="checkbox" [(ngModel)]="serviceSettings.staffAssignment.staffAssignmentRequired" /></label>
+        <label class="toggle-card"><b>Allow multiple staff</b><input type="checkbox" [(ngModel)]="serviceSettings.staffAssignment.allowMultiStaff" /></label>
+        <label class="toggle-card"><b>Recipe required</b><input type="checkbox" [(ngModel)]="serviceSettings.recipeInventory.requireRecipeForService" /></label>
+        <label class="toggle-card"><b>Category required</b><input type="checkbox" [(ngModel)]="serviceSettings.serviceMasterRules.categoryRequired" /></label>
+        <label class="toggle-card"><b>Duration required</b><input type="checkbox" [(ngModel)]="serviceSettings.serviceMasterRules.durationRequired" /></label>
+        <label class="toggle-card"><b>Block duplicate names</b><input type="checkbox" [(ngModel)]="serviceSettings.serviceMasterRules.duplicateServiceNameBlock" /></label>
+        <label class="toggle-card"><b>Price greater than zero</b><input type="checkbox" [(ngModel)]="serviceSettings.pricingRules.minimumPriceRule" /></label>
+      </div>
+    </section>
+
+    <footer>
+      <button class="primary" type="button" [disabled]="serviceSettingsLoading || serviceSettingsSaving" (click)="saveServiceSettings()">{{ serviceSettingsSaving ? 'Saving…' : 'Save' }}</button>
+      <span class="status" [class.error]="!!serviceSettingsError">{{ serviceSettingsStatus || serviceSettingsError }}</span>
+    </footer>
   </section>
 
   <section class="settings-panel appointment-settings-panel" *ngIf="activePanel === 'appointments'" aria-label="Appointment settings">

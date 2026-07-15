@@ -1,0 +1,169 @@
+<section class="cash-page">
+  <header class="command-strip">
+    <div><span>POS CONTROL</span><h1>Cash drawer &amp; day close</h1></div>
+    <div class="command-actions">
+      <label><span>Business date</span><input type="text" [(ngModel)]="businessDate" placeholder="DD/MM/YYYY" inputmode="numeric" /></label>
+      <button type="button" (click)="load()" [disabled]="loading || busy">Refresh</button>
+      <a routerLink="/pos/enterprise">Enterprise</a>
+      <a routerLink="/pos">Checkout</a>
+    </div>
+  </header>
+
+  <p class="success" *ngIf="message">{{ message }}</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+  <p class="state" *ngIf="loading">Loading...</p>
+
+  <main class="workspace" *ngIf="!loading">
+    <section class="card">
+      <header><div><span>DRAWER</span><h2>{{ session ? session.status.replace('_', ' ') : 'Not opened' }}</h2></div><strong>{{ businessDate }}</strong></header>
+
+      <form *ngIf="!session" (ngSubmit)="openDrawer()">
+        <label><span>Opening cash</span><input type="number" min="0" step="0.01" [(ngModel)]="openingCash" name="openingCash" placeholder="Amount" /></label>
+        <label class="wide"><span>Notes</span><textarea [(ngModel)]="openingNotes" name="openingNotes" rows="2"></textarea></label>
+        <button class="primary" type="submit" [disabled]="busy">Open drawer</button>
+      </form>
+
+      <ng-container *ngIf="session as drawer">
+        <dl class="summary">
+          <div><dt>Opening cash</dt><dd>{{ money(drawer.openingCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+          <div *ngIf="drawer.status !== 'open'"><dt>Expected cash</dt><dd>{{ drawer.expectedCashPaise == null ? 'Restricted' : (money(drawer.expectedCashPaise) | currency:'INR':'symbol':'1.0-2') }}</dd></div>
+          <div *ngIf="drawer.status !== 'open'"><dt>Counted cash</dt><dd>{{ money(drawer.countedCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+          <div *ngIf="drawer.status !== 'open'"><dt>Variance</dt><dd>{{ drawer.variancePaise == null ? 'Restricted' : (money(drawer.variancePaise) | currency:'INR':'symbol':'1.0-2') }}</dd></div>
+          <div *ngIf="drawer.handoverToStaffId"><dt>Handed over to</dt><dd>{{ staffName(drawer.handoverToStaffId) }}</dd></div>
+        </dl>
+
+        <section class="action-block" *ngIf="drawer.status === 'open'">
+          <h3>Cash movement</h3>
+          <form (ngSubmit)="recordMovement()">
+            <label><span>Type</span><select [(ngModel)]="movementType" name="movementType"><option value="cash_in">Cash in</option><option value="cash_out">Cash out</option><option value="refund_cash">Cash refund</option></select></label>
+            <label><span>Amount</span><input type="number" min="0.01" step="0.01" [(ngModel)]="movementAmount" name="movementAmount" placeholder="Amount" /></label>
+            <label *ngIf="movementType === 'refund_cash'"><span>Invoice reference</span><input type="text" [(ngModel)]="movementReference" name="movementReference" /></label>
+            <label class="wide"><span>Notes</span><textarea [(ngModel)]="movementNotes" name="movementNotes" rows="2"></textarea></label>
+            <label><span>MFA code</span><input type="password" [(ngModel)]="actionMfaCode" name="movementMfaCode" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
+            <button type="submit" [disabled]="busy">Record movement</button>
+          </form>
+          <div class="deposit-list" *ngIf="movements.length">
+            <article *ngFor="let row of movements"><div><strong>{{ row.movementType.replace('_',' ') }} · {{ money(row.amountPaise) | currency:'INR':'symbol':'1.0-2' }}</strong><span>{{ row.notes }}<ng-container *ngIf="row.referenceId"> · {{ row.referenceId }}</ng-container></span></div><span class="status">{{ row.reversesMovementId ? 'correction' : (row.reversedById ? 'reversed' : 'recorded') }}</span><div class="review-box" *ngIf="!row.reversesMovementId && !row.reversedById && row.movementType !== 'opening' && row.movementType !== 'sale_cash'"><input type="text" [(ngModel)]="movementCorrectionReasons[row.id]" [name]="'correction-' + row.id" placeholder="Correction reason" /><button type="button" (click)="reverseMovement(row)" [disabled]="busy">Reverse</button></div></article>
+          </div>
+        </section>
+
+        <section class="action-block" *ngIf="drawer.status === 'open'">
+          <h3>Shift handover</h3>
+          <form (ngSubmit)="recordHandover()">
+            <label><span>Handover to</span><select [(ngModel)]="handoverStaffId" name="handoverStaffId"><option value="" disabled>{{ staff.length ? 'Select staff' : 'No staff available' }}</option><option *ngFor="let item of staff" [value]="item.id">{{ staffName(item.id) }}</option></select></label>
+            <label class="wide"><span>Handover notes</span><textarea [(ngModel)]="handoverNotes" name="handoverNotes" rows="2"></textarea></label>
+            <button type="submit" [disabled]="busy || !staff.length">Record handover</button>
+          </form>
+        </section>
+
+        <section class="action-block" *ngIf="drawer.status === 'open'">
+          <h3>Cash tills</h3>
+          <form (ngSubmit)="createTill()">
+            <label><span>Till code</span><input type="text" [(ngModel)]="tillCode" name="tillCode" /></label>
+            <label><span>Till name</span><input type="text" [(ngModel)]="tillName" name="tillName" /></label>
+            <label><span>Opening cash</span><input type="number" min="0" step="0.01" [(ngModel)]="tillOpening" name="tillOpening" placeholder="Amount" /></label>
+            <label><span>Notes</span><input type="text" [(ngModel)]="tillNotes" name="tillNotes" /></label>
+            <button type="submit" [disabled]="busy">Open till</button>
+          </form>
+          <div class="till-list" *ngIf="tills.length; else noTills">
+            <article *ngFor="let till of tills">
+              <div><strong>{{ till.tillName }} · {{ till.tillCode }}</strong><span>Opening {{ money(till.openingCashPaise) | currency:'INR':'symbol':'1.0-2' }}<ng-container *ngIf="till.status !== 'open'"> · Expected {{ money(till.expectedCashPaise) | currency:'INR':'symbol':'1.0-2' }} · Counted {{ money(till.countedCashPaise) | currency:'INR':'symbol':'1.0-2' }} · Variance {{ money(till.variancePaise) | currency:'INR':'symbol':'1.0-2' }}</ng-container></span></div>
+              <strong class="status">{{ till.status.replace('_', ' ') }}</strong>
+              <div class="review-box" *ngIf="till.status === 'open'"><input type="number" min="0" step="0.01" [(ngModel)]="tillCounts[till.id]" [name]="'till-count-' + till.id" placeholder="Counted cash" /><button type="button" (click)="closeTill(till)" [disabled]="busy">Close</button></div>
+              <button type="button" *ngIf="till.status === 'pending_approval'" (click)="approveTill(till)" [disabled]="busy">Approve</button>
+            </article>
+          </div>
+          <ng-template #noTills><p class="empty">No tills yet</p></ng-template>
+        </section>
+
+        <section class="action-block" *ngIf="drawer.status === 'open'">
+          <h3>Blind close</h3>
+          <form (ngSubmit)="closeDrawer()">
+            <div class="denomination-grid wide" *ngIf="!tills.length">
+              <label *ngFor="let item of denominations"><span>{{ item.label }}</span><input type="number" min="0" step="1" [(ngModel)]="item.count" [name]="'denomination' + item.paise" placeholder="Count" /></label>
+              <label><span>Loose / other</span><input type="number" min="0" step="0.01" [(ngModel)]="looseCash" name="looseCash" placeholder="Amount" /></label>
+            </div>
+            <div class="count-total wide" *ngIf="!tills.length"><span>Counted total</span><strong>{{ money(denominationTotalPaise()) | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+            <div class="count-total wide" *ngIf="tills.length"><span>Till close status</span><strong>{{ tills.length }} tills</strong></div>
+            <label class="wide"><span>Close notes</span><textarea [(ngModel)]="closeNotes" name="closeNotes" rows="2"></textarea></label>
+            <button class="primary" type="submit" [disabled]="busy">Submit day close</button>
+          </form>
+        </section>
+
+        <section class="action-block" *ngIf="drawer.status === 'pending_approval'">
+          <h3>Variance approval</h3>
+          <form (ngSubmit)="approveVariance()">
+            <label class="wide"><span>Manager approval note</span><textarea [(ngModel)]="approvalNote" name="approvalNote" rows="2"></textarea></label>
+            <button class="primary" type="submit" [disabled]="busy">Approve and close</button>
+          </form>
+        </section>
+
+        <section class="action-block" *ngIf="drawer.status === 'closed'">
+          <h3>Bank deposit</h3>
+          <form (ngSubmit)="editingDepositId ? amendDeposit() : createDeposit()">
+            <label><span>Amount</span><input type="number" min="0.01" step="0.01" [(ngModel)]="depositAmount" name="depositAmount" placeholder="Amount" /></label>
+            <label><span>Bank</span><input type="text" [(ngModel)]="depositBank" name="depositBank" /></label>
+            <label><span>Reference</span><input type="text" [(ngModel)]="depositReference" name="depositReference" /></label>
+            <label><span>Notes</span><input type="text" [(ngModel)]="depositNotes" name="depositNotes" /></label>
+            <label *ngIf="editingDepositId"><span>Amendment note</span><input type="text" [(ngModel)]="depositAmendmentNote" name="depositAmendmentNote" /></label>
+            <label><span>MFA code</span><input type="password" [(ngModel)]="actionMfaCode" name="depositMfaCode" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
+            <button class="primary" type="submit" [disabled]="busy">{{ editingDepositId ? 'Save amendment' : 'Record deposit' }}</button>
+          </form>
+          <div class="deposit-list" *ngIf="deposits.length; else noDeposits">
+            <article *ngFor="let deposit of deposits">
+              <div><strong>{{ money(deposit.amountPaise) | currency:'INR':'symbol':'1.0-2' }}</strong><span>{{ deposit.bankName }} · {{ deposit.reference }}</span></div>
+              <span class="status">{{ deposit.status }}</span>
+              <div class="row-actions" *ngIf="deposit.status === 'pending'"><button type="button" (click)="editDeposit(deposit)" [disabled]="busy">Amend</button><button type="button" (click)="reviewDeposit(deposit, 'confirm')" [disabled]="busy">Confirm</button><button type="button" (click)="reviewDeposit(deposit, 'cancel')" [disabled]="busy">Cancel</button></div>
+            </article>
+          </div>
+          <ng-template #noDeposits><p class="empty">No deposits yet</p></ng-template>
+        </section>
+
+        <section class="action-block" *ngIf="drawer.status === 'closed'">
+          <h3>Provider reconciliation</h3>
+          <form (ngSubmit)="createReconciliation()">
+            <label><span>Provider</span><input type="text" [(ngModel)]="reconciliationProvider" name="reconciliationProvider" /></label>
+            <label><span>Statement reference</span><input type="text" [(ngModel)]="reconciliationReference" name="reconciliationReference" /></label>
+            <label><span>Statement gross</span><input type="number" min="0" step="0.01" [(ngModel)]="reconciliationGross" name="reconciliationGross" placeholder="Amount" /></label>
+            <label><span>Provider fee</span><input type="number" min="0" step="0.01" [(ngModel)]="reconciliationFee" name="reconciliationFee" placeholder="Amount" /></label>
+            <label><span>Bank net</span><input type="number" min="0" step="0.01" [(ngModel)]="reconciliationBankNet" name="reconciliationBankNet" placeholder="Amount" /></label>
+            <label><span>Notes</span><input type="text" [(ngModel)]="reconciliationNotes" name="reconciliationNotes" /></label>
+            <button class="primary" type="submit" [disabled]="busy">Run reconciliation</button>
+          </form>
+          <label class="csv-import"><span>Import provider CSV</span><input type="file" accept=".csv,text/csv" (change)="importReconciliationCsv($event)" [disabled]="busy || reconciliationImporting" /></label>
+          <div class="reconciliation-list" *ngIf="reconciliations.length; else noReconciliations">
+            <article *ngFor="let row of reconciliations">
+              <div><strong>{{ row.provider }} · {{ row.statementReference }}</strong><span>System {{ money(row.systemGrossPaise) | currency:'INR':'symbol':'1.0-2' }} · Statement {{ money(row.statementGrossPaise) | currency:'INR':'symbol':'1.0-2' }} · Bank {{ money(row.bankNetPaise) | currency:'INR':'symbol':'1.0-2' }}</span><span>Gross difference {{ money(row.grossDifferencePaise) | currency:'INR':'symbol':'1.0-2' }} · Net difference {{ money(row.netDifferencePaise) | currency:'INR':'symbol':'1.0-2' }}</span></div>
+              <strong class="status">{{ row.status.replace('_', ' ') }}</strong>
+              <div class="review-box" *ngIf="row.status === 'review_required'"><input type="text" [(ngModel)]="reconciliationReviewNotes[row.id]" [name]="'review-' + row.id" placeholder="Review note" /><button type="button" (click)="reviewReconciliation(row)" [disabled]="busy">Review</button></div>
+            </article>
+          </div>
+          <ng-template #noReconciliations><p class="empty">No reconciliation runs yet</p></ng-template>
+        </section>
+      </ng-container>
+    </section>
+
+    <aside class="card report" *ngIf="report">
+      <header><div><span>RECONCILIATION</span><h2>Daily closing report</h2></div></header>
+      <dl class="report-list">
+        <div><dt>Opening cash</dt><dd>{{ money(report.openingCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Cash sales</dt><dd>{{ money(report.cashSalesPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Cash in</dt><dd>{{ money(report.cashInPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Cash out</dt><dd>{{ money(report.cashOutPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Cash refunds</dt><dd>{{ money(report.cashRefundsPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <ng-container *ngIf="session?.status !== 'open'">
+          <div><dt>Expected cash</dt><dd>{{ money(report.expectedCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+          <div><dt>Counted cash</dt><dd>{{ money(report.countedCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+          <div><dt>Variance</dt><dd>{{ money(report.variancePaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        </ng-container>
+        <div><dt>Bank deposited</dt><dd>{{ money(report.bankDepositPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Pending deposit</dt><dd>{{ money(report.pendingDepositPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+        <div><dt>Reconciliation exceptions</dt><dd>{{ report.reconciliationExceptions }}</dd></div>
+      </dl>
+      <section class="payment-summary" *ngIf="report.paymentModes?.length">
+        <h3>Payment modes</h3>
+        <div *ngFor="let mode of report.paymentModes"><span>{{ mode.method.replace('_', ' ') }} · {{ mode.paymentCount }}</span><strong>{{ money(mode.amountPaise) | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+      </section>
+    </aside>
+  </main>
+</section>

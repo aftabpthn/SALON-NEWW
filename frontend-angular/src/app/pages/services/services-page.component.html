@@ -54,7 +54,10 @@
             <th>Cleanup time</th>
             <th>Buffer time</th>
             <th>GST %</th>
+            <th>Staff</th>
+            <th>Pricing</th>
             <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -67,7 +70,10 @@
             <td>{{ service.cleanupTimeMinutes }}</td>
             <td>{{ service.bufferTimeMinutes }}</td>
             <td>{{ service.gstPercent }}</td>
+            <td>{{ service.staffIds.length }}</td>
+            <td>{{ service.variants.length }} / {{ service.addons.length }} / {{ service.priceRules.length }}</td>
             <td><span class="status-pill">{{ service.status }}</span></td>
+            <td><button type="button" (click)="openEditService(service)">Edit</button></td>
           </tr>
         </tbody>
       </table>
@@ -76,10 +82,10 @@
     </div>
   </section>
 
-  <aside class="service-flyout" *ngIf="addServiceOpen" aria-label="Add service">
+  <aside class="service-flyout" *ngIf="addServiceOpen" [attr.aria-label]="serviceForm.id ? 'Edit service' : 'Add service'">
     <header>
-      <h2>Add service</h2>
-      <button class="icon-button" type="button" aria-label="Close add service" (click)="closeAddService()">×</button>
+      <h2>{{ serviceForm.id ? 'Edit service' : 'Add service' }}</h2>
+      <button class="icon-button" type="button" [attr.aria-label]="serviceForm.id ? 'Close edit service' : 'Close add service'" (click)="closeAddService()">×</button>
     </header>
 
     <form class="service-form" (ngSubmit)="saveService()">
@@ -103,6 +109,11 @@
           <input type="number" min="0" step="0.01" [(ngModel)]="serviceForm.gstPercent" name="gstPercent" />
         </label>
       </div>
+
+      <label>
+        SAC code
+        <input type="text" inputmode="numeric" maxlength="8" [(ngModel)]="serviceForm.sacCode" name="sacCode" />
+      </label>
 
       <div class="field-row">
         <label>
@@ -133,6 +144,74 @@
           <option value="inactive">Inactive</option>
         </select>
       </label>
+
+      <fieldset class="staff-assignment-card">
+        <legend>Assigned staff</legend>
+        <input type="search" placeholder="Search staff" aria-label="Search staff assignments" [(ngModel)]="staffSearch" name="staffSearch" />
+        <div class="staff-assignment-list">
+          <label class="staff-option" *ngFor="let staff of filteredStaffOptions; trackBy: trackByIndex">
+            <input type="checkbox" [checked]="isStaffAssigned(staff.id)" (change)="setStaffAssigned(staff.id, $any($event.target).checked)" />
+            <span><strong>{{ staff.name }}</strong><small>{{ staff.jobTitle || (staff.active ? 'Staff' : 'Inactive') }}</small></span>
+            <em *ngIf="!staff.active">Inactive</em>
+          </label>
+          <div class="compact-empty" *ngIf="filteredStaffOptions.length === 0">No matching staff</div>
+        </div>
+      </fieldset>
+
+      <fieldset class="pricing-card">
+        <legend>Variants</legend>
+        <div class="pricing-row variant-row" *ngFor="let row of serviceForm.variants; let index = index; trackBy: trackByIndex">
+          <input aria-label="Variant name" placeholder="Variant" [ngModel]="row.name" [name]="'variantName' + index" (ngModelChange)="row.name = titleCase($event)" />
+          <input type="number" step="0.01" aria-label="Variant price adjustment" placeholder="Price +/-" [(ngModel)]="row.priceDelta" [name]="'variantPrice' + index" />
+          <input type="number" step="1" aria-label="Variant duration adjustment" placeholder="Minutes +/-" [(ngModel)]="row.durationDelta" [name]="'variantDuration' + index" />
+          <label class="active-check"><input type="checkbox" [(ngModel)]="row.active" [name]="'variantActive' + index" />Active</label>
+          <button type="button" (click)="removeVariant(index)">Remove</button>
+        </div>
+        <div class="compact-empty" *ngIf="serviceForm.variants.length === 0">No variants yet</div>
+        <button type="button" (click)="addVariant()">Add variant</button>
+      </fieldset>
+
+      <fieldset class="pricing-card">
+        <legend>Add-ons</legend>
+        <div class="pricing-row addon-row" *ngFor="let row of serviceForm.addons; let index = index; trackBy: trackByIndex">
+          <input aria-label="Add-on name" placeholder="Add-on" [ngModel]="row.name" [name]="'addonName' + index" (ngModelChange)="row.name = titleCase($event)" />
+          <input type="number" min="0" step="0.01" aria-label="Add-on price" placeholder="Price" [(ngModel)]="row.price" [name]="'addonPrice' + index" />
+          <input type="number" min="0" step="1" aria-label="Add-on duration" placeholder="Minutes" [(ngModel)]="row.durationMinutes" [name]="'addonDuration' + index" />
+          <label class="active-check"><input type="checkbox" [(ngModel)]="row.active" [name]="'addonActive' + index" />Active</label>
+          <button type="button" (click)="removeAddon(index)">Remove</button>
+        </div>
+        <div class="compact-empty" *ngIf="serviceForm.addons.length === 0">No add-ons yet</div>
+        <div class="compact-empty" *ngIf="!serviceAddonsEnabled">Add-ons disabled in settings</div>
+        <button type="button" [disabled]="!serviceAddonsEnabled" (click)="addAddon()">Add add-on</button>
+      </fieldset>
+
+      <fieldset class="pricing-card">
+        <legend>Staff pricing</legend>
+        <div class="pricing-row staff-price-row" *ngFor="let row of serviceForm.staffPrices; let index = index; trackBy: trackByIndex">
+          <select aria-label="Staff price staff" [(ngModel)]="row.staffId" [name]="'staffPriceStaff' + index"><option value="">Select staff</option><option *ngFor="let staff of staffOptions; trackBy: trackByIndex" [value]="staff.id">{{ staff.name }}</option></select>
+          <input type="number" min="0" step="0.01" aria-label="Staff service price" placeholder="Price" [(ngModel)]="row.price" [name]="'staffPrice' + index" />
+          <label class="active-check"><input type="checkbox" [(ngModel)]="row.active" [name]="'staffPriceActive' + index" />Active</label>
+          <button type="button" (click)="removeStaffPrice(index)">Remove</button>
+        </div>
+        <div class="compact-empty" *ngIf="serviceForm.staffPrices.length === 0">No staff prices yet</div>
+        <button type="button" (click)="addStaffPrice()">Add staff price</button>
+      </fieldset>
+
+      <fieldset class="pricing-card">
+        <legend>Schedule pricing</legend>
+        <div class="pricing-row rule-row" *ngFor="let row of serviceForm.priceRules; let index = index; trackBy: trackByIndex">
+          <input aria-label="Price rule name" placeholder="Rule" [ngModel]="row.name" [name]="'ruleName' + index" (ngModelChange)="row.name = titleCase($event)" />
+          <input aria-label="Price rule days" placeholder="Days 0-6" [(ngModel)]="row.daysOfWeek" [name]="'ruleDays' + index" />
+          <input type="time" aria-label="Price rule start" [(ngModel)]="row.startTime" [name]="'ruleStart' + index" />
+          <input type="time" aria-label="Price rule end" [(ngModel)]="row.endTime" [name]="'ruleEnd' + index" />
+          <input type="number" min="-50" max="100" step="0.01" aria-label="Price adjustment percentage" placeholder="Adjustment %" [(ngModel)]="row.adjustmentPercent" [name]="'ruleAdjustment' + index" />
+          <input type="number" min="0" max="1000" step="1" aria-label="Price rule priority" placeholder="Priority" [(ngModel)]="row.priority" [name]="'rulePriority' + index" />
+          <label class="active-check"><input type="checkbox" [(ngModel)]="row.active" [name]="'ruleActive' + index" />Active</label>
+          <button type="button" (click)="removePriceRule(index)">Remove</button>
+        </div>
+        <div class="compact-empty" *ngIf="serviceForm.priceRules.length === 0">No schedule pricing yet</div>
+        <button type="button" (click)="addPriceRule()">Add schedule rule</button>
+      </fieldset>
 
       <button class="consumption-toggle" type="button" (click)="openProductConsumption()">Product consumption (optional)</button>
 
@@ -176,7 +255,7 @@
     <footer>
       <button type="button" (click)="closeAddService()">Cancel</button>
       <button class="primary" type="button" [disabled]="savingService" (click)="saveService()">
-        {{ savingService ? 'Saving...' : 'Save service' }}
+        {{ savingService ? 'Saving...' : (serviceForm.id ? 'Save changes' : 'Save service') }}
       </button>
     </footer>
   </aside>

@@ -13,6 +13,7 @@ use crate::{
     services::{
         invoice_pdf,
         membership_service::{self, MembershipPlanInput},
+        razorpay_payment_service,
     },
     state::AppState,
 };
@@ -101,7 +102,7 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/membership-enterprise/rewards/ledger",
-            axum::routing::get(rewards_ledger),
+            axum::routing::get(rewards_ledger).post(adjust_reward_ledger),
         )
         .route(
             "/membership-enterprise/rewards/roi",
@@ -134,10 +135,6 @@ pub fn router() -> Router<AppState> {
         .route(
             "/membership-enterprise/client/:client_id/self-service/status-link",
             axum::routing::post(create_status_link),
-        )
-        .route(
-            "/membership-enterprise/self-service/public/:token",
-            axum::routing::get(public_status),
         )
         .route(
             "/membership-enterprise/sell",
@@ -190,6 +187,26 @@ pub fn router() -> Router<AppState> {
         .route(
             "/membership-enterprise/active/:id/auto-renew/retry",
             axum::routing::post(retry_auto_renew),
+        )
+        .route(
+            "/membership-enterprise/auto-renew/process-due",
+            axum::routing::post(process_due_auto_renewals),
+        )
+}
+
+pub fn public_router() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/membership-enterprise/self-service/public/:token",
+            axum::routing::get(public_status),
+        )
+        .route(
+            "/membership-enterprise/self-service/public/:token/renew",
+            axum::routing::post(public_renew_request),
+        )
+        .route(
+            "/membership-enterprise/self-service/public/:token/request",
+            axum::routing::post(public_self_service_request),
         )
 }
 
@@ -249,6 +266,15 @@ struct ListQuery {
     limit: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RewardAdjustmentRequest {
+    client_id: String,
+    points: i32,
+    note: String,
+    idempotency_key: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GenerateRemindersRequest {
@@ -301,6 +327,19 @@ struct SelfServiceRequest {
     request_type: String,
     target_membership_id: Option<String>,
     reason: Option<String>,
+    credit_delta: Option<i32>,
+    service_id: Option<String>,
+    payment_reference: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicSelfServiceRequest {
+    request_type: String,
+    reason: Option<String>,
+    credit_delta: Option<i32>,
+    service_id: Option<String>,
+    payment_reference: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -676,6 +715,27 @@ async fn rewards_ledger(
     )))
 }
 
+async fn adjust_reward_ledger(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<RewardAdjustmentRequest>,
+) -> ApiResult<membership_service::RewardAdjustmentResult> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::adjust_reward_balance(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &payload.client_id,
+            payload.points,
+            &payload.note,
+            &payload.idempotency_key,
+            &actor(&headers),
+        )
+        .await?,
+    )))
+}
+
 async fn rewards_roi(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
@@ -879,9 +939,37 @@ async fn create_status_link(
 async fn public_status(
     State(state): State<AppState>,
     Path(token): Path<String>,
-) -> ApiResult<crate::repositories::membership_advanced_repository::PublicMembershipStatusRecord> {
+) -> ApiResult<Value> {
     Ok(Json(ApiResponse::ok(
         membership_service::public_status(&state.db, &token).await?,
+    )))
+}
+
+async fn public_self_service_request(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    Json(payload): Json<PublicSelfServiceRequest>,
+) -> ApiResult<crate::repositories::membership_lifecycle_repository::SelfServiceRequestRecord> {
+    Ok(Json(ApiResponse::ok(
+        membership_service::public_self_service_request(
+            &state.db,
+            &token,
+            &payload.request_type,
+            payload.reason.as_deref().unwrap_or(""),
+            payload.credit_delta.unwrap_or(0),
+            payload.service_id.as_deref().unwrap_or(""),
+            payload.payment_reference.as_deref().unwrap_or(""),
+        )
+        .await?,
+    )))
+}
+
+async fn public_renew_request(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> ApiResult<crate::repositories::membership_lifecycle_repository::SelfServiceRequestRecord> {
+    Ok(Json(ApiResponse::ok(
+        membership_service::public_renew_request(&state.db, &token).await?,
     )))
 }
 
@@ -1053,6 +1141,9 @@ async fn create_self_service_request(
             &payload.request_type,
             payload.target_membership_id.as_deref(),
             payload.reason.as_deref().unwrap_or(""),
+            payload.credit_delta.unwrap_or(0),
+            payload.service_id.as_deref().unwrap_or(""),
+            payload.payment_reference.as_deref().unwrap_or(""),
         )
         .await?,
     )))
@@ -1065,6 +1156,25 @@ async fn resolve_self_service_request(
     Json(payload): Json<ResolveSelfServiceRequest>,
 ) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if payload.status == "approved" {
+        let request = membership_service::self_service_requests(&state.db, &tenant_id, &branch_id)
+            .await?
+            .into_iter()
+            .find(|request| request.id == id && request.status == "pending")
+            .ok_or_else(|| AppError::not_found("pending self-service request was not found"))?;
+        if request.request_type == "payment_method_update" {
+            let remote = razorpay_payment_service::fetch_subscription(
+                &state.settings,
+                &request.payment_reference,
+            )
+            .await?;
+            if remote.status != "active" {
+                return Err(AppError::validation(
+                    "Razorpay subscription must be active before enabling auto-renew",
+                ));
+            }
+        }
+    }
     if !membership_service::resolve_self_service_request(
         &state.db,
         &tenant_id,
@@ -1101,6 +1211,35 @@ async fn update_auto_renew_status(
     Json(payload): Json<AutoRenewStatusRequest>,
 ) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if payload.status == "active" {
+        let payment_reference = sqlx::query_scalar::<_, String>(
+            "SELECT auto_renew_payment_reference FROM client_memberships WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(&id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to load auto-renew mandate"))?
+        .ok_or_else(|| AppError::not_found("active membership was not found"))?;
+        let remote =
+            razorpay_payment_service::fetch_subscription(&state.settings, &payment_reference)
+                .await?;
+        if remote.status != "active" {
+            return Err(AppError::validation(
+                "Razorpay subscription must be active before enabling auto-renew",
+            ));
+        }
+        crate::repositories::membership_lifecycle_repository::register_verified_payment_mandate(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &id,
+            &payment_reference,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to register verified payment mandate"))?;
+    }
     if !membership_service::set_auto_renew_status(
         &state.db,
         &tenant_id,
@@ -1127,6 +1266,16 @@ async fn retry_auto_renew(
         membership_service::retry_auto_renew(&state.db, &tenant_id, &branch_id, &id).await?;
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"attempt":attempt,"checkout":checkout_intent_response(intent)}),
+    )))
+}
+
+async fn process_due_auto_renewals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::process_due_auto_renewals(&state.db, &tenant_id, &branch_id).await?,
     )))
 }
 

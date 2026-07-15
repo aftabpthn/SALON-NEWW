@@ -1,184 +1,474 @@
-<section class="guest-workspace">
-  <header class="workspace-bar">
-    <div>
-      <span class="eyebrow">Guest Command</span>
-      <h2>{{ mode === 'list' ? 'Manage guests' : mode === 'create' ? 'Add Guest' : 'Edit Guest' }}</h2>
-    </div>
+<section class="client-lifecycle-page">
+  <header class="client-command-bar">
+    <h1>Clients</h1>
 
-    <div class="bar-actions" *ngIf="mode === 'list'">
-      <input type="search" placeholder="Search guests" aria-label="Search guests" />
-      <button class="primary" type="button" (click)="showCreate()">Add new</button>
-    </div>
+    <div class="client-search">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <input type="search" aria-label="Search clients" placeholder="Search clients" [ngModel]="searchTerm" (ngModelChange)="onSearchTerm($event)" (focus)="searchOpen = true" (keydown.escape)="searchOpen = false" />
+      <button *ngIf="selectedClient" class="search-clear" type="button" aria-label="Clear selected client" (click)="clearSelection()"><i class="bi bi-x"></i></button>
 
-    <div class="bar-actions" *ngIf="mode !== 'list'">
-      <button class="primary" type="button" (click)="mode === 'create' ? saveClient() : showCreate()" [disabled]="savingClient">
-        {{ mode === 'create' ? (savingClient ? 'Saving...' : 'Save') : 'New' }}
-      </button>
-      <button type="button">More</button>
-    </div>
-  </header>
-
-  <section class="guest-list" *ngIf="mode === 'list'">
-    <div class="guest-table-head">
-      <span>Code</span>
-      <span>First name</span>
-      <span>Last name</span>
-      <span>Phone no.</span>
-      <span>Last visit</span>
-      <span>Membership</span>
-      <span>Categories</span>
-      <span>Center</span>
-    </div>
-
-    <div class="guest-table-row" *ngFor="let client of clientRows; trackBy: trackByIndex">
-      <span>{{ client.code }}</span>
-      <button class="name-link" type="button" (click)="openGuest(client)">{{ client.firstName }}</button>
-      <span>{{ client.lastName }}</span>
-      <span>{{ client.phone }}</span>
-      <span>{{ client.lastVisit }}</span>
-      <span>{{ client.membership }}</span>
-      <span>{{ client.categories }}</span>
-      <span>{{ client.center }}</span>
-    </div>
-
-    <div class="empty-block" *ngIf="clientRows.length === 0">
-      No records yet
-    </div>
-  </section>
-
-  <section class="create-panel" *ngIf="mode === 'create'">
-    <div class="panel-toolbar">
-      <strong>Add guest information</strong>
-      <button type="button" (click)="showList()">Back to search</button>
-    </div>
-
-    <form class="create-form" (ngSubmit)="saveClient()">
-      <label>Code<input type="text" [(ngModel)]="createGuest.code" name="code" /></label>
-      <label>First name<input type="text" [ngModel]="createGuest.firstName" name="firstName" (ngModelChange)="createGuest.firstName = titleCase($event)" /></label>
-      <label>Last name<input type="text" [ngModel]="createGuest.lastName" name="lastName" (ngModelChange)="createGuest.lastName = titleCase($event)" /></label>
-      <label>Phone no.<input type="tel" [(ngModel)]="createGuest.phone" name="phone" /></label>
-      <label>Last visit<input type="date" [(ngModel)]="createGuest.lastVisit" name="lastVisit" /></label>
-      <label>Categories<input type="text" [ngModel]="createGuest.categories" name="categories" (ngModelChange)="createGuest.categories = titleCase($event)" /></label>
-      <label>Center<input type="text" [(ngModel)]="createGuest.center" name="center" /></label>
-      <p class="form-error" *ngIf="clientError">{{ clientError }}</p>
-    </form>
-  </section>
-
-  <nav class="guest-tabs" aria-label="Guest tabs" *ngIf="mode === 'detail'">
-    <button
-      *ngFor="let tab of tabs; trackBy: trackByIndex"
-      [class.active]="activeTab === tab"
-      (click)="activeTab = tab"
-      type="button"
-    >
-      {{ tab }}
-    </button>
-
-    <details class="more-menu">
-      <summary [class.active]="moreItems.includes(activeTab)">More</summary>
-      <div class="more-list">
-        <button
-          *ngFor="let item of moreItems; trackBy: trackByIndex"
-          [class.active]="activeTab === item"
-          (click)="activeTab = item"
-          type="button"
-        >
-          {{ item }}
+      <div class="search-results" *ngIf="selectedClient && searchOpen && searchTerm.trim()">
+        <button type="button" *ngFor="let client of searchResults; trackBy: trackByClient" (click)="selectClient(client)">
+          <span class="result-avatar"><i class="bi bi-person"></i></span>
+          <span><strong>{{ client.name || 'Unnamed client' }}</strong><small>{{ client.phone || client.email || client.code || 'No contact saved' }}</small></span>
         </button>
+        <p *ngIf="loadingClients">Loading...</p>
+        <p class="search-error" *ngIf="!loadingClients && clientListError">{{ clientListError }}</p>
+        <p *ngIf="!loadingClients && !clientListError && searchResults.length === 0">No records yet</p>
+      </div>
+    </div>
+
+    <span></span>
+    <button class="primary-button" type="button" (click)="showCreate()"><i class="bi bi-plus-circle"></i>Add client</button>
+    <details class="more-actions">
+      <summary><i class="bi bi-three-dots"></i>More</summary>
+      <div>
+        <button type="button" [disabled]="!selectedClient" (click)="showEdit()"><i class="bi bi-pencil"></i>Edit client</button>
+        <button type="button" [disabled]="!selectedClient" (click)="blockSelectedClient()"><i class="bi bi-slash-circle"></i>{{ selectedClient?.active ? 'Block client' : 'Unblock client' }}</button>
+        <button type="button" [disabled]="!selectedClient" (click)="deleteSelectedClient()"><i class="bi bi-trash"></i>Delete client</button>
+        <button type="button" (click)="selectTab('Reports')"><i class="bi bi-bar-chart"></i>Client reports</button>
+        <button type="button" (click)="openGiftCardRegister()"><i class="bi bi-gift"></i>Gift card register</button>
+        <button type="button" (click)="exportClients()"><i class="bi bi-download"></i>Export clients</button>
+        <button type="button" (click)="bulkImportFile.click()"><i class="bi bi-upload"></i>Import clients</button>
+        <input #bulkImportFile type="file" accept="application/json,.json" hidden (change)="importClients($event)" />
+        <button type="button" (click)="refreshClients()"><i class="bi bi-arrow-clockwise"></i>Refresh</button>
       </div>
     </details>
-  </nav>
+  </header>
 
-  <section class="overview-grid" *ngIf="mode === 'detail' && activeTab === 'Overview'">
-    <aside class="guest-card">
-      <div class="avatar">{{ guest?.name ? guest?.name?.slice(0, 2) : '--' }}</div>
-      <strong>{{ guest?.name || 'No guest selected' }}</strong>
-      <span>{{ guest?.contact || '-' }}</span>
+  <section class="client-list-panel" *ngIf="!selectedClient">
+    <div class="client-list-table" role="table" aria-label="Clients">
+      <div class="client-list-head" role="row">
+        <span role="columnheader">Code</span>
+        <span role="columnheader">First name</span>
+        <span role="columnheader">Last name</span>
+        <span role="columnheader">Phone no.</span>
+        <span role="columnheader">Last visit</span>
+        <span role="columnheader">Membership</span>
+        <span role="columnheader">Categories</span>
+        <span role="columnheader">Center</span>
+      </div>
 
-      <div class="stat-grid">
-        <span>Points <b>{{ guest?.points ?? '-' }}</b></span>
-        <span>Total visits <b>{{ guest?.totalVisits ?? '-' }}</b></span>
-        <span>Open appointments <b>{{ guest?.openAppointments ?? '-' }}</b></span>
-        <span>Amount due <b>{{ money(guest?.unpaidPaise || 0) }}</b></span>
-        <span>Wallet <b>{{ money(guest?.walletPaise || 0) }}</b></span>
-        <span>Membership <b>{{ guest?.membershipName || '-' }}</b></span>
-        <span>Expiry <b>{{ formatDate(guest?.membershipExpiresAt) }}</b></span>
+      <button class="client-list-row" type="button" role="row" *ngFor="let client of clientRows; trackBy: trackByClient" (click)="selectClient(client)">
+        <span role="cell">{{ client.code || '—' }}</span>
+        <strong role="cell">{{ client.firstName || client.name || '—' }}</strong>
+        <span role="cell">{{ client.lastName || '—' }}</span>
+        <span role="cell">{{ client.phone || '—' }}</span>
+        <span role="cell">{{ formatDate(client.lastVisit) }}</span>
+        <span role="cell">{{ client.membership || '—' }}</span>
+        <span role="cell">{{ client.categories.join(', ') || '—' }}</span>
+        <span role="cell">{{ client.center || '—' }}</span>
+      </button>
+    </div>
+
+    <div class="client-list-state" *ngIf="loadingClients">Loading...</div>
+    <div class="client-list-state error" *ngIf="!loadingClients && clientListError">{{ clientListError }}</div>
+    <div class="client-list-state" *ngIf="!loadingClients && !clientListError && clientRows.length === 0">No records yet</div>
+  </section>
+
+  <ng-container *ngIf="selectedClient">
+  <section class="client-profile-strip">
+    <div class="profile-avatar"><i class="bi bi-person-fill" aria-hidden="true"></i></div>
+    <div class="profile-content">
+      <strong class="profile-name">{{ selectedClient.name || '—' }}</strong>
+      <div class="profile-facts">
+        <span><small>Phone</small><b>{{ selectedClient.phone || '—' }}</b></span>
+        <span><small>Email</small><b>{{ selectedClient.email || '—' }}</b></span>
+        <span><small>Date of birth</small><b>{{ formatDate(selectedClient.birthday) }}</b></span>
+        <span><small>Categories</small><b>{{ selectedClient.categories.join(', ') || '—' }}</b></span>
+        <span><small>Membership</small><b>{{ selectedClient.membership || '—' }}</b></span>
+        <span><small>Status</small><b>{{ selectedClient.active ? 'Active' : 'Blocked' }}</b></span>
+        <span><small>Client since</small><b>{{ formatDate(selectedClient.createdAt) }}</b></span>
+        <span><small>Last visit</small><b>{{ formatDate(selectedClient.lastVisit) }}</b></span>
+      </div>
+    </div>
+    <div class="profile-actions">
+      <button type="button" [disabled]="!selectedClient" (click)="bookAppointment()"><i class="bi bi-calendar2-week"></i>Book appointment</button>
+      <button type="button" [disabled]="!selectedClient" (click)="newSale()"><i class="bi bi-cart3"></i>New sale</button>
+      <button type="button" [disabled]="!selectedClient" (click)="showNote()"><i class="bi bi-journal-text"></i>Add note</button>
+      <button type="button" [disabled]="!selectedClient" (click)="messageClient()"><i class="bi bi-whatsapp"></i>Message</button>
+    </div>
+  </section>
+
+  <section class="duplicate-warning" *ngIf="selectedClient && duplicates.length">
+    <span><i class="bi bi-people"></i><strong>{{ duplicates.length }} possible duplicate{{ duplicates.length === 1 ? '' : 's' }}</strong><small>{{ selectedClient.normalizedPhone }}</small></span>
+    <button type="button" (click)="showMerge()">Review &amp; merge</button>
+  </section>
+
+  <section class="client-workspace-grid">
+    <aside class="filters-panel">
+      <header><strong>Filters</strong><button type="button" (click)="clearFilters()">Clear</button></header>
+      <label class="filter-title">Date range</label>
+      <div class="date-range">
+        <as-date-picker ariaLabel="Client activity from date" [(value)]="dateFrom"></as-date-picker>
+        <span>–</span>
+        <as-date-picker ariaLabel="Client activity to date" [(value)]="dateTo"></as-date-picker>
+      </div>
+      <span class="filter-title">Event types</span>
+      <div class="event-filters">
+        <label *ngFor="let filter of eventFilters">
+          <i class="bi {{ filter.icon }}" aria-hidden="true"></i>
+          <span>{{ filter.key }}</span>
+          <input type="checkbox" [checked]="selectedEventTypes.has(filter.key)" (change)="toggleEventType(filter.key)" />
+        </label>
       </div>
     </aside>
 
-    <main class="overview-main">
-      <section class="entitlement-panel">
-        <header>
-          <strong>Packages</strong>
-        </header>
-        <div class="entitlement-list" *ngIf="packages.length"><div *ngFor="let credit of packages"><strong>{{ credit.packageName }}</strong><span>{{ credit.serviceName }}</span><span>{{ credit.pendingQty }} / {{ credit.totalQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div></div>
-        <div class="empty-block" *ngIf="!entitlementLoading && packages.length === 0">No active packages</div>
+    <main class="activity-panel">
+      <nav class="workspace-tabs" aria-label="Client workspace">
+        <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab === tab" (click)="selectTab(tab)">{{ tab }}</button>
+      </nav>
+      <p class="workspace-error" *ngIf="workspaceError">{{ workspaceError }}</p>
+
+      <section class="timeline-view" *ngIf="activeTab === 'Timeline'">
+        <div class="timeline-skeleton" *ngIf="loadingWorkspace" aria-label="Loading activity">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="timeline-list" *ngIf="!loadingWorkspace && visibleTimeline.length">
+          <article *ngFor="let event of visibleTimeline; trackBy: trackByEvent" [class.timeline-grouped]="event.grouped">
+            <span class="event-icon"><i class="bi {{ event.icon }}"></i></span>
+            <div>
+              <strong>{{ event.title }}</strong>
+              <p *ngIf="event.detail">{{ event.detail }}</p>
+              <small>{{ formatDateTime(event.occurredAt) }} · {{ event.type }}</small>
+              <div class="timeline-steps" *ngIf="event.steps?.length">
+                <span *ngFor="let step of event.steps">
+                  <i class="bi {{ step.icon }}"></i>
+                  <b>{{ step.label }}</b>
+                  <small>{{ formatDateTime(step.occurredAt) }}</small>
+                </span>
+              </div>
+              <div class="timeline-money" *ngIf="event.tipPaise || event.balancePaise">
+                <span *ngIf="event.tipPaise">Tip <b>{{ money(event.tipPaise) }}</b></span>
+                <span class="due" *ngIf="event.balancePaise">Unpaid <b>{{ money(event.balancePaise) }}</b></span>
+              </div>
+              <div class="timeline-linked" *ngIf="event.children?.length">
+                <span *ngFor="let child of event.children">{{ child.title }}<b *ngIf="child.amountPaise !== undefined">{{ money(child.amountPaise) }}</b></span>
+              </div>
+            </div>
+            <div class="event-value"><b *ngIf="event.amountPaise !== undefined">{{ money(event.amountPaise) }}</b><span *ngIf="event.status">{{ event.status }}</span></div>
+          </article>
+          <button type="button" class="timeline-load-more" *ngIf="timelineNextCursor" [disabled]="loadingMoreTimeline" (click)="loadMoreTimeline()">
+            {{ loadingMoreTimeline ? 'Loading...' : 'Load more' }}
+          </button>
+        </div>
+        <div class="timeline-empty" *ngIf="!loadingWorkspace && visibleTimeline.length === 0">
+          <span><i class="bi bi-calendar2-week"></i></span>
+          <strong>No activity yet</strong>
+          <small>—</small>
+        </div>
       </section>
 
-      <section class="entitlement-panel">
-        <header>
-          <strong>Services available</strong>
-        </header>
-        <div class="entitlement-list" *ngIf="membershipCredits.length || packages.length"><div *ngFor="let credit of membershipCredits"><strong>{{ credit.serviceName }}</strong><span>{{ credit.membershipName }}</span><span>{{ credit.pendingQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div><div *ngFor="let credit of packages"><strong>{{ credit.serviceName }}</strong><span>{{ credit.packageName }}</span><span>{{ credit.pendingQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div></div>
-        <div class="empty-block" *ngIf="!entitlementLoading && membershipCredits.length === 0 && packages.length === 0">No services available</div>
+      <section class="profile-tab" *ngIf="activeTab === 'Profile'">
+        <header class="tab-toolbar"><h2>Profile</h2><div><button type="button" (click)="showFamilyLink()">Link family</button></div></header>
+        <div class="detail-grid">
+          <span><small>Client code</small><b>{{ selectedClient.code || '—' }}</b></span><span><small>Branch</small><b>{{ selectedClient.center || '—' }}</b></span>
+          <span><small>Birthday</small><b>{{ formatDate(selectedClient.birthday) }}</b></span><span><small>Anniversary</small><b>{{ formatDate(selectedClient.anniversary) }}</b></span>
+          <span><small>Status</small><b>{{ selectedClient.active ? 'Active' : 'Inactive' }}</b></span><span><small>Notes</small><b>{{ selectedClient.notes || '—' }}</b></span>
+        </div>
+        <div class="forms-consent-grid">
+          <article class="wide-card"><header><strong>Family</strong></header><div class="record-list" *ngIf="familyMembers.length; else noFamily"><div *ngFor="let member of familyMembers"><span><b>{{ member.firstName }} {{ member.lastName }}</b><small>{{ member.relationshipType }} · {{ member.phone || '—' }}</small></span><button type="button" (click)="unlinkFamilyMember(member)">Unlink</button></div></div><ng-template #noFamily><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
       </section>
 
-      <section class="entitlement-panel">
-        <header>
-          <strong>Memberships</strong>
-        </header>
-        <div class="entitlement-list" *ngIf="memberships.length"><div *ngFor="let membership of memberships"><strong>{{ membership.membershipName }}</strong><span>{{ formatDate(membership.assignedAt) }}</span><span>{{ membership.remainingCredits }} credits</span><span class="benefit-status">{{ membership.status }}</span></div></div>
-        <div class="empty-block" *ngIf="!entitlementLoading && memberships.length === 0">No memberships</div>
+      <section class="profile-tab" *ngIf="activeTab === 'Insights'">
+        <header class="tab-toolbar"><h2>Insights</h2><div><button type="button" [disabled]="!selectedClient" (click)="openRetention('wallet-credit')">Add wallet credit</button><button type="button" [disabled]="!selectedClient" (click)="openRetention('loyalty-adjust')">Adjust points</button></div></header>
+        <div class="detail-grid">
+          <span><small>Total visits</small><b>{{ selectedClient ? (clientSummary.totalVisits || 0) : '—' }}</b></span><span><small>Open appointments</small><b>{{ selectedClient ? (clientSummary.openAppointments || 0) : '—' }}</b></span>
+          <span><small>Invoices</small><b>{{ selectedClient ? salesRows.length : '—' }}</b></span><span><small>Services</small><b>{{ selectedClient ? serviceHistory.length : '—' }}</b></span>
+          <span><small>Wallet</small><b>{{ selectedClient ? money(walletBalancePaise) : '—' }}</b></span><span><small>Loyalty points</small><b>{{ selectedClient ? rewardPoints : '—' }}</b></span>
+          <span><small>Outstanding</small><b>{{ selectedClient ? money(unpaidPaise) : '—' }}</b></span><span><small>Next best action</small><b>{{ nextBestAction }}</b></span>
+          <span><small>Lifetime value</small><b>{{ selectedClient ? money(clientSummary.lifetimeValuePaise) : '—' }}</b></span><span><small>Average spend</small><b>{{ selectedClient ? money(clientSummary.averageSpendPaise) : '—' }}</b></span>
+          <span><small>Highest bill</small><b>{{ selectedClient ? money(clientSummary.highestBillPaise) : '—' }}</b></span><span><small>Service / product spend</small><b>{{ selectedClient ? (money(clientSummary.serviceSpendPaise) + ' / ' + money(clientSummary.productSpendPaise)) : '—' }}</b></span>
+          <span><small>Favourite services</small><b>{{ clientSummary.favouriteServices || '—' }}</b></span><span><small>Preferred staff</small><b>{{ clientSummary.preferredStaffName || selectedClient.preferredStaffName || '—' }}</b></span>
+          <span><small>Visit frequency</small><b>{{ clientSummary.visitFrequencyDays !== null && clientSummary.visitFrequencyDays !== undefined ? (clientSummary.visitFrequencyDays | number:'1.0-1') + ' days' : '—' }}</b></span><span><small>Inactive days</small><b>{{ selectedClient ? clientSummary.inactiveDays : '—' }}</b></span>
+          <span><small>No-show / cancellation</small><b>{{ selectedClient ? ((clientSummary.noShowRateBps || 0) / 100 | number:'1.0-1') + '% / ' + ((clientSummary.cancellationRateBps || 0) / 100 | number:'1.0-1') + '%' : '—' }}</b></span><span><small>Churn risk</small><b>{{ selectedClient ? (clientSummary.churnRiskScore + '/100') : '—' }}</b></span>
+          <span><small>Review sentiment</small><b>{{ clientSummary.reviewSentiment || '—' }}</b></span><span><small>RFM</small><b>{{ clientSummary.rfmSegment || '—' }}<ng-container *ngIf="clientSummary.rfmScore"> · {{ clientSummary.rfmScore }}/15</ng-container></b></span>
+          <span><small>Opportunity</small><b>{{ clientSummary.occasionOpportunity || '—' }}</b></span><span><small>Action reason</small><b>{{ clientSummary.nextBestActionReason || '—' }}</b></span>
+        </div>
+        <div class="forms-consent-grid retention-grid">
+          <article><header><strong>Wallet &amp; prepaid credit</strong></header><div class="form-card-body"><span><small>Wallet balance</small><b>{{ money(walletBalancePaise) }}</b></span><span><small>Store credits</small><b>{{ storeCredits.length }}</b></span></div><div class="card-actions"><button type="button" (click)="openRetention('wallet-credit')">Credit</button><button type="button" [disabled]="walletBalancePaise <= 0" (click)="openRetention('wallet-debit')">Debit</button></div></article>
+          <article><header><strong>Loyalty tier</strong></header><div class="form-card-body"><span><small>Current tier</small><b>{{ retention.loyalty.currentTier?.name || 'No tier' }}</b></span><span><small>Next tier</small><b>{{ retention.loyalty.nextTier?.name || '—' }}<ng-container *ngIf="retention.loyalty.pointsToNextTier !== null"> · {{ retention.loyalty.pointsToNextTier }} points</ng-container></b></span></div><div class="card-actions"><button type="button" (click)="openRetention('loyalty-adjust')">Adjust points</button></div></article>
+          <article class="wide-card"><header><strong>Gift cards</strong><span>{{ money(activeGiftCardBalancePaise) }} active</span></header><div class="record-list" *ngIf="retention.giftCards.length; else noGiftCards"><div *ngFor="let card of retention.giftCards"><span><b>{{ card.code }}</b><small>{{ card.status }} · {{ money(card.balancePaise) }} · {{ formatDate(card.expiresAt) }}</small></span><span class="row-actions"><button type="button" (click)="openGiftCardDetail(card)">Details</button><ng-container *ngIf="card.status === 'active'"><button type="button" (click)="openRetention('gift-reissue', card)">Reissue</button><button type="button" (click)="openRetention('gift-void', card)">Void</button></ng-container></span></div></div><ng-template #noGiftCards><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>Referrals</strong><span>{{ completedReferralCount }} completed</span></header><div class="referral-code"><span><small>Referral code</small><b>{{ retention.referralCode?.code || '—' }}</b></span><button type="button" *ngIf="!retention.referralCode" (click)="generateReferralCode()">Generate code</button><button type="button" (click)="openRetention('referral-link')">Link client</button></div><div class="record-list" *ngIf="retention.referrals.length; else noReferrals"><div *ngFor="let referral of retention.referrals"><span><b>{{ referral.referredName }}</b><small>{{ referral.code }} · {{ referral.status }} · {{ formatDate(referral.createdAt) }}</small></span><button type="button" *ngIf="referral.status === 'pending'" (click)="completeReferral(referral)">Complete</button></div></div><ng-template #noReferrals><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
       </section>
-      <p class="form-error" *ngIf="entitlementError">{{ entitlementError }}</p>
+
+      <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Growth'">
+        <header class="tab-toolbar"><h2>Growth &amp; win-back</h2><div><button type="button" [disabled]="!selectedClient" (click)="showDiscountDecision()">Evaluate discount</button><button type="button" [disabled]="!selectedClient" (click)="showWinBackOffer()">Issue offer</button><button type="button" [disabled]="!selectedClient" (click)="loadGrowth()">Refresh</button></div></header>
+        <p class="form-error" *ngIf="growthError">{{ growthError }}</p>
+        <div class="loading-state compact-loading" *ngIf="loadingGrowth"><i class="bi bi-arrow-repeat"></i><strong>Loading...</strong></div>
+        <div class="compact-empty" *ngIf="!loadingGrowth && !selectedClient">Select a client</div>
+        <div class="forms-consent-grid" *ngIf="!loadingGrowth && selectedClient">
+          <article><header><strong>Segmentation</strong></header><div class="form-card-body"><span><small>Standard segment</small><b>{{ growth.context?.segment || clientSummary.rfmSegment || '—' }}</b></span><span><small>Custom segments</small><b>{{ growth.customSegments?.join(', ') || '—' }}</b></span><span><small>Membership eligible</small><b>{{ growth.context?.hasMembership ? 'Active membership' : 'No active membership' }}</b></span><span><small>Wallet eligible</small><b>{{ growth.context?.hasWalletBalance ? 'Wallet balance available' : 'No wallet balance' }}</b></span></div></article>
+          <article><header><strong>Return tracker</strong></header><div class="form-card-body"><span><small>Offers issued</small><b>{{ growth.winBack?.issuedCount || 0 }}</b></span><span><small>Clients returned</small><b>{{ growth.winBack?.returnedCount || 0 }}</b></span><span><small>Success rate</small><b>{{ ((growth.winBack?.winBackSuccessRateBps || 0) / 100) | number:'1.0-1' }}%</b></span><span><small>Offer ROI</small><b>{{ ((growth.winBack?.offerRoiBps || 0) / 100) | number:'1.0-1' }}%</b></span></div></article>
+          <article class="wide-card"><header><strong>Discount decisions</strong></header><div class="record-list" *ngIf="growth.discountDecisions?.length; else noDiscountDecisions"><div *ngFor="let decision of growth.discountDecisions"><span><b>{{ decision.ruleName || 'No matching rule' }} · {{ decision.status }}</b><small>{{ decision.serviceCategory }} · {{ (decision.approvedDiscountBps / 100) | number:'1.0-2' }}% · {{ money(decision.discountPaise) }}</small></span><span class="row-actions"><button type="button" *ngIf="decision.status === 'approval_required'" (click)="approveDiscountDecision(decision)">Approve</button><button type="button" *ngIf="decision.status === 'approved'" (click)="showWinBackOffer(decision)">Create offer</button></span></div></div><ng-template #noDiscountDecisions><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>Win-back offers</strong><span>{{ money(growth.winBack?.revenueAfterReturnPaise || 0) }} return revenue</span></header><div class="record-list" *ngIf="growth.offers?.length; else noWinBackOffers"><div *ngFor="let offer of growth.offers"><span><b>{{ offer.offerCode }} · {{ offer.title }}</b><small>{{ offer.status }} · {{ (offer.offeredDiscountBps / 100) | number:'1.0-2' }}% · {{ offer.returnWindowDays }} days · {{ money(offer.revenueAfterReturnPaise) }}</small></span><button type="button" *ngIf="offer.status === 'issued'" (click)="redeemWinBackOffer(offer)">Redeem</button></div></div><ng-template #noWinBackOffers><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>Next best action</strong><span>{{ memoryGraph.calculatedSnapshot?.calculatedAt ? formatDateTime(memoryGraph.calculatedSnapshot.calculatedAt) : '—' }}</span></header><div class="form-card-body"><span><small>Action</small><b>{{ memoryGraph.recommendation?.action || clientSummary.nextBestAction || '—' }}</b></span><span><small>Reason</small><b>{{ memoryGraph.recommendation?.reason || clientSummary.nextBestActionReason || '—' }}</b></span></div><div class="card-actions"><button type="button" [disabled]="savingRecommendationFeedback || !memoryGraph.recommendation?.action" (click)="saveRecommendationFeedback('accepted')">Accept</button><button type="button" [disabled]="savingRecommendationFeedback || !memoryGraph.recommendation?.action" (click)="saveRecommendationFeedback('rejected')">Reject</button></div></article>
+          <article><header><strong>Segment history</strong></header><div class="record-list" *ngIf="memoryGraph.segment?.history?.length; else noSegmentHistory"><div *ngFor="let row of memoryGraph.segment.history"><span><b>{{ row.segment }}</b><small>{{ row.previousSegment || 'Initial' }} · {{ row.rfmScore }}/15 · {{ formatDateTime(row.changedAt) }}</small></span></div></div><ng-template #noSegmentHistory><div class="small-empty">No records yet</div></ng-template></article>
+          <article><header><strong>Memory relationships</strong></header><div class="form-card-body"><span><small>Appointments / services</small><b>{{ memoryGraph.relationships?.appointments?.length || 0 }} / {{ memoryGraph.relationships?.services?.length || 0 }}</b></span><span><small>Products / staff</small><b>{{ memoryGraph.relationships?.products?.length || 0 }} / {{ memoryGraph.relationships?.staff?.length || 0 }}</b></span><span><small>Memberships / packages</small><b>{{ memoryGraph.relationships?.memberships?.length || 0 }} / {{ memoryGraph.relationships?.packages?.length || 0 }}</b></span><span><small>Reviews / messages</small><b>{{ memoryGraph.relationships?.reviews?.length || 0 }} / {{ memoryGraph.relationships?.messages?.length || 0 }}</b></span></div></article>
+          <article class="wide-card"><header><strong>Automation history</strong></header><div class="record-list" *ngIf="automations.length; else noAutomations"><div *ngFor="let item of automations"><span><b>{{ item.type }} · {{ item.status }}</b><small>{{ item.channel }} · {{ formatDateTime(item.scheduledAt) }}</small></span></div></div><ng-template #noAutomations><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
+      </section>
+
+      <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Clinical'">
+        <header class="tab-toolbar">
+          <h2>Clinical profile</h2>
+          <div><button type="button" [disabled]="!selectedClient" (click)="showClinicalProfile()">Edit profile</button><button type="button" [disabled]="!selectedClient" (click)="showSoapNote()">Add SOAP note</button><button type="button" [disabled]="!selectedClient" (click)="showPhotoUpload()">Upload photo</button></div>
+        </header>
+        <div class="forms-consent-grid">
+          <article><header><strong>Clinical profile</strong></header><div class="form-card-body"><span><small>Allergies</small><b>{{ clinicalProfile?.allergies || '—' }}</b></span><span><small>Preferences</small><b>{{ clinicalProfile?.preferences || '—' }}</b></span></div></article>
+          <article><header><strong>Complaints</strong></header><div class="record-list" *ngIf="complaintNotes.length; else noComplaints"><div *ngFor="let note of complaintNotes"><span><b>{{ note.noteType === 'service-recovery' ? 'Service recovery' : 'Complaint' }}</b><small>{{ note.note }} · {{ formatDateTime(note.createdAt) }}</small></span></div></div><ng-template #noComplaints><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>SOAP notes</strong></header><div class="record-list" *ngIf="soapNotes.length; else noSoap"><div *ngFor="let note of soapNotes"><span><b>{{ note.status }} · v{{ note.version }}</b><small>{{ note.assessment || note.subjective || note.objective || note.plan }} · {{ formatDateTime(note.updatedAt) }}</small></span><button type="button" *ngIf="note.status === 'draft'" (click)="showSoapNote(note)">Edit</button></div></div><ng-template #noSoap><div class="small-empty">No records yet</div></ng-template></article>
+          <article><header><strong>Before / after photos</strong></header><div class="record-list" *ngIf="treatmentPhotos.length; else noPhotos"><div *ngFor="let photo of treatmentPhotos"><span><b>{{ photo.caption || photo.fileName }}</b><small>{{ photo.photoType }} · {{ formatDateTime(photo.createdAt) }}</small></span><button type="button" (click)="viewTreatmentPhoto(photo)">Download</button></div></div><ng-template #noPhotos><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
+      </section>
+
+      <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Consent'">
+        <header class="tab-toolbar"><h2>Consent</h2><div><button type="button" [disabled]="!selectedClient" (click)="showContactPreferences()">Edit consent</button></div></header>
+        <div class="forms-consent-grid">
+          <article><header><strong>Communication preferences</strong></header><div class="form-card-body"><span><small>Preferred staff</small><b>{{ selectedClient.preferredStaffName || '—' }}</b></span><span><small>Preferred channel</small><b>{{ selectedClient.preferredCommunicationChannel || 'none' }}</b></span><span><small>WhatsApp</small><b>{{ selectedClient.whatsappOptIn === true ? 'Opted in' : selectedClient.whatsappOptIn === false ? 'Opted out' : 'Not recorded' }}</b></span><span><small>SMS</small><b>{{ selectedClient.smsOptIn === true ? 'Opted in' : selectedClient.smsOptIn === false ? 'Opted out' : 'Not recorded' }}</b></span><span><small>Email</small><b>{{ selectedClient.emailOptIn === true ? 'Opted in' : selectedClient.emailOptIn === false ? 'Opted out' : 'Not recorded' }}</b></span></div></article>
+          <article><header><strong>Consent history</strong></header><div class="record-list" *ngIf="consentHistory.length; else noConsent"><div *ngFor="let event of consentHistory"><span><b>{{ event.channel }} · {{ event.optedIn ? 'Opted in' : 'Opted out' }}</b><small>{{ formatDateTime(event.recordedAt) }} · {{ event.reason || event.source }}</small></span></div></div><ng-template #noConsent><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
+      </section>
+
+      <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Forms'">
+        <header class="tab-toolbar"><h2>Consultation forms</h2><div><button type="button" (click)="showFormDefinition()">Add form</button><button type="button" [disabled]="!selectedClient || !formDefinitions.length" (click)="showFormSubmission()">Complete form</button></div></header>
+        <div class="forms-consent-grid">
+          <article><header><strong>Form definitions</strong></header><div class="record-list" *ngIf="formDefinitions.length; else noDefinitions"><div *ngFor="let form of formDefinitions"><span><b>{{ form.name }}</b><small>{{ form.formType }} · v{{ form.version }}</small></span><span class="row-actions"><button type="button" (click)="startKiosk(form)">Kiosk</button><button type="button" (click)="showFormDefinition(form)">New version</button></span></div></div><ng-template #noDefinitions><div class="small-empty">No records yet</div></ng-template></article>
+          <article><header><strong>Submissions</strong></header><div class="record-list" *ngIf="formSubmissions.length; else noSubmissions"><div *ngFor="let submission of formSubmissions"><span><b>{{ submission.formName }} · v{{ submission.formVersion }}</b><small>{{ formatDateTime(submission.submittedAt) }}<ng-container *ngIf="submission.signatureName"> · {{ submission.signatureName }}</ng-container></small></span></div></div><ng-template #noSubmissions><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
+      </section>
+
+      <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Communications'">
+        <header class="tab-toolbar"><h2>Communications</h2><div><button type="button" [disabled]="!selectedClient" (click)="showReviewLink()">Link review</button></div></header>
+        <div class="forms-consent-grid">
+          <article><header><strong>WhatsApp activity</strong></header><div class="record-list" *ngIf="communications.length; else noMessages"><div *ngFor="let event of communications"><span><b>{{ event.subject || event.channel }}</b><small>{{ event.status }} · {{ formatDateTime(event.occurredAt) }}</small></span></div></div><ng-template #noMessages><div class="small-empty">No records yet</div></ng-template></article>
+          <article><header><strong>Reviews</strong></header><div class="record-list" *ngIf="reviews.length; else noReviews"><div *ngFor="let review of reviews"><span><b>{{ review.platform }}<ng-container *ngIf="review.rating"> · {{ review.rating }}/5</ng-container></b><small>{{ review.reviewText || review.externalReviewId || 'Linked review' }} · {{ formatDateTime(review.reviewedAt || review.createdAt) }}</small></span></div></div><ng-template #noReviews><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>Protected audit activity</strong></header><div class="record-list" *ngIf="auditEvents.length; else noAudit"><div *ngFor="let event of auditEvents"><span><b>{{ event.eventType }}</b><small>{{ formatDateTime(event.createdAt) }} · {{ event.actorUserId }}</small></span></div></div><ng-template #noAudit><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
+      </section>
+
+      <section class="profile-tab reports-tab" *ngIf="activeTab === 'Reports'">
+        <header class="tab-toolbar">
+          <h2>{{ selectedReportLabel }}</h2>
+          <div>
+            <select [(ngModel)]="selectedReportType" (change)="changeClientReportType()" aria-label="Client report type">
+              <option *ngFor="let report of clientReportTypes" [value]="report.key">{{ report.label }}</option>
+            </select>
+            <select [(ngModel)]="reportDays" (change)="loadClientReport()" aria-label="Report period">
+              <option *ngIf="isBestClientsReport" [ngValue]="0">All time</option>
+              <option [ngValue]="30">30 days</option>
+              <option [ngValue]="90">90 days</option>
+              <option [ngValue]="180">180 days</option>
+              <option [ngValue]="365">365 days</option>
+            </select>
+            <button type="button" (click)="loadClientReport()">Refresh</button>
+            <button type="button" *ngIf="isBestClientsReport" (click)="exportBestClientsReport()">Export Best clients</button>
+            <button type="button" [disabled]="!selectedClient" (click)="exportClient360()">Export Client 360</button>
+          </div>
+        </header>
+        <div class="report-filters" *ngIf="isBestClientsReport">
+          <label><span>Min LTV</span><input type="number" inputmode="decimal" placeholder="₹" [(ngModel)]="reportMinLifetimeValue" (keyup.enter)="loadClientReport()" /></label>
+          <label><span>Min visits</span><input type="number" inputmode="numeric" placeholder="Visits" [(ngModel)]="reportMinVisits" (keyup.enter)="loadClientReport()" /></label>
+          <label><span>Segment</span><input type="text" placeholder="Champion, VIP..." [(ngModel)]="reportSegment" (keyup.enter)="loadClientReport()" /></label>
+          <label><span>Max churn</span><input type="number" inputmode="numeric" placeholder="0-100" [(ngModel)]="reportMaxChurnRisk" (keyup.enter)="loadClientReport()" /></label>
+          <label><span>Limit</span><input type="number" inputmode="numeric" min="1" max="500" [(ngModel)]="reportLimit" (keyup.enter)="loadClientReport()" /></label>
+          <label class="report-check"><input type="checkbox" [(ngModel)]="reportIncludeUnpaid" (change)="loadClientReport()" /><span>Include unpaid</span></label>
+        </div>
+        <p class="form-error" *ngIf="reportError">{{ reportError }}</p>
+        <div class="loading-state compact-loading" *ngIf="loadingReport"><i class="bi bi-arrow-repeat"></i><strong>Loading report...</strong></div>
+        <div class="report-table-wrap" *ngIf="!loadingReport && reportRows.length"><table><thead><tr><th *ngFor="let column of reportColumns">{{ reportHeader(column) }}</th></tr></thead><tbody><tr *ngFor="let row of reportRows"><td *ngFor="let column of reportColumns">{{ reportValue(column, row[column]) }}</td></tr></tbody></table></div>
+        <div class="compact-empty" *ngIf="!loadingReport && !reportRows.length && !reportError">No records yet</div>
+      </section>
+
+      <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Masters'">
+        <header class="tab-toolbar"><h2>Client masters</h2><div><select [(ngModel)]="selectedMasterType" (change)="loadClientMasters()"><option *ngFor="let type of clientMasterTypes" [value]="type.key">{{ type.label }}</option></select><button type="button" (click)="showClientMaster()">Add master</button><button type="button" (click)="showDiscountRule()">Add discount rule</button></div></header>
+        <p class="form-error" *ngIf="mastersError">{{ mastersError }}</p>
+        <div class="loading-state compact-loading" *ngIf="loadingMasters"><i class="bi bi-arrow-repeat"></i><strong>Loading...</strong></div>
+        <div class="forms-consent-grid" *ngIf="!loadingMasters">
+          <article><header><strong>{{ selectedMasterLabel }}</strong></header><div class="form-card-body"><span><small>Total</small><b>{{ selectedMasterSummary?.total || 0 }}</b></span><span><small>Active</small><b>{{ selectedMasterSummary?.active || 0 }}</b></span><span><small>Draft</small><b>{{ selectedMasterSummary?.draft || 0 }}</b></span><span><small>Archived</small><b>{{ selectedMasterSummary?.archived || 0 }}</b></span></div></article>
+          <article class="wide-card"><header><strong>{{ selectedMasterLabel }}</strong></header><div class="record-list" *ngIf="clientMasters.length; else noClientMasters"><div *ngFor="let master of clientMasters"><span><b>{{ master.name }}</b><small>{{ master.code }} · {{ master.status }} · v{{ master.version }}</small></span><button type="button" (click)="showClientMaster(master)">Edit</button></div></div><ng-template #noClientMasters><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>Discount rules</strong></header><div class="record-list" *ngIf="discountRules.length; else noDiscountRules"><div *ngFor="let rule of discountRules"><span><b>{{ rule.name }}</b><small>{{ rule.active ? 'active' : 'inactive' }} · max {{ (rule.maxDiscountBps / 100) | number:'1.0-2' }}% · approval {{ (rule.approvalAboveBps / 100) | number:'1.0-2' }}% · v{{ rule.version }}</small></span><button type="button" (click)="showDiscountRule(rule)">Edit</button></div></div><ng-template #noDiscountRules><div class="small-empty">No records yet</div></ng-template></article>
+          <article class="wide-card"><header><strong>Version audit</strong></header><div class="record-list" *ngIf="clientMasterAudit.length; else noMasterAudit"><div *ngFor="let event of clientMasterAudit"><span><b>{{ event.masterName }} · {{ event.action }}</b><small>v{{ event.version }} · {{ event.actorUserId }} · {{ formatDateTime(event.createdAt) }}</small></span></div></div><ng-template #noMasterAudit><div class="small-empty">No records yet</div></ng-template></article>
+        </div>
+      </section>
     </main>
-  </section>
 
-  <section class="notes-panel" *ngIf="mode === 'detail' && activeTab === 'Notes'">
-    <div class="panel-toolbar">
-      <strong>Notes</strong>
-      <select aria-label="Note type">
-        <option>All</option>
-      </select>
-      <button type="button">+ Note</button>
+    <aside class="insight-rail">
+      <article>
+        <button type="button" (click)="togglePanel('health')"><span><i class="bi bi-heart-pulse"></i>Client health</span><i class="bi" [class.bi-chevron-up]="!collapsedPanels.has('health')" [class.bi-chevron-down]="collapsedPanels.has('health')"></i></button>
+        <p *ngIf="!collapsedPanels.has('health')">{{ clientHealth }}</p>
+      </article>
+      <article>
+        <button type="button" (click)="togglePanel('wallet')"><span><i class="bi bi-wallet2"></i>Wallet &amp; loyalty</span><i class="bi" [class.bi-chevron-up]="!collapsedPanels.has('wallet')" [class.bi-chevron-down]="collapsedPanels.has('wallet')"></i></button>
+        <p *ngIf="!collapsedPanels.has('wallet')">{{ walletLoyalty }}</p>
+      </article>
+      <article>
+        <button type="button" (click)="togglePanel('benefits')"><span><i class="bi bi-gem"></i>Memberships &amp; packages</span><i class="bi" [class.bi-chevron-up]="!collapsedPanels.has('benefits')" [class.bi-chevron-down]="collapsedPanels.has('benefits')"></i></button>
+        <p *ngIf="!collapsedPanels.has('benefits')">{{ benefitsSummary }}</p>
+      </article>
+      <article>
+        <button type="button" (click)="togglePanel('consent')"><span><i class="bi bi-shield-check"></i>Consent</span><i class="bi" [class.bi-chevron-up]="!collapsedPanels.has('consent')" [class.bi-chevron-down]="collapsedPanels.has('consent')"></i></button>
+        <p *ngIf="!collapsedPanels.has('consent')">{{ consentSummary }}</p>
+      </article>
+      <article>
+        <button type="button" (click)="togglePanel('action')"><span><i class="bi bi-compass"></i>Next best action</span><i class="bi" [class.bi-chevron-up]="!collapsedPanels.has('action')" [class.bi-chevron-down]="collapsedPanels.has('action')"></i></button>
+        <p *ngIf="!collapsedPanels.has('action')">{{ nextBestAction }}</p>
+      </article>
+    </aside>
+  </section>
+  </ng-container>
+
+  <div class="drawer-backdrop" *ngIf="drawerMode" (click)="closeDrawer()"></div>
+  <aside class="client-drawer gift-register-drawer" *ngIf="drawerMode === 'gift-register'" aria-label="Gift card register">
+    <header><strong>Gift card register</strong><button type="button" aria-label="Close gift card register" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="gift-register-body">
+      <div class="gift-register-toolbar">
+        <input type="search" aria-label="Search gift cards" placeholder="Search code or client" [(ngModel)]="giftCardRegisterSearch" />
+        <select aria-label="Gift card status" [(ngModel)]="giftCardRegisterStatus"><option value="all">All statuses</option><option value="active">Active</option><option value="redeemed">Redeemed</option><option value="expired">Expired</option><option value="voided">Voided</option><option value="blocked">Blocked</option></select>
+        <button type="button" [disabled]="giftCardRegisterLoading" (click)="loadGiftCardRegister()"><i class="bi bi-arrow-clockwise"></i>Refresh</button>
+      </div>
+      <div class="gift-register-head"><span>Code</span><span>Client</span><span>Issued</span><span>Balance</span><span>Status</span><span>Expiry</span><span></span></div>
+      <div class="gift-register-list" *ngIf="!giftCardRegisterLoading && filteredGiftCardRegister.length">
+        <div *ngFor="let card of filteredGiftCardRegister; trackBy: trackByGiftCard">
+          <strong>{{ card.code }}</strong><span>{{ card.clientName || card.clientId || '—' }}</span><span>{{ money(card.initialAmountPaise) }}</span><b>{{ money(card.balancePaise) }}</b><span class="gift-status" [class.active]="card.status === 'active'">{{ card.status }}</span><span>{{ formatDate(card.expiresAt) }}</span><button type="button" (click)="openGiftCardClient(card)">Open client</button>
+        </div>
+      </div>
+      <div class="small-empty" *ngIf="giftCardRegisterLoading">Loading...</div>
+      <div class="small-empty form-error" *ngIf="!giftCardRegisterLoading && giftCardRegisterError">{{ giftCardRegisterError }}</div>
+      <div class="small-empty" *ngIf="!giftCardRegisterLoading && !giftCardRegisterError && !filteredGiftCardRegister.length">No records yet</div>
     </div>
+    <footer><button type="button" (click)="closeDrawer()">Close</button></footer>
+  </aside>
+  <aside class="client-drawer" *ngIf="drawerMode === 'client'" aria-label="Client form">
+    <header><strong>{{ editingClientId ? 'Edit client' : 'Add client' }}</strong><button type="button" aria-label="Close client form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <form class="drawer-body" id="client-form" (ngSubmit)="saveClient()">
+      <label>Code<input [(ngModel)]="createGuest.code" name="code" /></label>
+      <label>First name<input [ngModel]="createGuest.firstName" name="firstName" (ngModelChange)="createGuest.firstName = titleCase($event)" /></label>
+      <label>Last name<input [ngModel]="createGuest.lastName" name="lastName" (ngModelChange)="createGuest.lastName = titleCase($event)" /></label>
+      <label>Phone<input type="tel" [(ngModel)]="createGuest.phone" name="phone" /></label>
+      <label>Email<input type="email" [(ngModel)]="createGuest.email" name="email" /></label>
+      <label>Birthday<as-date-picker ariaLabel="Client birthday" [(value)]="createGuest.birthday"></as-date-picker></label>
+      <label>Anniversary<as-date-picker ariaLabel="Client anniversary" [(value)]="createGuest.anniversary"></as-date-picker></label>
+      <label>Categories<input [ngModel]="createGuest.categories" name="categories" (ngModelChange)="createGuest.categories = titleCase($event)" /></label>
+      <p class="form-error" *ngIf="clientError">{{ clientError }}</p>
+    </form>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" form="client-form" [disabled]="savingClient">{{ savingClient ? 'Saving...' : 'Save' }}</button></footer>
+  </aside>
 
-    <div class="notes-head">
-      <span>Note</span>
-      <span>Note type</span>
-      <span>Created by</span>
-      <span>Center</span>
-      <span>Actions</span>
+  <aside class="client-drawer note-drawer" *ngIf="drawerMode === 'note'" aria-label="Client note form">
+    <header><strong>Add note</strong><button type="button" aria-label="Close note form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Note type<select [(ngModel)]="noteType"><option value="general">General</option><option value="preference">Preference</option><option value="allergy">Allergy</option><option value="service">Service</option><option value="follow_up">Follow up</option><option value="complaint">Complaint</option><option value="service-recovery">Service recovery</option></select></label><label>Note<textarea rows="8" [(ngModel)]="noteDraft"></textarea></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingNote" (click)="saveNote()">{{ savingNote ? 'Saving...' : 'Save note' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer" *ngIf="drawerMode === 'family'" aria-label="Link family member">
+    <header><strong>Link family member</strong><button type="button" aria-label="Close family form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Client<select [(ngModel)]="familyDraft.relatedClientId"><option value="">Select client</option><option *ngFor="let client of familyCandidates" [value]="client.id">{{ client.name }} · {{ client.phone || client.code }}</option></select></label><label>Relationship<select [(ngModel)]="familyDraft.relationshipType"><option value="spouse">Spouse</option><option value="parent">Parent</option><option value="child">Child</option><option value="sibling">Sibling</option><option value="guardian">Guardian</option><option value="dependent">Dependent</option><option value="partner">Partner</option><option value="other">Other</option></select></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace || !familyDraft.relatedClientId" (click)="saveFamilyLink()">{{ savingWorkspace ? 'Saving...' : 'Link member' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer" *ngIf="drawerMode === 'soap'" aria-label="SOAP note form">
+    <header><strong>SOAP note</strong><button type="button" aria-label="Close SOAP note" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Appointment<select [(ngModel)]="soapDraft.appointmentId"><option value="">Not linked</option><option *ngFor="let appointment of appointments" [value]="appointment.id">{{ formatDateTime(appointment.startAt) }} · {{ appointment.serviceNames || appointment.status }}</option></select></label><label class="full-field">Subjective<textarea rows="4" [(ngModel)]="soapDraft.subjective"></textarea></label><label class="full-field">Objective<textarea rows="4" [(ngModel)]="soapDraft.objective"></textarea></label><label class="full-field">Assessment<textarea rows="4" [(ngModel)]="soapDraft.assessment"></textarea></label><label class="full-field">Plan<textarea rows="4" [(ngModel)]="soapDraft.plan"></textarea></label><label>Status<select [(ngModel)]="soapDraft.status"><option value="draft">Draft</option><option value="final">Final</option></select></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveSoapNote()">{{ savingWorkspace ? 'Saving...' : 'Save SOAP note' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer note-drawer" *ngIf="drawerMode === 'clinical'" aria-label="Allergies and preferences form">
+    <header><strong>Allergies &amp; preferences</strong><button type="button" aria-label="Close clinical profile form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Allergies<textarea rows="7" [(ngModel)]="clinicalDraft.allergies"></textarea></label><label>Preferences<textarea rows="7" [(ngModel)]="clinicalDraft.preferences"></textarea></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveClinicalProfile()">{{ savingWorkspace ? 'Saving...' : 'Save' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer" *ngIf="drawerMode === 'contact-preferences'" aria-label="Client communication preferences">
+    <header><strong>Consent &amp; preferences</strong><button type="button" aria-label="Close communication preferences" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      <label>Preferred staff<select [(ngModel)]="contactDraft.preferredStaffId"><option value="">None</option><option *ngFor="let staff of staffRows" [value]="staff.id">{{ staff.appointmentDisplayName || staff.name || ((staff.firstName || '') + ' ' + (staff.lastName || '')) }}</option></select></label>
+      <label>Preferred channel<select [(ngModel)]="contactDraft.preferredCommunicationChannel"><option value="none">None</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option><option value="phone">Phone</option></select></label>
+      <label>WhatsApp consent<select [(ngModel)]="contactDraft.whatsappOptIn"><option value="">Not recorded</option><option value="true">Opted in</option><option value="false">Opted out</option></select></label>
+      <label>SMS consent<select [(ngModel)]="contactDraft.smsOptIn"><option value="">Not recorded</option><option value="true">Opted in</option><option value="false">Opted out</option></select></label>
+      <label>Email consent<select [(ngModel)]="contactDraft.emailOptIn"><option value="">Not recorded</option><option value="true">Opted in</option><option value="false">Opted out</option></select></label>
+      <label class="full-field">Reason<textarea rows="4" [(ngModel)]="contactDraft.reason"></textarea></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p>
     </div>
-    <div class="empty-block">No records yet</div>
-  </section>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveContactPreferences()">{{ savingWorkspace ? 'Saving...' : 'Save' }}</button></footer>
+  </aside>
 
-  <section class="appointments-panel" *ngIf="mode === 'detail' && activeTab === 'Appointment'">
-    <div class="panel-toolbar">
-      <strong>Appointments</strong>
-      <button type="button">Upcoming</button>
-      <button type="button">Past</button>
+  <aside class="client-drawer note-drawer" *ngIf="drawerMode === 'retention'" aria-label="Retention action">
+    <header><strong>{{ retentionDrawerTitle }}</strong><button type="button" aria-label="Close retention action" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      <ng-container *ngIf="retentionAction === 'gift-detail'">
+        <div class="gift-detail full-field" *ngIf="giftCardDetail?.card as card"><span><small>Code</small><b>{{ card.code }}</b></span><span><small>Status</small><b>{{ card.status }}</b></span><span><small>Balance</small><b>{{ money(card.balancePaise) }}</b></span><span><small>Expiry</small><b>{{ formatDate(card.expiresAt) }}</b></span></div>
+        <div class="record-list full-field" *ngIf="giftCardDetail?.transactions?.length; else noGiftHistory"><div *ngFor="let item of giftCardDetail.transactions"><span><b>{{ item.transactionType }}</b><small>{{ formatDateTime(item.createdAt) }} · {{ item.notes || '—' }}</small></span><b>{{ money(item.deltaPaise) }}</b></div></div><ng-template #noGiftHistory><div class="small-empty full-field">No records yet</div></ng-template>
+      </ng-container>
+      <label *ngIf="retentionAction === 'wallet-credit' || retentionAction === 'wallet-debit'">Amount<input type="number" min="0.01" step="0.01" [(ngModel)]="retentionDraft.amount" /></label>
+      <label *ngIf="retentionAction === 'loyalty-adjust'">Points<input type="number" step="1" [(ngModel)]="retentionDraft.points" /></label>
+      <label *ngIf="retentionAction === 'gift-reissue'">New code<input [(ngModel)]="retentionDraft.code" placeholder="Auto-generate" /></label>
+      <label *ngIf="retentionAction === 'gift-reissue'">New expiry<as-date-picker ariaLabel="Gift card expiry" [(value)]="retentionDraft.expiresAt"></as-date-picker></label>
+      <label *ngIf="retentionAction === 'referral-link'">Referred client<select [(ngModel)]="retentionDraft.referredClientId"><option value="">Select client</option><option *ngFor="let client of referralClientOptions" [value]="client.id">{{ client.name }}</option></select></label>
+      <label *ngIf="retentionAction !== 'referral-link' && retentionAction !== 'gift-detail'">{{ retentionAction === 'gift-void' || retentionAction === 'gift-reissue' ? 'Reason' : 'Note' }}<textarea rows="5" [(ngModel)]="retentionDraft.note"></textarea></label>
+      <p class="form-error" *ngIf="clientError">{{ clientError }}</p>
     </div>
+    <footer><button type="button" (click)="closeDrawer()">{{ retentionAction === 'gift-detail' ? 'Close' : 'Cancel' }}</button><button *ngIf="retentionAction !== 'gift-detail'" class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveRetentionAction()">{{ savingWorkspace ? 'Saving...' : 'Save' }}</button></footer>
+  </aside>
 
-    <div class="appointment-head">
-      <span>Date</span>
-      <span>Service</span>
-      <span>Payment</span>
-      <span>Status</span>
-    </div>
-    <div class="empty-block">No records yet</div>
-  </section>
+  <aside class="client-drawer" *ngIf="drawerMode === 'master'" aria-label="Client master form">
+    <header><strong>{{ editingMasterId ? 'Edit client master' : 'Add client master' }}</strong><button type="button" aria-label="Close client master form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Code<input [(ngModel)]="masterDraft.code" /></label><label>Name<input [ngModel]="masterDraft.name" (ngModelChange)="masterDraft.name = titleCase($event)" /></label><label>Status<select [(ngModel)]="masterDraft.status"><option value="draft">Draft</option><option value="active">Active</option><option value="archived">Archived</option></select></label><label class="full-field">Description<textarea rows="4" [(ngModel)]="masterDraft.description"></textarea></label><ng-container *ngIf="usesCustomSegmentRules; else standardMasterDefinition"><label>Minimum lifetime value<input type="number" min="0" step="1" [(ngModel)]="masterDraft.minLifetimeValue" /></label><label>Minimum RFM score<input type="number" min="0" max="15" step="1" [(ngModel)]="masterDraft.minRfmScore" /></label><label>Maximum inactive days<input type="number" min="0" step="1" [(ngModel)]="masterDraft.maxInactiveDays" /></label><label>Minimum churn risk<input type="number" min="0" max="100" step="1" [(ngModel)]="masterDraft.minChurnRiskScore" /></label></ng-container><ng-template #standardMasterDefinition><label>Sort order<input type="number" step="1" [(ngModel)]="masterDraft.sortOrder" /></label><label>Color<input [(ngModel)]="masterDraft.color" placeholder="#1769d2" /></label><label class="full-field">Configuration JSON<textarea rows="8" [(ngModel)]="masterDraft.definitionText"></textarea></label></ng-template><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveClientMaster()">{{ savingWorkspace ? 'Saving...' : 'Save version' }}</button></footer>
+  </aside>
 
-  <section class="detail-entitlements" *ngIf="mode === 'detail' && activeTab === 'Packages'">
-    <div class="entitlement-panel"><header><strong>Packages</strong></header><div class="entitlement-list" *ngIf="packages.length"><div *ngFor="let credit of packages"><strong>{{ credit.packageName }}</strong><span>{{ credit.serviceName }}</span><span>{{ credit.pendingQty }} / {{ credit.totalQty }} credits</span><span>{{ formatDate(credit.expiresAt) }}</span></div></div><div class="empty-block" *ngIf="packages.length === 0">No active packages</div></div>
-  </section>
+  <aside class="client-drawer" *ngIf="drawerMode === 'discount-rule'" aria-label="Client discount rule form">
+    <header><strong>{{ editingDiscountRuleId ? 'Edit discount rule' : 'Add discount rule' }}</strong><button type="button" aria-label="Close discount rule form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label class="full-field">Name<input [ngModel]="discountRuleDraft.name" (ngModelChange)="discountRuleDraft.name = titleCase($event)" /></label><label class="full-field">Segments<input [(ngModel)]="discountRuleDraft.segments" /></label><label class="full-field">Service categories<input [(ngModel)]="discountRuleDraft.serviceCategories" /></label><label>Minimum lifetime value<input type="number" min="0" step="1" [(ngModel)]="discountRuleDraft.minLifetimeValue" /></label><label>Maximum discount %<input type="number" min="0.01" max="100" step="0.01" [(ngModel)]="discountRuleDraft.maxDiscountPercent" /></label><label>CLV budget %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="discountRuleDraft.clvBudgetPercent" /></label><label>Approval above %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="discountRuleDraft.approvalAbovePercent" /></label><label>Priority<input type="number" step="1" [(ngModel)]="discountRuleDraft.priority" /></label><label class="check-field"><input type="checkbox" [(ngModel)]="discountRuleDraft.membershipEligible" />Allow active membership</label><label class="check-field"><input type="checkbox" [(ngModel)]="discountRuleDraft.walletEligible" />Allow wallet balance</label><label class="check-field"><input type="checkbox" [(ngModel)]="discountRuleDraft.active" />Active</label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveDiscountRule()">{{ savingWorkspace ? 'Saving...' : 'Save rule' }}</button></footer>
+  </aside>
 
-  <section class="detail-entitlements" *ngIf="mode === 'detail' && activeTab === 'Memberships'">
-    <div class="entitlement-panel"><header><strong>Memberships</strong></header><div class="entitlement-list" *ngIf="memberships.length"><div *ngFor="let membership of memberships"><strong>{{ membership.membershipName }}</strong><span>{{ formatDate(membership.assignedAt) }}</span><span>{{ membership.remainingCredits }} credits</span><span class="benefit-status">{{ membership.status }}</span></div></div><div class="empty-block" *ngIf="memberships.length === 0">No memberships</div></div>
-  </section>
+  <aside class="client-drawer note-drawer" *ngIf="drawerMode === 'discount'" aria-label="Evaluate client discount">
+    <header><strong>Evaluate discount</strong><button type="button" aria-label="Close discount evaluation" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Service category<input [ngModel]="discountDraft.serviceCategory" (ngModelChange)="discountDraft.serviceCategory = titleCase($event)" /></label><label>Cart subtotal<input type="number" min="0.01" step="0.01" [(ngModel)]="discountDraft.subtotal" /></label><label>Requested discount %<input type="number" min="0.01" max="100" step="0.01" [(ngModel)]="discountDraft.discountPercent" /></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveDiscountDecision()">{{ savingWorkspace ? 'Evaluating...' : 'Evaluate & record' }}</button></footer>
+  </aside>
 
-  <section class="empty-tab" *ngIf="mode === 'detail' && activeTab !== 'Overview' && activeTab !== 'Notes' && activeTab !== 'Appointment' && activeTab !== 'Packages' && activeTab !== 'Memberships'">
-    <strong>{{ activeTab }}</strong>
-    <span>No records yet</span>
+  <aside class="client-drawer" *ngIf="drawerMode === 'win-back'" aria-label="Issue win-back offer">
+    <header><strong>Issue win-back offer</strong><button type="button" aria-label="Close win-back offer form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label class="full-field">Title<input [ngModel]="winBackDraft.title" (ngModelChange)="winBackDraft.title = titleCase($event)" /></label><label>Offer code<input [(ngModel)]="winBackDraft.offerCode" /></label><label>Discount %<input type="number" min="0.01" max="100" step="0.01" [(ngModel)]="winBackDraft.discountPercent" /></label><label>Discount cost<input type="number" min="0" step="0.01" [(ngModel)]="winBackDraft.discountCost" /></label><label>Return window days<input type="number" min="1" max="180" step="1" [(ngModel)]="winBackDraft.returnWindowDays" /></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveWinBackOffer()">{{ savingWorkspace ? 'Issuing...' : 'Issue offer' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer" *ngIf="drawerMode === 'review'" aria-label="Link client review">
+    <header><strong>Link review</strong><button type="button" aria-label="Close review link" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Platform<select [(ngModel)]="reviewDraft.platform"><option value="google">Google</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="internal">Internal</option><option value="other">Other</option></select></label><label>Rating<input type="number" min="1" max="5" [(ngModel)]="reviewDraft.rating" /></label><label class="full-field">External review ID<input [(ngModel)]="reviewDraft.externalReviewId" /></label><label>Review date<as-date-picker ariaLabel="Review date" [(value)]="reviewDraft.reviewedAt"></as-date-picker></label><label class="full-field">Review text<textarea rows="6" [(ngModel)]="reviewDraft.reviewText"></textarea></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveReviewLink()">{{ savingWorkspace ? 'Saving...' : 'Link review' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer note-drawer" *ngIf="drawerMode === 'merge'" aria-label="Merge duplicate client">
+    <header><strong>Merge duplicate</strong><button type="button" aria-label="Close merge" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Keep client<select [(ngModel)]="mergeTargetId"><option *ngFor="let duplicate of duplicates" [value]="duplicate.id">{{ duplicate.firstName }} {{ duplicate.lastName }} · {{ duplicate.phone }}</option></select></label><p class="merge-warning">Selected client will become inactive. Its history remains linked to the kept client.</p><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace || !mergeTargetId" (click)="mergeClient()">{{ savingWorkspace ? 'Merging...' : 'Merge safely' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer" *ngIf="drawerMode === 'form-definition'" aria-label="Client form definition">
+    <header><strong>{{ definitionDraft.formKey ? 'New form version' : 'Add form' }}</strong><button type="button" aria-label="Close form definition" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Form name<input [ngModel]="definitionDraft.name" (ngModelChange)="definitionDraft.name = titleCase($event)" /></label><label>Form type<select [(ngModel)]="definitionDraft.formType"><option value="consent">Consent</option><option value="intake">Intake</option><option value="treatment">Treatment</option></select></label><label class="full-field">Body<textarea rows="6" [(ngModel)]="definitionDraft.body"></textarea></label><label class="full-field">Questions (* required | text, textarea, boolean, date or select:Option 1,Option 2)<textarea rows="8" [(ngModel)]="definitionDraft.questions"></textarea></label><label class="full-field">Conditions (question_2 | question_1 = Yes)<textarea rows="5" [(ngModel)]="definitionDraft.conditions"></textarea></label><label class="check-field"><input type="checkbox" [(ngModel)]="definitionDraft.requiresSignature" />Signature required</label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveFormDefinition()">{{ savingWorkspace ? 'Saving...' : 'Save version' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer" *ngIf="drawerMode === 'form-submission'" aria-label="Complete client form">
+    <header><strong>Complete form</strong><button type="button" aria-label="Close form submission" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label class="full-field">Form<select [ngModel]="submissionDraft.definitionId" (ngModelChange)="changeSubmissionForm($event)"><option *ngFor="let form of formDefinitions" [value]="form.id">{{ form.name }} · v{{ form.version }}</option></select></label><p class="form-body full-field" *ngIf="selectedFormDefinition?.body">{{ selectedFormDefinition.body }}</p><ng-container *ngFor="let field of formFields(selectedFormDefinition)"><ng-container *ngIf="isFormFieldVisible(field)"><label class="full-field" *ngIf="field.type !== 'boolean'">{{ field.label }}<textarea *ngIf="field.type === 'textarea'; else shortField" rows="4" [(ngModel)]="submissionDraft.responses[field.key]"></textarea><ng-template #shortField><as-date-picker *ngIf="field.type === 'date'; else nonDateField" [ariaLabel]="field.label" [(value)]="submissionDraft.responses[field.key]"></as-date-picker><ng-template #nonDateField><select *ngIf="field.type === 'select'; else textField" [(ngModel)]="submissionDraft.responses[field.key]"><option value="">Select</option><option *ngFor="let option of field.options" [value]="option">{{ option }}</option></select><ng-template #textField><input [(ngModel)]="submissionDraft.responses[field.key]" /></ng-template></ng-template></ng-template></label><label class="check-field full-field" *ngIf="field.type === 'boolean'"><input type="checkbox" [(ngModel)]="submissionDraft.responses[field.key]" />{{ field.label }}</label></ng-container></ng-container><label class="full-field" *ngIf="selectedFormDefinition?.requiresSignature">Signature name<input [ngModel]="submissionDraft.signatureName" (ngModelChange)="submissionDraft.signatureName = titleCase($event)" /></label><label class="check-field full-field" *ngIf="selectedFormDefinition?.requiresSignature"><input type="checkbox" [(ngModel)]="submissionDraft.consentAccepted" />Consent accepted</label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveFormSubmission()">{{ savingWorkspace ? 'Saving...' : 'Submit form' }}</button></footer>
+  </aside>
+
+  <aside class="client-drawer note-drawer" *ngIf="drawerMode === 'photo'" aria-label="Treatment photo upload">
+    <header><strong>Upload treatment photo</strong><button type="button" aria-label="Close treatment photo upload" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body"><label>Photo<input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhotoSelected($event)" /></label><label>Photo type<select [(ngModel)]="photoType"><option value="before">Before</option><option value="after">After</option><option value="other">Other</option></select></label><label class="full-field">Caption<textarea rows="5" [(ngModel)]="photoCaption"></textarea></label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveTreatmentPhoto()">{{ savingWorkspace ? 'Uploading...' : 'Upload' }}</button></footer>
+  </aside>
+
+  <section class="client-kiosk" *ngIf="kioskMode && selectedKioskForm" aria-label="Client intake kiosk">
+    <header><span><i class="bi bi-card-checklist"></i><strong>{{ selectedKioskForm.name }}</strong></span><button type="button" aria-label="Close kiosk" (click)="closeKiosk()"><i class="bi bi-x-lg"></i></button></header>
+    <main><p class="form-body" *ngIf="selectedKioskForm.body">{{ selectedKioskForm.body }}</p><ng-container *ngFor="let field of formFields(selectedKioskForm)"><ng-container *ngIf="isKioskFieldVisible(field)"><label *ngIf="field.type !== 'boolean'">{{ field.label }}<textarea *ngIf="field.type === 'textarea'; else kioskShortField" rows="4" [(ngModel)]="kioskDraft.responses[field.key]"></textarea><ng-template #kioskShortField><as-date-picker *ngIf="field.type === 'date'; else kioskNonDateField" [ariaLabel]="field.label" [(value)]="kioskDraft.responses[field.key]"></as-date-picker><ng-template #kioskNonDateField><select *ngIf="field.type === 'select'; else kioskTextField" [(ngModel)]="kioskDraft.responses[field.key]"><option value="">Select</option><option *ngFor="let option of field.options" [value]="option">{{ option }}</option></select><ng-template #kioskTextField><input [(ngModel)]="kioskDraft.responses[field.key]" /></ng-template></ng-template></ng-template></label><label class="kiosk-check" *ngIf="field.type === 'boolean'"><input type="checkbox" [(ngModel)]="kioskDraft.responses[field.key]" />{{ field.label }}</label></ng-container></ng-container><label *ngIf="selectedKioskForm.requiresSignature">Signature name<input [ngModel]="kioskDraft.signatureName" (ngModelChange)="kioskDraft.signatureName = titleCase($event)" /></label><label class="kiosk-check" *ngIf="selectedKioskForm.requiresSignature"><input type="checkbox" [(ngModel)]="kioskDraft.consentAccepted" />Consent accepted</label><p class="form-error" *ngIf="clientError">{{ clientError }}</p></main>
+    <footer><button type="button" (click)="closeKiosk()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="submitKioskForm()">{{ savingWorkspace ? 'Submitting...' : 'Submit form' }}</button></footer>
   </section>
 </section>

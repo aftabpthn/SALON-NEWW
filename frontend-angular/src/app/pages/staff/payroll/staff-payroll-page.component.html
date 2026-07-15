@@ -27,12 +27,19 @@
   <section class="utility-bar">
     <button type="button" [disabled]="loading" (click)="checkSourceData(true)"><i class="bi bi-calculator"></i>{{ action === 'commissions' ? 'Calculating...' : 'Calculate commissions' }}</button>
     <button type="button" [disabled]="items.length === 0" (click)="exportCsv()"><i class="bi bi-download"></i>Export</button>
+    <button type="button" (click)="holidayOpen = !holidayOpen"><i class="bi bi-calendar-event"></i>Holidays</button>
     <div class="column-control">
       <button type="button" (click)="columnMenuOpen = !columnMenuOpen"><i class="bi bi-layout-three-columns"></i>Columns</button>
       <div class="column-menu" *ngIf="columnMenuOpen">
         <label *ngFor="let column of columns"><input type="checkbox" [checked]="isVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label>
       </div>
     </div>
+  </section>
+
+  <section class="holiday-card" *ngIf="holidayOpen">
+    <header><h2>Holiday calendar</h2><span>{{ year }}</span></header>
+    <div class="holiday-form"><as-date-picker [(value)]="holidayDate" ariaLabel="Holiday date"></as-date-picker><input [ngModel]="holidayName" (ngModelChange)="holidayName = titleCase($event)" maxlength="120" placeholder="Holiday name" /><label><input type="checkbox" [(ngModel)]="holidayPaid" />Paid</label><button type="button" class="primary" [disabled]="!holidayDate || !holidayName.trim() || action === 'holiday'" (click)="saveHoliday()">Save</button></div>
+    <div class="holiday-list"><article *ngFor="let holiday of holidays"><span><strong>{{ holiday.name }}</strong><small>{{ formatDate(holiday.holidayDate) }} · {{ holiday.isPaid ? 'Paid' : 'Unpaid' }}</small></span><button type="button" aria-label="Remove holiday" (click)="deleteHoliday(holiday.id)"><i class="bi bi-trash"></i></button></article><p *ngIf="holidays.length === 0">No records yet</p></div>
   </section>
 
   <section class="progress-strip" aria-label="Payroll progress">
@@ -80,7 +87,7 @@
         </tr></thead>
         <tbody><tr *ngFor="let item of items">
           <td><strong>{{ item.staffName }}</strong><small>{{ item.employeeCode || 'No employee code' }}</small></td>
-          <td *ngIf="isVisible('attendance')"><strong>{{ days(item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2) }} days</strong><small>{{ item.workedMinutes }} min · OT {{ item.overtimeMinutes }} min</small></td>
+          <td *ngIf="isVisible('attendance')"><strong>{{ days(item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2 + item.holidayDaysX2) }} days</strong><small>{{ item.workedMinutes }} min · OT {{ item.overtimeMinutes }} min · Holiday {{ days(item.holidayDaysX2) }}</small></td>
           <td *ngIf="isVisible('payrate')"><strong>{{ formatMoney(item.payRatePaise) }}</strong><small>{{ item.payRateType ? statusLabel(item.payRateType) : 'Not configured' }}</small></td>
           <td *ngIf="isVisible('commission')">{{ formatMoney(item.commissionPaise) }}</td>
           <td *ngIf="isVisible('adjustments')">
@@ -138,9 +145,10 @@
 
   <footer class="action-footer" *ngIf="activeTab !== 'history'">
     <button type="button" (click)="backToStaff()">Cancel</button>
-    <div class="payout-fields" *ngIf="run?.status === 'finalized'">
-      <label>Method<select [(ngModel)]="payoutMethod"><option value="">Select</option><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
-      <label *ngIf="payoutMethod !== 'cash'">Reference<input maxlength="160" [(ngModel)]="payoutReference" /></label>
+    <div class="payout-fields" *ngIf="run?.status === 'reviewed' || run?.status === 'finalized'">
+      <label *ngIf="run?.status === 'finalized'">Method<select [(ngModel)]="payoutMethod"><option value="">Select</option><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
+      <label *ngIf="run?.status === 'finalized' && payoutMethod !== 'cash' && payoutMethod !== 'bank'">Reference<input maxlength="160" [(ngModel)]="payoutReference" /></label>
+      <label>MFA code<input type="password" autocomplete="one-time-code" [(ngModel)]="actionMfaCode" placeholder="Authenticator or recovery code" /></label>
     </div>
     <span *ngIf="run?.status !== 'finalized'"></span>
     <button type="button" [disabled]="!canSaveDraft" (click)="saveDraft()"><i class="bi bi-save"></i>{{ action === 'save' ? 'Saving...' : 'Save draft' }}</button>

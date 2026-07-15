@@ -1,12 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../shared/services/api.service';
+import { PosRealtimeService } from '../../core/services/pos-realtime.service';
 import { printInvoiceDocument } from '../../shared/utils/safe-invoice-print';
+import { Subscription } from 'rxjs';
 
 type LineType = 'service' | 'product' | 'membership' | 'package' | 'gift_card' | 'custom';
 type CatalogLineType = 'service' | 'product';
+type AddonSaleType = 'membership' | 'package' | 'gift_card';
 type DiscountType = 'amount' | 'percent';
 type SaleStatus = 'draft' | 'finalized';
 
@@ -22,6 +25,7 @@ interface PosLine {
   unitPrice: string;
   discount: string;
   discountType: DiscountType;
+  discountSource: string;
   taxPercent: string;
   staffId: string | number | null;
   staffSplits: StaffSplit[];
@@ -33,6 +37,10 @@ interface ClientKpi {
   unpaidPaise: number;
   membershipAssignDate: string | null;
   membershipExpireDate: string | null;
+  hasActiveMembership: boolean;
+  membershipDiscountPercent: number;
+  membershipServiceIds: string[];
+  rewardPointsBalance: number;
   membershipCredits: MembershipRedeemRow[];
   packageCredits: PackageRedeemRow[];
 }
@@ -64,14 +72,31 @@ interface PackageRedeemRow {
 }
 
 interface PaymentMode { code: string; label: string; balancePaise?: number; }
+interface GiftCardLookup {
+  id: string;
+  code: string;
+  clientId: string;
+  clientName: string;
+  initialAmountPaise: number;
+  balancePaise: number;
+  status: string;
+  expiresAt: string | null;
+}
 interface QuickClient { name: string; phone: string; email: string; birthday: string; anniversary: string; tags: string; notes: string; }
 interface OfflineCheckout {
   operationId: string;
   checkout: any;
-  appointmentId: string;
   createdAt: string;
   status: 'pending' | 'conflict';
   lastError: string;
+}
+interface PosPackageSettings { pricingPayment: { taxApplicable: boolean; taxInclusive: boolean }; packageCatalog: { salesEnabled: boolean; visibleInPos: boolean }; }
+interface PosMembershipSettings {
+  membershipCatalog: { membershipSalesEnabled: boolean; visibleInPos: boolean; freeMembershipEnabled: boolean; paidMembershipEnabled: boolean };
+  creditsBenefits: { rewardPointsEnabled: boolean; rewardPointValuePaise: number; discountBenefitsEnabled: boolean; allowBenefitStacking: boolean };
+  paymentBilling: { allowDueOnMembershipSale: boolean; membershipTaxApplicable: boolean; taxInclusiveMembershipPrice: boolean };
+  redemptionRules: { blockRedemptionWhenExpired: boolean; requireStaffConfirmation: boolean; allowPartialCredits: boolean; allowFamilySharing: boolean };
+  renewalExpiry: { expiredBenefitAction: string };
 }
 
 @Component({
@@ -81,16 +106,28 @@ interface OfflineCheckout {
   templateUrl: './pos-page.component.html',
   styleUrls: ['./pos-page.component.css'],
 })
-export class PosPageComponent implements OnInit {
+export class PosPageComponent implements OnInit, OnDestroy {
   clients: any[] = [];
   staff: any[] = [];
   services: any[] = [];
   products: any[] = [];
   memberships: any[] = [];
   packages: any[] = [];
+  membershipSettings: PosMembershipSettings = {
+    membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, freeMembershipEnabled: true, paidMembershipEnabled: true },
+    creditsBenefits: { rewardPointsEnabled: true, rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false },
+    paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false },
+    redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true },
+    renewalExpiry: { expiredBenefitAction: 'block' },
+  };
+  packageSettings: PosPackageSettings = { pricingPayment: { taxApplicable: true, taxInclusive: false }, packageCatalog: { salesEnabled: true, visibleInPos: true } };
   appointments: any[] = [];
   paymentMethods: PaymentMode[] = [];
   paymentInputs: Record<string, string> = {};
+  cashTills: Array<{ id: string; tillName: string; tillCode: string; status: string }> = [];
+  selectedCashTillId = '';
+  terminals: Array<{ id: string; terminalName: string; terminalCode: string; status: string; activeSessionId: string | null }> = [];
+  selectedTerminalId = '';
 
   selectedClientId: string | number | null = null;
   selectedStaffId: string | number | null = null;
@@ -115,6 +152,11 @@ export class PosPageComponent implements OnInit {
   selectedMembershipId = '';
   selectedPackageId = '';
   giftCardAmount = '';
+  giftCardPaymentCode = '';
+  verifiedGiftCard: GiftCardLookup | null = null;
+  giftCardLookupLoading = false;
+  giftCardLookupError = '';
+  activeAddonSale: AddonSaleType | null = null;
   private readonly catalogPickerSelection = new Set<string>();
 
   branchName = this.readStoredBranchName();
@@ -126,6 +168,7 @@ export class PosPageComponent implements OnInit {
   couponCode = '';
   tipAmount = '';
   walletCreditAmount = '';
+  rewardPointsToRedeem = '';
   roundTotal = false;
 
   saleLines: PosLine[] = [];
@@ -144,8 +187,11 @@ export class PosPageComponent implements OnInit {
   private clientSearchRequest = 0;
   private appointmentIdFromRoute = '';
   private membershipPrefillApplied = false;
+  private membershipSettingsLoaded = false;
+  private liveUpdates?: Subscription;
+  private heartbeatTimer = 0;
 
-  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute, private readonly router: Router) {}
+  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute, private readonly router: Router, private readonly realtime: PosRealtimeService) {}
 
   ngOnInit(): void {
     this.loadOfflineCheckouts();
@@ -156,12 +202,26 @@ export class PosPageComponent implements OnInit {
     this.loadStaff();
     this.loadServices();
     this.loadProducts();
+    this.loadMembershipSettings();
     this.loadMemberships();
     this.loadPackages();
+    this.loadPackageSettings();
     this.loadAppointments();
     this.loadPaymentMethods();
+    this.loadCashTills();
+    this.loadTerminals();
     const draftId = this.route.snapshot.queryParamMap.get('draft');
     if (draftId) this.restoreHeldInvoice(draftId);
+    this.liveUpdates = this.realtime.events().subscribe((event) => {
+      if (event.entityType === 'terminal') this.loadTerminals();
+      if (event.entityType === 'invoice' && event.entityId === this.draftId && !this.saving) this.restoreHeldInvoice(event.entityId);
+    });
+    this.heartbeatTimer = window.setInterval(() => this.sendTerminalHeartbeat(), 30_000);
+  }
+
+  ngOnDestroy(): void {
+    this.liveUpdates?.unsubscribe();
+    window.clearInterval(this.heartbeatTimer);
   }
 
   @HostListener('window:online')
@@ -172,26 +232,35 @@ export class PosPageComponent implements OnInit {
 
   get selectedClient(): any | null { return this.clients.find((c) => String(c.id) === String(this.selectedClientId)) ?? null; }
   get subtotalPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineSubtotalPaise(l), 0); }
-  get lineDiscountPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineDiscountPaiseValue(l), 0); }
-  get billDiscountPaise(): number {
+  get lineDiscountPaise(): number { return this.saleLines.reduce((s, line) => s + this.lineDiscountPaiseValue(line), 0); }
+  get manualBillDiscountPaise(): number {
     const base = Math.max(0, this.subtotalPaise - this.lineDiscountPaise);
     const value = this.num(this.billDiscount);
     if (!value) return 0;
     return this.billDiscountType === 'percent' ? Math.min(base, Math.round((base * value) / 100)) : Math.min(base, this.toPaise(value));
   }
+  get rewardDiscountPaise(): number {
+    const requested = Math.floor(this.num(this.rewardPointsToRedeem)) * Math.max(0, this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise));
+    return Math.min(Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.manualBillDiscountPaise), requested);
+  }
+  get billDiscountPaise(): number { return this.manualBillDiscountPaise + this.rewardDiscountPaise; }
   get gstPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineGstPaise(l), 0); }
   get tipPaise(): number { return this.toPaise(this.num(this.tipAmount)); }
   get totalBeforeRoundPaise(): number { return Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.billDiscountPaise + this.gstPaise + this.tipPaise); }
   get totalPaise(): number { return this.roundTotal ? Math.round(this.totalBeforeRoundPaise / 100) * 100 : this.totalBeforeRoundPaise; }
   get paidNowPaise(): number { return this.paymentMethods.reduce((s, m) => s + this.toPaise(this.num(this.paymentInputs[m.code])), 0); }
-  get balanceDuePaise(): number { return Math.max(0, this.totalPaise - this.paidNowPaise); }
+  get invoicePaidPaise(): number { return Math.min(this.totalPaise, this.paidNowPaise); }
+  get balanceDuePaise(): number { return Math.max(0, this.totalPaise - this.invoicePaidPaise); }
   get walletCreditPaise(): number { return this.toPaise(this.num(this.walletCreditAmount)); }
-  get unappliedOverpayPaise(): number { const overpay = Math.max(0, this.paidNowPaise - this.totalPaise - this.walletCreditPaise); return overpay < 100 ? 0 : overpay; }
-  get advanceAdjustedPaise(): number { return 0; }
-  get canSave(): boolean { return !this.saving && this.saleLines.some((line) => this.isLineReady(line)) && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption(); }
+  get unappliedOverpayPaise(): number { return Math.max(0, this.paidNowPaise - this.totalPaise - this.walletCreditPaise); }
+  get advanceAdjustedPaise(): number { return this.walletCreditPaise; }
+  get canSave(): boolean { return !this.saving && this.saleLines.some((line) => this.isLineReady(line)) && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption() && !this.hasInvalidRewardRedemption() && !this.giftCardRedemptionError() && !this.paymentAllocationError(); }
   get itemCount(): number { return this.saleLines.filter((line) => this.isLineReady(line)).length; }
   get offlineConflictCount(): number { return this.offlineCheckouts.filter((item) => item.status === 'conflict').length; }
   get offlineConflictMessage(): string { return this.offlineCheckouts.find((item) => item.status === 'conflict')?.lastError || ''; }
+  get membershipSalesVisible(): boolean { return this.membershipSettingsLoaded && this.membershipSettings.membershipCatalog.membershipSalesEnabled && this.membershipSettings.membershipCatalog.visibleInPos; }
+  get posMemberships(): any[] { return this.memberships.filter((plan) => this.membershipPlanAllowed(plan)); }
+  get giftCardPaymentPaise(): number { return this.toPaise(this.num(this.paymentInputs['gift_card'])); }
 
   incrementLineQty(line: PosLine): void {
     line.quantity = String(Math.max(1, this.num(line.quantity) + 1));
@@ -209,7 +278,40 @@ export class PosPageComponent implements OnInit {
   loadServices(): void { this.loadList('/api/v1/services', (rows) => { this.services = rows; this.applyAppointmentFromRoute(); }); }
   loadProducts(): void { this.loadList('/api/v1/products', (rows) => (this.products = rows)); }
   loadMemberships(): void { this.loadList('/api/v1/memberships', (rows) => { this.memberships = rows.filter((item) => item.active !== false); this.applyMembershipFromRoute(); }); }
-  loadPackages(): void { this.loadList('/api/v1/packages', (rows) => (this.packages = rows.filter((item) => item.active !== false))); }
+  loadMembershipSettings(): void {
+    this.api.get<any>('/membership-enterprise/settings').subscribe({
+      next: (response) => {
+        const value = response?.data ?? response;
+        this.membershipSettings = {
+          membershipCatalog: { ...this.membershipSettings.membershipCatalog, ...(value?.membershipCatalog ?? {}) },
+          creditsBenefits: { ...this.membershipSettings.creditsBenefits, ...(value?.creditsBenefits ?? {}) },
+          paymentBilling: { ...this.membershipSettings.paymentBilling, ...(value?.paymentBilling ?? {}) },
+          redemptionRules: { ...this.membershipSettings.redemptionRules, ...(value?.redemptionRules ?? {}) },
+          renewalExpiry: { ...this.membershipSettings.renewalExpiry, ...(value?.renewalExpiry ?? {}) },
+        };
+        this.membershipSettingsLoaded = true;
+        if (!this.membershipSalesVisible || !this.posMemberships.some((plan) => String(plan.id) === String(this.selectedMembershipId))) this.selectedMembershipId = '';
+        this.applyMembershipFromRoute();
+      },
+      error: () => {
+        this.membershipSettingsLoaded = true;
+        this.applyMembershipFromRoute();
+      },
+    });
+  }
+  loadPackages(): void { this.loadList('/api/v1/packages', (rows) => (this.packages = this.packageSettings.packageCatalog.salesEnabled && this.packageSettings.packageCatalog.visibleInPos ? rows.filter((item) => item.active !== false) : [])); }
+  loadPackageSettings(): void {
+    this.api.get<any>('/package-enterprise/settings').subscribe({
+      next: (response) => {
+        const value = response?.data ?? response;
+        this.packageSettings = {
+          pricingPayment: { ...this.packageSettings.pricingPayment, ...(value?.pricingPayment ?? {}) },
+          packageCatalog: { ...this.packageSettings.packageCatalog, ...(value?.packageCatalog ?? {}) },
+        };
+        if (!this.packageSettings.packageCatalog.salesEnabled || !this.packageSettings.packageCatalog.visibleInPos) this.packages = [];
+      },
+    });
+  }
   loadAppointments(): void { this.loadList('/api/v1/appointments', (rows) => { this.appointments = rows; this.applyAppointmentFromRoute(); }); }
   loadStaff(): void {
     this.loadList('/api/v1/staff', (rows) => {
@@ -235,6 +337,43 @@ export class PosPageComponent implements OnInit {
       },
       error: () => { this.paymentMethods = []; this.ensurePaymentInputs(); },
     });
+  }
+
+  loadCashTills(): void {
+    this.api.get<any>('/api/v1/pos/cash-drawer/current').subscribe({
+      next: (response) => {
+        const session = response?.data ?? response;
+        if (!session?.id || session.status !== 'open') { this.cashTills = []; this.selectedCashTillId = ''; return; }
+        this.api.get<any>(`/api/v1/pos/cash-drawer/${session.id}/tills`).subscribe({
+          next: (result) => {
+            const rows = result?.data ?? result;
+            this.cashTills = (Array.isArray(rows) ? rows : []).filter((row) => row.status === 'open');
+            if (!this.cashTills.some((row) => row.id === this.selectedCashTillId)) this.selectedCashTillId = this.cashTills.length === 1 ? this.cashTills[0].id : '';
+          },
+          error: () => { this.cashTills = []; this.selectedCashTillId = ''; },
+        });
+      },
+      error: () => { this.cashTills = []; this.selectedCashTillId = ''; },
+    });
+  }
+
+  loadTerminals(): void {
+    this.api.get<any>('/api/v1/pos/terminals').subscribe({
+      next: (response) => {
+        const rows = response?.data ?? response;
+        this.terminals = (Array.isArray(rows) ? rows : []).filter((row) => row.status === 'active');
+        if (!this.terminals.some((row) => row.id === this.selectedTerminalId)) {
+          const active = this.terminals.filter((row) => !!row.activeSessionId);
+          this.selectedTerminalId = active.length === 1 ? active[0].id : this.terminals.length === 1 ? this.terminals[0].id : '';
+        }
+      },
+      error: () => { this.terminals = []; this.selectedTerminalId = ''; },
+    });
+  }
+
+  private sendTerminalHeartbeat(): void {
+    if (!this.isOnline || !this.selectedTerminalId) return;
+    this.api.post(`/api/v1/pos/terminals/${this.selectedTerminalId}/heartbeat`, {}).subscribe({ error: () => undefined });
   }
 
   setClientSearch(value: string): void {
@@ -276,6 +415,7 @@ export class PosPageComponent implements OnInit {
   }
 
   setCompletedAppointment(appointmentId: string): void {
+    this.source = appointmentId ? 'appointment' : 'Counter';
     this.reference = appointmentId;
     const appointment = this.appointments.find((item) => String(item.id) === String(appointmentId));
     if (!appointment) return;
@@ -426,27 +566,42 @@ export class PosPageComponent implements OnInit {
     return count ? `Add ${count}` : 'Add';
   }
 
+  toggleAddonSale(type: AddonSaleType): void {
+    this.activeAddonSale = this.activeAddonSale === type ? null : type;
+  }
+
   addMembershipSale(): void {
-    const plan = this.memberships.find((item) => String(item.id) === String(this.selectedMembershipId));
+    if (!this.membershipSalesVisible) return;
+    const plan = this.posMemberships.find((item) => String(item.id) === String(this.selectedMembershipId));
     if (!plan) return;
-    const routePrice = Number(this.route.snapshot.queryParamMap.get('unitPricePaise'));
-    this.addAddonLine('membership', plan, Number.isFinite(routePrice) && routePrice >= 0 ? routePrice : this.pricePaise(plan), this.firstNumber(plan, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18);
+    const displayPrice = this.membershipDisplayPrice(plan);
+    const taxPercent = this.membershipTaxPercent(plan);
+    this.addAddonLine('membership', plan, this.priceBeforeMembershipTax(displayPrice, taxPercent), taxPercent);
     this.selectedMembershipId = '';
+    this.activeAddonSale = null;
   }
 
   addPackageSale(): void {
     const itemPackage = this.packages.find((item) => String(item.id) === String(this.selectedPackageId));
     if (!itemPackage) return;
-    this.addAddonLine('package', itemPackage, this.pricePaise(itemPackage), this.firstNumber(itemPackage, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18);
+    const configuredTax = this.packageSettings.pricingPayment.taxApplicable ? (this.firstNumber(itemPackage, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18) : 0;
+    const catalogPrice = this.pricePaise(itemPackage);
+    const unitPrice = this.packageSettings.pricingPayment.taxInclusive && configuredTax > 0
+      ? Math.round((catalogPrice * 100) / (100 + configuredTax))
+      : catalogPrice;
+    this.addAddonLine('package', itemPackage, unitPrice, configuredTax);
     this.selectedPackageId = '';
+    this.activeAddonSale = null;
   }
 
   addGiftCardSale(): void {
+    if (!this.selectedClientId) { this.error = 'Select a client before selling a gift card'; return; }
     const amountPaise = this.toPaise(this.num(this.giftCardAmount));
     if (amountPaise <= 0) return;
-    const code = `GC-${Date.now().toString().slice(-6)}`;
+    const code = `GC-${globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase() || Date.now().toString().slice(-8)}`;
     this.addAddonLine('gift_card', { id: code, name: `Gift Card ${code}` }, amountPaise, 0);
     this.giftCardAmount = '';
+    this.activeAddonSale = null;
   }
 
   setLineStaffSearch(line: PosLine, value: string): void {
@@ -541,6 +696,7 @@ export class PosPageComponent implements OnInit {
   onClientChange(clientId: string | number | null): void {
     this.selectedClientId = clientId;
     this.selectedSale = null;
+    this.rewardPointsToRedeem = '';
     this.refreshClientKpi(clientId);
   }
 
@@ -614,7 +770,8 @@ export class PosPageComponent implements OnInit {
   membershipRedeemCount(): number { return this.membershipRedeemRows.reduce((sum, row) => sum + Math.max(0, this.num(row.redeemQty)), 0); }
 
   setMembershipRedeemQty(row: MembershipRedeemRow, value: string): void {
-    row.redeemQty = String(Math.max(0, Math.min(row.pendingQty, this.num(value))));
+    const requested = Math.max(0, Math.min(row.pendingQty, this.num(value)));
+    row.redeemQty = String(!this.membershipSettings.redemptionRules.allowPartialCredits && requested > 0 ? row.pendingQty : requested);
   }
 
   setMembershipRedeemStaff(row: MembershipRedeemRow, staffId: string): void {
@@ -624,7 +781,9 @@ export class PosPageComponent implements OnInit {
   }
 
   redeemMembershipRow(row: MembershipRedeemRow): void {
-    if (this.num(row.redeemQty) <= 0 && row.pendingQty > 0) row.redeemQty = '1';
+    if (this.num(row.redeemQty) <= 0 && row.pendingQty > 0) {
+      row.redeemQty = String(this.membershipSettings.redemptionRules.allowPartialCredits ? 1 : row.pendingQty);
+    }
   }
 
   setPackageRedeemQty(row: PackageRedeemRow, value: string): void {
@@ -641,10 +800,54 @@ export class PosPageComponent implements OnInit {
     if (this.num(row.redeemQty) <= 0 && row.pendingQty > 0) row.redeemQty = '1';
   }
 
+  onGiftCardCodeInput(value: string): void {
+    this.giftCardPaymentCode = value.toUpperCase().replace(/\s+/g, '');
+    this.verifiedGiftCard = null;
+    this.giftCardLookupError = '';
+  }
+
+  verifyGiftCard(): void {
+    const code = this.giftCardPaymentCode.trim().toUpperCase();
+    this.giftCardPaymentCode = code;
+    this.verifiedGiftCard = null;
+    this.giftCardLookupError = '';
+    if (!code) { this.giftCardLookupError = 'Enter gift card code'; return; }
+    this.giftCardLookupLoading = true;
+    this.api.get<any>(`/retention/gift-cards?code=${encodeURIComponent(code)}`).subscribe({
+      next: (response: any) => {
+        const card = this.list(response).find((item) => String(item?.code ?? '').trim().toUpperCase() === code);
+        if (!card) { this.giftCardLookupError = 'Gift card not found'; this.giftCardLookupLoading = false; return; }
+        const normalized: GiftCardLookup = {
+          id: String(card.id ?? ''),
+          code: String(card.code ?? '').toUpperCase(),
+          clientId: String(card.clientId ?? card.client_id ?? ''),
+          clientName: String(card.clientName ?? card.client_name ?? ''),
+          initialAmountPaise: this.firstMoney(card, ['initialAmountPaise', 'initial_amount_paise']),
+          balancePaise: this.firstMoney(card, ['balancePaise', 'balance_paise']),
+          status: String(card.status ?? ''),
+          expiresAt: card.expiresAt ?? card.expires_at ?? null,
+        };
+        if (normalized.status !== 'active') { this.giftCardLookupError = `Gift card is ${normalized.status || 'not active'}`; this.giftCardLookupLoading = false; return; }
+        if (normalized.expiresAt && String(normalized.expiresAt).slice(0, 10) < new Date().toISOString().slice(0, 10)) { this.giftCardLookupError = 'Gift card is expired'; this.giftCardLookupLoading = false; return; }
+        if (normalized.balancePaise <= 0) { this.giftCardLookupError = 'Gift card has no available balance'; this.giftCardLookupLoading = false; return; }
+        this.verifiedGiftCard = normalized;
+        this.giftCardLookupLoading = false;
+      },
+      error: (err: any) => { this.giftCardLookupError = this.errorText(err, 'Gift card could not be verified'); this.giftCardLookupLoading = false; },
+    });
+  }
+
   fillPayment(method: PaymentMode): void { if (this.balanceDuePaise > 0) this.paymentInputs[method.code] = String(Math.round(this.balanceDuePaise / 100)); }
   applyOverpayToWallet(): void { if (this.unappliedOverpayPaise > 0) this.walletCreditAmount = this.paiseToInput(this.walletCreditPaise + this.unappliedOverpayPaise); }
   applyOverpayToTip(): void { if (this.unappliedOverpayPaise > 0) this.tipAmount = this.paiseToInput(this.tipPaise + this.unappliedOverpayPaise); }
-  clearPayments(): void { this.paymentInputs = {}; this.walletCreditAmount = ''; this.ensurePaymentInputs(); }
+  clearPayments(): void {
+    this.paymentInputs = {};
+    this.walletCreditAmount = '';
+    this.giftCardPaymentCode = '';
+    this.verifiedGiftCard = null;
+    this.giftCardLookupError = '';
+    this.ensurePaymentInputs();
+  }
   holdInvoice(): void { this.saveSale('draft'); }
   finalizeSale(): void { this.saveSale('finalized'); }
 
@@ -658,7 +861,6 @@ export class PosPageComponent implements OnInit {
         this.persistOfflineCheckouts();
         this.syncingOffline = false;
         this.message = 'Offline checkout synced';
-        if (queued.appointmentId) this.completeOfflineAppointment(queued.appointmentId);
         this.syncOfflineCheckouts();
       },
       error: (err: any) => {
@@ -684,12 +886,27 @@ export class PosPageComponent implements OnInit {
   }
 
   lineSubtotalPaise(line: PosLine): number { return this.toPaise(this.num(line.unitPrice)) * Math.max(0, this.num(line.quantity)); }
+  setLineDiscount(line: PosLine, value: string): void { line.discount = value; line.discountSource = ''; }
+  setLineDiscountType(line: PosLine, value: DiscountType): void { line.discountType = value; line.discountSource = ''; }
   lineDiscountPaiseValue(line: PosLine): number {
+    return Math.min(this.lineSubtotalPaise(line), this.manualLineDiscountPaise(line) + this.membershipLineDiscountPaise(line));
+  }
+  private manualLineDiscountPaise(line: PosLine): number {
     const subtotal = this.lineSubtotalPaise(line);
     const value = this.num(line.discount);
     return line.discountType === 'percent'
       ? Math.round(subtotal * Math.min(100, Math.max(0, value)) / 100)
       : Math.min(subtotal, this.toPaise(value));
+  }
+  private membershipLineDiscountPaise(line: PosLine): number {
+    const benefits = this.membershipSettings.creditsBenefits;
+    if (line.discountSource || line.lineType !== 'service' || !line.itemId || !this.clientKpi.hasActiveMembership || !benefits.discountBenefitsEnabled || this.clientKpi.membershipDiscountPercent <= 0) return 0;
+    if (this.clientKpi.membershipServiceIds.length && !this.clientKpi.membershipServiceIds.includes(String(line.itemId))) return 0;
+    if (!benefits.allowBenefitStacking && (this.hasManualDiscount() || this.num(this.rewardPointsToRedeem) > 0)) return 0;
+    return Math.round(this.lineSubtotalPaise(line) * Math.min(100, this.clientKpi.membershipDiscountPercent) / 100);
+  }
+  private hasManualDiscount(): boolean {
+    return this.saleLines.some((line) => this.manualLineDiscountPaise(line) > 0) || this.num(this.billDiscount) > 0 || !!this.couponCode.trim();
   }
   lineGstPaise(line: PosLine): number { return Math.round((Math.max(0, this.lineSubtotalPaise(line) - this.lineDiscountPaiseValue(line)) * Math.max(0, this.num(line.taxPercent))) / 100); }
   lineTotalPaise(line: PosLine): number { return Math.max(0, this.lineSubtotalPaise(line) - this.lineDiscountPaiseValue(line) + this.lineGstPaise(line)); }
@@ -745,6 +962,7 @@ export class PosPageComponent implements OnInit {
       unitPrice: '',
       discount: '',
       discountType: 'amount',
+      discountSource: '',
       taxPercent: '',
       staffId: this.selectedStaffId,
       staffSplits: [],
@@ -763,12 +981,14 @@ export class PosPageComponent implements OnInit {
   }
 
   private applyMembershipFromRoute(): void {
-    if (this.membershipPrefillApplied || !this.clients.length || !this.memberships.length) return;
+    if (this.membershipPrefillApplied || !this.membershipSalesVisible || !this.clients.length || !this.memberships.length) return;
     const membershipId = this.route.snapshot.queryParamMap.get('membershipId');
     if (!membershipId) return;
-    const plan = this.memberships.find((item) => String(item.id) === membershipId);
+    const plan = this.posMemberships.find((item) => String(item.id) === membershipId);
     if (!plan) return;
-    this.addAddonLine('membership', plan, this.pricePaise(plan), this.firstNumber(plan, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18);
+    const displayPrice = this.membershipDisplayPrice(plan);
+    const taxPercent = this.membershipTaxPercent(plan);
+    this.addAddonLine('membership', plan, this.priceBeforeMembershipTax(displayPrice, taxPercent), taxPercent);
     this.membershipPrefillApplied = true;
   }
 
@@ -811,10 +1031,23 @@ export class PosPageComponent implements OnInit {
     this.error = '';
     this.message = '';
     if (this.hasInvalidStaffSplit()) { this.error = 'Staff split total must be 100%'; return; }
+    if (this.hasMissingMembershipRedeemStaff()) { this.error = 'Select staff for membership redemption'; return; }
     if (this.hasInvalidMembershipRedemption()) { this.error = 'Membership redeem qty is not available'; return; }
     if (this.hasInvalidPackageRedemption()) { this.error = 'Package redeem qty is not available'; return; }
+    const giftCardError = this.giftCardRedemptionError();
+    if (giftCardError) { this.error = giftCardError; return; }
+    const rewardError = this.rewardRedemptionError();
+    if (rewardError) { this.error = rewardError; return; }
+    const paymentError = this.paymentAllocationError();
+    if (paymentError) { this.error = paymentError; return; }
+    if (status === 'draft' && this.walletCreditPaise > 0) { this.error = 'Client advance can only be applied when finalizing the invoice'; return; }
     if (!this.canSave) { this.error = 'Add at least one item'; return; }
+    if (status !== 'draft' && this.hasMembershipSaleLine() && !this.membershipSettings.paymentBilling.allowDueOnMembershipSale && this.paidNowPaise < this.totalPaise) {
+      this.error = 'Full payment is required for membership sales';
+      return;
+    }
     if (!this.isOnline) {
+      if (this.giftCardPaymentPaise > 0) { this.error = 'Gift card redemption requires an internet connection'; return; }
       if (status === 'draft' || this.draftId) { this.error = 'Held invoices require an internet connection'; return; }
       this.queueOfflineCheckout();
       return;
@@ -832,7 +1065,7 @@ export class PosPageComponent implements OnInit {
   }
 
   private finalizeHeldInvoice(): void {
-    this.api.post<any>(`/api/v1/pos/invoices/${this.draftId}/finalize`, {}).subscribe({ next: (res: any) => this.completeSave(res, 'finalized'), error: (err: any) => this.saveError(err) });
+    this.api.post<any>(`/api/v1/pos/invoices/${this.draftId}/finalize`, { cashDrawerTillId: this.selectedCashTillId || null }).subscribe({ next: (res: any) => this.completeSave(res, 'finalized'), error: (err: any) => this.saveError(err) });
   }
 
   private completeSave(res: any, status: SaleStatus): void {
@@ -842,19 +1075,7 @@ export class PosPageComponent implements OnInit {
     this.saving = false;
     this.loadPaymentMethods();
     if (this.selectedClientId) this.refreshClientKpi(this.selectedClientId);
-    if (status === 'finalized') this.completeReferencedAppointment();
-  }
-
-  private completeReferencedAppointment(): void {
-    const appointmentId = this.reference.trim();
-    if (!this.appointments.some((item) => String(item.id) === appointmentId)) {
-      void this.router.navigate(['/pos/invoices']);
-      return;
-    }
-    this.api.post(`/api/v1/appointments/${appointmentId}/status`, { status: 'completed', reason: 'Invoice finalized' }).subscribe({
-      next: () => void this.router.navigate(['/pos/invoices']),
-      error: () => { this.error = 'Invoice saved, but appointment status could not be updated'; },
-    });
+    if (status === 'finalized') void this.router.navigate(['/pos/invoices']);
   }
 
   private saveError(err: any): void {
@@ -869,7 +1090,6 @@ export class PosPageComponent implements OnInit {
     const queued: OfflineCheckout = {
       operationId: crypto.randomUUID(),
       checkout: this.salePayload('finalized'),
-      appointmentId: this.reference.trim(),
       createdAt: new Date().toISOString(),
       status: 'pending',
       lastError: '',
@@ -892,8 +1112,10 @@ export class PosPageComponent implements OnInit {
     this.clientKpi = this.emptyKpi();
     this.membershipRedeemRows = [];
     this.packageRedeemRows = [];
+    this.source = 'Counter';
     this.reference = '';
     this.billDiscount = '';
+    this.rewardPointsToRedeem = '';
     this.couponCode = '';
     this.tipAmount = '';
     this.walletCreditAmount = '';
@@ -924,12 +1146,6 @@ export class PosPageComponent implements OnInit {
     return `aurashine_pos_offline:${tenantId}:${branchId}`;
   }
 
-  private completeOfflineAppointment(appointmentId: string): void {
-    this.api.post(`/api/v1/appointments/${appointmentId}/status`, { status: 'completed', reason: 'Offline invoice synced' }).subscribe({
-      error: () => { this.error = 'Invoice synced, but appointment status could not be updated'; },
-    });
-  }
-
   private errorText(err: any, fallback: string): string {
     const body = err?.error;
     return typeof body === 'string' ? body : body?.error?.message ?? body?.message ?? body?.error ?? err?.message ?? fallback;
@@ -952,13 +1168,25 @@ export class PosPageComponent implements OnInit {
         this.source = sale.source ?? 'Counter';
         this.reference = sale.referenceId ?? sale.reference_id ?? '';
         this.invoiceDate = this.formatDate(sale.businessDate ?? sale.business_date ?? sale.createdAt ?? sale.created_at);
-        this.billDiscount = this.paiseToInput(this.firstMoney(sale, ['billDiscountPaise', 'bill_discount_paise']));
+        const restoredLines = Array.isArray(details.lines) ? details.lines : [];
+        const rewardLine = restoredLines.find((line: any) => String(line.lineType ?? line.line_type) === 'redemption' && String(line.itemId ?? line.item_id) === 'reward_points');
+        const rewardPoints = Math.max(0, this.firstNumber(rewardLine, ['quantity', 'qty']));
+        this.rewardPointsToRedeem = rewardPoints ? String(rewardPoints) : '';
+        const storedBillDiscount = this.firstMoney(sale, ['billDiscountPaise', 'bill_discount_paise']);
+        this.billDiscount = this.paiseToInput(Math.max(0, storedBillDiscount - rewardPoints * this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise)));
         this.couponCode = sale.couponCode ?? sale.coupon_code ?? '';
         this.tipAmount = this.paiseToInput(this.firstMoney(sale, ['tipPaise', 'tip_paise']));
-        this.saleLines = (details.lines ?? []).map((line: any) => this.restoreLine(line));
+        this.saleLines = restoredLines.filter((line: any) => line !== rewardLine).map((line: any) => this.restoreLine(line));
         this.paymentInputs = {};
-        (details.payments ?? []).forEach((payment: any) => this.paymentInputs[String(payment.method ?? payment.code)] = this.paiseToInput(this.firstMoney(payment, ['amountPaise', 'amount_paise'])));
+        this.giftCardPaymentCode = '';
+        this.verifiedGiftCard = null;
+        (details.payments ?? []).forEach((payment: any) => {
+          const method = String(payment.method ?? payment.code);
+          this.paymentInputs[method] = this.paiseToInput(this.firstMoney(payment, ['amountPaise', 'amount_paise']));
+          if (method === 'gift_card') this.giftCardPaymentCode = String(payment.methodReference ?? payment.method_reference ?? payment.reference ?? '').toUpperCase();
+        });
         this.ensurePaymentInputs();
+        if (this.giftCardPaymentCode) this.verifyGiftCard();
         this.refreshClientKpi(this.selectedClientId);
         this.message = 'Held invoice restored';
       },
@@ -968,10 +1196,11 @@ export class PosPageComponent implements OnInit {
 
   private restoreLine(line: any): PosLine {
     const type = String(line.lineType ?? line.line_type ?? 'custom') as LineType;
-    const amountType = String(line.discountType ?? line.discount_type ?? 'amount') === 'percent' ? 'percent' : 'amount';
+    const rawDiscountType = String(line.discountType ?? line.discount_type ?? 'amount');
+    const amountType = rawDiscountType === 'percent' ? 'percent' : 'amount';
     const discount = amountType === 'percent' ? String((this.firstMoney(line, ['discountBps', 'discount_bps']) || 0) / 100) : this.paiseToInput(this.firstMoney(line, ['discountValuePaise', 'discount_value_paise', 'discountPaise', 'discount_paise']));
     const itemName = String(line.itemName ?? line.item_name ?? '');
-    return { id: `line-${this.lineSeed++}`, lineType: type, itemId: (line.itemId ?? line.item_id ?? null) as any, itemName, itemSearchText: itemName, staffSearchText: '', customName: type === 'custom' ? itemName : '', quantity: String(line.quantity ?? 1), unitPrice: this.paiseToInput(this.firstMoney(line, ['unitPricePaise', 'unit_price_paise'])), discount, discountType: amountType, taxPercent: String(line.taxPercent ?? line.tax_percent ?? line.gstPercent ?? line.gst_percent ?? ''), staffId: (line.staffId ?? line.staff_id ?? null) as any, staffSplits: this.parseStaffSplits(line.staffSplits ?? line.staff_splits) };
+    return { id: `line-${this.lineSeed++}`, lineType: type, itemId: (line.itemId ?? line.item_id ?? null) as any, itemName, itemSearchText: itemName, staffSearchText: '', customName: type === 'custom' ? itemName : '', quantity: String(line.quantity ?? 1), unitPrice: this.paiseToInput(this.firstMoney(line, ['unitPricePaise', 'unit_price_paise'])), discount, discountType: amountType, discountSource: rawDiscountType.startsWith('membership') ? rawDiscountType : '', taxPercent: String(line.taxPercent ?? line.tax_percent ?? line.gstPercent ?? line.gst_percent ?? ''), staffId: (line.staffId ?? line.staff_id ?? null) as any, staffSplits: this.parseStaffSplits(line.staffSplits ?? line.staff_splits) };
   }
 
   private salePayload(status: SaleStatus): any {
@@ -982,6 +1211,10 @@ export class PosPageComponent implements OnInit {
       const itemId = line.lineType === 'custom' || line.itemId == null ? null : String(line.itemId);
       const lineStaffId = this.idPayload(line.staffId);
       const staffSplits = this.payloadStaffSplits(line);
+      const manualDiscountPaise = this.manualLineDiscountPaise(line);
+      const membershipDiscountPaise = this.membershipLineDiscountPaise(line);
+      const discountSource = line.discountSource || (membershipDiscountPaise > 0 ? (manualDiscountPaise > 0 ? 'membership_stacked' : 'membership') : line.discountType);
+      const fixedDiscountPaise = discountSource.startsWith('membership') ? manualDiscountPaise + membershipDiscountPaise : line.discountType === 'amount' ? manualDiscountPaise : null;
       return {
         lineType: line.lineType,
         line_type: line.lineType,
@@ -1008,12 +1241,12 @@ export class PosPageComponent implements OnInit {
         quantity: this.num(line.quantity),
         unitPricePaise: this.toPaise(this.num(line.unitPrice)),
         unit_price_paise: this.toPaise(this.num(line.unitPrice)),
-        discountType: line.discountType,
-        discount_type: line.discountType,
-        discountValue: this.num(line.discount),
-        discount_value: this.num(line.discount),
-        discountPaise: line.discountType === 'amount' ? this.lineDiscountPaiseValue(line) : null,
-        discount_paise: line.discountType === 'amount' ? this.lineDiscountPaiseValue(line) : null,
+        discountType: discountSource,
+        discount_type: discountSource,
+        discountValue: discountSource.startsWith('membership') ? 0 : this.num(line.discount),
+        discount_value: discountSource.startsWith('membership') ? 0 : this.num(line.discount),
+        discountPaise: fixedDiscountPaise,
+        discount_paise: fixedDiscountPaise,
         gstPercent: this.num(line.taxPercent),
         gst_percent: this.num(line.taxPercent),
         taxPercent: this.num(line.taxPercent),
@@ -1031,6 +1264,15 @@ export class PosPageComponent implements OnInit {
         staffId: row.staffId ? String(row.staffId) : '', staff_id: row.staffId ? String(row.staffId) : '',
         qty: quantity, quantity, unitPricePaise: 0, unit_price_paise: 0, discountType: 'amount', discount_type: 'amount', discountValue: 0, discount_value: 0, gstPercent: 0, gst_percent: 0,
       })));
+    const rewardPoints = Math.floor(this.num(this.rewardPointsToRedeem));
+    if (rewardPoints > 0) {
+      lines.push({
+        lineType: 'redemption', line_type: 'redemption', itemId: 'reward_points', item_id: 'reward_points',
+        itemName: 'Reward points', item_name: 'Reward points', qty: rewardPoints, quantity: rewardPoints,
+        unitPricePaise: 0, unit_price_paise: 0, discountType: 'amount', discount_type: 'amount',
+        discountValue: 0, discount_value: 0, gstPercent: 0, gst_percent: 0,
+      });
+    }
     const paymentSplit = this.cappedPaymentSplit();
     const packageRedemptions = this.packageRedemptionPayload();
     return {
@@ -1050,6 +1292,8 @@ export class PosPageComponent implements OnInit {
       lines,
       billDiscountPaise: this.billDiscountPaise,
       bill_discount_paise: this.billDiscountPaise,
+      rewardDiscountPaise: this.rewardDiscountPaise,
+      reward_discount_paise: this.rewardDiscountPaise,
       billDiscountType: this.billDiscountType,
       bill_discount_type: this.billDiscountType,
       couponCode: this.couponCode.trim() || null,
@@ -1063,6 +1307,8 @@ export class PosPageComponent implements OnInit {
       paymentSplit,
       payment_split: paymentSplit,
       payments: paymentSplit,
+      cashDrawerTillId: this.selectedCashTillId || null,
+      terminalId: this.selectedTerminalId || null,
       packageRedemptions,
       subtotalPaise: this.subtotalPaise,
       gstPaise: this.gstPaise,
@@ -1077,8 +1323,61 @@ export class PosPageComponent implements OnInit {
 
   private isCatalogLine(type: LineType): type is CatalogLineType { return type === 'service' || type === 'product'; }
   private hasInvalidStaffSplit(): boolean { return this.saleLines.some((line) => line.staffSplits.length > 0 && this.splitPercentTotal(line) !== 100); }
-  private hasInvalidMembershipRedemption(): boolean { return this.membershipRedeemRows.some((row) => this.num(row.redeemQty) < 0 || this.num(row.redeemQty) > row.pendingQty); }
+  private hasMissingMembershipRedeemStaff(): boolean { return this.membershipSettings.redemptionRules.requireStaffConfirmation && this.membershipRedeemRows.some((row) => this.num(row.redeemQty) > 0 && !row.staffId); }
+  private hasInvalidMembershipRedemption(): boolean {
+    return this.hasMissingMembershipRedeemStaff() || this.membershipRedeemRows.some((row) => {
+      const quantity = this.num(row.redeemQty);
+      return quantity < 0 || quantity > row.pendingQty || (!this.membershipSettings.redemptionRules.allowPartialCredits && quantity > 0 && quantity !== row.pendingQty);
+    });
+  }
   private hasInvalidPackageRedemption(): boolean { return this.packageRedeemRows.some((row) => this.num(row.redeemQty) < 0 || this.num(row.redeemQty) > row.pendingQty); }
+  private giftCardRedemptionError(): string {
+    if (this.giftCardPaymentPaise <= 0) return '';
+    const code = this.giftCardPaymentCode.trim().toUpperCase();
+    if (!code) return 'Enter gift card code';
+    if (!this.verifiedGiftCard || this.verifiedGiftCard.code !== code) return 'Verify gift card before payment';
+    if (this.verifiedGiftCard.status !== 'active') return 'Gift card is not active';
+    if (this.giftCardPaymentPaise > this.verifiedGiftCard.balancePaise) return 'Gift card balance cannot cover this payment';
+    return '';
+  }
+  private paymentAllocationError(): string {
+    const overpayPaise = Math.max(0, this.paidNowPaise - this.totalPaise);
+    if (this.walletCreditPaise > 0 && !this.selectedClientId) return 'Select a client before adding advance to wallet';
+    if (this.walletCreditPaise > overpayPaise) return 'Wallet credit cannot exceed the extra payment';
+    if (this.walletCreditPaise < overpayPaise) return 'Apply the extra payment to client wallet or staff tip';
+    return '';
+  }
+  private hasMembershipSaleLine(): boolean { return this.saleLines.some((line) => line.lineType === 'membership' && this.isLineReady(line)); }
+  private membershipPlanAllowed(plan: any): boolean {
+    const paid = this.pricePaise(plan) > 0;
+    return paid ? this.membershipSettings.membershipCatalog.paidMembershipEnabled : this.membershipSettings.membershipCatalog.freeMembershipEnabled;
+  }
+  private membershipTaxPercent(plan: any): number { return this.membershipSettings.paymentBilling.membershipTaxApplicable ? (this.firstNumber(plan, ['gstPercent', 'taxPercent', 'gst_percent', 'tax_percent']) || 18) : 0; }
+  private membershipDisplayPrice(plan: any): number {
+    const rawPrice = this.route.snapshot.queryParamMap.get('unitPricePaise');
+    const routePrice = rawPrice === null || rawPrice.trim() === '' ? Number.NaN : Number(rawPrice);
+    return Number.isFinite(routePrice) && routePrice >= 0 ? routePrice : this.pricePaise(plan);
+  }
+  private priceBeforeMembershipTax(displayPricePaise: number, taxPercent: number): number {
+    return this.membershipSettings.paymentBilling.taxInclusiveMembershipPrice && taxPercent > 0
+      ? Math.round((displayPricePaise * 100) / (100 + taxPercent))
+      : displayPricePaise;
+  }
+  private hasInvalidRewardRedemption(): boolean {
+    return !!this.rewardRedemptionError();
+  }
+  private rewardRedemptionError(): string {
+    const points = this.num(this.rewardPointsToRedeem);
+    if (!points) return '';
+    if (points < 0 || !Number.isInteger(points)) return 'Reward points must be a whole positive number';
+    if (!this.selectedClientId || !this.clientKpi.hasActiveMembership) return 'Active membership is required for reward redemption';
+    if (!this.membershipSettings.creditsBenefits.rewardPointsEnabled) return 'Reward redemption is disabled';
+    if (points > this.clientKpi.rewardPointsBalance) return 'Reward points balance is insufficient';
+    if (this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise) <= 0) return 'Reward point value must be greater than zero';
+    if (!this.membershipSettings.creditsBenefits.allowBenefitStacking && this.hasManualDiscount()) return 'Reward points cannot be combined with other discounts';
+    if (points * this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise) > Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.manualBillDiscountPaise)) return 'Reward points exceed bill amount';
+    return '';
+  }
   private packageRedemptionPayload(): any[] {
     return this.packageRedeemRows
       .map((row) => ({ row, quantity: Math.floor(this.num(row.redeemQty)) }))
@@ -1108,7 +1407,7 @@ export class PosPageComponent implements OnInit {
     }));
   }
   private cappedPaymentSplit(): any[] {
-    let remainingPaise = this.totalPaise;
+    let remainingPaise = this.totalPaise + this.walletCreditPaise;
     const payments: any[] = [];
 
     for (const method of this.paymentMethods) {
@@ -1116,7 +1415,8 @@ export class PosPageComponent implements OnInit {
       const typedPaise = this.toPaise(this.num(this.paymentInputs[method.code]));
       const amountPaise = Math.min(typedPaise, remainingPaise);
       if (amountPaise > 0) {
-        payments.push({ method: method.code, code: method.code, amountPaise, amount_paise: amountPaise });
+        const methodReference = method.code === 'gift_card' ? this.giftCardPaymentCode.trim().toUpperCase() : '';
+        payments.push({ method: method.code, code: method.code, amountPaise, amount_paise: amountPaise, methodReference, method_reference: methodReference, reference: methodReference });
         remainingPaise -= amountPaise;
       }
     }
@@ -1146,11 +1446,15 @@ export class PosPageComponent implements OnInit {
       unpaidPaise: this.firstMoney(data, ['unpaidPaise', 'unpaid_paise', 'unpaidAmountPaise', 'unpaid_amount_paise']),
       membershipAssignDate: data?.membershipAssignDate ?? data?.membership_assign_date ?? data?.membershipAssignedAt ?? data?.membership_assigned_at ?? null,
       membershipExpireDate: data?.membershipExpireDate ?? data?.membership_expire_date ?? data?.membershipExpiresAt ?? data?.membership_expires_at ?? null,
+      hasActiveMembership: Boolean(data?.hasActiveMembership ?? data?.has_active_membership),
+      membershipDiscountPercent: this.firstNumber(data, ['membershipDiscountPercent', 'membership_discount_percent']),
+      membershipServiceIds: Array.isArray(data?.membershipServiceIds ?? data?.membership_service_ids) ? (data?.membershipServiceIds ?? data?.membership_service_ids).map(String) : [],
+      rewardPointsBalance: this.firstNumber(data, ['rewardPointsBalance', 'reward_points_balance']),
       membershipCredits: this.membershipCreditsFrom(data?.membershipCredits ?? data?.membership_credits),
       packageCredits: this.packageCreditsFrom(data?.packageCredits ?? data?.package_credits ?? data?.packageRedemptions ?? data?.package_redemptions),
     };
   }
-  private emptyKpi(): ClientKpi { return { walletPaise: 0, unpaidPaise: 0, membershipAssignDate: null, membershipExpireDate: null, membershipCredits: [], packageCredits: [] }; }
+  private emptyKpi(): ClientKpi { return { walletPaise: 0, unpaidPaise: 0, membershipAssignDate: null, membershipExpireDate: null, hasActiveMembership: false, membershipDiscountPercent: 0, membershipServiceIds: [], rewardPointsBalance: 0, membershipCredits: [], packageCredits: [] }; }
   private membershipCreditsFrom(raw: any): MembershipRedeemRow[] {
     const rows = Array.isArray(raw) ? raw : [];
     return rows.map((row) => {

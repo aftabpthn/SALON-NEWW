@@ -16,7 +16,7 @@ use crate::{
         },
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_attendance_service},
+    services::{auth_service::AuthClaims, staff_attendance_service, staff_enterprise_service},
     state::AppState,
 };
 
@@ -182,15 +182,24 @@ async fn get_details(
 
 async fn clock_in(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<ClockInRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = self_scoped_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.staff_id.trim(),
+    )
+    .await?;
     let row = staff_attendance_service::clock_in(
         &state.db,
         &tenant_id,
         &branch_id,
-        payload.staff_id.trim(),
+        &staff_id,
         payload.business_date,
         payload.clock_in_at,
         payload.source.as_deref().unwrap_or("manual").trim(),
@@ -202,22 +211,50 @@ async fn clock_in(
 
 async fn clock_out(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<ClockOutRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let self_service = claims.role.eq_ignore_ascii_case("staff");
+    let staff_id = self_scoped_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.staff_id.trim(),
+    )
+    .await?;
     let row = staff_attendance_service::clock_out(
         &state.db,
         &tenant_id,
         &branch_id,
-        payload.staff_id.trim(),
+        &staff_id,
         payload.business_date,
         payload.clock_out_at,
-        payload.penalty_paise.unwrap_or(0),
+        if self_service {
+            0
+        } else {
+            payload.penalty_paise.unwrap_or(0)
+        },
         payload.comments.as_deref().unwrap_or("").trim(),
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn self_scoped_staff_id(
+    state: &AppState,
+    claims: &AuthClaims,
+    tenant_id: &str,
+    branch_id: &str,
+    requested_staff_id: &str,
+) -> Result<String, AppError> {
+    if claims.role.eq_ignore_ascii_case("staff") {
+        staff_enterprise_service::self_staff_id(&state.db, tenant_id, branch_id, &claims.sub).await
+    } else {
+        Ok(requested_staff_id.to_string())
+    }
 }
 
 async fn correct_attendance(

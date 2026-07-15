@@ -1,0 +1,229 @@
+<section class="outgoing-page">
+  <header class="command-strip">
+    <div class="title-block">
+      <span class="section-label">Finance</span>
+      <h1>Outgoing Funds</h1>
+    </div>
+    <div class="command-actions">
+      <button type="button" class="utility-button" (click)="reload()" [disabled]="loading() || busy()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+        Refresh
+      </button>
+      <button type="button" class="utility-button" *ngIf="canExport" (click)="exportCsv()" [disabled]="loading() || busy()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+        Export
+      </button>
+      <button type="button" class="primary-button" (click)="openCreate()" [disabled]="!canWrite || busy()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        New outgoing voucher
+      </button>
+    </div>
+  </header>
+
+  <p class="status-message success" *ngIf="success()">{{ success() }}</p>
+  <p class="status-message error" *ngIf="error() && !drawerOpen()">{{ error() }}</p>
+
+  <nav class="view-tabs" aria-label="Outgoing funds views">
+    <button type="button" [class.active]="activeTab() === 'entries'" (click)="activeTab.set('entries')">Entries</button>
+    <button type="button" [class.active]="activeTab() === 'report'" (click)="activeTab.set('report')">Report</button>
+  </nav>
+
+  <section class="kpi-grid" aria-label="Outgoing funds summary">
+    <article class="kpi-card">
+      <span class="kpi-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4H7zM5 7h14v14H5zM8 11h8M8 15h6"/></svg></span>
+      <div><span>Vouchers</span><strong>{{ loading() ? '—' : summary().voucherCount }}</strong></div>
+    </article>
+    <article class="kpi-card">
+      <span class="kpi-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h10M7 9h10M8 5c5 0 5 7 0 7h-1l7 7"/></svg></span>
+      <div><span>Approved outgoing</span><strong>{{ loading() ? '—' : money(summary().totalPaise) }}</strong></div>
+    </article>
+    <article class="kpi-card warning">
+      <span class="kpi-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <div><span>Pending approval</span><strong>{{ loading() ? '—' : summary().pendingCount }}</strong></div>
+    </article>
+    <article class="kpi-card positive">
+      <span class="kpi-icon gst">GST</span>
+      <div><span>Approved input GST</span><strong>{{ loading() ? '—' : money(summary().inputGstPaise) }}</strong></div>
+    </article>
+  </section>
+
+  <section class="workspace-card">
+    <div class="filters">
+      <label class="search-control">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+        <input type="search" [(ngModel)]="search" (keyup.enter)="applyFilters()" placeholder="Search voucher, payee, reference" />
+      </label>
+      <div class="date-filter">
+        <as-date-picker ariaLabel="Outgoing funds from date" [(value)]="fromDate"></as-date-picker>
+        <span>to</span>
+        <as-date-picker ariaLabel="Outgoing funds to date" [(value)]="toDate"></as-date-picker>
+      </div>
+      <select [(ngModel)]="category" aria-label="Filter outgoing category">
+        <option value="">All categories</option>
+        <option *ngFor="let item of categories()" [value]="item.key">{{ item.label }}</option>
+      </select>
+      <select [(ngModel)]="status" aria-label="Filter outgoing status">
+        <option value="">All statuses</option>
+        <option value="draft">Draft</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="reversed">Reversed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <button type="button" class="filter-button" (click)="applyFilters()" [disabled]="loading()">Apply</button>
+      <button type="button" class="icon-button" aria-label="Clear filters" (click)="clearFilters()" [disabled]="loading()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4"/></svg>
+      </button>
+    </div>
+
+    <div class="workflow-shortcuts" *ngIf="workflowCategories().length">
+      <span>Existing workflows</span>
+      <a *ngFor="let item of workflowCategories()" [routerLink]="item.workflowPath">{{ item.label }}</a>
+    </div>
+
+    <div class="loading-state" *ngIf="loading()">
+      <span></span><span></span><span></span>
+    </div>
+
+    <ng-container *ngIf="!loading()">
+      <div class="table-wrap" *ngIf="activeTab() === 'entries' && rows().length">
+        <table>
+          <thead><tr><th>Date</th><th>Voucher</th><th>Category / Payee</th><th>Payment</th><th>Status</th><th class="number">GST</th><th class="number">Amount</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let voucher of rows()" (click)="openVoucher(voucher)" [class.selected]="selected()?.id === voucher.id">
+              <td>{{ displayDate(voucher.businessDate) }}</td>
+              <td><strong>{{ voucher.voucherNumber }}</strong><small>{{ displayDateTime(voucher.updatedAt) }}</small></td>
+              <td><strong>{{ firstCategoryLabel(voucher) }}</strong><small>{{ voucher.linkedPartyName || voucher.billReference || '-' }}</small></td>
+              <td><strong>{{ voucher.paymentAccountName }}</strong><small>{{ voucher.paymentMode }}</small></td>
+              <td><span class="status-pill" [attr.data-status]="voucher.status">{{ statusLabel(voucher.status) }}</span></td>
+              <td class="number">{{ money(voucher.gstPaise) }}</td>
+              <td class="number"><strong>{{ money(voucher.totalPaise) }}</strong></td>
+              <td><button type="button" class="row-action" (click)="openVoucher(voucher); $event.stopPropagation()" aria-label="Open voucher">›</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap report-table" *ngIf="activeTab() === 'report' && reportLines().length">
+        <table>
+          <thead><tr><th>Date</th><th>Voucher</th><th>Category</th><th>Linked party</th><th>Payment</th><th>Status</th><th class="number">GST</th><th class="number">Amount</th><th>Bill / Remarks</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let line of reportLines()" (click)="openVoucherById(line.voucherId)">
+              <td>{{ displayDate(line.businessDate) }}</td>
+              <td>{{ line.voucherNumber }}</td>
+              <td><strong>{{ line.categoryLabel }}</strong><small>{{ line.accountCode }}</small></td>
+              <td>{{ line.linkedPartyName || '-' }}</td>
+              <td><strong>{{ line.paymentAccountName }}</strong><small>{{ line.paymentMode }}</small></td>
+              <td><span class="status-pill" [attr.data-status]="line.status">{{ statusLabel(line.status) }}</span></td>
+              <td class="number">{{ money(line.gstPaise) }}</td>
+              <td class="number"><strong>{{ money(line.amountPaise) }}</strong></td>
+              <td>{{ line.billReference || line.remarks || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" *ngIf="(activeTab() === 'entries' ? !rows().length : !reportLines().length)">
+        <span class="empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v4H6zM4 8h16v13H4zM8 12h8M8 16h5"/></svg></span>
+        <strong>No records yet</strong>
+        <button type="button" *ngIf="canWrite" (click)="openCreate()">Create voucher</button>
+      </div>
+    </ng-container>
+
+    <footer class="table-footer">
+      <span>{{ totalRecords() }} vouchers</span>
+      <div class="pager" *ngIf="totalPages() > 1">
+        <button type="button" aria-label="Previous page" (click)="changePage(currentPage() - 1)" [disabled]="currentPage() === 1 || loading()">‹</button>
+        <span>Page {{ currentPage() }} of {{ totalPages() }}</span>
+        <button type="button" aria-label="Next page" (click)="changePage(currentPage() + 1)" [disabled]="currentPage() === totalPages() || loading()">›</button>
+      </div>
+      <strong>{{ money(summary().totalPaise) }}</strong>
+    </footer>
+  </section>
+
+  <aside class="voucher-drawer" *ngIf="drawerOpen()">
+    <header>
+      <div>
+        <span class="section-label">{{ selected()?.voucherNumber || 'Finance voucher' }}</span>
+        <h2>{{ selected() ? 'Outgoing voucher' : 'New outgoing voucher' }}</h2>
+      </div>
+      <button type="button" class="icon-button" aria-label="Close outgoing voucher" (click)="closeDrawer()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+
+    <p class="drawer-message error" *ngIf="error()">{{ error() }}</p>
+    <p class="drawer-message success" *ngIf="success()">{{ success() }}</p>
+
+    <div class="drawer-body">
+      <section class="voucher-meta" *ngIf="selected() as voucher">
+        <span class="status-pill" [attr.data-status]="voucher.status">{{ statusLabel(voucher.status) }}</span>
+        <span *ngIf="voucher.journalEntryId">Journal {{ voucher.journalEntryId | slice:-8 }}</span>
+        <span *ngIf="voucher.reversalJournalEntryId">Reversal {{ voucher.reversalJournalEntryId | slice:-8 }}</span>
+      </section>
+
+      <div class="form-grid">
+        <label><span>Voucher date</span><as-date-picker ariaLabel="Outgoing voucher date" [(value)]="draft.businessDate" [disabled]="!canEditSelected()"></as-date-picker></label>
+        <label><span>Payment account</span><select [(ngModel)]="draft.paymentAccountCode" [disabled]="!canEditSelected()"><option value="">Select cash / bank</option><option *ngFor="let account of paymentAccounts()" [value]="account.code">{{ account.name }}</option></select></label>
+        <label><span>Payment mode</span><select [(ngModel)]="draft.paymentMode" (ngModelChange)="paymentModeChanged()" [disabled]="!canEditSelected()"><option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Card</option><option>Cheque</option><option>NEFT</option><option>RTGS</option><option>IMPS</option><option>Wallet</option><option>Other</option></select></label>
+        <label><span>Reference number</span><input type="text" [(ngModel)]="draft.referenceNumber" [disabled]="!canEditSelected()" /></label>
+        <label *ngIf="draft.paymentMode === 'Cheque'"><span>Cheque number</span><input type="text" [(ngModel)]="draft.chequeNumber" [disabled]="!canEditSelected()" /></label>
+        <label *ngIf="draft.paymentMode === 'Cheque'"><span>Cheque date</span><as-date-picker ariaLabel="Cheque date" [(value)]="draft.chequeDate" [disabled]="!canEditSelected()"></as-date-picker></label>
+      </div>
+
+      <section class="line-section">
+        <div class="section-title"><h3>Expense lines</h3><button type="button" (click)="addLine()" [disabled]="!canEditSelected()">＋ Add line</button></div>
+        <article class="line-card" *ngFor="let line of draft.lines; let index = index">
+          <label class="wide"><span>Category / ledger account</span><select [(ngModel)]="line.categoryKey" [disabled]="!canEditSelected()"><option value="">Select expense category</option><option *ngFor="let item of manualCategories()" [value]="item.key">{{ item.label }}</option></select></label>
+          <label><span>Amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="line.amount" [disabled]="!canEditSelected()" placeholder="Amount" /></label>
+          <label><span>GST treatment</span><select [(ngModel)]="line.gstTreatment" (ngModelChange)="gstChanged(line)" [disabled]="!canEditSelected()"><option value="none">No GST</option><option value="cgst_sgst">CGST + SGST</option><option value="igst">IGST</option></select></label>
+          <label *ngIf="line.gstTreatment !== 'none'"><span>GST amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="line.gstAmount" [disabled]="!canEditSelected()" placeholder="GST" /></label>
+          <label class="wide"><span>Line remarks</span><input type="text" [(ngModel)]="line.remarks" [disabled]="!canEditSelected()" /></label>
+          <button type="button" class="remove-line" aria-label="Remove expense line" (click)="removeLine(index)" [disabled]="!canEditSelected()">×</button>
+        </article>
+      </section>
+
+      <section class="linked-section">
+        <h3>Linked party</h3>
+        <div class="form-grid">
+          <label><span>Type</span><select [(ngModel)]="draft.linkedPartyType" (ngModelChange)="linkedPartyChanged()" [disabled]="!canEditSelected()"><option value="none">None</option><option value="vendor">Vendor</option><option value="staff">Staff</option><option value="client">Client</option><option value="owner">Owner</option><option value="other">Other</option></select></label>
+          <label *ngIf="isRecordParty()"><span>Record</span><select [(ngModel)]="draft.linkedPartyId" (ngModelChange)="partySelected()" [disabled]="!canEditSelected()"><option value="">Select real record</option><option *ngFor="let party of partyOptions()" [value]="party.id">{{ party.name }}</option></select></label>
+          <label *ngIf="!isRecordParty() && draft.linkedPartyType !== 'none'"><span>Name</span><input type="text" [ngModel]="draft.linkedPartyName" (ngModelChange)="titleCasePartyName($event)" [disabled]="!canEditSelected()" /></label>
+        </div>
+      </section>
+
+      <div class="form-grid document-grid">
+        <label><span>Bill / invoice reference</span><input type="text" [(ngModel)]="draft.billReference" [disabled]="!canEditSelected()" /></label>
+        <label><span>Attachment URL</span><input type="url" [(ngModel)]="draft.attachmentUrl" [disabled]="!canEditSelected()" placeholder="https://" /></label>
+        <label class="full"><span>Remarks</span><textarea rows="3" [(ngModel)]="draft.remarks" [disabled]="!canEditSelected()"></textarea></label>
+      </div>
+
+      <section class="decision-box" *ngIf="decisionMode()">
+        <label><span>{{ decisionMode() === 'reject' ? 'Rejection reason' : 'Reversal reason' }}</span><textarea rows="3" [(ngModel)]="decisionReason"></textarea></label>
+        <div><button type="button" (click)="cancelDecision()">Cancel</button><button type="button" class="danger-button" (click)="action(decisionMode() === 'reject' ? 'reject' : 'reverse')" [disabled]="busy()">Confirm</button></div>
+      </section>
+
+      <section class="total-card">
+        <div><span>Input GST</span><strong>{{ gstTotalPaise() ? money(gstTotalPaise()) : '—' }}</strong></div>
+        <div><span>Total</span><strong>{{ lineTotalPaise() ? money(lineTotalPaise()) : '—' }}</strong></div>
+      </section>
+    </div>
+
+    <footer class="drawer-footer">
+      <button type="button" (click)="closeDrawer()" [disabled]="busy()">Close</button>
+      <ng-container *ngIf="canEditSelected()">
+        <button type="button" *ngIf="selected()" class="danger-ghost" (click)="action('cancel')" [disabled]="busy()">Cancel voucher</button>
+        <button type="button" (click)="save(false)" [disabled]="busy()">Save draft</button>
+        <button type="button" class="primary-button" (click)="save(true)" [disabled]="busy()">Submit</button>
+      </ng-container>
+      <ng-container *ngIf="selected()?.status === 'pending' && canApprove && !decisionMode()">
+        <button type="button" class="danger-ghost" (click)="startDecision('reject')" [disabled]="busy()">Reject</button>
+        <button type="button" class="primary-button" (click)="action('approve')" [disabled]="busy()">Approve</button>
+      </ng-container>
+      <ng-container *ngIf="selected()?.status === 'approved' && canApprove && !decisionMode()">
+        <button type="button" class="danger-ghost" (click)="startDecision('reverse')" [disabled]="busy()">Reverse voucher</button>
+      </ng-container>
+    </footer>
+  </aside>
+</section>

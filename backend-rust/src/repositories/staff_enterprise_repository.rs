@@ -147,6 +147,9 @@ pub struct SelfDashboardRecord {
     pub attendance: Option<Value>,
     pub tasks: Value,
     pub appointments: Value,
+    pub leave_requests: Value,
+    pub payroll: Value,
+    pub holidays: Value,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -358,6 +361,9 @@ pub struct StaffNotificationQueueRecord {
     pub provider: String,
     pub provider_message_id: String,
     pub last_error: String,
+    pub delivery_attempts: i32,
+    pub max_delivery_attempts: i32,
+    pub next_attempt_at: DateTime<Utc>,
     pub metadata_json: Value,
     pub version: i32,
     pub created_at: DateTime<Utc>,
@@ -404,6 +410,7 @@ pub struct StaffSkillMatrixRecord {
 pub struct StaffFloorControlRecord {
     pub staff_id: String,
     pub staff_name: String,
+    pub schedule_id: Option<String>,
     pub schedule_status: Option<String>,
     pub shift1_start: Option<NaiveTime>,
     pub shift1_end: Option<NaiveTime>,
@@ -589,9 +596,28 @@ pub async fn self_dashboard(
       (SELECT to_jsonb(sc)-'tenant_id'-'branch_id'-'staff_id' FROM staff_schedules sc WHERE sc.tenant_id=s.tenant_id AND sc.branch_id=s.branch_id AND sc.staff_id=s.id AND sc.schedule_date=$4) schedule,
       (SELECT to_jsonb(a)-'tenant_id'-'branch_id'-'staff_id' FROM staff_attendance_records a WHERE a.tenant_id=s.tenant_id AND a.branch_id=s.branch_id AND a.staff_id=s.id AND a.business_date=$4) attendance,
       COALESCE((SELECT jsonb_agg(to_jsonb(t)-'tenant_id'-'branch_id') FROM staff_tasks t WHERE t.tenant_id=s.tenant_id AND t.branch_id=s.branch_id AND t.staff_id=s.id AND t.status IN ('open','in_progress','blocked')),'[]'::jsonb) tasks,
-      COALESCE((SELECT jsonb_agg(to_jsonb(ap)-'tenant_id'-'branch_id') FROM appointments ap WHERE ap.tenant_id=s.tenant_id AND ap.branch_id=s.branch_id AND ap.staff_id=s.id AND ap.start_at::DATE=$4),'[]'::jsonb) appointments
+      COALESCE((SELECT jsonb_agg(to_jsonb(ap)-'tenant_id'-'branch_id') FROM appointments ap WHERE ap.tenant_id=s.tenant_id AND ap.branch_id=s.branch_id AND ap.staff_id=s.id AND ap.start_at::DATE=$4),'[]'::jsonb) appointments,
+      COALESCE((SELECT jsonb_agg(to_jsonb(l)-'tenant_id'-'branch_id' ORDER BY l.created_at DESC) FROM (SELECT * FROM staff_leave_requests lr WHERE lr.tenant_id=s.tenant_id AND lr.branch_id=s.branch_id AND lr.staff_id=s.id ORDER BY lr.created_at DESC LIMIT 20) l),'[]'::jsonb) leave_requests,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('runId',r.id,'periodStart',r.period_start,'periodEnd',r.period_end,'status',r.status,'grossPaise',i.gross_paise,'deductionsPaise',i.deductions_paise,'netPaise',i.net_paise,'paymentMethod',COALESCE(p.payment_method,''),'reference',COALESCE(p.reference,''),'payslipPath','/staff/self/payslips/'||r.id) ORDER BY r.period_end DESC) FROM staff_payroll_items i JOIN staff_payroll_runs r ON r.id=i.payroll_run_id AND r.tenant_id=i.tenant_id AND r.branch_id=i.branch_id LEFT JOIN staff_payroll_payouts p ON p.payroll_item_id=i.id AND p.tenant_id=i.tenant_id AND p.branch_id=i.branch_id WHERE i.tenant_id=s.tenant_id AND i.branch_id=s.branch_id AND i.staff_id=s.id AND r.status IN ('finalized','paid')),'[]'::jsonb) payroll,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('id',h.id,'holidayDate',h.holiday_date,'name',h.name,'isPaid',h.is_paid) ORDER BY h.holiday_date) FROM staff_holidays h WHERE h.tenant_id=s.tenant_id AND h.branch_id=s.branch_id AND h.active=TRUE AND h.holiday_date BETWEEN $4-INTERVAL '30 days' AND $4+INTERVAL '365 days'),'[]'::jsonb) holidays
       FROM staff s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.user_id=$3 AND s.active=TRUE"#)
       .bind(tenant).bind(branch).bind(user).bind(date).fetch_optional(db).await
+}
+
+pub async fn linked_staff_id(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    user: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND user_id=$3 AND active=TRUE",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(user)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn list_tips(
@@ -1250,7 +1276,7 @@ pub async fn create_notification_queue(
     scheduled_at: DateTime<Utc>,
     metadata: &Value,
 ) -> Result<StaffNotificationQueueRecord, sqlx::Error> {
-    sqlx::query_as("INSERT INTO staff_notification_queue(tenant_id,branch_id,requested_by,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,metadata_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,metadata_json,version,created_at,updated_at")
+    sqlx::query_as("INSERT INTO staff_notification_queue(tenant_id,branch_id,requested_by,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,metadata_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,delivery_attempts,max_delivery_attempts,next_attempt_at,metadata_json,version,created_at,updated_at")
         .bind(tenant).bind(branch).bind(actor).bind(staff_id).bind(template_id).bind(channel).bind(notification_type).bind(recipient).bind(title).bind(body).bind(sensitive).bind(requires_approval).bind(status).bind(scheduled_at).bind(metadata).fetch_one(db).await
 }
 
@@ -1260,7 +1286,7 @@ pub async fn list_notification_queue(
     branch: &str,
     status: Option<&str>,
 ) -> Result<Vec<StaffNotificationQueueRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,metadata_json,version,created_at,updated_at FROM staff_notification_queue WHERE tenant_id=$1 AND branch_id=$2 AND ($3::TEXT IS NULL OR status=$3) ORDER BY created_at DESC LIMIT 500")
+    sqlx::query_as("SELECT id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,delivery_attempts,max_delivery_attempts,next_attempt_at,metadata_json,version,created_at,updated_at FROM staff_notification_queue WHERE tenant_id=$1 AND branch_id=$2 AND ($3::TEXT IS NULL OR status=$3) ORDER BY created_at DESC LIMIT 500")
         .bind(tenant).bind(branch).bind(status).fetch_all(db).await
 }
 
@@ -1272,7 +1298,7 @@ pub async fn approve_notification(
     version: i32,
     actor: &str,
 ) -> Result<Option<StaffNotificationQueueRecord>, sqlx::Error> {
-    sqlx::query_as("UPDATE staff_notification_queue SET status='approved',approved_by=$5,approved_at=NOW(),version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='approval_required' RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,metadata_json,version,created_at,updated_at")
+    sqlx::query_as("UPDATE staff_notification_queue SET status='approved',approved_by=$5,approved_at=NOW(),next_attempt_at=NOW(),version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='approval_required' RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,delivery_attempts,max_delivery_attempts,next_attempt_at,metadata_json,version,created_at,updated_at")
         .bind(tenant).bind(branch).bind(id).bind(version).bind(actor).fetch_optional(db).await
 }
 
@@ -1289,7 +1315,7 @@ pub async fn record_notification_delivery(
     payload: &Value,
 ) -> Result<Option<StaffNotificationQueueRecord>, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let row: Option<StaffNotificationQueueRecord> = sqlx::query_as("UPDATE staff_notification_queue SET status=$5,provider=$6,provider_message_id=$7,last_error=$8,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status IN ('queued','approved') RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,metadata_json,version,created_at,updated_at")
+    let row: Option<StaffNotificationQueueRecord> = sqlx::query_as("UPDATE staff_notification_queue SET status=$5,provider=$6,provider_message_id=$7,last_error=$8,delivery_attempts=CASE WHEN $5='failed' THEN delivery_attempts+1 ELSE delivery_attempts END,next_attempt_at=CASE WHEN $5='failed' THEN NOW() + (INTERVAL '5 minutes' * LEAST(delivery_attempts+1,max_delivery_attempts)) ELSE next_attempt_at END,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status IN ('queued','approved') RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,delivery_attempts,max_delivery_attempts,next_attempt_at,metadata_json,version,created_at,updated_at")
         .bind(tenant).bind(branch).bind(id).bind(version).bind(status).bind(provider).bind(provider_message_id).bind(error).fetch_optional(&mut *tx).await?;
     let Some(row) = row else {
         tx.rollback().await?;
@@ -1299,6 +1325,17 @@ pub async fn record_notification_delivery(
         .bind(tenant).bind(branch).bind(id).bind(provider).bind(provider_message_id).bind(status).bind(error).bind(payload).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(Some(row))
+}
+
+pub async fn retry_notification(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+) -> Result<Option<StaffNotificationQueueRecord>, sqlx::Error> {
+    sqlx::query_as("UPDATE staff_notification_queue SET status=CASE WHEN requires_approval THEN 'approved' ELSE 'queued' END,last_error='',next_attempt_at=NOW(),version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='failed' AND delivery_attempts < max_delivery_attempts RETURNING id,staff_id,template_id,channel,notification_type,recipient,title,message_body,sensitive,requires_approval,status,scheduled_at,requested_by,approved_by,approved_at,provider,provider_message_id,last_error,delivery_attempts,max_delivery_attempts,next_attempt_at,metadata_json,version,created_at,updated_at")
+        .bind(tenant).bind(branch).bind(id).bind(version).fetch_optional(db).await
 }
 
 pub async fn notification_delivery_logs(
@@ -1344,6 +1381,7 @@ pub async fn staff_floor_control(
     sqlx::query_as(
         r#"SELECT s.id staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name)),s.id) staff_name,
+          schedule.id schedule_id,
           schedule.status schedule_status,schedule.shift1_start,schedule.shift1_end,schedule.shift2_start,schedule.shift2_end,
           COALESCE(attendance.manual_status,attendance.status) attendance_status,
           attendance.clock_in_at,attendance.clock_out_at,

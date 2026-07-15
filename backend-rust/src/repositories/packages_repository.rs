@@ -41,6 +41,7 @@ pub struct CreatePackage<'a> {
     pub rules_json: &'a str,
     pub show_mobile_app: bool,
     pub show_online_booking: bool,
+    pub active: bool,
 }
 
 pub struct UpdatePackage<'a> {
@@ -204,9 +205,9 @@ pub async fn create(db: &PgPool, input: CreatePackage<'_>) -> Result<PackageReco
         r#"
         INSERT INTO packages (
           tenant_id, branch_id, name, description, price_paise, discount_percent, validity_days, service_ids_json,
-          paid_sessions, free_sessions, cost_price_paise, service_rows_json, rules_json, show_mobile_app, show_online_booking
+          paid_sessions, free_sessions, cost_price_paise, service_rows_json, rules_json, show_mobile_app, show_online_booking, active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16)
         RETURNING
           id, tenant_id, branch_id, name, description, price_paise::BIGINT AS price_paise,
           discount_percent, validity_days, service_ids_json::TEXT AS service_ids_json,
@@ -230,6 +231,7 @@ pub async fn create(db: &PgPool, input: CreatePackage<'_>) -> Result<PackageReco
     .bind(input.rules_json)
     .bind(input.show_mobile_app)
     .bind(input.show_online_booking)
+    .bind(input.active)
     .fetch_one(db)
     .await
 }

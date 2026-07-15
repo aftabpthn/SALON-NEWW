@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use serde::Serialize;
 use serde_json::{json, Value};
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool};
 
 use crate::{
     models::common::AppError,
@@ -36,6 +36,24 @@ pub struct PackageReport {
     pub offset: i64,
 }
 
+#[derive(Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageAlert {
+    pub id: String,
+    pub client_id: String,
+    pub alert_type: String,
+    pub severity: String,
+    pub client_name: String,
+    pub contact: String,
+    pub phone: String,
+    pub email: String,
+    pub package_name: String,
+    pub service_name: String,
+    pub pending_qty: i32,
+    pub pending_value_paise: i64,
+    pub expires_at: Option<NaiveDate>,
+}
+
 pub async fn create(
     db: &PgPool,
     tenant_id: &str,
@@ -43,9 +61,11 @@ pub async fn create(
     input: PackageInput,
 ) -> Result<PackageRecord, AppError> {
     let name = required_text(input.name.as_deref(), "name is required")?;
+    let package_settings = settings(db, tenant_id, branch_id).await?;
     let paid_sessions = positive(input.paid_sessions.unwrap_or(1), "paidSessions")?;
     let free_sessions = non_negative(input.free_sessions.unwrap_or(0), "freeSessions")?;
     let rows = normalize_service_rows(input.service_rows, input.service_ids.as_deref())?;
+    validate_paid_addons(&rows, &package_settings)?;
     if rows.is_empty() {
         return Err(AppError::validation(
             "at least one package service is required",
@@ -65,11 +85,15 @@ pub async fn create(
     )?;
     let service_ids_json = json_text(&json!(service_ids));
     let service_rows_json = json_text(&Value::Array(rows));
-    let rules_json = json_text(
-        &input
-            .rules
-            .unwrap_or_else(|| json!({ "type": "pay_x_get_y" })),
-    );
+    let rules_json = json_text(&normalize_package_rules(input.rules, &package_settings)?);
+    let default_validity = setting_i64(
+        &package_settings,
+        &["expiryRenewal", "defaultExpiryDays"],
+        0,
+    )
+    .clamp(0, i64::from(i32::MAX)) as i32;
+    let default_active =
+        setting_text(&package_settings, &["defaults", "defaultStatus"], "active") == "active";
     packages_repository::create(
         db,
         CreatePackage {
@@ -79,7 +103,10 @@ pub async fn create(
             description: input.description.as_deref().unwrap_or(""),
             price_paise,
             discount_percent: percentage(input.discount_percent.unwrap_or(0))?,
-            validity_days: non_negative(input.validity_days.unwrap_or(0), "validityDays")?,
+            validity_days: non_negative(
+                input.validity_days.unwrap_or(default_validity),
+                "validityDays",
+            )?,
             service_ids_json: &service_ids_json,
             paid_sessions,
             free_sessions,
@@ -88,6 +115,7 @@ pub async fn create(
             rules_json: &rules_json,
             show_mobile_app: input.show_mobile_app.unwrap_or(false),
             show_online_booking: input.show_online_booking.unwrap_or(true),
+            active: input.active.unwrap_or(default_active),
         },
     )
     .await
@@ -101,10 +129,14 @@ pub async fn update(
     id: &str,
     input: PackageInput,
 ) -> Result<Option<PackageRecord>, AppError> {
+    let package_settings = settings(db, tenant_id, branch_id).await?;
     let rows = input
         .service_rows
         .map(|rows| normalize_service_rows(Some(rows), None))
         .transpose()?;
+    if let Some(rows) = rows.as_ref() {
+        validate_paid_addons(rows, &package_settings)?;
+    }
     let service_rows_json = rows
         .as_ref()
         .map(|rows| json_text(&Value::Array(rows.clone())));
@@ -113,7 +145,11 @@ pub async fn update(
     } else {
         input.service_ids.as_ref().map(|ids| json_text(&json!(ids)))
     };
-    let rules_json = input.rules.as_ref().map(json_text);
+    let rules = input
+        .rules
+        .map(|value| normalize_package_rules(Some(value), &package_settings))
+        .transpose()?;
+    let rules_json = rules.as_ref().map(json_text);
     packages_repository::update(
         db,
         UpdatePackage {
@@ -212,6 +248,78 @@ pub async fn report(
     })
 }
 
+pub async fn alerts(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<PackageAlert>, AppError> {
+    let settings = settings(db, tenant_id, branch_id).await?;
+    let pending_enabled = settings["remindersRisk"]["pendingCreditReminder"]
+        .as_bool()
+        .unwrap_or(true);
+    let expiry_enabled = settings["remindersRisk"]["expiryReminder"]
+        .as_bool()
+        .unwrap_or(true);
+    let high_enabled = settings["remindersRisk"]["ownerHighPendingAlert"]
+        .as_bool()
+        .unwrap_or(true);
+    let reminder_days = settings["expiryRenewal"]["renewalReminderDays"]
+        .as_i64()
+        .unwrap_or(15)
+        .clamp(0, 3650) as i32;
+    let threshold = settings["remindersRisk"]["highPendingThresholdPaise"]
+        .as_i64()
+        .unwrap_or(1_000_000)
+        .max(0);
+    if !pending_enabled && !expiry_enabled && !high_enabled {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as::<_, PackageAlert>(
+        r#"
+        WITH credits AS (
+          SELECT pc.id,pc.client_id, CONCAT_WS(' ',c.first_name,c.last_name) AS client_name,
+                 COALESCE(NULLIF(c.phone,''),c.email,'') AS contact,COALESCE(c.phone,'') AS phone,COALESCE(c.email,'') AS email, pc.package_name,
+                 pc.service_name, pc.remaining_qty AS pending_qty,
+                 (pc.remaining_qty::BIGINT*pc.unit_value_paise) AS pending_value_paise, pc.expires_at
+            FROM client_package_credits pc
+            JOIN clients c ON c.id=pc.client_id AND c.tenant_id=pc.tenant_id AND c.branch_id=pc.branch_id
+           WHERE pc.tenant_id=$1 AND pc.branch_id=$2 AND pc.active=TRUE AND pc.remaining_qty>0
+        ), totals AS (
+          SELECT client_id,SUM(pending_value_paise)::BIGINT AS client_pending_value FROM credits GROUP BY client_id
+        )
+        SELECT CASE
+                 WHEN $4 AND cr.expires_at IS NOT NULL AND cr.expires_at<=CURRENT_DATE+$7::INT THEN 'expiry'
+                 WHEN $5 AND t.client_pending_value >= $6 THEN 'high_pending'
+                 ELSE 'pending_credit'
+               END AS alert_type,
+               CASE
+                 WHEN cr.expires_at IS NOT NULL AND cr.expires_at<CURRENT_DATE THEN 'critical'
+                 WHEN $4 AND cr.expires_at IS NOT NULL AND cr.expires_at<=CURRENT_DATE+$7::INT THEN 'high'
+                 WHEN $5 AND t.client_pending_value >= $6 THEN 'medium'
+                 ELSE 'low'
+               END AS severity,
+               cr.id,cr.client_id,cr.client_name,cr.contact,cr.phone,cr.email,cr.package_name,cr.service_name,cr.pending_qty,
+               cr.pending_value_paise,cr.expires_at
+          FROM credits cr JOIN totals t ON t.client_id=cr.client_id
+         WHERE $3 OR ($4 AND cr.expires_at IS NOT NULL AND cr.expires_at<=CURRENT_DATE+$7::INT)
+                   OR ($5 AND t.client_pending_value >= $6)
+         ORDER BY CASE WHEN cr.expires_at<CURRENT_DATE THEN 0 WHEN cr.expires_at IS NULL THEN 2 ELSE 1 END,
+                  cr.expires_at NULLS LAST,cr.client_name
+         LIMIT 250
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(pending_enabled)
+    .bind(expiry_enabled)
+    .bind(high_enabled)
+    .bind(threshold)
+    .bind(reminder_days)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load package alerts"))
+}
+
 fn normalize_service_rows(
     rows: Option<Vec<Value>>,
     fallback_ids: Option<&[String]>,
@@ -251,6 +359,11 @@ fn normalize_service_rows(
             .or_else(|| row.get("unit_price_paise"))
             .and_then(Value::as_i64)
             .unwrap_or(0);
+        let addon_price = row
+            .get("addonPricePaise")
+            .or_else(|| row.get("addon_price_paise"))
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
         if quantity <= 0 || quantity > i32::MAX as i64 {
             return Err(AppError::validation(
                 "service quantity must be greater than zero",
@@ -261,9 +374,85 @@ fn normalize_service_rows(
                 "service unitPricePaise must be 0 or greater",
             ));
         }
-        normalized.push(json!({ "serviceId": service_id, "serviceName": row.get("serviceName").and_then(Value::as_str).unwrap_or(""), "quantity": quantity, "unitPricePaise": unit_price }));
+        if addon_price < 0 {
+            return Err(AppError::validation(
+                "service addonPricePaise must be 0 or greater",
+            ));
+        }
+        normalized.push(json!({ "serviceId": service_id, "serviceName": row.get("serviceName").and_then(Value::as_str).unwrap_or(""), "quantity": quantity, "unitPricePaise": unit_price, "addonPricePaise": addon_price }));
     }
     Ok(normalized)
+}
+
+fn normalize_package_rules(input: Option<Value>, settings: &Value) -> Result<Value, AppError> {
+    let mut rules = input.unwrap_or_else(|| json!({}));
+    let object = rules
+        .as_object_mut()
+        .ok_or_else(|| AppError::validation("package rules must be an object"))?;
+    object.entry("type").or_insert_with(|| json!("pay_x_get_y"));
+    let package_type = object
+        .get("packageType")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| setting_text(settings, &["defaults", "defaultPackageType"], "paid"))
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(package_type.as_str(), "paid" | "free" | "combo") {
+        return Err(AppError::validation(
+            "packageType must be paid, free, or combo",
+        ));
+    }
+    object.insert("packageType".into(), json!(package_type));
+    let group_name = object
+        .get("groupName")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if !group_name.is_empty()
+        && !setting_bool(settings, &["packageCatalog", "packageGroupsEnabled"], true)
+    {
+        return Err(AppError::validation("package groups are disabled"));
+    }
+    object.insert("groupName".into(), json!(group_name));
+    Ok(rules)
+}
+
+fn validate_paid_addons(rows: &[Value], settings: &Value) -> Result<(), AppError> {
+    if setting_bool(
+        settings,
+        &["packageCatalog", "paidPackageAddonEnabled"],
+        true,
+    ) {
+        return Ok(());
+    }
+    if rows
+        .iter()
+        .any(|row| row["addonPricePaise"].as_i64().unwrap_or(0) > 0)
+    {
+        return Err(AppError::validation("paid package add-ons are disabled"));
+    }
+    Ok(())
+}
+
+fn setting_bool(value: &Value, path: &[&str], fallback: bool) -> bool {
+    path.iter()
+        .try_fold(value, |current, key| current.get(*key))
+        .and_then(Value::as_bool)
+        .unwrap_or(fallback)
+}
+
+fn setting_i64(value: &Value, path: &[&str], fallback: i64) -> i64 {
+    path.iter()
+        .try_fold(value, |current, key| current.get(*key))
+        .and_then(Value::as_i64)
+        .unwrap_or(fallback)
+}
+
+fn setting_text<'a>(value: &'a Value, path: &[&str], fallback: &'a str) -> &'a str {
+    path.iter()
+        .try_fold(value, |current, key| current.get(*key))
+        .and_then(Value::as_str)
+        .unwrap_or(fallback)
 }
 
 fn service_ids(rows: &[Value]) -> Vec<String> {
@@ -362,8 +551,8 @@ fn merge_known_settings(defaults: &Value, input: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_settings, merge_known_settings, normalize_service_rows, package_price_paise,
-        report_status, service_cost_paise,
+        default_settings, merge_known_settings, normalize_package_rules, normalize_service_rows,
+        package_price_paise, report_status, service_cost_paise, validate_paid_addons,
     };
     use serde_json::json;
 
@@ -394,5 +583,26 @@ mod tests {
         );
         assert_eq!(merged["creditsRedemption"]["allowCrossService"], true);
         assert!(merged.get("unknown").is_none());
+    }
+
+    #[test]
+    fn package_catalog_rules_enforce_groups_addons_and_defaults() {
+        let settings = merge_known_settings(
+            &default_settings(),
+            &json!({
+                "packageCatalog": { "packageGroupsEnabled": false, "paidPackageAddonEnabled": false },
+                "defaults": { "defaultPackageType": "combo" }
+            }),
+        );
+        let rules = normalize_package_rules(None, &settings).unwrap();
+        assert_eq!(rules["packageType"], "combo");
+        assert!(
+            normalize_package_rules(Some(json!({ "groupName": "Premium" })), &settings).is_err()
+        );
+        assert!(validate_paid_addons(
+            &[json!({ "serviceId": "svc", "quantity": 1, "unitPricePaise": 100, "addonPricePaise": 50 })],
+            &settings,
+        )
+        .is_err());
     }
 }

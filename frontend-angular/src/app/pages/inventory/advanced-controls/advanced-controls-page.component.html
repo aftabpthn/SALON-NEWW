@@ -1,0 +1,76 @@
+<section class="controls-page">
+  <header class="command-bar">
+    <div class="command-title"><h1>Inventory Advanced Controls</h1><span class="api-state" [class.error]="!!error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
+    <span></span>
+    <select aria-label="Filter exception severity" [(ngModel)]="severity">
+      <option value="all">All severities</option>
+      <option value="critical">Critical</option>
+      <option value="warning">Warning</option>
+    </select>
+    <button class="primary-button" type="button" [disabled]="loading" (click)="reload()">Refresh controls</button>
+  </header>
+
+  <p class="message error" *ngIf="error">{{ error }}</p>
+
+  <nav class="tabs" aria-label="Inventory advanced control sections">
+    <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab === tab.id" (click)="activeTab = tab.id">{{ tab.label }}</button>
+  </nav>
+
+  <section class="metrics" aria-label="Inventory control summary">
+    <article class="critical"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Critical</span><strong>{{ controls.summary.critical }}</strong></article>
+    <article class="approval"><i class="bi bi-arrow-up-right" aria-hidden="true"></i><span>Pending approvals</span><strong>{{ controls.summary.pendingApprovals }}</strong></article>
+    <article class="expiry"><i class="bi bi-hourglass-split" aria-hidden="true"></i><span>Expiry alerts</span><strong>{{ controls.summary.expiryAlerts === null ? '—' : controls.summary.expiryAlerts }}</strong></article>
+    <article class="dead"><i class="bi bi-box-seam" aria-hidden="true"></i><span>Dead stock</span><strong>{{ controls.summary.deadStock }}</strong></article>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'exceptions'">
+    <header><h2>Exception dashboard</h2><div class="panel-actions"><button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">Export evidence</button><button class="icon-button" type="button" aria-label="Refresh exceptions" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+    <div class="loading-state" *ngIf="loading">Loading controls</div>
+    <div class="table-scroll" *ngIf="!loading && filteredExceptions.length">
+      <table>
+        <thead><tr><th>Severity</th><th>Control</th><th>Exception</th><th>Value</th><th>Evidence</th><th>Owner</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of filteredExceptions">
+            <td><span class="status" [class.critical]="row.severity === 'critical'">{{ row.severity }}</span></td>
+            <td>{{ row.control }}</td><td><strong>{{ row.title }}</strong></td><td>{{ money(row.valuePaise) }}</td><td>{{ row.evidence || '—' }}</td><td>{{ row.owner }}</td><td>{{ row.status }}</td>
+            <td><a [routerLink]="row.route">Open</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-state" *ngIf="!loading && !filteredExceptions.length"><i class="bi bi-shield-check" aria-hidden="true"></i><strong>No control exceptions yet</strong></div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'approvals'">
+    <header><h2>Approval Matrix</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>Control</th><th>Required role</th><th>Pending</th><th>Gate</th><th>Action</th></tr></thead><tbody>
+      <tr *ngFor="let row of controls.approvalMatrix"><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><a [routerLink]="row.route">Open</a></td></tr>
+      <tr *ngIf="!controls.approvalMatrix.length"><td class="empty-state" colspan="5">No approval controls available</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'locks'">
+    <header><h2>Audit Locks</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>Lock</th><th>Locked records</th><th>Reason</th><th>Action</th></tr></thead><tbody>
+      <tr *ngFor="let row of controls.auditLocks"><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><a [routerLink]="row.route">Open</a></td></tr>
+      <tr *ngIf="!controls.auditLocks.length"><td class="empty-state" colspan="4">No audit locks available</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'expiry'">
+    <header><h2>Expiry</h2></header>
+    <div class="capability-state" *ngIf="!controls.capabilities.expiry">Batch expiry data is not available</div>
+    <div class="table-scroll" *ngIf="controls.capabilities.expiry"><table><thead><tr><th>Product</th><th>Batch</th><th>Expiry</th><th>Days</th></tr></thead><tbody>
+      <tr *ngFor="let row of controls.expiringRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td>{{ date(row.expiryDate) }}</td><td>{{ row.daysToExpiry }}</td></tr>
+      <tr *ngIf="!controls.expiringRows.length"><td class="empty-state" colspan="4">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'dead-stock'">
+    <header><h2>Dead Stock</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Inactive days</th><th>Value</th><th>Last outbound</th></tr></thead><tbody>
+      <tr *ngFor="let row of controls.deadStockRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.sku || '—' }}</td><td>{{ row.stockQuantity }}</td><td>{{ row.inactiveDays }}</td><td>{{ money(row.valuePaise) }}</td><td>{{ date(row.lastOutboundAt) }}</td></tr>
+      <tr *ngIf="!controls.deadStockRows.length"><td class="empty-state" colspan="6">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+</section>

@@ -15,7 +15,7 @@ use crate::{
         staff_leave_repository::{LeaveBalanceRecord, LeaveRequestRecord},
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_leave_service},
+    services::{auth_service::AuthClaims, staff_enterprise_service, staff_leave_service},
     state::AppState,
 };
 
@@ -71,13 +71,21 @@ async fn list_requests(
 ) -> ApiResult<Vec<LeaveRequestRecord>> {
     ensure_leave_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = scoped_leave_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        query.staff_id.as_deref().unwrap_or(""),
+    )
+    .await?;
     let rows = staff_leave_service::list_requests(
         &state.db,
         &tenant_id,
         &branch_id,
         query.year,
         query.month,
-        query.staff_id.as_deref().unwrap_or("").trim(),
+        &staff_id,
         query
             .status
             .as_deref()
@@ -98,14 +106,17 @@ async fn list_balances(
 ) -> ApiResult<Vec<LeaveBalanceRecord>> {
     ensure_leave_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let rows = staff_leave_service::balances(
-        &state.db,
+    let staff_id = scoped_leave_staff_id(
+        &state,
+        &claims,
         &tenant_id,
         &branch_id,
-        query.year,
-        query.staff_id.as_deref().unwrap_or("").trim(),
+        query.staff_id.as_deref().unwrap_or(""),
     )
     .await?;
+    let rows =
+        staff_leave_service::balances(&state.db, &tenant_id, &branch_id, query.year, &staff_id)
+            .await?;
     Ok(Json(ApiResponse::ok(rows)))
 }
 
@@ -117,12 +128,14 @@ async fn create_request(
 ) -> ApiResult<LeaveRequestRecord> {
     ensure_leave_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        scoped_leave_staff_id(&state, &claims, &tenant_id, &branch_id, &payload.staff_id).await?;
     let row = staff_leave_service::create_request(
         &state.db,
         &tenant_id,
         &branch_id,
         &claims.sub,
-        &payload.staff_id,
+        &staff_id,
         &payload.leave_type,
         payload.start_date,
         payload.end_date,
@@ -185,11 +198,22 @@ async fn reject(
 }
 
 fn leave_context(claims: &AuthClaims, headers: &HeaderMap) -> Result<(String, String), AppError> {
-    ensure_leave_access(claims)?;
+    ensure_leave_manage_access(claims)?;
     tenant_branch(headers)
 }
 
 fn ensure_leave_access(claims: &AuthClaims) -> Result<(), AppError> {
+    if ["owner", "admin", "manager", "staff"]
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden("leave management access is restricted"))
+    }
+}
+
+fn ensure_leave_manage_access(claims: &AuthClaims) -> Result<(), AppError> {
     if ["owner", "admin", "manager"]
         .iter()
         .any(|role| role.eq_ignore_ascii_case(&claims.role))
@@ -197,6 +221,20 @@ fn ensure_leave_access(claims: &AuthClaims) -> Result<(), AppError> {
         Ok(())
     } else {
         Err(AppError::forbidden("leave management access is restricted"))
+    }
+}
+
+async fn scoped_leave_staff_id(
+    state: &AppState,
+    claims: &AuthClaims,
+    tenant_id: &str,
+    branch_id: &str,
+    requested_staff_id: &str,
+) -> Result<String, AppError> {
+    if claims.role.eq_ignore_ascii_case("staff") {
+        staff_enterprise_service::self_staff_id(&state.db, tenant_id, branch_id, &claims.sub).await
+    } else {
+        Ok(requested_staff_id.trim().to_string())
     }
 }
 

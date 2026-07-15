@@ -1,18 +1,22 @@
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
     routing::{delete, get, patch, post, put},
-    Json, Router,
+    Extension, Json, Router,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::routes::appointments::{self, ApiError};
+use crate::routes::{
+    appointments::{self, ApiError},
+    clients,
+};
 use crate::state::AppState;
+use crate::{repositories::clients_repository, services::auth_service::AuthClaims};
 
 type QueryMap = HashMap<String, String>;
 
@@ -35,6 +39,14 @@ pub fn public_router() -> Router<AppState> {
         .route(
             "/public-booking/:token/reschedule/confirm",
             post(public_booking_reschedule_confirm),
+        )
+        .route(
+            "/public/client-forms/:definition_id",
+            get(public_client_form),
+        )
+        .route(
+            "/public/client-forms/:definition_id/submissions",
+            post(public_client_form_submission),
         )
 }
 
@@ -156,8 +168,10 @@ pub fn protected_router() -> Router<AppState> {
             "/booking-wizard/state",
             put(appointments::save_wizard_state),
         )
-        .route("/clients/:id/preferences", get(client_preferences_get))
-        .route("/clients/:id/preferences", patch(client_preferences_update))
+        .route(
+            "/clients/:id/preferences",
+            get(clients::get_client_preferences).patch(clients::save_client_preferences),
+        )
         .route("/clients/:id/family-members", get(client_family_members))
         .route("/clients/:id/link-member", post(client_family_link_member))
         .route(
@@ -165,10 +179,13 @@ pub fn protected_router() -> Router<AppState> {
             delete(client_family_unlink_member),
         )
         .route("/clients/family-tree", get(client_family_tree))
-        .route("/customers/:id/preferences", get(customer_preferences_get))
+        .route(
+            "/clients/:id/forms/:definition_id/kiosk-token",
+            post(client_form_kiosk_token),
+        )
         .route(
             "/customers/:id/preferences",
-            patch(customer_preferences_update),
+            get(clients::get_client_preferences).patch(clients::save_client_preferences),
         )
         .route(
             "/customers/:id/family-members",
@@ -185,39 +202,19 @@ pub fn protected_router() -> Router<AppState> {
         .route("/customers/family-tree", get(customer_family_tree))
 }
 
-fn tenant_id(query: &QueryMap) -> String {
-    query
-        .get("tenantId")
-        .or_else(|| query.get("tenant_id"))
-        .cloned()
-        .unwrap_or_else(|| "default-tenant".to_string())
-}
-
-fn branch_id(query: &QueryMap) -> String {
-    query
-        .get("branchId")
-        .or_else(|| query.get("branch_id"))
-        .cloned()
-        .unwrap_or_default()
-}
-
 fn now_iso() -> String {
     Utc::now().to_rfc3339()
 }
 
-async fn booking_settings_get(Query(query): Query<QueryMap>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(json!({
-            "tenantId": tenant_id(&query),
-            "branchId": branch_id(&query),
-            "status": "ready",
-            "allowSelfService": true,
-            "depositRequired": false,
-            "depositAmount": 0,
-            "updatedAt": now_iso(),
-        })),
+fn unsupported(feature: &'static str) -> ApiError {
+    ApiError::with_status(
+        StatusCode::NOT_IMPLEMENTED,
+        format!("{feature} is not implemented"),
     )
+}
+
+async fn booking_settings_get(Query(_query): Query<QueryMap>) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking settings storage"))
 }
 
 async fn booking_settings_save(
@@ -369,12 +366,7 @@ async fn public_booking_details(Path(token): Path<String>) -> Result<Json<Value>
     if token.trim().is_empty() {
         return Err(ApiError::bad_request("token is required"));
     }
-    Ok(Json(json!({
-        "token": token,
-        "status": "ready",
-        "booking": null,
-        "generatedAt": now_iso()
-    })))
+    Err(unsupported("public booking token details"))
 }
 
 async fn public_booking_cancel(
@@ -398,12 +390,8 @@ async fn public_booking_reschedule_options(
     if token.trim().is_empty() {
         return Err(ApiError::bad_request("token is required"));
     }
-    let date = payload.get("date").and_then(Value::as_str).unwrap_or("");
-    Ok(Json(json!({
-        "token": token,
-        "date": date,
-        "options": []
-    })))
+    let _ = payload;
+    Err(unsupported("public booking reschedule options"))
 }
 
 async fn public_booking_reschedule_confirm(
@@ -420,23 +408,16 @@ async fn public_booking_reschedule_confirm(
     ))
 }
 
-async fn booking_intelligence_no_show_risk(Path(customer_id): Path<String>) -> Json<Value> {
-    Json(json!({
-        "customerId": customer_id,
-        "score": null,
-        "level": null,
-        "recommendation": null,
-        "generatedAt": now_iso()
-    }))
+async fn booking_intelligence_no_show_risk(
+    Path(_customer_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking no-show intelligence"))
 }
 
-async fn booking_intelligence_rebooking_suggestion(Path(customer_id): Path<String>) -> Json<Value> {
-    Json(json!({
-        "customerId": customer_id,
-        "message": null,
-        "confidence": null,
-        "generatedAt": now_iso()
-    }))
+async fn booking_intelligence_rebooking_suggestion(
+    Path(_customer_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking rebooking intelligence"))
 }
 
 async fn booking_intelligence_rebooking_queue(
@@ -451,61 +432,39 @@ async fn booking_intelligence_rebooking_queue(
     ))
 }
 
-async fn booking_intelligence_churn_risk(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "scope": "all",
-        "count": 0,
-        "generatedAt": now_iso()
-    }))
+async fn booking_intelligence_churn_risk(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking churn intelligence"))
 }
 
 async fn booking_intelligence_churn_risk_customer(
-    Path(customer_id): Path<String>,
-    Query(query): Query<QueryMap>,
-) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "customerId": customer_id,
-        "score": null,
-        "risk": null,
-        "generatedAt": now_iso()
-    }))
+    Path(_customer_id): Path<String>,
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("customer churn intelligence"))
 }
 
-async fn booking_intelligence_upsell_suggestions(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "serviceIds": query.get("serviceIds").cloned().unwrap_or_default(),
-        "customerId": query.get("customerId").cloned().unwrap_or_default(),
-        "suggestions": []
-    }))
+async fn booking_intelligence_upsell_suggestions(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking upsell intelligence"))
 }
 
-async fn booking_analytics_funnel(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "metric": "funnel",
-        "conversion": null,
-        "generatedAt": now_iso()
-    }))
+async fn booking_analytics_funnel(Query(_query): Query<QueryMap>) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking funnel analytics"))
 }
 
-async fn booking_analytics_conversion_rates(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "metric": "conversionRates",
-        "rates": [],
-        "generatedAt": now_iso()
-    }))
+async fn booking_analytics_conversion_rates(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking conversion analytics"))
 }
 
-async fn booking_analytics_abandonments(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "reasons": [],
-        "generatedAt": now_iso()
-    }))
+async fn booking_analytics_abandonments(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking abandonment analytics"))
 }
 
 async fn booking_analytics_detect_abandonments(
@@ -532,13 +491,10 @@ async fn booking_analytics_recover_abandonment(
     ))
 }
 
-async fn booking_analytics_recovery_stats(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "recoveryRate": null,
-        "activeRecoveries": 0,
-        "generatedAt": now_iso()
-    }))
+async fn booking_analytics_recovery_stats(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("booking recovery analytics"))
 }
 
 async fn booking_payments_webhook(Json(payload): Json<Value>) -> Result<Json<Value>, ApiError> {
@@ -550,25 +506,16 @@ async fn booking_payments_webhook(Json(payload): Json<Value>) -> Result<Json<Val
 }
 
 async fn booking_payments_deposit_calculate(
-    Query(query): Query<QueryMap>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(_query): Query<QueryMap>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let amount = payload
-        .get("amount")
-        .and_then(Value::as_f64)
-        .or_else(|| payload.get("amountPaise").and_then(Value::as_f64))
-        .unwrap_or(0.0);
-    if amount <= 0.0 {
+    let total_paise = payload_amount_paise(&payload);
+    if total_paise <= 0 {
         return Err(ApiError::bad_request("amount is required"));
     }
-    Ok(Json(json!({
-        "tenantId": tenant_id(&query),
-        "calculation": {
-            "amount": amount,
-            "depositPaise": (amount * 100.0) as i64
-        },
-        "generatedAt": now_iso()
-    })))
+    booking_deposit_quote(&state, &headers, total_paise).await
 }
 
 async fn booking_payments_payment_link_create(
@@ -622,53 +569,77 @@ async fn booking_payments_refund(
 async fn appointment_sms_queue(
     Path(appointment_id): Path<String>,
     Json(payload): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::CREATED,
-        Json(json!({
-            "appointmentId": appointment_id,
-            "message": payload,
-            "queuedAt": now_iso(),
-            "status": "queued"
-        })),
-    )
+) -> Result<Json<Value>, ApiError> {
+    if appointment_id.trim().is_empty() || payload.is_null() {
+        return Err(ApiError::bad_request(
+            "appointmentId and message are required",
+        ));
+    }
+    Err(unsupported("appointment SMS queue"))
 }
 
-async fn appointment_salonist_report_detail_list(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "rows": [],
-        "generatedAt": now_iso()
-    }))
+async fn appointment_salonist_report_detail_list(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("appointment detail report"))
 }
 
 async fn appointment_salonist_report_staff_appointments(
-    Query(query): Query<QueryMap>,
-) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "rows": [],
-        "generatedAt": now_iso()
-    }))
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("staff appointment report"))
 }
 
 async fn appointment_deposit_quote(
-    Query(query): Query<QueryMap>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(_query): Query<QueryMap>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let total = payload
-        .get("totalAmount")
-        .and_then(Value::as_f64)
-        .unwrap_or(0.0);
-    if total <= 0.0 {
+    let total_paise = payload_amount_paise(&payload);
+    if total_paise <= 0 {
         return Err(ApiError::bad_request("totalAmount is required"));
     }
+    booking_deposit_quote(&state, &headers, total_paise).await
+}
+
+fn payload_amount_paise(payload: &Value) -> i64 {
+    payload
+        .get("amountPaise")
+        .or_else(|| payload.get("totalPaise"))
+        .and_then(Value::as_i64)
+        .or_else(|| {
+            payload
+                .get("amount")
+                .or_else(|| payload.get("totalAmount"))
+                .and_then(Value::as_f64)
+                .map(|amount| (amount * 100.0).round() as i64)
+        })
+        .unwrap_or(0)
+}
+
+async fn booking_deposit_quote(
+    state: &AppState,
+    headers: &HeaderMap,
+    total_paise: i64,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = appointments::scope_from_headers(headers, None, None);
+    let percent = sqlx::query_scalar::<_, i32>(
+        "SELECT booking_deposit_percent FROM branches b JOIN tenants t ON t.id=b.tenant_id WHERE COALESCE(NULLIF(t.scope_id,''),t.id::text)=$1 AND COALESCE(NULLIF(b.scope_id,''),b.id::text)=$2 AND b.active=TRUE",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to load booking deposit policy"))?
+    .unwrap_or(0);
+    let deposit_paise = total_paise.saturating_mul(i64::from(percent)) / 100;
     Ok(Json(json!({
-        "tenantId": tenant_id(&query),
-        "totalAmount": total,
-        "requiredDeposit": total * 0.2,
-        "currency": payload.get("currency").and_then(Value::as_str).unwrap_or("INR"),
-        "updatedAt": now_iso()
+        "totalPaise": total_paise,
+        "depositPercent": percent,
+        "depositPaise": deposit_paise,
+        "required": deposit_paise > 0,
+        "currency": "INR"
     })))
 }
 
@@ -684,16 +655,10 @@ async fn appointment_deposits_multi_service_bookings(
     ))
 }
 
-async fn appointment_deposits_report(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "tenantId": tenant_id(&query),
-        "metrics": {
-            "totalQuotes": 0,
-            "totalBooked": 0,
-            "totalDepositsCollected": 0
-        },
-        "generatedAt": now_iso()
-    }))
+async fn appointment_deposits_report(
+    Query(_query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("appointment deposit report"))
 }
 
 async fn appointment_deposits_update_followup(
@@ -885,116 +850,310 @@ async fn appointment_calendar_token_revoke(
     })))
 }
 
-async fn appointment_jobs_list() -> Json<Value> {
-    Json(json!({
-        "jobs": [],
-        "status": "ready",
-        "generatedAt": now_iso()
-    }))
+async fn appointment_jobs_list() -> Result<Json<Value>, ApiError> {
+    Err(unsupported("appointment job queue"))
 }
 
-async fn appointment_jobs_retry(Path(id): Path<String>) -> Json<Value> {
-    Json(json!({
-        "jobId": id,
-        "status": "retried",
-        "retriedAt": now_iso()
-    }))
+async fn appointment_jobs_retry(Path(_id): Path<String>) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("appointment job retry"))
 }
 
-async fn appointment_jobs_delete(Path(id): Path<String>) -> Json<Value> {
-    Json(json!({
-        "jobId": id,
-        "status": "deleted",
-        "deletedAt": now_iso()
-    }))
+async fn appointment_jobs_delete(Path(_id): Path<String>) -> Result<Json<Value>, ApiError> {
+    Err(unsupported("appointment job deletion"))
 }
 
-async fn client_preferences_get(Path(id): Path<String>) -> Json<Value> {
-    Json(json!({
-        "clientId": id,
-        "preferences": {
-            "sms": true,
-            "email": true
+async fn client_form_kiosk_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((client_id, definition_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = appointments::scope_from_headers(&headers, None, None);
+    if !clients_repository::client_exists(&state.db, &tenant_id, &branch_id, &client_id)
+        .await
+        .map_err(|_| ApiError::internal("failed to load client"))?
+    {
+        return Err(ApiError::not_found("client was not found"));
+    }
+    let definition =
+        clients_repository::get_form_definition(&state.db, &tenant_id, &branch_id, &definition_id)
+            .await
+            .map_err(|_| ApiError::internal("failed to load client form"))?
+            .filter(|row| row.active)
+            .ok_or_else(|| ApiError::not_found("client form was not found"))?;
+    let token = appointments::issue_public_booking_token(
+        &state,
+        &tenant_id,
+        &branch_id,
+        None,
+        Some(&client_id),
+        &format!("client-form-kiosk:{definition_id}"),
+        30,
+    )?;
+    Ok(Json(json!({
+        "success":true,
+        "data":{
+            "token":token,
+            "expiresInMinutes":30,
+            "definitionId":definition.id,
+            "formName":definition.name,
+            "endpoint":format!("/api/v1/public/client-forms/{}", definition.id)
         }
-    }))
+    })))
 }
 
-async fn client_preferences_update(
-    Path(id): Path<String>,
+async fn public_client_form(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(definition_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let claims = appointments::require_public_booking_claims(
+        &state,
+        &headers,
+        &format!("client-form-kiosk:{definition_id}"),
+    )?;
+    let definition = clients_repository::get_form_definition(
+        &state.db,
+        &claims.tenant_id,
+        &claims.branch_id,
+        &definition_id,
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to load client form"))?
+    .filter(|row| row.active)
+    .ok_or_else(|| ApiError::not_found("client form was not found"))?;
+    Ok(Json(json!({"success":true,"data":definition})))
+}
+
+async fn public_client_form_submission(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(definition_id): Path<String>,
     Json(payload): Json<Value>,
-) -> Json<Value> {
-    Json(json!({
-        "clientId": id,
-        "preferences": payload,
-        "status": "updated"
-    }))
+) -> Result<Json<Value>, ApiError> {
+    let claims = appointments::require_public_booking_claims(
+        &state,
+        &headers,
+        &format!("client-form-kiosk:{definition_id}"),
+    )?;
+    let client_id = claims
+        .client_id
+        .as_deref()
+        .ok_or_else(|| ApiError::unauthorized("client form token is invalid"))?;
+    let definition = clients_repository::get_form_definition(
+        &state.db,
+        &claims.tenant_id,
+        &claims.branch_id,
+        &definition_id,
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to load client form"))?
+    .filter(|row| row.active)
+    .ok_or_else(|| ApiError::not_found("client form was not found"))?;
+    let responses = payload
+        .get("responses")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    clients::validate_form_responses(&definition.fields_json, &responses)
+        .map_err(|_| ApiError::bad_request("invalid client form responses"))?;
+    let signature_name = payload
+        .get("signatureName")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let consent_accepted = payload
+        .get("consentAccepted")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if definition.requires_signature && (!consent_accepted || signature_name.chars().count() < 2) {
+        return Err(ApiError::bad_request(
+            "consent and signatureName are required",
+        ));
+    }
+    if signature_name.chars().count() > 200 || (!signature_name.is_empty() && !consent_accepted) {
+        return Err(ApiError::bad_request("invalid signature evidence"));
+    }
+    let signature_sha256 = if signature_name.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "{}:{}:{}:{}",
+                    client_id, definition.id, definition.version, signature_name
+                )
+                .as_bytes()
+            )
+        )
+    };
+    let row = clients_repository::create_form_submission(
+        &state.db,
+        &claims.tenant_id,
+        &claims.branch_id,
+        client_id,
+        &definition.id,
+        &responses,
+        signature_name,
+        &signature_sha256,
+        "kiosk",
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to submit client form"))?
+    .ok_or_else(|| ApiError::not_found("client was not found"))?;
+    Ok(Json(json!({"success":true,"data":row})))
 }
 
-async fn client_family_members(Path(id): Path<String>) -> Json<Value> {
-    Json(json!({
-        "clientId": id,
-        "members": [],
-        "total": 0
-    }))
+async fn client_family_members(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = appointments::scope_from_headers(&headers, None, None);
+    if !clients_repository::client_exists(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| ApiError::internal("failed to load client"))?
+    {
+        return Err(ApiError::not_found("client was not found"));
+    }
+    let rows = clients_repository::list_family_members(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| ApiError::internal("failed to load family members"))?;
+    Ok(Json(json!({"success":true,"data":rows})))
 }
 
 async fn client_family_link_member(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::CREATED,
-        Json(json!({
-            "clientId": id,
-            "member": payload,
-            "status": "linked"
-        })),
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = appointments::scope_from_headers(&headers, None, None);
+    let related_client_id = payload
+        .get("relatedClientId")
+        .or_else(|| payload.get("memberId"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let relationship = payload
+        .get("relationshipType")
+        .or_else(|| payload.get("relationship"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("")
+        .to_lowercase();
+    if related_client_id.is_empty()
+        || related_client_id == id
+        || !matches!(
+            relationship.as_str(),
+            "spouse"
+                | "parent"
+                | "child"
+                | "sibling"
+                | "guardian"
+                | "dependent"
+                | "partner"
+                | "other"
+        )
+    {
+        return Err(ApiError::bad_request("invalid family relationship"));
+    }
+    let reverse_relationship = match relationship.as_str() {
+        "parent" => "child",
+        "child" => "parent",
+        "guardian" => "dependent",
+        "dependent" => "guardian",
+        value => value,
+    };
+    let row = clients_repository::link_family_member(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        related_client_id,
+        &relationship,
+        reverse_relationship,
+        &claims.sub,
     )
+    .await
+    .map_err(|_| ApiError::internal("failed to link family member"))?
+    .ok_or_else(|| ApiError::not_found("client or family member was not found"))?;
+    Ok(Json(json!({"success":true,"data":row})))
 }
 
-async fn client_family_unlink_member(Path((id, member_id)): Path<(String, String)>) -> Json<Value> {
-    Json(json!({
-        "clientId": id,
-        "memberId": member_id,
-        "status": "unlinked"
-    }))
+async fn client_family_unlink_member(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, member_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = appointments::scope_from_headers(&headers, None, None);
+    let removed = clients_repository::unlink_family_member(
+        &state.db, &tenant_id, &branch_id, &id, &member_id,
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to unlink family member"))?;
+    if !removed {
+        return Err(ApiError::not_found("family relationship was not found"));
+    }
+    Ok(Json(
+        json!({"success":true,"data":{"memberId":member_id,"unlinked":true}}),
+    ))
 }
 
-async fn client_family_tree(Query(query): Query<QueryMap>) -> Json<Value> {
-    Json(json!({
-        "phone": query.get("phone").cloned().unwrap_or_default(),
-        "tree": []
-    }))
+async fn client_family_tree(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    let client_id = query
+        .get("clientId")
+        .or_else(|| query.get("customerId"))
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::bad_request("clientId is required"))?;
+    client_family_members(State(state), headers, Path(client_id.to_owned())).await
 }
 
-async fn customer_preferences_get(Path(id): Path<String>) -> Json<Value> {
-    client_preferences_get(Path(id)).await
-}
-
-async fn customer_preferences_update(
+async fn customer_family_members(
+    State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
-    Json(payload): Json<Value>,
-) -> Json<Value> {
-    client_preferences_update(Path(id), Json(payload)).await
-}
-
-async fn customer_family_members(Path(id): Path<String>) -> Json<Value> {
-    client_family_members(Path(id)).await
+) -> Result<Json<Value>, ApiError> {
+    client_family_members(State(state), headers, Path(id)).await
 }
 
 async fn customer_family_link_member(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    client_family_link_member(Path(id), Json(payload)).await
+) -> Result<Json<Value>, ApiError> {
+    client_family_link_member(
+        State(state),
+        Extension(claims),
+        headers,
+        Path(id),
+        Json(payload),
+    )
+    .await
 }
 
-async fn customer_family_unlink_member(Path(path): Path<(String, String)>) -> Json<Value> {
-    client_family_unlink_member(Path(path)).await
+async fn customer_family_unlink_member(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(path): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    client_family_unlink_member(State(state), headers, Path(path)).await
 }
 
-async fn customer_family_tree(Query(query): Query<QueryMap>) -> Json<Value> {
-    client_family_tree(Query(query)).await
+async fn customer_family_tree(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<QueryMap>,
+) -> Result<Json<Value>, ApiError> {
+    client_family_tree(State(state), headers, Query(query)).await
 }
 
 fn parse_service_ids_from_payload(payload: Value, fallback: &[String]) -> Vec<String> {
@@ -1025,4 +1184,49 @@ fn services_json(service_ids: &[String]) -> String {
 fn parse_json_array(raw: Option<&str>) -> Vec<String> {
     raw.and_then(|raw| serde_json::from_str::<Vec<String>>(raw).ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        appointment_jobs_retry, booking_intelligence_no_show_risk, booking_settings_get,
+        payload_amount_paise, QueryMap,
+    };
+    use axum::{extract::Path, extract::Query, http::StatusCode, response::IntoResponse};
+
+    #[tokio::test]
+    async fn unsupported_booking_placeholders_fail_closed() {
+        let statuses = [
+            booking_settings_get(Query(QueryMap::new()))
+                .await
+                .unwrap_err()
+                .into_response()
+                .status(),
+            booking_intelligence_no_show_risk(Path("client-1".to_string()))
+                .await
+                .unwrap_err()
+                .into_response()
+                .status(),
+            appointment_jobs_retry(Path("job-1".to_string()))
+                .await
+                .unwrap_err()
+                .into_response()
+                .status(),
+        ];
+        assert!(statuses
+            .into_iter()
+            .all(|status| status == StatusCode::NOT_IMPLEMENTED));
+    }
+
+    #[test]
+    fn deposit_amount_accepts_paise_and_rupees_without_mixing_units() {
+        assert_eq!(
+            payload_amount_paise(&serde_json::json!({ "amountPaise": 1250 })),
+            1250
+        );
+        assert_eq!(
+            payload_amount_paise(&serde_json::json!({ "totalAmount": 12.5 })),
+            1250
+        );
+    }
 }

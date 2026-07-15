@@ -2,15 +2,16 @@ use axum::{
     body::Body,
     extract::{Path, Query, State},
     http::{header, HeaderMap, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Extension, Json, Router,
 };
+use chrono::NaiveDate;
 use serde::Deserialize;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_payroll_service},
+    services::{auth_service::AuthClaims, security_service, staff_payroll_service},
     state::AppState,
 };
 
@@ -30,6 +31,11 @@ pub fn router() -> Router<AppState> {
         .route("/staff-payroll/runs/:run_id/finalize", post(finalize))
         .route("/staff-payroll/runs/:run_id/mark-paid", post(mark_paid))
         .route("/staff-payroll/runs/:run_id/payout", post(record_payout))
+        .route(
+            "/staff-payroll/holidays",
+            get(list_holidays).post(save_holiday),
+        )
+        .route("/staff-payroll/holidays/:id", delete(delete_holiday))
         .route("/staff-payroll/runs/:run_id/export", get(export_run))
         .route(
             "/staff-payroll/runs/:run_id/payslips/:staff_id",
@@ -75,6 +81,20 @@ struct PayoutRequest {
     payment_method: String,
     reference: Option<String>,
     idempotency_key: String,
+    mfa_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MfaActionRequest {
+    mfa_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HolidayQuery {
+    from: NaiveDate,
+    to: NaiveDate,
 }
 
 async fn preview(
@@ -200,8 +220,18 @@ async fn finalize(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(run_id): Path<String>,
+    Json(payload): Json<MfaActionRequest>,
 ) -> ApiResult<staff_payroll_service::PayrollRunDetail> {
     let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.finalize",
+    )
+    .await?;
     let result =
         staff_payroll_service::finalize(&state.db, &tenant_id, &branch_id, &run_id, &claims.sub)
             .await?;
@@ -213,8 +243,18 @@ async fn mark_paid(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(run_id): Path<String>,
+    Json(payload): Json<MfaActionRequest>,
 ) -> ApiResult<staff_payroll_service::PayrollRunDetail> {
     let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.mark_paid",
+    )
+    .await?;
     let result =
         staff_payroll_service::mark_paid(&state.db, &tenant_id, &branch_id, &run_id, &claims.sub)
             .await?;
@@ -229,7 +269,17 @@ async fn record_payout(
     Json(payload): Json<PayoutRequest>,
 ) -> ApiResult<staff_payroll_service::PayrollRunDetail> {
     let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.payout",
+    )
+    .await?;
     let result = staff_payroll_service::record_payout(
+        &state.settings,
         &state.db,
         &tenant_id,
         &branch_id,
@@ -243,6 +293,72 @@ async fn record_payout(
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_holidays(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<HolidayQuery>,
+) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::StaffHolidayRecord>> {
+    let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_payroll_service::list_holidays(
+            &state.db, &tenant_id, &branch_id, query.from, query.to,
+        )
+        .await?,
+    )))
+}
+
+async fn save_holiday(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<staff_payroll_service::StaffHolidayInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::StaffHolidayRecord> {
+    let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_payroll_service::save_holiday(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn delete_holiday(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<()> {
+    let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
+    staff_payroll_service::delete_holiday(&state.db, &tenant_id, &branch_id, &id).await?;
+    Ok(Json(ApiResponse::ok(())))
+}
+
+async fn require_payroll_action_mfa(
+    state: &AppState,
+    claims: &AuthClaims,
+    tenant_id: &str,
+    branch_id: &str,
+    code: Option<&str>,
+    action: &str,
+) -> Result<(), AppError> {
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        tenant_id,
+        branch_id,
+        &claims.sub,
+        &claims.session_id,
+        code,
+        action,
+    )
+    .await
 }
 
 async fn export_run(
@@ -265,12 +381,12 @@ async fn export_run(
                 attendance_days.to_string(),
                 item.worked_minutes.to_string(),
                 item.overtime_minutes.to_string(),
-                paise_text(item.earned_salary_paise),
-                paise_text(item.overtime_paise),
-                paise_text(item.commission_paise),
-                paise_text(item.adjustment_paise),
-                paise_text(item.deductions_paise),
-                paise_text(item.net_paise),
+                staff_payroll_service::paise_text(item.earned_salary_paise),
+                staff_payroll_service::paise_text(item.overtime_paise),
+                staff_payroll_service::paise_text(item.commission_paise),
+                staff_payroll_service::paise_text(item.adjustment_paise),
+                staff_payroll_service::paise_text(item.deductions_paise),
+                staff_payroll_service::paise_text(item.net_paise),
                 csv_cell(&item.status),
             ]
             .join(","),
@@ -297,39 +413,9 @@ async fn download_payslip(
     Path((run_id, staff_id)): Path<(String, String)>,
 ) -> Result<Response<Body>, AppError> {
     let (tenant_id, branch_id) = payroll_context(&claims, &headers)?;
-    let detail = staff_payroll_service::detail(&state.db, &tenant_id, &branch_id, &run_id).await?;
-    if !matches!(detail.run.status.as_str(), "finalized" | "paid") {
-        return Err(AppError::conflict(
-            "payslips are available after payroll finalization",
-        ));
-    }
-    let item = detail
-        .items
-        .iter()
-        .find(|item| item.staff_id == staff_id)
-        .ok_or_else(|| AppError::not_found("payroll employee not found"))?;
-    let lines = vec![
-        format!("Employee: {}", item.staff_name),
-        format!(
-            "Employee code: {}",
-            item.employee_code.as_deref().unwrap_or("-")
-        ),
-        format!(
-            "Period: {} to {}",
-            detail.run.period_start, detail.run.period_end
-        ),
-        format!("Status: {}", detail.run.status),
-        format!(
-            "Earned salary: INR {}",
-            paise_text(item.earned_salary_paise)
-        ),
-        format!("Overtime: INR {}", paise_text(item.overtime_paise)),
-        format!("Commission: INR {}", paise_text(item.commission_paise)),
-        format!("Adjustment: INR {}", paise_text(item.adjustment_paise)),
-        format!("Deductions: INR {}", paise_text(item.deductions_paise)),
-        format!("Net pay: INR {}", paise_text(item.net_paise)),
-    ];
-    let pdf = crate::services::invoice_pdf::render_text_report("STAFF PAYSLIP", &lines);
+    let pdf =
+        staff_payroll_service::payslip_pdf(&state.db, &tenant_id, &branch_id, &run_id, &staff_id)
+            .await?;
     Response::builder()
         .header(header::CONTENT_TYPE, "application/pdf")
         .header(
@@ -345,10 +431,6 @@ async fn download_payslip(
 
 fn csv_cell(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "\"\""))
-}
-
-fn paise_text(value: i64) -> String {
-    format!("{}.{:02}", value / 100, value.unsigned_abs() % 100)
 }
 
 fn payroll_context(claims: &AuthClaims, headers: &HeaderMap) -> Result<(String, String), AppError> {

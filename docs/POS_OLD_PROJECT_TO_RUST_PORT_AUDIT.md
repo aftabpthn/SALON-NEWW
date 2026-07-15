@@ -38,7 +38,7 @@ Date: 13/07/2026
 | Invoice PDF/print | `services/invoice_pdf.rs` and print helpers | Complete | Reuse |
 | Invoice appearance and bilingual settings | Branch-scoped invoice settings | Complete | Reuse |
 | Invoice action history and ledger verification | History plus on-demand ledger verification in invoice detail | Complete after Phase 2 | Reuse |
-| Invoice delivery/outbox/reminders | Delivery service, outbox and reminder endpoints | Backend complete, UI partial | Connect real delivery state later |
+| Invoice delivery/outbox/reminders | Delivery service, persisted outbox, status/attempt history and due-reminder action | Complete after Phase 6C | Reuse |
 | Payment links and reconciliation | Persistent payment-link list/create/copy/open/reconcile flow | Complete after Phase 3 | Reuse |
 | Membership sale/redemption | POS membership and client KPI flows | Complete | Reuse |
 | Package sale/redemption | POS package credit flow | Complete | Reuse |
@@ -46,12 +46,21 @@ Date: 13/07/2026
 | Gift card sale | POS gift-card route and checkout line | Complete | Reuse |
 | Offline checkout replay safety | `/pos/offline-checkout` with operation identity | Complete after Phase 4 | Reuse |
 | Payment method settings | POS payment-mode settings page and repository | Complete | Reuse |
-| POS/invoice settings | Invoice profile, appearance and compliance settings | Core complete | Map only proven legacy-only fields |
-| Basic cash drawer open/movement/close/approval | `routes/cash_drawer.rs` and repository | Backend complete | Connect existing finance UI before adding routes |
-| Advanced EOD: tills, denominations, handover, deposits, approval tokens, risk and three-way settlement | No one-to-one current workflow | Missing | Separate finance project; requires schema and UI approval |
-| Provider reconciliation runs/import/review | Payment-link reconcile is narrower | Partial | Phase 5 after provider requirements |
-| Dedicated daily closing report | Current cash drawer covers base close | Partial | Add only after EOD scope approval |
-| Legacy billing analytics/fraud guards | Current reports, discount rules and lifecycle validation overlap | Partial/overlapping | Audit per rule; do not bulk-port |
+| POS/invoice settings | Branch profile, A4/thermal, appearance, compliance, GST, UPI and bilingual labels | Complete after Phase 6D audit | Reuse; no proven legacy gap remains |
+| Basic cash drawer open/movement/close/approval | `routes/cash_drawer.rs` and `/pos/cash-drawer` | Complete after Phase 5 | Reuse |
+| Advanced EOD: tills, denominations, handover, deposits, approval and three-way settlement | Multi-till POS attribution, server count, independent RBAC approval, bank deposit tracking and expiring public review token | Complete after Phase 7 | Reuse |
+| Provider reconciliation runs/import/review | Manual or atomic CSV provider statements matched against paid links and bank net | Complete after Phase 6B | Review only real mismatches |
+| Dedicated daily closing report | Cash, payment-mode, deposit and reconciliation exception report | Complete after Phase 6B | Reuse |
+| Legacy billing analytics/fraud guards | Payment overrun, idempotency, signed webhook, refund/credit, discount/margin and independent approval guards | Complete after Phase 6D audit | Reuse existing stronger controls |
+| Terminal registry, sessions, heartbeat and terminal sales | Branch terminals, active operator sessions, device heartbeat and terminal-scoped sales | Complete after Phase 7 | Added |
+| Print-device registry, queue and retry | Thermal/A4 devices plus claim/result/retry job lifecycle | Complete after Phase 7 | Added |
+| Immutable Z report and day lock/reopen | Versioned SHA-256 Z snapshot plus database mutation guard | Complete after Phase 7 | Added |
+| EOD accounting, tax register and Tally export | Locked-day accounting batch plus JSON/CSV/Tally exports | Complete after Phase 7 | Added |
+| Owner risk inbox and approval-token review | Risk scan/resolution plus expiring, hashed, one-use approval links | Complete after Phase 7 | Added |
+| Cashfree and PhonePe payment adapters | Provider create/status/reconciliation and signed webhook verification | Complete after Phase 7 | Credentials required for activation |
+| Float suggestion and settlement exceptions | Real closed-drawer history and provider mismatch risk cases | Complete after Phase 7 | Added |
+| Invoice notification identity | Branch sender/media profile with provider-backed verification gate | Complete after Phase 7 | Added |
+| Corporate billing workflows | Corporate account, credit limit, terms, invoice reference and guarded assignment | Complete after Phase 7 | Added |
 
 ## Legacy Files Not To Copy
 
@@ -67,8 +76,9 @@ Date: 13/07/2026
 2. Credit-note and invoice-ledger verification actions in the existing invoice detail panel — implemented.
 3. Payment-link creation, status and reconciliation UI using existing Rust endpoints — implemented.
 4. Offline checkout UI wrapper using the existing idempotent Rust endpoint — implemented.
-5. Provider reconciliation workflow after Razorpay/provider requirements are confirmed.
-6. Advanced cash-drawer/EOD as a separately approved finance scope with additive migrations.
+5. Cash drawer open, movement, blind close, variance approval and EOD report UI — implemented.
+6. Advanced cash-drawer/EOD — implemented through Phase 6D with multi-till, deposits, settlement matching, daily close, delivery UI and guard audit.
+7. Extended enterprise parity — implemented with terminals, print queue, immutable Z/day lock, EOD posting/export, owner risk/approval, Cashfree/PhonePe adapters, notification identity and corporate billing.
 
 ## Phase 1 Evidence
 
@@ -104,9 +114,72 @@ Date: 13/07/2026
 - Offline held-invoice edits are blocked so a held invoice cannot be duplicated as a new sale.
 - Appointment completion runs only after the queued invoice has synced successfully.
 
+## Phase 5 Evidence
+
+- Added one authenticated `/pos/cash-drawer` workspace over the existing Rust cash-drawer and EOD report APIs.
+- Opening cash, cash in/out/refund movements, blind counted cash, zero-variance close and manager variance approval use real PostgreSQL-backed data.
+- Every successful action reloads the current drawer and report; no browser-only cash truth or sample rows were added.
+- Existing Rust authorization, cash-payment gate, transaction locking and audit events remain authoritative.
+
+## Phase 6A Evidence
+
+- Blind close now accepts denomination counts and loose cash; Rust validates overflow, duplicates and negative values, then calculates the authoritative counted total.
+- The saved denomination breakdown remains attached to the existing tenant/branch/date cash-drawer session.
+- Shift handover accepts only a real active branch staff record, locks the current drawer and records an audit event before commit.
+- The existing `/pos/cash-drawer` page reloads real drawer data after both actions; no parallel EOD page or browser-only cash truth was added.
+
+## Phase 6B Evidence
+
+- Added branch-scoped bank deposits with counted-cash limits, unique bank references, independent manager confirmation and auditable status changes.
+- Added real child tills under the existing drawer; cash sales persist their till ID, multiple open tills require explicit checkout selection, and every till must close before master day-close.
+- Till variance and drawer variance retain authenticated independent approval. A separate owner review link now uses an expiring, SHA-256-hashed, one-use token and records the reviewer decision without exposing tenant identifiers.
+- Provider reconciliation accepts one statement or an atomic CSV batch, calculates system gross from paid provider links, compares statement gross and fees to bank net, and sends every mismatch to manager review.
+- Daily Closing now includes payment-mode totals, confirmed/pending deposits and unresolved provider reconciliation exceptions.
+
+## Phase 6C Evidence
+
+- Invoice detail now queues email or WhatsApp delivery through the existing outbox using an idempotency key.
+- Real delivery status, recipient, attempts and provider error state reload from PostgreSQL.
+- The existing due-reminder scheduler is available from invoice UI and reports its real queued count.
+
+## Phase 6D Evidence
+
+- Current branch invoice settings already cover the proven legacy A4/thermal, business profile, visibility, GST, UPI, terms and bilingual label fields; no duplicate settings schema was added.
+- Existing POS guards already block payment overruns, unsafe gateway confirmation, duplicate lifecycle writes, invalid refunds/credits and unsafe discount or margin rules.
+- Advanced EOD adds independent approvals, deposit amount limits, forced till attribution and provider mismatch review as additional financial-risk controls.
+
+## Phase 7 Evidence
+
+- Registered POS terminals own heartbeat, active operator session and terminal-scoped sales history; checkout accepts only a real active branch terminal.
+- Thermal/A4 print devices use a persistent server queue with atomic claim, bounded attempts, result recording and explicit retry.
+- Day close requires closed drawers, then locks the business date. Database triggers reject later sale, line and payment mutations until an authorized reopen with reason.
+- Z reports are immutable versioned snapshots with a SHA-256 checksum. JSON, CSV and Tally-compatible export reuse the saved snapshot, and accounting posting is idempotent per Z version.
+- Risk scan persists cash variance, unresolved settlement, open till, duplicate reference, overpayment, excessive discount, repeated void and refund-abuse cases. Every case now carries a real amount-at-risk value; managers resolve or dismiss it with an audit note.
+- Razorpay, Cashfree and PhonePe share the current payment-link lifecycle. Provider status reconciliation and signed webhook verification remain authoritative; unavailable credentials produce an unavailable state, never a fake payment.
+- Float suggestion is calculated only from real closed-drawer history. Existing provider-reconciliation mismatches feed the financial risk inbox.
+- Invoice notification identity stores sender, owner and reporting contacts, channel preferences, daily-report schedule and database-backed logo/signature media. Contact ownership uses a throttled, expiring, hashed six-digit OTP with a five-attempt lock; provider readiness alone no longer marks a contact verified.
+- Corporate billing adds account GSTIN/phone, real client members, per-member spending limits, due-dated corporate credit invoices, idempotent FIFO credit-payment allocation, account statements and consolidated current/overdue outstanding.
+- `/pos/enterprise` connects all Phase 7 controls to real APIs; `/cash-drawer-approval/:token` is the limited public review surface.
+
+## Final Legacy-Parity Completion Evidence
+
+- Pending cash operations are corrected by an inverse movement that references the original record; financial movement deletion is not exposed. A database uniqueness guard prevents a second reversal, and every correction is written to the existing cash-drawer audit stream.
+- Pending bank deposits can be amended only by owner/admin/manager. The service rechecks counted-cash availability, preserves the original audit trail and records amendment actor, reason and time.
+- Accounting preview and HSN/SAC tax-register endpoints reuse current POS sales and line data without posting or mutating the day. Provider statement exceptions remain on the current Cash Drawer reconciliation surface instead of creating a duplicate page.
+- The enterprise UI now exposes corporate members, credit conversion, FIFO payments and statement balances; verified notification contacts/media/schedule and global outbox retry; amount-at-risk fraud KPIs; and EOD accounting/tax previews.
+- Strict source-code parity for the four previously partial groups is complete. Live Cashfree, PhonePe, Razorpay, WhatsApp and email operation still requires real credentials, reachable webhooks and production reconciliation evidence.
+
+## Reliability and Financial Integrity Evidence
+
+- Checkout continues to commit invoice, payment, inventory and accounting writes in one PostgreSQL transaction; duplicate checkout/payment protection remains idempotency-key and row-lock based.
+- Invoice delivery and print queues stop automatic processing after five failed attempts. Terminal failed jobs remain visible as dead-letter work and explicit retry resets a fresh bounded attempt budget.
+- A five-minute worker matches invoice paid totals to payment rows, verifies balanced journals and detects invoices missing their accounting journal; findings use the existing real-data risk inbox.
+- `GET /api/v1/pos/reliability` exposes database query latency/pool state, queue depth/lag/dead-letter counts and current financial matching exceptions. Checkout latency is emitted as structured `pos.checkout` tracing data.
+- A focused PostgreSQL concurrency test verifies that two checkout writers serialize through `FOR UPDATE`, preventing a lost payment update.
+
 ## Deferred By Design
 
 - No Express/SQLite source was copied.
 - No duplicate frontend state store was added.
-- No new route or database migration was added for behavior already supported by Rust.
-- Advanced EOD and reconciliation were not bundled into the invoice change because they have separate data, permissions and accounting risk.
+- No duplicate route-level frontend page was added for behavior already supported by the existing Enterprise, Cash Drawer and Invoice surfaces.
+- Provider credential activation and external delivery still depend on real environment configuration; no fake provider or bank response is generated.

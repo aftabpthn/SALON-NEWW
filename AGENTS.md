@@ -9,6 +9,16 @@
 - Do not duplicate logic.
 - Preserve backward compatibility.
 - New top-level folders are allowed only when the domain is genuinely different.
+- AI agents must not execute `npm run ...` commands in this repository. When a frontend npm script is needed, provide the exact command for the user to run instead.
+
+## 10X Completion Rule
+
+- Every requested task must be completed to a 10X production-ready standard within the approved scope.
+- Treat a task as complete only when all applicable backend, database, frontend, security, permission, real-data, error-handling, reload, and verification requirements are finished and correctly wired.
+- Do not mark partial, demo-only, placeholder, mock-backed, disconnected, or unverified work as complete.
+- Reuse and extend existing architecture instead of creating parallel implementations merely to finish faster.
+- Break large work into clear phases and complete the active phase end to end before moving to the next phase. Do not force trivial tasks into ten artificial phases.
+- If completion depends on credentials, external services, user approval, or another genuine blocker, keep that item explicitly pending and report the exact blocker instead of claiming completion.
 
 ## Real Data Only Rule
 
@@ -256,7 +266,7 @@ Current domain folder names:
 ## Verification
 
 - Run the smallest useful verification after changes.
-- For frontend structure changes, `npm run build` inside `frontend-angular` is enough.
+- For frontend structure changes, do not run `npm run build`; tell the user to run `cd frontend-angular && npm run build`.
 - For backend compile changes, `cargo check` inside `backend-rust` is enough.
 
 ## graphify

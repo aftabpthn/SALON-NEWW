@@ -1,4 +1,310 @@
-<section class="empty-page">
-  <h3>Inventory</h3>
-  <p>No records yet</p>
+<section class="page-shell">
+  <header class="page-head" [class.order-head]="tab === 'orders'">
+    <div class="head-title">
+      <h1>{{ heading }}</h1>
+      <span class="api-state" [class.error]="!!error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span>
+    </div>
+    <div class="head-actions" *ngIf="tab === 'orders'; else standardActions">
+      <input aria-label="Search purchase orders" placeholder="Search PO or supplier" [(ngModel)]="orderQuery" />
+      <select aria-label="Filter purchase orders by status" [ngModel]="orderStatus" (ngModelChange)="selectOrderStatus($event)">
+        <option value="">All statuses</option>
+        <option *ngFor="let status of orderStatuses" [value]="status">{{ status.replace('_', ' ') | titlecase }}</option>
+      </select>
+      <button type="button" (click)="reload()">Refresh</button>
+      <button class="primary" type="button" (click)="openOrder()">New purchase order</button>
+    </div>
+    <ng-template #standardActions><div class="head-actions">
+      <ng-container *ngIf="tab === 'products'">
+        <input aria-label="Search inventory" placeholder="Search name or SKU" [(ngModel)]="productQuery" />
+        <select aria-label="Filter inventory by category" [(ngModel)]="productCategory"><option value="">All categories</option><option *ngFor="let category of productCategories" [value]="category">{{ category }}</option></select>
+        <button type="button" (click)="productQuery = ''; productCategory = ''">Clear filters</button>
+        <button class="primary" type="button" (click)="openNewProduct()">Add product</button>
+      </ng-container>
+      <ng-container *ngIf="tab === 'ledger'">
+        <as-date-picker ariaLabel="Ledger from date" [(value)]="ledgerFrom"></as-date-picker>
+        <as-date-picker ariaLabel="Ledger to date" [(value)]="ledgerTo"></as-date-picker>
+        <select aria-label="Filter ledger movement" [(ngModel)]="ledgerMovement"><option value="">All movements</option><option value="sale">Sale</option><option value="return">Return</option><option value="purchase">Purchase</option><option value="purchase_return">Purchase return</option><option value="transfer_out">Transfer out</option><option value="transfer_in">Transfer in</option><option value="adjustment">Adjustment</option><option value="consumption">Consumption</option></select>
+        <button type="button" (click)="loadLedger()">Apply</button><button class="primary" type="button" [disabled]="!ledgerRows.length" (click)="exportLedger()">Export CSV</button>
+      </ng-container>
+      <ng-container *ngIf="tab === 'reorder'">
+        <select aria-label="Filter reorder priority" [(ngModel)]="reorderPriority"><option value="">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select>
+        <button type="button" (click)="loadReorder()">Refresh</button><button class="primary" type="button" (click)="loadReorder()">Generate suggestions</button>
+      </ng-container>
+      <ng-container *ngIf="tab === 'valuation'">
+        <as-date-picker ariaLabel="Valuation date" [(value)]="valuationAsOf"></as-date-picker>
+        <select aria-label="Valuation method" disabled><option>Weighted average</option></select>
+        <button class="primary" type="button" (click)="loadValuation()">Apply</button>
+      </ng-container>
+      <button class="icon-button" type="button" aria-label="Reload" *ngIf="tab !== 'products' && tab !== 'ledger' && tab !== 'reorder' && tab !== 'valuation'" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button>
+      <button class="primary" type="button" *ngIf="tab === 'suppliers'" (click)="openSupplier()">New supplier</button>
+      <button class="primary" type="button" *ngIf="tab === 'grn'" (click)="openGrn()">New GRN</button>
+      <button class="primary" type="button" *ngIf="tab === 'returns'" (click)="openReturn()">New return</button>
+      <button class="primary" type="button" *ngIf="tab === 'transfers'" (click)="openTransfer()">New transfer</button>
+    </div></ng-template>
+  </header>
+
+  <nav class="tabs" aria-label="Procurement sections" *ngIf="!standaloneOrders">
+    <button type="button" *ngFor="let item of tabs" [class.active]="tab === item.id" (click)="selectTab(item.id)">{{ item.label }}</button>
+  </nav>
+
+  <nav class="order-stages" aria-label="Purchase order stages" *ngIf="tab === 'orders'">
+    <button type="button" [class.active]="orderStage === 'draft'" (click)="selectOrderStage('draft')">Draft</button>
+    <button type="button" [class.active]="orderStage === 'approved'" (click)="selectOrderStage('approved')">Approved</button>
+    <button type="button" [class.active]="orderStage === 'partially_received'" (click)="selectOrderStage('partially_received')">Part Received</button>
+    <button type="button" [class.active]="orderStage === 'closed'" (click)="selectOrderStage('closed')">Closed</button>
+  </nav>
+
+  <p class="message error" *ngIf="error">{{ error }}</p>
+  <p class="message success" *ngIf="notice">{{ notice }}</p>
+  <div class="loading" *ngIf="loading">Loading…</div>
+
+  <section class="order-kpis" *ngIf="!loading && tab === 'products'">
+    <article class="blue"><i class="bi bi-box-seam" aria-hidden="true"></i><span>Total items</span><strong>{{ items.length }}</strong></article>
+    <article class="orange"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>Low stock</span><strong>{{ lowStockItems.length }}</strong></article>
+    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Out of stock</span><strong>{{ outOfStockItems.length }}</strong></article>
+    <article class="green"><i class="bi bi-currency-rupee" aria-hidden="true"></i><span>Stock value</span><strong>{{ money(inventoryValue) }}</strong></article>
+  </section>
+  <section class="order-kpis" *ngIf="!loading && tab === 'ledger'">
+    <article class="blue"><i class="bi bi-arrow-down-up" aria-hidden="true"></i><span>Movements</span><strong>{{ ledgerRows.length }}</strong></article>
+    <article class="orange"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>Stock in</span><strong>{{ ledgerStockIn }}</strong></article>
+    <article class="teal"><i class="bi bi-arrow-up" aria-hidden="true"></i><span>Stock out</span><strong>{{ ledgerStockOut }}</strong></article>
+    <article class="green"><i class="bi bi-plus-minus" aria-hidden="true"></i><span>Adjustments</span><strong>{{ ledgerAdjustments }}</strong></article>
+  </section>
+  <section class="order-kpis" *ngIf="!loading && tab === 'reorder'">
+    <article class="blue"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>Below reorder</span><strong>{{ reorderRows.length }}</strong></article>
+    <article class="orange"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Out of stock</span><strong>{{ outOfStockItems.length }}</strong></article>
+    <article class="teal"><i class="bi bi-list-check" aria-hidden="true"></i><span>Suggested lines</span><strong>{{ filteredReorderRows.length }}</strong></article>
+    <article class="green"><i class="bi bi-currency-rupee" aria-hidden="true"></i><span>Estimated value</span><strong>{{ money(reorderValue) }}</strong></article>
+  </section>
+  <section class="order-kpis" *ngIf="!loading && tab === 'valuation'">
+    <article class="blue"><i class="bi bi-currency-rupee" aria-hidden="true"></i><span>Stock value</span><strong>{{ money(valuationValue) }}</strong></article>
+    <article class="orange"><i class="bi bi-boxes" aria-hidden="true"></i><span>Units on hand</span><strong>{{ valuationUnits }}</strong></article>
+    <article class="teal"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>Low stock value</span><strong>{{ money(valuationLowStockValue) }}</strong></article>
+    <article class="green"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Cost exceptions</span><strong>{{ valuationExceptions }}</strong></article>
+  </section>
+
+  <section class="register-tools" *ngIf="!loading && tab === 'grn'">
+    <div class="register-filters">
+      <as-date-picker ariaLabel="Purchase bill from date" [(value)]="receiptFrom"></as-date-picker>
+      <as-date-picker ariaLabel="Purchase bill to date" [(value)]="receiptTo"></as-date-picker>
+      <input aria-label="Search supplier or invoice" placeholder="Search supplier or invoice" [(ngModel)]="receiptQuery" />
+      <select aria-label="Filter purchase bills by supplier" [(ngModel)]="receiptSupplier"><option value="">All suppliers</option><option *ngFor="let supplier of receiptSuppliers" [value]="supplier">{{ supplier }}</option></select>
+      <button type="button" (click)="reload()">Refresh</button>
+      <button type="button" [disabled]="!filteredReceipts.length" (click)="exportReceipts()">Export CSV</button>
+    </div>
+    <div class="register-kpis">
+      <article><span>Purchases</span><strong>{{ money(receiptSum('totalPaise')) }}</strong></article>
+      <article><span>Input GST</span><strong>{{ money(receiptGstTotal) }}</strong></article>
+      <article><span>Bills</span><strong>{{ filteredReceipts.length }}</strong></article>
+      <article><span>Payable</span><strong>{{ money(receiptPayableTotal) }}</strong></article>
+    </div>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'products'">
+    <header class="register-head"><strong>Products</strong><button class="icon-button" type="button" aria-label="Refresh products" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
+    <table *ngIf="filteredItems.length; else empty"><thead><tr><th>Product</th><th>SKU / Barcode</th><th>Stock</th><th>Reorder level</th><th>Unit cost</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody><tr *ngFor="let row of filteredItems"><td><strong>{{ row.name }}</strong><small>{{ row.category || '—' }}</small></td><td>{{ row.sku || '—' }}<small>{{ row.barcode || '—' }}</small></td><td>{{ row.stockQuantity }} {{ row.unit }}</td><td>{{ row.reorderPoint }}</td><td>{{ money(row.unitCostPaise) }}</td><td><span class="status" [class.muted]="!row.active">{{ row.batchTracked ? 'Batch tracked' : row.active ? 'Active' : 'Inactive' }}</span></td><td class="actions"><button type="button" (click)="openProduct(row)">View</button><button type="button" (click)="printBarcode(row)">Label</button><button type="button" (click)="openKit(row)">Kit</button></td></tr></tbody>
+    </table>
+    <div class="register-count">Showing {{ filteredItems.length }} of {{ items.length }} records</div>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'batches'">
+    <header class="register-head"><strong>Batch stock</strong><button class="icon-button" type="button" aria-label="Refresh batches" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
+    <table *ngIf="batches.length; else empty"><thead><tr><th>Product</th><th>Batch</th><th>Barcode</th><th>Received</th><th>Expiry</th><th>Quantity</th><th>Unit cost</th></tr></thead>
+      <tbody><tr *ngFor="let row of batches"><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td>{{ row.barcode || '—' }}</td><td>{{ date(row.receivedDate) }}</td><td>{{ date(row.expiryDate) }}</td><td>{{ row.quantity }}</td><td>{{ money(row.unitCostPaise) }}</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'ledger'">
+    <header class="register-head"><strong>Immutable movement history</strong><div><input aria-label="Search stock ledger" placeholder="Search product or source" [(ngModel)]="ledgerQuery" /><button class="icon-button" type="button" aria-label="Refresh ledger" (click)="loadLedger()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+    <table *ngIf="ledgerRows.length; else emptyLedger"><thead><tr><th>Date &amp; time</th><th>Product</th><th>Movement</th><th>Quantity</th><th>Value</th><th>Source</th><th>Stock after</th></tr></thead>
+      <tbody><tr *ngFor="let row of ledgerRows"><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td><span class="status">{{ row.movementType.replace('_', ' ') }}</span></td><td>{{ row.quantityDelta }}</td><td>{{ money(row.valuePaise) }}</td><td>{{ row.source || '—' }}</td><td>{{ row.stockAfterQuantity ?? '—' }}</td></tr></tbody>
+    </table>
+    <ng-template #emptyLedger><div class="empty-state">No movements yet</div></ng-template>
+    <div class="register-count">Showing {{ ledgerRows.length }} movements</div>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'reorder'">
+    <header class="register-head"><strong>Suggested replenishment</strong><span class="api-state">PO creation available</span></header>
+    <table *ngIf="filteredReorderRows.length; else emptyReorder"><thead><tr><th>Product</th><th>Current stock</th><th>Reorder level</th><th>Suggested qty</th><th>Priority</th><th>Reason</th><th>Action</th></tr></thead>
+      <tbody><tr *ngFor="let row of filteredReorderRows"><td><strong>{{ row.productName }}</strong><small>{{ row.sku || '—' }}</small></td><td>{{ row.currentStock }}</td><td>{{ row.reorderLevel }}</td><td>{{ row.suggestedQuantity }}</td><td><span class="status" [class.muted]="row.priority === 'medium'">{{ row.priority }}</span></td><td>{{ row.reason }}</td><td><button type="button" (click)="createOrderFromSuggestion(row)">Create PO</button></td></tr></tbody>
+    </table>
+    <ng-template #emptyReorder><div class="empty-state">No suggestions yet</div></ng-template>
+    <div class="register-count">Showing {{ filteredReorderRows.length }} suggestions</div>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'valuation'">
+    <header class="register-head"><strong>Weighted-cost valuation</strong><div><button type="button" [disabled]="!valuationRows.length" (click)="exportValuation()">Export CSV</button><button class="icon-button" type="button" aria-label="Refresh valuation" (click)="loadValuation()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+    <table *ngIf="valuationRows.length; else emptyValuation"><thead><tr><th>Product</th><th>Category</th><th>Stock</th><th>Unit cost</th><th>Stock value</th><th>Reorder level</th><th>Status</th></tr></thead>
+      <tbody><tr *ngFor="let row of valuationRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.category || '—' }}</td><td>{{ row.stockQuantity }}</td><td>{{ money(row.unitCostPaise) }}</td><td><strong>{{ money(row.stockValuePaise) }}</strong></td><td>{{ row.reorderPoint }}</td><td><span class="status" [class.muted]="row.stockQuantity <= row.reorderPoint">{{ row.unitCostPaise <= 0 && row.stockQuantity > 0 ? 'Cost missing' : row.stockQuantity <= row.reorderPoint ? 'Low stock' : 'Valued' }}</span></td></tr></tbody>
+    </table>
+    <ng-template #emptyValuation><div class="empty-state">No valuation data</div></ng-template>
+    <div class="register-count">Method: weighted average</div>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'suppliers'">
+    <table *ngIf="suppliers.length; else empty"><thead><tr><th>Code</th><th>Supplier</th><th>GSTIN</th><th>Contact</th><th>Terms</th><th>Status</th><th></th></tr></thead>
+      <tbody><tr *ngFor="let row of suppliers"><td>{{ row.code }}</td><td><strong>{{ row.name }}</strong></td><td>{{ row.gstin || '—' }}</td><td>{{ row.contactName || row.phone || '—' }}</td><td>{{ row.paymentTermsDays }} days</td><td><span class="status" [class.muted]="!row.active">{{ row.active ? 'Active' : 'Inactive' }}</span></td><td class="actions"><button type="button" (click)="openSupplier(row)">Edit</button></td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="order-register" *ngIf="!loading && tab === 'orders'">
+    <div class="order-kpis">
+      <article class="blue"><i class="bi bi-receipt" aria-hidden="true"></i><span>Purchase orders</span><strong>{{ orders.length }}</strong></article>
+      <article class="orange"><i class="bi bi-file-earmark" aria-hidden="true"></i><span>Draft</span><strong>{{ orderCount('draft') }}</strong></article>
+      <article class="teal"><i class="bi bi-check2" aria-hidden="true"></i><span>Approved</span><strong>{{ orderCount('approved') }}</strong></article>
+      <article class="green"><i class="bi bi-currency-rupee" aria-hidden="true"></i><span>Open value</span><strong>{{ money(orderOpenValue) }}</strong></article>
+    </div>
+    <section class="table-card order-table">
+      <header class="register-head"><strong>Purchase order register</strong><div><select aria-label="Filter purchase orders by supplier" [(ngModel)]="orderSupplier"><option value="">All suppliers</option><option *ngFor="let supplier of suppliers" [value]="supplier.id">{{ supplier.name }}</option></select><button type="button" [disabled]="!filteredOrders.length" (click)="exportOrders()">Export CSV</button></div></header>
+      <table *ngIf="filteredOrders.length; else emptyOrders"><thead><tr><th>PO number</th><th>Supplier</th><th>Created date</th><th>Expected date</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody><tr *ngFor="let row of filteredOrders"><td><strong>{{ row.orderNumber }}</strong></td><td>{{ row.supplierName }}</td><td>{{ date(row.createdAt) }}</td><td>{{ date(row.expectedDate) }}</td><td>{{ row.lineCount }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td><span class="status" [class.muted]="row.status === 'received' || row.status === 'rejected'">{{ row.status.replace('_', ' ') }}</span></td><td class="actions"><button type="button" *ngIf="row.status === 'draft'" (click)="orderAction(row, 'submit')">Submit</button><button type="button" *ngIf="row.status === 'pending_approval'" (click)="orderAction(row, 'approve')">Approve</button><button type="button" *ngIf="row.status === 'pending_approval'" (click)="orderAction(row, 'reject')">Reject</button><button type="button" *ngIf="row.status === 'approved' || row.status === 'partially_received'" (click)="openGrn(row)">Receive</button></td></tr></tbody>
+      </table>
+      <ng-template #emptyOrders><div class="order-empty"><i class="bi bi-receipt" aria-hidden="true"></i><strong>No purchase orders yet</strong></div></ng-template>
+      <footer class="register-count"><span>Showing {{ filteredOrders.length }} of {{ orders.length }} purchase orders</span><span>GRN receiving stays linked to approved POs</span></footer>
+    </section>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'grn'">
+    <table *ngIf="filteredReceipts.length; else empty"><thead><tr><th>Bill date</th><th>Supplier</th><th>GSTIN</th><th>Invoice number</th><th>Taxable</th><th>GST</th><th>Total</th><th></th></tr></thead>
+      <tbody><tr *ngFor="let row of filteredReceipts"><td>{{ date(row.receivedDate) }}</td><td><strong>{{ row.supplierName }}</strong></td><td>{{ row.supplierGstin || '—' }}</td><td>{{ row.supplierInvoiceNumber }}</td><td>{{ money(row.taxablePaise) }}</td><td>{{ money(receiptGst(row)) }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td class="actions"><button type="button" (click)="openReturn(row)">Return</button></td></tr></tbody>
+    </table>
+    <div class="register-count">Showing {{ filteredReceipts.length }} of {{ receipts.length }} bills</div>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'returns'">
+    <table *ngIf="returns.length; else empty"><thead><tr><th>Supplier</th><th>Reason</th><th>Date</th><th>Total</th></tr></thead>
+      <tbody><tr *ngFor="let row of returns"><td><strong>{{ row.supplierName }}</strong></td><td>{{ row.reason }}</td><td>{{ date(row.createdAt) }}</td><td>{{ money(row.totalPaise) }}</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'payables'">
+    <table *ngIf="payables.length; else empty"><thead><tr><th>Invoice</th><th>Supplier</th><th>Due</th><th>Total</th><th>Paid / Returned</th><th>Balance</th><th></th></tr></thead>
+      <tbody><tr *ngFor="let row of payables"><td><strong>{{ row.supplierInvoiceNumber }}</strong></td><td>{{ row.supplierName }}</td><td>{{ date(row.dueDate) }}</td><td>{{ money(row.totalPaise) }}</td><td>{{ money(row.paidPaise) }} / {{ money(row.returnedPaise) }}</td><td><strong>{{ money(row.balancePaise) }}</strong></td><td class="actions"><button type="button" *ngIf="row.balancePaise > 0" (click)="openPayment(row)">Pay</button></td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && tab === 'transfers'">
+    <table *ngIf="transfers.length; else empty"><thead><tr><th>Source branch</th><th>Destination branch</th><th>Dispatched</th><th>Status</th><th></th></tr></thead>
+      <tbody><tr *ngFor="let row of transfers"><td>{{ row.sourceBranchId }}</td><td>{{ row.destinationBranchId }}</td><td>{{ date(row.dispatchedAt) }}</td><td><span class="status">{{ row.status.replace('_', ' ') }}</span></td><td class="actions"><button type="button" *ngIf="row.status === 'in_transit'" (click)="transferAction(row, 'receive')">Receive</button><button type="button" *ngIf="row.status === 'in_transit'" (click)="transferAction(row, 'cancel')">Cancel</button></td></tr></tbody>
+    </table>
+  </section>
+
+  <ng-template #empty><div class="empty-state">No records yet</div></ng-template>
 </section>
+
+<div class="drawer-backdrop" *ngIf="drawer" (click)="closeDrawer()"></div>
+<aside class="drawer" *ngIf="drawer" role="dialog" aria-modal="true">
+  <header><h2>{{ drawer === 'product' ? (productCreating ? 'Add product' : 'Product 360') : drawer === 'kit' ? 'Product kit' : drawer === 'supplier' ? (supplierId ? 'Edit supplier' : 'New supplier') : drawer === 'order' ? 'New purchase order' : drawer === 'grn' ? (pageTitle || 'Post GRN') : drawer === 'return' ? 'Purchase return' : drawer === 'transfer' ? 'Inventory transfer' : 'Supplier payment' }}</h2><button class="icon-button" type="button" aria-label="Close" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+  <div class="drawer-body">
+    <p class="message error" *ngIf="error">{{ error }}</p>
+
+    <section class="product-360" *ngIf="drawer === 'product'">
+      <div class="loading" *ngIf="productLoading">Loading…</div>
+      <ng-container *ngIf="productDetail as detail">
+        <header class="product-summary">
+          <div><strong>{{ detail.product.name }}</strong><span>{{ detail.product.sku || '—' }} · {{ detail.product.category || '—' }}</span></div>
+          <span class="status" [class.muted]="!detail.product.active">{{ detail.product.active ? 'Active' : 'Inactive' }}</span>
+        </header>
+
+        <div class="product-detail-grid" *ngIf="!productEditing">
+          <article><h3>Stock &amp; reorder</h3><span>Current stock <b>{{ detail.product.stockQuantity }} {{ detail.product.unit }}</b></span><span>Reorder level <b>{{ detail.product.reorderPoint }}</b></span><span>Unit cost <b>{{ money(detail.product.unitCostPaise) }}</b></span><span>Barcode <b>{{ detail.product.barcode || '—' }}</b></span><span>Tracking <b>{{ detail.product.batchTracked ? 'Batch' : 'Standard' }}</b></span></article>
+          <article><h3>Movement trail</h3><span>Last movement <b>{{ date(detail.lastMovementAt) }}</b></span><span>Stock in <b>{{ detail.stockInQuantity }}</b></span><span>Stock out <b>{{ detail.stockOutQuantity }}</b></span></article>
+          <article><h3>Purchase history</h3><span>Last receipt <b>{{ date(detail.lastReceiptDate) }}</b></span><span>Supplier <b>{{ detail.lastSupplier || '—' }}</b></span></article>
+          <article><h3>Service usage</h3><span>Recipes <b>{{ detail.recipeCount }}</b></span><span>Consumed <b>{{ detail.consumedQuantity }}</b></span></article>
+        </div>
+
+        <form class="stocktake-form" *ngIf="!productEditing" (ngSubmit)="applyStocktake()">
+          <h3>Stocktake adjustment</h3>
+          <label>Actual stock<input required type="number" min="0" step="1" [(ngModel)]="stocktakeDraft.stockQuantity" name="stocktakeQuantity" /></label>
+          <label>Adjustment reason<input required maxlength="240" [(ngModel)]="stocktakeDraft.reason" name="stocktakeReason" /></label>
+          <button class="primary" type="submit" [disabled]="saving">{{ saving ? 'Posting…' : 'Post stocktake' }}</button>
+        </form>
+
+      </ng-container>
+      <form class="form-grid" *ngIf="productEditing" (ngSubmit)="saveProduct()" id="product-form">
+        <label>SKU<input maxlength="120" [(ngModel)]="productDraft.sku" name="productSku" /></label>
+        <label>Product name<input required maxlength="160" [ngModel]="productDraft.name" (ngModelChange)="productDraft.name = titleCase($event)" name="productName" /></label>
+        <label>Category<input maxlength="120" [ngModel]="productDraft.category" (ngModelChange)="productDraft.category = titleCase($event)" name="productCategory" /></label>
+        <label>Unit<input required maxlength="40" [(ngModel)]="productDraft.unit" name="productUnit" /></label>
+        <label>Reorder level<input required type="number" min="0" [(ngModel)]="productDraft.reorderPoint" name="productReorder" /></label>
+        <label>Unit cost (₹)<input required type="number" min="0" step="0.01" [(ngModel)]="productDraft.unitCostRupees" name="productCost" /></label>
+        <label>GST %<input required type="number" min="0" max="100" [(ngModel)]="productDraft.gstPercent" name="productGst" /></label>
+        <label>HSN code<input maxlength="8" [(ngModel)]="productDraft.hsnCode" name="productHsn" /></label>
+        <label>Barcode<input maxlength="120" [(ngModel)]="productDraft.barcode" name="productBarcode" /></label>
+        <label class="check"><input type="checkbox" [(ngModel)]="productDraft.batchTracked" name="productBatchTracked" /> Batch tracking</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="productDraft.active" name="productActive" /> Active</label>
+      </form>
+    </section>
+
+    <section class="kit-workspace" *ngIf="drawer === 'kit' && productDetail as detail">
+      <header class="product-summary"><div><strong>{{ detail.product.name }}</strong><span>{{ detail.product.sku || '—' }}</span></div><span class="status">{{ detail.product.stockQuantity }} {{ detail.product.unit }}</span></header>
+      <form class="form-grid" (ngSubmit)="saveKit()" id="kit-form">
+        <div class="line-list span-2"><div class="entry-line kit-line" *ngFor="let line of kitDraft.components; let i = index"><label>Component<select required [(ngModel)]="line.inventoryItemId" [name]="'kitItem' + i"><option value="">Select item</option><option *ngFor="let item of items" [value]="item.id" [disabled]="item.id === detail.product.id">{{ item.name }} · {{ item.sku }}</option></select></label><label>Quantity<input required type="number" min="1" step="1" [(ngModel)]="line.quantity" [name]="'kitQty' + i" /></label><button class="icon-button remove" type="button" aria-label="Remove component" (click)="removeKitComponent(i)" [disabled]="kitDraft.components.length === 1"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div><button class="add-line" type="button" (click)="addKitComponent()"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add component</button></div>
+      </form>
+      <form class="stocktake-form" (ngSubmit)="assembleKit()"><h3>Assemble stock</h3><label>Quantity<input required type="number" min="1" step="1" [(ngModel)]="kitDraft.quantity" name="assemblyQuantity" /></label><button class="primary" type="submit" [disabled]="saving">{{ saving ? 'Posting…' : 'Assemble' }}</button></form>
+    </section>
+
+    <form class="form-grid" *ngIf="drawer === 'supplier'" (ngSubmit)="saveSupplier()" id="supplier-form">
+      <label>Code<input required maxlength="80" [(ngModel)]="supplierDraft.code" name="code" /></label>
+      <label>Supplier name<input required maxlength="160" [ngModel]="supplierDraft.name" (ngModelChange)="supplierDraft.name = titleCase($event)" name="name" /></label>
+      <label>GSTIN<input maxlength="15" [(ngModel)]="supplierDraft.gstin" name="gstin" /></label>
+      <label>Contact name<input maxlength="160" [ngModel]="supplierDraft.contactName" (ngModelChange)="supplierDraft.contactName = titleCase($event)" name="contactName" /></label>
+      <label>Phone<input maxlength="40" [(ngModel)]="supplierDraft.phone" name="phone" /></label>
+      <label>Email<input type="email" maxlength="254" [(ngModel)]="supplierDraft.email" name="email" /></label>
+      <label>Payment terms (days)<input type="number" min="0" max="3650" [(ngModel)]="supplierDraft.paymentTermsDays" name="terms" /></label>
+      <label class="span-2">Address<textarea maxlength="1000" [(ngModel)]="supplierDraft.address" name="address"></textarea></label>
+      <label class="check"><input type="checkbox" [(ngModel)]="supplierDraft.active" name="active" /> Active</label>
+    </form>
+
+    <form class="form-grid" *ngIf="drawer === 'order'" (ngSubmit)="saveOrder()" id="order-form">
+      <label>Supplier<select required [(ngModel)]="orderDraft.supplierId" name="supplier"><option value="">Select supplier</option><option *ngFor="let row of suppliers" [value]="row.id" [disabled]="!row.active">{{ row.name }}</option></select></label>
+      <label>Expected date<as-date-picker [(value)]="orderDraft.expectedDate" ariaLabel="Expected date"></as-date-picker></label>
+      <label class="span-2">Notes<textarea maxlength="500" [(ngModel)]="orderDraft.notes" name="notes"></textarea></label>
+      <ng-container *ngTemplateOutlet="lineEditor; context: { $implicit: orderDraft.lines, kind: 'order' }"></ng-container>
+    </form>
+
+    <form class="form-grid" *ngIf="drawer === 'grn'" (ngSubmit)="saveGrn()" id="grn-form">
+      <label>Supplier<select required [(ngModel)]="grnDraft.supplierId" name="grnSupplier" [disabled]="!!grnDraft.purchaseOrderId"><option value="">Select supplier</option><option *ngFor="let row of suppliers" [value]="row.id">{{ row.name }}</option></select></label>
+      <label>Supplier invoice<input required maxlength="120" [(ngModel)]="grnDraft.invoiceNumber" name="invoice" /></label>
+      <label>Received date<as-date-picker [(value)]="grnDraft.receivedDate" ariaLabel="Received date"></as-date-picker></label>
+      <label>Due date<as-date-picker [(value)]="grnDraft.dueDate" ariaLabel="Due date"></as-date-picker></label>
+      <ng-container *ngTemplateOutlet="lineEditor; context: { $implicit: grnDraft.lines, kind: 'grn' }"></ng-container>
+    </form>
+
+    <form class="form-grid" *ngIf="drawer === 'return'" (ngSubmit)="saveReturn()" id="return-form">
+      <label class="span-2">GRN<select required [(ngModel)]="returnDraft.receiptId" (ngModelChange)="loadReturnLines()" name="returnReceipt"><option value="">Select GRN</option><option *ngFor="let row of receipts" [value]="row.id">{{ row.supplierName }} · {{ row.supplierInvoiceNumber }}</option></select></label>
+      <label class="span-2">Reason<input required maxlength="500" [(ngModel)]="returnDraft.reason" name="reason" /></label>
+      <div class="line-list span-2"><div class="return-line" *ngFor="let line of returnDraft.lines; let i = index"><span><strong>{{ itemName(line.inventoryItemId) }}</strong><small>Received {{ line.maxQuantity }}</small></span><label>Return quantity<input type="number" min="0" [max]="line.maxQuantity ?? null" [(ngModel)]="line.quantity" [name]="'returnQty' + i" /></label></div></div>
+    </form>
+
+    <form class="form-grid" *ngIf="drawer === 'payment'" (ngSubmit)="savePayment()" id="payment-form">
+      <label>Amount (₹)<input required type="number" min="0.01" step="0.01" [(ngModel)]="paymentDraft.amountRupees" name="amount" /></label>
+      <label>Method<select [(ngModel)]="paymentDraft.method" name="method"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="other">Other</option></select></label>
+      <label class="span-2">Reference<input maxlength="160" [(ngModel)]="paymentDraft.reference" name="reference" /></label>
+    </form>
+
+    <form class="form-grid" *ngIf="drawer === 'transfer'" (ngSubmit)="saveTransfer()" id="transfer-form">
+      <label>Destination branch ID<input required [(ngModel)]="transferDraft.destinationBranchId" name="destinationBranch" /></label>
+      <label>Notes<input maxlength="500" [(ngModel)]="transferDraft.notes" name="transferNotes" /></label>
+      <div class="line-list span-2"><div class="entry-line transfer-line" *ngFor="let line of transferDraft.lines; let i = index"><label>Source item<select required [(ngModel)]="line.sourceInventoryItemId" [name]="'sourceItem' + i"><option value="">Select item</option><option *ngFor="let item of items" [value]="item.id">{{ item.name }} · {{ item.sku }}</option></select></label><label>Destination item ID<input required [(ngModel)]="line.destinationInventoryItemId" [name]="'destinationItem' + i" /></label><label>Quantity<input required type="number" min="1" [(ngModel)]="line.quantity" [name]="'transferQty' + i" /></label><button class="icon-button remove" type="button" aria-label="Remove line" (click)="removeTransferLine(i)" [disabled]="transferDraft.lines.length === 1"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div><button class="add-line" type="button" (click)="addTransferLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add line</button></div>
+    </form>
+  </div>
+  <footer *ngIf="drawer !== 'product' && drawer !== 'kit'"><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="submit" [disabled]="saving" [attr.form]="drawer + '-form'">{{ saving ? 'Saving…' : 'Save' }}</button></footer>
+  <footer *ngIf="drawer === 'product'"><button type="button" (click)="closeDrawer()">Close</button><button class="primary" type="button" *ngIf="productDetail && !productEditing" (click)="startProductEdit()">Edit product</button><button class="primary" type="submit" form="product-form" *ngIf="productEditing" [disabled]="saving">{{ saving ? 'Saving…' : 'Save' }}</button></footer>
+  <footer *ngIf="drawer === 'kit'"><button type="button" (click)="closeDrawer()">Close</button><button class="primary" type="submit" form="kit-form" [disabled]="saving">{{ saving ? 'Saving…' : 'Save components' }}</button></footer>
+</aside>
+
+<ng-template #lineEditor let-lines let-kind="kind">
+  <div class="line-list span-2">
+    <div class="entry-line" [class.batch-line]="kind === 'grn' && isBatchTracked(line.inventoryItemId)" *ngFor="let line of lines; let i = index">
+      <label>Item<select required [(ngModel)]="line.inventoryItemId" (ngModelChange)="syncItem(line)" [name]="kind + 'Item' + i" [disabled]="!!grnDraft.purchaseOrderId && kind === 'grn'"><option value="">Select item</option><option *ngFor="let item of items" [value]="item.id">{{ item.name }} · {{ item.sku }}</option></select></label>
+      <label>Quantity<input required type="number" min="1" [(ngModel)]="line.quantity" [name]="kind + 'Qty' + i" /></label>
+      <label>Unit cost (₹)<input required type="number" min="0" step="0.01" [(ngModel)]="line.unitCostRupees" [name]="kind + 'Cost' + i" /></label>
+      <label>GST %<input required type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="kind + 'Gst' + i" /></label>
+      <ng-container *ngIf="kind === 'grn' && isBatchTracked(line.inventoryItemId)"><label>Batch number<input required maxlength="120" [(ngModel)]="line.batchNumber" [name]="kind + 'Batch' + i" /></label><label>Batch barcode<input maxlength="120" [(ngModel)]="line.batchBarcode" [name]="kind + 'Barcode' + i" /></label><label>Expiry date<as-date-picker [(value)]="line.expiryDate" [ariaLabel]="'Expiry date line ' + (i + 1)"></as-date-picker></label></ng-container>
+      <button class="icon-button remove" type="button" aria-label="Remove line" (click)="removeLine(kind, i)" [disabled]="lines.length === 1"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+    <button class="add-line" type="button" (click)="addLine(kind)" *ngIf="!(kind === 'grn' && grnDraft.purchaseOrderId)"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add line</button>
+  </div>
+</ng-template>

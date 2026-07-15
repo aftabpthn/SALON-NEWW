@@ -64,7 +64,7 @@ pub struct StaffFileMetadata {
     pub byte_size: i32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct BulkStaffInput {
     pub employee_code: String,
     pub first_name: String,
@@ -278,12 +278,34 @@ pub async fn apply_bulk_import(
     rows: &[BulkStaffInput],
 ) -> Result<BulkImportResult, sqlx::Error> {
     let mut tx = db.begin().await?;
+    let result = apply_bulk_import_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        batch_key,
+        requested_by,
+        rows,
+        None,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+pub(crate) async fn apply_bulk_import_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    batch_key: &str,
+    requested_by: &str,
+    rows: &[BulkStaffInput],
+    import_job_id: Option<&str>,
+) -> Result<BulkImportResult, sqlx::Error> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(format!("staff-bulk:{tenant_id}:{branch_id}:{batch_key}"))
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-    if let Some(existing) = find_bulk_import_tx(&mut tx, tenant_id, branch_id, batch_key).await? {
-        tx.commit().await?;
+    if let Some(existing) = find_bulk_import_tx(tx, tenant_id, branch_id, batch_key).await? {
         return Ok(existing);
     }
     let mut created_rows = 0_i32;
@@ -296,7 +318,7 @@ pub async fn apply_bulk_import(
         .bind(tenant_id)
         .bind(branch_id)
         .bind(&row.employee_code)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?;
         let staff_id = if let Some(id) = existing_id {
             sqlx::query(
@@ -315,7 +337,7 @@ pub async fn apply_bulk_import(
             .bind(row.mobile_phone.as_deref())
             .bind(row.job_title.as_deref())
             .bind(row.active)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
             updated_rows += 1;
             id
@@ -323,8 +345,8 @@ pub async fn apply_bulk_import(
             let id = sqlx::query_scalar::<_, String>(
                 r#"INSERT INTO staff (
                       tenant_id, branch_id, employee_code, first_name, last_name,
-                      appointment_display_name, email, mobile_phone, job_title, active
-                   ) VALUES ($1,$2,$3,$4,COALESCE($5,''),$4,COALESCE($6,''),COALESCE($7,''),COALESCE($8,''),COALESCE($9,TRUE))
+                      appointment_display_name, email, mobile_phone, job_title, active,import_job_id
+                   ) VALUES ($1,$2,$3,$4,COALESCE($5,''),$4,COALESCE($6,''),COALESCE($7,''),COALESCE($8,''),COALESCE($9,TRUE),$10)
                    RETURNING id"#,
             )
             .bind(tenant_id)
@@ -336,12 +358,13 @@ pub async fn apply_bulk_import(
             .bind(row.mobile_phone.as_deref())
             .bind(row.job_title.as_deref())
             .bind(row.active)
-            .fetch_one(&mut *tx)
+            .bind(import_job_id)
+            .fetch_one(&mut **tx)
             .await?;
             created_rows += 1;
             id
         };
-        upsert_bulk_profile(&mut tx, tenant_id, branch_id, &staff_id, row).await?;
+        upsert_bulk_profile(tx, tenant_id, branch_id, &staff_id, row).await?;
         staff_ids.push(staff_id);
     }
     let result = sqlx::query_as(
@@ -359,9 +382,8 @@ pub async fn apply_bulk_import(
     .bind(updated_rows)
     .bind(serde_json::json!(staff_ids))
     .bind(requested_by)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **tx)
     .await?;
-    tx.commit().await?;
     Ok(result)
 }
 

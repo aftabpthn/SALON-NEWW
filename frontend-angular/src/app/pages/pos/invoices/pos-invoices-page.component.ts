@@ -1,9 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../../shared/services/api.service';
+import { PosRealtimeService } from '../../../core/services/pos-realtime.service';
 import { downloadInvoiceDocument, printInvoiceDocument } from '../../../shared/utils/safe-invoice-print';
+import { Subscription } from 'rxjs';
 
 interface InvoiceRow {
   id: string;
@@ -29,9 +31,12 @@ interface InvoiceTotals {
 }
 
 interface InvoiceAction { id: string; action: string; recipient: string; createdAt: string; }
+interface InvoiceDelivery { id: string; channel: string; recipient: string; status: string; attempts: number; lastError: string; deliveredAt: string | null; createdAt: string; }
 interface LedgerVerification { valid: boolean; events: number; headHash: string; failedAt: number | null; }
 interface PaymentLink { id: string; provider: string; amountPaise: number; status: string; url: string; expiresAt?: string; }
 interface PaymentReconciliation { paymentLinkId: string; providerStatus: string; providerAmountPaidPaise: number; requiresSignedWebhook: boolean; }
+interface PaymentInstrument { id: string; provider: string; methodType: string; brand: string; last4: string; recurringEnabled: boolean; status: string; }
+interface PaymentDispute { id: string; provider: string; providerDisputeId: string; amountPaise: number; currency: string; reason: string; status: string; evidenceDueAt?: string; openedAt: string; }
 
 interface InvoiceLine {
   id: string;
@@ -60,7 +65,7 @@ interface ReturnLine extends InvoiceLine {
   templateUrl: './pos-invoices-page.component.html',
   styleUrls: ['./pos-invoices-page.component.css'],
 })
-export class PosInvoicesPageComponent implements OnInit {
+export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   invoices: InvoiceRow[] = [];
   totals: InvoiceTotals = this.emptyTotals();
   selected: InvoiceRow | null = null;
@@ -70,8 +75,12 @@ export class PosInvoicesPageComponent implements OnInit {
   detailsLoading = false;
   returnLines: ReturnLine[] = [];
   recipient = '';
+  deliveryChannel: 'email' | 'whatsapp' = 'email';
+  deliveries: InvoiceDelivery[] = [];
+  reminderLoading = false;
   returnDrawerOpen = false;
   returnReason = '';
+  returnMfaCode = '';
   restockProducts = false;
   returnIdempotencyKey = '';
   returnLoading = false;
@@ -90,15 +99,26 @@ export class PosInvoicesPageComponent implements OnInit {
   paymentLinks: PaymentLink[] = [];
   paymentLinkDrawerOpen = false;
   paymentLinkAmount = '';
+  paymentLinkProvider = 'razorpay';
   paymentLinkIdempotencyKey = '';
   paymentLinkLoading = false;
   reconcilingPaymentLinkId = '';
   paymentReconciliation: PaymentReconciliation | null = null;
+  paymentInstruments: PaymentInstrument[] = [];
+  paymentDisputes: PaymentDispute[] = [];
+  revokingInstrumentId = '';
   error = '';
   message = '';
+  private liveUpdates?: Subscription;
 
-  constructor(private readonly api: ApiService) {}
-  ngOnInit(): void { this.load(); }
+  constructor(private readonly api: ApiService, private readonly realtime: PosRealtimeService) {}
+  ngOnInit(): void {
+    this.load();
+    this.liveUpdates = this.realtime.events().subscribe((event) => {
+      if (event.entityType === 'invoice') this.load();
+    });
+  }
+  ngOnDestroy(): void { this.liveUpdates?.unsubscribe(); }
 
   load(afterLoad?: () => void): void {
     this.error = '';
@@ -116,8 +136,9 @@ export class PosInvoicesPageComponent implements OnInit {
 
   select(invoice: InvoiceRow): void {
     this.selected = invoice;
-    this.recipient = '';
+    this.recipient = invoice.clientPhone || '';
     this.history = [];
+    this.deliveries = [];
     this.invoiceLines = [];
     this.clientKpi = null;
     this.detailsLoading = true;
@@ -126,8 +147,12 @@ export class PosInvoicesPageComponent implements OnInit {
     this.closeCreditNoteDrawer();
     this.ledgerVerification = null;
     this.paymentLinks = [];
+    this.paymentInstruments = [];
+    this.paymentDisputes = [];
     this.paymentReconciliation = null;
     this.loadPaymentLinks(invoice.id);
+    this.loadPaymentCompliance(invoice.id);
+    this.loadDeliveries(invoice.id);
     this.api.get<any>(`/api/v1/pos/invoices/${invoice.id}`).subscribe({
       next: (res) => {
         const data = res?.data ?? res;
@@ -146,15 +171,31 @@ export class PosInvoicesPageComponent implements OnInit {
       },
       error: (err: any) => { this.detailsLoading = false; this.error = this.messageFor(err); },
     });
-    this.api.get<any>(`/api/v1/pos/invoices/${invoice.id}/history`).subscribe({
-      next: (res) => this.history = this.rows(res).map((row) => ({ id: String(row.id), action: String(row.action), recipient: String(row.recipient ?? ''), createdAt: String(row.createdAt ?? row.created_at ?? '') })),
-      error: (err: any) => this.error = this.messageFor(err),
-    });
+    this.loadHistory(invoice);
   }
 
   print(): void { this.withAction('print', () => this.api.get<any>(`/api/v1/pos/invoices/${this.selected!.id}/print`).subscribe({ next: (res) => { if (!printInvoiceDocument(res?.data ?? res)) this.error = 'Print not available'; }, error: (err: any) => this.error = this.messageFor(err) })); }
   download(): void { this.withAction('download', () => this.api.get<any>(`/api/v1/pos/invoices/${this.selected!.id}/basic`).subscribe({ next: (res) => downloadInvoiceDocument(res?.data ?? res, this.selected?.invoiceNumber || this.selected?.id || 'invoice'), error: (err: any) => this.error = this.messageFor(err) })); }
-  requestResend(): void { if (!this.recipient.trim()) { this.error = 'Recipient is required'; return; } this.withAction('resend', () => this.message = 'Resend request recorded'); }
+  requestResend(): void {
+    if (!this.selected || !this.recipient.trim()) { this.error = 'Recipient is required'; return; }
+    this.error = '';
+    this.api.post<any>(`/api/v1/pos/invoices/${this.selected.id}/actions`, {
+      action: 'resend', channel: this.deliveryChannel, recipient: this.recipient.trim(),
+      idempotencyKey: this.newIdempotencyKey(), templateVersion: 'invoice-v1',
+    }).subscribe({
+      next: () => { this.message = 'Invoice delivery queued'; this.loadDeliveries(this.selected!.id); this.loadHistory(this.selected!); },
+      error: (err: any) => this.error = this.messageFor(err),
+    });
+  }
+
+  scheduleDueReminders(): void {
+    if (this.reminderLoading || !confirm('Queue reminders for eligible overdue invoices?')) return;
+    this.reminderLoading = true; this.error = '';
+    this.api.post<any>('/api/v1/pos/invoice-outbox/schedule-due-reminders', {}).subscribe({
+      next: (response) => { const data = response?.data ?? response; this.message = `${Number(data?.queued) || 0} due reminder(s) queued`; this.reminderLoading = false; if (this.selected) this.loadDeliveries(this.selected.id); },
+      error: (err: any) => { this.error = this.messageFor(err); this.reminderLoading = false; },
+    });
+  }
 
   canReturn(invoice: InvoiceRow): boolean {
     return invoice.paidPaise > 0 && !['draft', 'voided', 'cancelled', 'refunded'].includes(invoice.status.toLowerCase());
@@ -287,6 +328,7 @@ export class PosInvoicesPageComponent implements OnInit {
   closePaymentLinkDrawer(): void {
     this.paymentLinkDrawerOpen = false;
     this.paymentLinkAmount = '';
+    this.paymentLinkProvider = 'razorpay';
     this.paymentLinkIdempotencyKey = '';
     this.paymentLinkLoading = false;
   }
@@ -300,6 +342,7 @@ export class PosInvoicesPageComponent implements OnInit {
     this.error = '';
     this.paymentLinkLoading = true;
     this.api.post<any>(`/api/v1/pos/invoices/${selectedId}/payment-links`, {
+      provider: this.paymentLinkProvider,
       amountPaise,
       idempotencyKey: this.paymentLinkIdempotencyKey || this.newIdempotencyKey(),
     }).subscribe({
@@ -338,6 +381,20 @@ export class PosInvoicesPageComponent implements OnInit {
     navigator.clipboard.writeText(link.url).then(() => this.message = 'Payment link copied').catch(() => this.error = 'Unable to copy payment link');
   }
 
+  revokePaymentInstrument(instrument: PaymentInstrument): void {
+    if (!this.selected || this.revokingInstrumentId || instrument.status === 'revoked') return;
+    this.revokingInstrumentId = instrument.id;
+    this.error = '';
+    this.api.post<any>(`/api/v1/pos/payment-instruments/${instrument.id}/revoke`, {}).subscribe({
+      next: () => {
+        this.revokingInstrumentId = '';
+        this.message = 'Saved payment instrument revoked';
+        this.loadPaymentCompliance(this.selected!.id);
+      },
+      error: (err: any) => { this.revokingInstrumentId = ''; this.error = this.messageFor(err); },
+    });
+  }
+
   openReturnDrawer(): void {
     if (!this.selected || !this.canReturn(this.selected)) return;
     this.error = '';
@@ -354,6 +411,7 @@ export class PosInvoicesPageComponent implements OnInit {
           returnQuantity: null,
         })).filter((line) => line.id && line.quantity > 0);
         this.returnReason = '';
+        this.returnMfaCode = '';
         this.restockProducts = false;
         this.returnIdempotencyKey = this.newIdempotencyKey();
         this.returnDrawerOpen = true;
@@ -368,6 +426,7 @@ export class PosInvoicesPageComponent implements OnInit {
     this.returnLoading = false;
     this.returnLines = [];
     this.returnReason = '';
+    this.returnMfaCode = '';
     this.restockProducts = false;
     this.returnIdempotencyKey = '';
   }
@@ -387,6 +446,7 @@ export class PosInvoicesPageComponent implements OnInit {
       .filter((line) => (Number(line.returnQuantity) || 0) > 0)
       .map((line) => ({ saleLineId: line.id, quantity: Number(line.returnQuantity) }));
     if (!reason) { this.error = 'Return reason is required'; return; }
+    if (!this.returnMfaCode.trim()) { this.error = 'Authenticator or recovery code is required'; return; }
     if (!lines.length) { this.error = 'Select at least one item to return'; return; }
     if (lines.some((line) => !Number.isInteger(line.quantity) || line.quantity < 1)) { this.error = 'Return quantity must be a whole number'; return; }
     if (this.returnLines.some((line) => (Number(line.returnQuantity) || 0) > line.quantity)) { this.error = 'Return quantity cannot exceed sold quantity'; return; }
@@ -398,6 +458,7 @@ export class PosInvoicesPageComponent implements OnInit {
       idempotencyKey: this.returnIdempotencyKey || this.newIdempotencyKey(),
       restock: this.restockProducts,
       lines,
+      mfaCode: this.returnMfaCode.trim(),
     }).subscribe({
       next: () => {
         const selectedId = this.selected?.id;
@@ -422,6 +483,7 @@ export class PosInvoicesPageComponent implements OnInit {
   paymentSummary(row: InvoiceRow): string { return row.paymentMode ? row.paymentMode : row.paidPaise > 0 ? 'Paid' : 'Unpaid'; }
   trackByInvoice(_: number, row: InvoiceRow): string { return row.id; }
   trackByHistory(_: number, row: InvoiceAction): string { return row.id; }
+  trackByDelivery(_: number, row: InvoiceDelivery): string { return row.id; }
   trackByLine(_: number, row: InvoiceLine): string { return row.id; }
   lineTypeLabel(value: string): string { return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
@@ -450,6 +512,42 @@ export class PosInvoicesPageComponent implements OnInit {
   private loadPaymentLinks(invoiceId: string): void {
     this.api.get<any>(`/api/v1/pos/invoices/${invoiceId}/payment-links`).subscribe({
       next: (res) => this.paymentLinks = this.rows(res).map((row) => this.paymentLink(row)),
+      error: (err: any) => this.error = this.messageFor(err),
+    });
+  }
+
+  private loadPaymentCompliance(invoiceId: string): void {
+    this.api.get<any>(`/api/v1/pos/invoices/${invoiceId}/payment-instruments`).subscribe({
+      next: (response) => this.paymentInstruments = this.rows(response).map((row) => ({
+        id: String(row.id ?? ''), provider: String(row.provider ?? ''), methodType: String(row.methodType ?? ''),
+        brand: String(row.brand ?? ''), last4: String(row.last4 ?? ''), recurringEnabled: row.recurringEnabled === true,
+        status: String(row.status ?? ''),
+      })),
+      error: (err: any) => this.error = this.messageFor(err),
+    });
+    this.api.get<any>(`/api/v1/pos/invoices/${invoiceId}/disputes`).subscribe({
+      next: (response) => this.paymentDisputes = this.rows(response).map((row) => ({
+        id: String(row.id ?? ''), provider: String(row.provider ?? ''), providerDisputeId: String(row.providerDisputeId ?? ''),
+        amountPaise: Number(row.amountPaise) || 0, currency: String(row.currency ?? 'INR'), reason: String(row.reason ?? ''),
+        status: String(row.status ?? ''), evidenceDueAt: row.evidenceDueAt, openedAt: String(row.openedAt ?? ''),
+      })),
+      error: (err: any) => this.error = this.messageFor(err),
+    });
+  }
+
+  private loadDeliveries(invoiceId: string): void {
+    this.api.get<any>(`/api/v1/pos/invoices/${invoiceId}/deliveries`).subscribe({
+      next: (response) => this.deliveries = this.rows(response).map((row) => ({
+        id: String(row.id), channel: String(row.channel), recipient: String(row.recipient), status: String(row.status),
+        attempts: Number(row.attempts) || 0, lastError: String(row.lastError ?? ''), deliveredAt: row.deliveredAt ?? null, createdAt: String(row.createdAt ?? ''),
+      })),
+      error: (err: any) => this.error = this.messageFor(err),
+    });
+  }
+
+  private loadHistory(invoice: InvoiceRow): void {
+    this.api.get<any>(`/api/v1/pos/invoices/${invoice.id}/history`).subscribe({
+      next: (res) => this.history = this.rows(res).map((row) => ({ id: String(row.id), action: String(row.action), recipient: String(row.recipient ?? ''), createdAt: String(row.createdAt ?? row.created_at ?? '') })),
       error: (err: any) => this.error = this.messageFor(err),
     });
   }

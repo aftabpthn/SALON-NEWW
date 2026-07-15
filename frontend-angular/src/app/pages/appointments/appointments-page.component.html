@@ -38,13 +38,16 @@
         <span></span>
       </button>
 
-      <a class="report-link" routerLink="/appointments/activities">Report</a>
+      <a class="report-link" routerLink="/appointment-reports">Report</a>
       <button type="button" [class.active]="activeCommand === 'block'" (click)="openCommand('block')">Block time</button>
       <button type="button" [class.active]="activeCommand === 'waitlist'" (click)="openCommand('waitlist')">Waitlist</button>
       <button type="button" [class.active]="activeCommand === 'move'" (click)="openCommand('move')">Move</button>
       <button class="primary" type="button" [class.active]="newBookingOpen" (click)="openNewBooking()">New booking</button>
     </div>
   </section>
+
+  <p class="status-action-message" *ngIf="appointmentActionMessage">{{ appointmentActionMessage }}</p>
+  <p class="status-action-error board-action-error" *ngIf="appointmentActionError && !selectedAppointment">{{ appointmentActionError }}</p>
 
   <section class="metrics" aria-label="Appointment summary">
     <article *ngFor="let item of summary; trackBy: trackByIndex" [class]="item.tone">
@@ -326,6 +329,7 @@
           />
           <span aria-hidden="true" class="check-mark"></span>
         </label>
+
         <span class="initials">{{ person.initials }}</span>
         <span class="staff-copy">
           <b>{{ person.name }}</b>
@@ -339,7 +343,7 @@
     <footer>
       <button type="button" (click)="resetScheduledStaff()">Reset</button>
       <button type="button" (click)="closeScheduledStaff()">Cancel</button>
-      <button class="primary accent" type="button" (click)="closeScheduledStaff()">Save</button>
+      <button class="primary accent" type="button" (click)="saveScheduledStaff()">Save</button>
     </footer>
   </section>
 
@@ -387,6 +391,9 @@
         Notes
         <textarea rows="3" [(ngModel)]="appointmentNoteDraft" name="appointmentNoteDraft"></textarea>
       </label>
+      <button type="button" [disabled]="notesSaving" (click)="saveAppointmentNotes()">
+        {{ notesSaving ? 'Saving...' : 'Save notes' }}
+      </button>
 
       <section class="bill-lines">
         <h3>Service bill lines</h3>
@@ -460,6 +467,32 @@
     <strong>{{ slot.time }}</strong>
     <span>{{ slot.staff }}</span>
   </div>
+
+  <aside class="command-flyout" *ngIf="noShowDrawerOpen && selectedAppointment as appointment" aria-label="No-show action">
+    <header>
+      <div><span class="section-label">No-show</span><h2>{{ appointment.client }}</h2></div>
+      <button class="icon-button" type="button" aria-label="Close no-show action" (click)="closeNoShowDrawer()">×</button>
+    </header>
+    <div class="command-form">
+      <label>
+        Fee amount
+        <input [(ngModel)]="noShowAmount" name="noShowAmount" type="number" min="0.01" step="0.01" placeholder="Amount" />
+      </label>
+      <label>
+        Payment provider
+        <select [(ngModel)]="noShowProvider" name="noShowProvider">
+          <option value="razorpay">Razorpay</option>
+          <option value="cashfree">Cashfree</option>
+          <option value="phonepe">PhonePe</option>
+        </select>
+      </label>
+      <p class="status-action-error" *ngIf="appointmentActionError">{{ appointmentActionError }}</p>
+    </div>
+    <footer>
+      <button type="button" [disabled]="noShowSaving" (click)="submitNoShow(false)">Mark only</button>
+      <button class="primary" type="button" [disabled]="noShowSaving" (click)="submitNoShow(true)">{{ noShowSaving ? 'Saving...' : 'Create fee link' }}</button>
+    </footer>
+  </aside>
 
   <aside class="command-flyout" *ngIf="activeCommand" aria-label="Appointment action">
     <header>
@@ -663,6 +696,22 @@
           </div>
         </label>
 
+        <label *ngIf="serviceVariants(line).length">
+          Variant
+          <select [ngModel]="line.variantId" [name]="'variant' + line.id" (ngModelChange)="selectVariant(line, $event)">
+            <option value="">Standard</option>
+            <option *ngFor="let variant of serviceVariants(line); trackBy: trackByIndex" [value]="variant.id">{{ variant.name }}</option>
+          </select>
+        </label>
+
+        <div class="service-addons" *ngIf="serviceAddons(line).length">
+          <span>Add-ons</span>
+          <label *ngFor="let addon of serviceAddons(line); trackBy: trackByIndex">
+            <input type="checkbox" [checked]="line.addonIds.includes(addon.id)" (change)="toggleAddon(line, addon.id)" />
+            {{ addon.name }}
+          </label>
+        </div>
+
         <label class="smart-picker staff-field-wide">
           Staff
           <div class="staff-picker-input">
@@ -734,6 +783,22 @@
 
         <button class="mini danger" type="button" [disabled]="bookingLines.length === 1" (click)="removeServiceLine(line.id)">Remove</button>
       </section>
+
+      <div class="recurrence-fields" *ngIf="!editingAppointmentId">
+        <label>
+          Repeat
+          <select [(ngModel)]="recurrenceFrequency" name="recurrenceFrequency">
+            <option value="none">Does not repeat</option>
+            <option value="weekly">Weekly</option>
+            <option value="fortnightly">Every 2 weeks</option>
+            <option value="monthly">Every 4 weeks</option>
+          </select>
+        </label>
+        <label *ngIf="recurrenceFrequency !== 'none'">
+          Occurrences
+          <input type="number" min="2" max="52" step="1" [(ngModel)]="recurrenceCount" name="recurrenceCount" placeholder="Occurrences" />
+        </label>
+      </div>
 
       <label class="toggle-line">
         <input type="checkbox" [(ngModel)]="notifyStaff" name="notifyStaff" />

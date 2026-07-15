@@ -1,16 +1,22 @@
+use std::collections::BTreeSet;
+
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     extract::{Request, State},
-    http::HeaderValue,
+    http::{header, HeaderValue},
     middleware::Next,
     response::Response,
 };
+use serde_json::Value;
 
 use crate::{
     config::is_local_env,
     models::common::AppError,
-    repositories::auth_repository,
-    services::auth_service::{self, AuthClaims},
+    repositories::auth_repository::{self, AuthAuditInput},
+    services::{
+        auth_service::{self, AuthClaims},
+        security_service,
+    },
     state::AppState,
 };
 
@@ -43,40 +49,75 @@ pub async fn require_auth(
             .map_err(|_| AppError::internal("failed to validate user session"))?
             .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
 
-        claims.tenant_id = user.tenant_id;
-        claims.branch_id = user.branch_id;
-        claims.role = user.role_name;
-    }
-
-    if let Some(header_tenant_id) = req
-        .headers()
-        .get("x-tenant-id")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        if header_tenant_id != claims.tenant_id {
-            return Err(AppError::forbidden("tenant context does not match token"));
+        if claims.permission_version != 0 && claims.permission_version != user.permission_version {
+            return Err(AppError::unauthenticated(
+                "user permissions changed; please sign in again",
+            ));
         }
-    }
-
-    if let Some(claim_branch_id) = claims
-        .branch_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        if let Some(header_branch_id) = req
-            .headers()
-            .get("x-branch-id")
-            .and_then(|value| value.to_str().ok())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+        if !claims.session_id.is_empty()
+            && !auth_repository::is_session_active(
+                &state.db,
+                &claims.tenant_id,
+                &claims.sub,
+                &claims.session_id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to validate session"))?
         {
-            if header_branch_id != claim_branch_id {
-                return Err(AppError::forbidden("branch context does not match token"));
-            }
+            return Err(AppError::unauthenticated("session is no longer active"));
         }
+        if password_change_required(req.uri().path(), user.must_change_password) {
+            return Err(AppError::forbidden(
+                "password change is required before using the application",
+            ));
+        }
+
+        claims.tenant_id = user.tenant_id.clone();
+        claims.permission_version = user.permission_version;
+        if let Some(branch_id) = claims.branch_id.as_deref() {
+            let access = auth_repository::find_branch_access(&state.db, &user, branch_id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate branch access"))?
+                .ok_or_else(|| AppError::forbidden("current branch access was removed"))?;
+            claims.role = access.role_name;
+            claims.role_id = access.role_id;
+            claims.permissions = access.permissions;
+            claims.denied_permissions = access.denied_permissions;
+            claims.masked_fields = access.masked_fields;
+            claims.max_discount_paise = access.max_discount_paise;
+            claims.max_refund_paise = access.max_refund_paise;
+            claims.max_cash_movement_paise = access.max_cash_movement_paise;
+            let elevated = crate::repositories::security_repository::active_elevated_permissions(
+                &state.db,
+                &claims.tenant_id,
+                branch_id,
+                &claims.sub,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to validate temporary access"))?;
+            for permission in elevated {
+                if !claims.denied_permissions.contains(&permission)
+                    && !claims.permissions.contains(&permission)
+                {
+                    claims.permissions.push(permission);
+                }
+            }
+        } else {
+            claims.role = user.role_name;
+            claims.role_id = user.role_id;
+        }
+
+        if mfa_enrollment_required(req.uri().path(), claims.mfa_enrollment_required) {
+            return Err(
+                AppError::forbidden("MFA setup is required before using the application")
+                    .with_details(serde_json::json!({ "mfaEnrollmentRequired": true })),
+            );
+        }
+    }
+
+    if let Some((reason, message)) = scope_header_mismatch(req.headers(), &claims) {
+        audit_denied(&state, &claims, reason).await;
+        return Err(AppError::forbidden(message));
     }
 
     let tenant_header = HeaderValue::from_str(&claims.tenant_id)
@@ -93,11 +134,373 @@ pub async fn require_auth(
         req.headers_mut().insert("x-branch-id", branch_header);
     }
 
+    let request_path = req.uri().path().to_string();
+    if masked_export_blocked(&request_path, &claims.masked_fields) {
+        audit_field_mask_hits(
+            &state,
+            &claims,
+            &request_path,
+            &[("export".to_string(), "export".to_string())],
+            "blocked_export",
+            "masked_export_blocked",
+        )
+        .await;
+        return Err(AppError::forbidden(
+            "this role cannot export unmasked sensitive fields",
+        ));
+    }
+    let masked_fields = claims.masked_fields.clone();
+    let audit_claims = claims.clone();
     req.extensions_mut().insert(claims);
-    Ok(next.run(req).await)
+    mask_json_response(
+        next.run(req).await,
+        &state,
+        &audit_claims,
+        &request_path,
+        &masked_fields,
+    )
+    .await
+}
+
+async fn mask_json_response(
+    response: Response,
+    state: &AppState,
+    claims: &AuthClaims,
+    path: &str,
+    masked_fields: &[String],
+) -> Result<Response, AppError> {
+    if masked_fields.is_empty()
+        || !response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.starts_with("application/json"))
+    {
+        return Ok(response);
+    }
+
+    let (mut parts, body) = response.into_parts();
+    let bytes = to_bytes(body, 16 * 1024 * 1024)
+        .await
+        .map_err(|_| AppError::internal("failed to apply response field masking"))?;
+    let mut payload: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| AppError::internal("failed to apply response field masking"))?;
+    let mut hits = BTreeSet::new();
+    mask_value(&mut payload, path, masked_fields, &mut hits);
+    parts.headers.remove(header::CONTENT_LENGTH);
+    let body = serde_json::to_vec(&payload)
+        .map_err(|_| AppError::internal("failed to apply response field masking"))?;
+    audit_field_mask_hits(
+        state,
+        claims,
+        path,
+        &hits.into_iter().collect::<Vec<_>>(),
+        "mask",
+        "role_masked_field",
+    )
+    .await;
+    Ok(Response::from_parts(parts, Body::from(body)))
+}
+
+fn mask_value(
+    value: &mut Value,
+    path: &str,
+    masked_fields: &[String],
+    hits: &mut BTreeSet<(String, String)>,
+) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                mask_value(value, path, masked_fields, hits);
+            }
+        }
+        Value::Object(values) => {
+            for (key, value) in values {
+                if let Some(field_group) = matched_mask(key, path, masked_fields) {
+                    hits.insert((field_group.to_string(), key.to_string()));
+                    *value = if is_contact_field(key) {
+                        Value::String("[masked]".into())
+                    } else {
+                        Value::Null
+                    };
+                } else {
+                    mask_value(value, path, masked_fields, hits);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn matched_mask<'a>(key: &str, path: &str, masked_fields: &'a [String]) -> Option<&'a str> {
+    let normalized_key = key.to_ascii_lowercase();
+    let has_mask = |mask: &str| masked_fields.iter().any(|value| value == mask);
+    if has_mask("client.contact") && is_contact_field(key) {
+        Some("client.contact")
+    } else if has_mask("staff.payroll")
+        && path.contains("staff-payroll")
+        && is_money_field(&normalized_key)
+    {
+        Some("staff.payroll")
+    } else if has_mask("inventory.cost")
+        && ["inventory", "products", "purchases"]
+            .iter()
+            .any(|domain| path.contains(domain))
+        && (normalized_key.contains("cost") || normalized_key.contains("purchaseprice"))
+    {
+        Some("inventory.cost")
+    } else if has_mask("finance.amounts")
+        && ["reports", "finance", "balance-sheet", "accounting"]
+            .iter()
+            .any(|domain| path.contains(domain))
+        && is_money_field(&normalized_key)
+    {
+        Some("finance.amounts")
+    } else {
+        None
+    }
+}
+
+fn is_contact_field(key: &str) -> bool {
+    matches!(
+        key,
+        "phone"
+            | "normalizedPhone"
+            | "mobilePhone"
+            | "homePhone"
+            | "workPhone"
+            | "email"
+            | "recipient"
+    )
+}
+
+fn is_money_field(normalized_key: &str) -> bool {
+    normalized_key.ends_with("paise")
+        || ["amount", "total", "balance", "revenue", "profit", "tax"]
+            .iter()
+            .any(|value| normalized_key.contains(value))
+}
+
+fn masked_export_blocked(path: &str, masked_fields: &[String]) -> bool {
+    if !path.contains("export") && !path.contains("payslip") {
+        return false;
+    }
+    masked_fields.iter().any(|mask| match mask.as_str() {
+        "client.contact" => path.contains("client"),
+        "staff.payroll" => path.contains("staff-payroll") || path.contains("payslip"),
+        "inventory.cost" => {
+            path.contains("inventory") || path.contains("products") || path.contains("purchases")
+        }
+        "finance.amounts" => {
+            path.contains("reports")
+                || path.contains("finance")
+                || path.contains("balance-sheet")
+                || path.contains("accounting")
+        }
+        _ => false,
+    })
+}
+
+async fn audit_field_mask_hits(
+    state: &AppState,
+    claims: &AuthClaims,
+    path: &str,
+    hits: &[(String, String)],
+    access_type: &str,
+    reason: &str,
+) {
+    for (field_group, field_name) in hits {
+        if let Err(error) = security_service::record_field_audit(
+            &state.db,
+            &claims.tenant_id,
+            claims.branch_id.as_deref(),
+            &claims.sub,
+            "api_response",
+            path,
+            field_group,
+            field_name,
+            access_type,
+            true,
+            reason,
+        )
+        .await
+        {
+            tracing::warn!(error = ?error, field_group, field_name, "field audit write failed");
+        }
+    }
+}
+
+fn password_change_required(path: &str, must_change_password: bool) -> bool {
+    must_change_password && !path.ends_with("/auth/change-password")
+}
+
+fn mfa_enrollment_required(path: &str, required: bool) -> bool {
+    required && !path.contains("/auth/mfa/") && !path.ends_with("/auth/change-password")
+}
+
+fn scope_header_mismatch(
+    headers: &axum::http::HeaderMap,
+    claims: &AuthClaims,
+) -> Option<(&'static str, &'static str)> {
+    let tenant = headers
+        .get("x-tenant-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if tenant.is_some_and(|tenant| tenant != claims.tenant_id) {
+        return Some((
+            "tenant_header_mismatch",
+            "tenant context does not match token",
+        ));
+    }
+
+    let branch = headers
+        .get("x-branch-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    match claims
+        .branch_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(claim_branch) if branch.is_some_and(|branch| branch != claim_branch) => Some((
+            "branch_header_mismatch",
+            "branch context does not match token",
+        )),
+        None if branch.is_some() => Some((
+            "unscoped_token_branch_request",
+            "branch context requires a branch-scoped token",
+        )),
+        _ => None,
+    }
+}
+
+async fn audit_denied(state: &AppState, claims: &AuthClaims, reason: &str) {
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &claims.tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: claims.branch_id.as_deref(),
+            identity: None,
+            event_type: "permission.denied",
+            outcome: "denied",
+            ip_address: None,
+            user_agent: None,
+            details: serde_json::json!({ "reason": reason }),
+        },
+    )
+    .await;
 }
 
 #[allow(dead_code)]
 pub fn current_claims(req: &Request<Body>) -> Option<&AuthClaims> {
     req.extensions().get::<AuthClaims>()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use axum::http::{HeaderMap, HeaderValue};
+
+    use super::{
+        mask_value, masked_export_blocked, mfa_enrollment_required, password_change_required,
+        scope_header_mismatch,
+    };
+    use crate::services::auth_service::AuthClaims;
+
+    fn claims(branch_id: Option<&str>) -> AuthClaims {
+        AuthClaims {
+            sub: "user-1".into(),
+            tenant_id: "tenant-1".into(),
+            branch_id: branch_id.map(str::to_string),
+            role: "Owner".into(),
+            role_id: None,
+            permissions: Vec::new(),
+            denied_permissions: Vec::new(),
+            masked_fields: Vec::new(),
+            max_discount_paise: None,
+            max_refund_paise: None,
+            max_cash_movement_paise: None,
+            permission_version: 1,
+            mfa_enrollment_required: false,
+            session_id: "session-1".into(),
+            token_type: "access".into(),
+            jti: "token-1".into(),
+            iat: 1,
+            exp: usize::MAX,
+        }
+    }
+
+    #[test]
+    fn forced_password_change_allows_only_password_endpoint() {
+        assert!(password_change_required("/api/v1/staff", true));
+        assert!(!password_change_required(
+            "/api/v1/auth/change-password",
+            true
+        ));
+        assert!(!password_change_required("/api/v1/staff", false));
+    }
+
+    #[test]
+    fn mfa_enrollment_gate_allows_only_setup_and_password_change() {
+        assert!(mfa_enrollment_required("/api/v1/staff", true));
+        assert!(!mfa_enrollment_required("/api/v1/auth/mfa/setup", true));
+        assert!(!mfa_enrollment_required(
+            "/api/v1/auth/change-password",
+            true
+        ));
+        assert!(!mfa_enrollment_required("/api/v1/staff", false));
+    }
+
+    #[test]
+    fn forged_scope_headers_are_rejected() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-tenant-id", HeaderValue::from_static("tenant-2"));
+        assert_eq!(
+            scope_header_mismatch(&headers, &claims(Some("branch-1"))).map(|mismatch| mismatch.0),
+            Some("tenant_header_mismatch")
+        );
+
+        headers.insert("x-tenant-id", HeaderValue::from_static("tenant-1"));
+        headers.insert("x-branch-id", HeaderValue::from_static("branch-2"));
+        assert_eq!(
+            scope_header_mismatch(&headers, &claims(Some("branch-1"))).map(|mismatch| mismatch.0),
+            Some("branch_header_mismatch")
+        );
+        assert_eq!(
+            scope_header_mismatch(&headers, &claims(None)).map(|mismatch| mismatch.0),
+            Some("unscoped_token_branch_request")
+        );
+
+        headers.insert("x-branch-id", HeaderValue::from_static("branch-1"));
+        assert!(scope_header_mismatch(&headers, &claims(Some("branch-1"))).is_none());
+    }
+
+    #[test]
+    fn configured_profiles_mask_only_sensitive_fields() {
+        let mut payload = serde_json::json!({
+            "data": { "name": "Real Name", "phone": "9999999999", "grossPaise": 2500 }
+        });
+        let mut hits = BTreeSet::new();
+        mask_value(
+            &mut payload,
+            "/api/v1/staff-payroll/runs/1",
+            &["client.contact".into(), "staff.payroll".into()],
+            &mut hits,
+        );
+        assert_eq!(payload["data"]["name"], "Real Name");
+        assert_eq!(payload["data"]["phone"], "[masked]");
+        assert!(payload["data"]["grossPaise"].is_null());
+        assert!(hits.contains(&("client.contact".into(), "phone".into())));
+        assert!(hits.contains(&("staff.payroll".into(), "grossPaise".into())));
+        assert!(masked_export_blocked(
+            "/api/v1/staff-payroll/runs/1/export",
+            &["staff.payroll".into()]
+        ));
+    }
 }

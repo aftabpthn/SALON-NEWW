@@ -118,19 +118,6 @@ pub async fn list_wallet_transactions(
     .await
 }
 
-pub async fn write_wallet_transaction(
-    db: &PgPool,
-    input: WalletWrite<'_>,
-) -> Result<WalletWriteResult, sqlx::Error> {
-    let mut tx = db.begin().await?;
-    let result = write_wallet_transaction_in_tx(&mut tx, input).await?;
-    match result {
-        WalletWriteResult::Saved(_) => tx.commit().await?,
-        _ => tx.rollback().await?,
-    }
-    Ok(result)
-}
-
 pub async fn write_wallet_transaction_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     input: WalletWrite<'_>,
@@ -181,49 +168,32 @@ pub async fn list_store_credits(
     ).bind(tenant_id).bind(branch_id).bind(client_id).fetch_all(db).await
 }
 
-pub async fn issue_store_credit(
-    db: &PgPool,
+pub async fn issue_store_credit_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
     input: StoreCreditIssue<'_>,
 ) -> Result<StoreCreditWriteResult, sqlx::Error> {
-    let mut tx = db.begin().await?;
     let client = sqlx::query_scalar::<_, String>(
         "SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
     )
     .bind(input.tenant_id)
     .bind(input.branch_id)
     .bind(input.client_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     if client.is_none() {
-        tx.rollback().await?;
         return Ok(StoreCreditWriteResult::MissingClient);
     }
     if !input.idempotency_key.is_empty() {
-        if let Some(existing) = find_credit_by_key(&mut tx, &input).await? {
-            tx.rollback().await?;
+        if let Some(existing) = find_credit_by_key(tx, &input).await? {
             return Ok(StoreCreditWriteResult::Saved(existing));
         }
     }
     let credit = sqlx::query_as::<_, StoreCreditRecord>(
         "INSERT INTO store_credits (tenant_id, branch_id, client_id, source_type, source_id, initial_amount_paise, balance_paise, expires_at, reason, idempotency_key) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9) RETURNING id, client_id, source_type, source_id, initial_amount_paise, balance_paise, expires_at, reason, status, created_at, updated_at",
-    ).bind(input.tenant_id).bind(input.branch_id).bind(input.client_id).bind(input.source_type).bind(input.source_id).bind(input.amount_paise).bind(input.expires_at).bind(input.reason).bind(input.idempotency_key).fetch_one(&mut *tx).await?;
+    ).bind(input.tenant_id).bind(input.branch_id).bind(input.client_id).bind(input.source_type).bind(input.source_id).bind(input.amount_paise).bind(input.expires_at).bind(input.reason).bind(input.idempotency_key).fetch_one(&mut **tx).await?;
     sqlx::query("INSERT INTO store_credit_transactions (tenant_id, branch_id, store_credit_id, client_id, transaction_type, delta_paise, balance_after_paise, reference_type, reference_id, idempotency_key, notes) VALUES ($1,$2,$3,$4,'issue',$5,$5,$6,$7,$8,$9)")
-        .bind(input.tenant_id).bind(input.branch_id).bind(&credit.id).bind(input.client_id).bind(input.amount_paise).bind(input.source_type).bind(input.source_id).bind(input.idempotency_key).bind(input.reason).execute(&mut *tx).await?;
-    tx.commit().await?;
+        .bind(input.tenant_id).bind(input.branch_id).bind(&credit.id).bind(input.client_id).bind(input.amount_paise).bind(input.source_type).bind(input.source_id).bind(input.idempotency_key).bind(input.reason).execute(&mut **tx).await?;
     Ok(StoreCreditWriteResult::Saved(credit))
-}
-
-pub async fn redeem_store_credit(
-    db: &PgPool,
-    input: StoreCreditRedemption<'_>,
-) -> Result<StoreCreditWriteResult, sqlx::Error> {
-    let mut tx = db.begin().await?;
-    let result = redeem_store_credit_in_tx(&mut tx, input).await?;
-    match result {
-        StoreCreditWriteResult::Saved(_) => tx.commit().await?,
-        _ => tx.rollback().await?,
-    }
-    Ok(result)
 }
 
 pub async fn redeem_store_credit_in_tx(

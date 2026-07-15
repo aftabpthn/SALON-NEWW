@@ -516,6 +516,18 @@ pub async fn self_dashboard(
         .ok_or_else(|| AppError::not_found("linked employee profile not found"))
 }
 
+pub async fn self_staff_id(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    user: &str,
+) -> Result<String, AppError> {
+    repository::linked_staff_id(db, tenant, branch, user)
+        .await
+        .map_err(internal("load linked employee profile"))?
+        .ok_or_else(|| AppError::not_found("linked employee profile not found"))
+}
+
 pub async fn list_tips(
     db: &PgPool,
     t: &str,
@@ -1454,6 +1466,19 @@ pub async fn record_notification_delivery(
     .await
     .map_err(internal("record staff notification delivery"))?
     .ok_or_else(stale)
+}
+
+pub async fn retry_notification(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    id: &str,
+    version: i32,
+) -> Result<StaffNotificationQueueRecord, AppError> {
+    repository::retry_notification(db, t, b, id, version)
+        .await
+        .map_err(internal("retry staff notification"))?
+        .ok_or_else(stale)
 }
 
 pub async fn notification_delivery_logs(

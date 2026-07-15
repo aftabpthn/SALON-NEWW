@@ -80,11 +80,29 @@ If role is not matched: `403`.
 
 ## 3) Prefix Matrix (runtime gate from middleware)
 
+Protected routes now resolve to named domain/action permissions before the handler runs. Built-in roles retain the role bundles below; custom roles must carry one of the mapped permissions. Full catalog: `docs/permissions.md`.
+
+| Route area | Read permission | Manage / elevated permission |
+| --- | --- | --- |
+| Appointments and booking | `appointments.read`, `bookings.read` | `appointments.manage`, `appointments.settings.manage`, `bookings.manage` |
+| Clients | `clients.read` | `clients.manage` plus consent/forms/merge/audit/review action permissions |
+| POS and billing | `pos.read` | `pos.manage`, `pos.void`, `pos.refund` |
+| Inventory and purchases | `inventory.read`, `purchases.read` | `inventory.manage`, `purchases.manage`, `purchases.approve` |
+| Staff operations | `staff.read` and domain read permissions | `staff.manage`, attendance/leave/schedule/payroll/self-service permissions |
+| Memberships and packages | domain `.read` | domain `.manage` |
+| Retention value | `clients.read`, `memberships.read`, `pos.read` | `clients.manage`, `memberships.manage`, `pos.manage` |
+| Reports and finance | `reports.read`, `finance.read` | `reports.export`, `finance.write` |
+| Notifications, settings, security | domain `.read` | domain `.manage` |
+| SaaS tenant self-service (`/saas/*`) | management roles or `settings.read` | management roles or `settings.manage` |
+
+Legacy broad permissions remain accepted for backward compatibility: `tenant.read`, `front_desk.write`, `management.write`, `inventory.write`, `finance.read`, `finance.write`, and `staff_self.write`. Unknown protected reads and mutations fail closed.
+
 ### Platform-only (`require_platform_admin`)
 
 Any HTTP method for methods in middleware:
 - `/platform/*`
 - `/super-admin/*`
+- `/platform/saas/*`
 
 ### Management write (`require_management`)
 
@@ -93,14 +111,24 @@ Methods: `POST | PUT | PATCH | DELETE`
 - `/availability`
 - `/billing`
 - `/blackouts`
+- `/booking-payments`
 - `/services`
 - `/staff`
 - `/settings/payment-methods`
+- `/membership-enterprise`
 - `/memberships`
+- `/package-enterprise`
 - `/packages`
 - `/jobs`
 - `/calendar/tokens`
 - `/appointment-deposits`
+- `/security`
+- `/retention`
+
+Security control-plane handlers add a narrower second gate:
+- Reads require `owner`, `admin`, `security.read`, or `security.manage`.
+- Mutations require `owner`, `admin`, or `security.manage`.
+- `/settings/security` uses the same handler-level gate.
 
 ### Front-desk write (`require_role(front-desk write roles)`)
 
@@ -150,7 +178,7 @@ Everything else under protected routes that is not platform-only and not managem
 - `/appointment-activity/*`
 - and remaining non-mutating dashboard/report-lite endpoints
 
-Unknown protected mutations now fail closed with `403 no permission mapping for this mutation`.
+Unknown protected routes now fail closed with `403 no permission mapping for this endpoint`.
 
 ## 4) Tenant/Branch Isolation Runtime Checks
 
@@ -171,13 +199,11 @@ Unknown protected mutations now fail closed with `403 no permission mapping for 
 - Booking v2 confirm requires a valid public booking token, verified OTP mobile, and a non-expired hold for the same tenant/branch/mobile before creating an appointment.
 - Multi-service confirm also requires a verified OTP mobile in the submitted service payload.
 
-## 6) Recommended Hardening follow-up (after current merge)
+## 6) Remaining Hardening Follow-up
 
-The following sensitive routes are now visible as **potentially under-gated** because middleware is path-prefix-based:
-
-- `POST /smart-booking/bookings`, `POST /smart-booking/waitlist`, `POST /smart-booking/online-request`, `POST /smart-booking/qr-check-in` should be reviewed against desired receptionist permissions.
-- `/smart-booking/*` protected write routes should be reviewed against desired receptionist permissions.
-- Route-specific named permissions should replace role bundles as the permission table matures.
+- Add permission-usage analytics before retiring legacy broad permission codes.
+- Add time-boxed elevated access for rare owner-approved actions.
+- Keep handler-level checks for client consent/forms, purchase approval, security control-plane actions, and other sensitive workflows.
 
 ## 7) Runtime verification commands (after latest binary/container)
 

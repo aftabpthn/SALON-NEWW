@@ -37,6 +37,7 @@ type StaffOption = {
   initials: string;
   name: string;
   role: string;
+  serviceIds: string[];
 };
 
 type ServiceOption = {
@@ -46,6 +47,8 @@ type ServiceOption = {
   durationMinutes: number;
   active: boolean;
   priceText: string;
+  variants: Array<{ id: string; name: string; priceDeltaPaise: number; durationDeltaMinutes: number }>;
+  addons: Array<{ id: string; name: string; pricePaise: number; durationMinutes: number }>;
 };
 
 type ClientOption = {
@@ -127,6 +130,8 @@ type BookingLine = {
   staffRequested: boolean;
   serviceOpen: boolean;
   staffOpen: boolean;
+  variantId: string;
+  addonIds: string[];
 };
 
 type ChairRoomOption = { id: string; name: string; kind: string };
@@ -171,7 +176,7 @@ type PreviousService = {
 };
 
 type WaitlistEntry = { id: string; customerId: string; serviceIds: string[]; preferredSlotAt: string; notes: string };
-type BlackoutEntry = { id: string; staffId: string; blackoutDate: string; blockedFrom: string; blockedUntil: string; reason: string };
+type BlackoutEntry = { id: string; staffId: string; blackoutGroupId: string; blackoutDate: string; blockedFrom: string; blockedUntil: string; reason: string };
 
 @Component({
   selector: 'page-appointments',
@@ -196,6 +201,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     'Conflict View',
   ];
   readonly settingsKey = 'aurashine.appointment.settings';
+  readonly scheduledStaffKey = 'aurashine.appointment.scheduled-staff';
   // ponytail: build auth headers from local auth context instead of fixed dev IDs.
   private readonly settingsUpdatedEvent = () => {
     const existingSelectedId = this.selectedAppointment?.id;
@@ -236,8 +242,14 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   selectedAppointment: AppointmentCard | null = null;
   appointmentDetailTab: 'booking' | 'activity' = 'booking';
   appointmentNoteDraft = '';
+  notesSaving = false;
   appointmentActionError = '';
+  appointmentActionMessage = '';
   statusSaving = '';
+  noShowDrawerOpen = false;
+  noShowAmount = '';
+  noShowProvider = 'razorpay';
+  noShowSaving = false;
   activityRefreshError = '';
   private activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private currentTimeTimer: ReturnType<typeof setInterval> | null = null;
@@ -258,6 +270,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   selectedClientId = '';
   bookingNotes = '';
   notifyStaff = true;
+  recurrenceFrequency: 'none' | 'weekly' | 'fortnightly' | 'monthly' = 'none';
+  recurrenceCount = '';
   bookingLines: BookingLine[] = [];
   activeCommand: ToolbarCommand | null = null;
   commandError = '';
@@ -416,7 +430,16 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   get commandRecords(): Array<WaitlistEntry | BlackoutEntry> {
-    return this.activeCommand === 'waitlist' ? this.waitlistEntries : this.activeCommand === 'block' ? this.blackouts : [];
+    if (this.activeCommand === 'waitlist') return this.waitlistEntries;
+    if (this.activeCommand !== 'block') return [];
+
+    const seen = new Set<string>();
+    return this.blackouts.filter((entry) => {
+      const key = entry.blackoutGroupId || entry.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   get statusActions() {
@@ -496,6 +519,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   filteredStaff(line: BookingLine) {
     const q = line.staffSearch.trim().toLowerCase();
     return this.staff
+      .filter((person) => !line.serviceId || person.serviceIds.includes(line.serviceId))
       .filter((person) => !q || `${person.name} ${person.role}`.toLowerCase().includes(q))
       .slice(0, 8);
   }
@@ -542,6 +566,18 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   closeScheduledStaff() {
     this.scheduledStaffOpen = false;
+  }
+
+  saveScheduledStaff() {
+    try {
+      localStorage.setItem(this.scheduledStaffKey, JSON.stringify({
+        selectedIds: this.scheduledStaff.map((person) => person.id),
+        orderedIds: this.staff.map((person) => person.id),
+      }));
+    } catch {
+      // Local display preference does not block calendar work when storage is unavailable.
+    }
+    this.closeScheduledStaff();
   }
 
   resetScheduledStaff() {
@@ -765,6 +801,22 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     line.serviceSearch = service.name;
     line.durationMinutes = service.durationMinutes || line.durationMinutes || 30;
     line.serviceOpen = false;
+    line.variantId = '';
+    line.addonIds = [];
+  }
+
+  serviceVariants(line: BookingLine) { return this.services.find((service) => service.id === line.serviceId)?.variants || []; }
+  serviceAddons(line: BookingLine) { return this.services.find((service) => service.id === line.serviceId)?.addons || []; }
+  selectVariant(line: BookingLine, variantId: string) {
+    line.variantId = variantId;
+    const service = this.services.find((item) => item.id === line.serviceId);
+    const variant = service?.variants.find((item) => item.id === variantId);
+    line.durationMinutes = Math.max(15, (service?.durationMinutes || 30) + (variant?.durationDeltaMinutes || 0));
+  }
+  toggleAddon(line: BookingLine, addonId: string) {
+    line.addonIds = line.addonIds.includes(addonId)
+      ? line.addonIds.filter((id) => id !== addonId)
+      : [...line.addonIds, addonId];
   }
 
   setStaffSearch(line: BookingLine, value: string) {
@@ -800,6 +852,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       this.bookingError = 'Service, staff, and time required';
       return;
     }
+    if (!this.editingAppointmentId && this.recurrenceFrequency !== 'none'
+      && (!Number.isInteger(Number(this.recurrenceCount)) || Number(this.recurrenceCount) < 2 || Number(this.recurrenceCount) > 52)) {
+      this.bookingError = 'Recurring booking occurrences must be between 2 and 52';
+      return;
+    }
     if (validLines.some((line) => this.hasStaffBlackout(line.staffId, line.startTime, line.durationMinutes))) {
       this.bookingError = 'Staff is unavailable for this blocked time';
       return;
@@ -815,61 +872,31 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
     this.savingBooking = true;
     try {
-      if (this.editingAppointmentId) {
-        const removedAppointmentIds = [...new Set(this.removedServiceAppointmentIds)];
-        for (const appointmentId of removedAppointmentIds) {
-          await this.postJson(`/api/v1/appointments/${appointmentId}/remove-service`, {
-            status: 'cancelled',
-            reason: 'Service removed from booking',
-          });
-        }
-        for (const line of validLines) {
-          const startAt = this.localDateTimeToIso(this.appointmentDate, line.startTime);
-          const endAt = this.localDateTimeToIso(this.appointmentDate, this.addMinutesToTime(line.startTime, line.durationMinutes || 30));
-          if (line.appointmentId) {
-            await this.postJson(`/api/v1/appointments/${line.appointmentId}/reschedule`, {
-              start_at: startAt,
-              end_at: endAt,
-              staff_id: line.staffId,
-              chair_room_id: line.chairRoomId,
-              booking_group_id: this.editingBookingGroupId,
-              reason: this.bookingNotes.trim(),
-            });
-          } else {
-            await this.postJson('/api/v1/appointments', {
-              client_id: this.selectedClientId,
-              staff_id: line.staffId,
-              service_ids: [line.serviceId],
-              start_at: startAt,
-              end_at: endAt,
-              status: this.statusFromLabel(this.appointmentSettings.defaultStatus),
-              notes: this.bookingNotesFor(line),
-              booking_group_id: this.editingBookingGroupId,
-              chair_room_id: line.chairRoomId,
-            });
-          }
-        }
-        await this.loadAppointments();
-        this.closeNewBooking();
-        return;
-      }
-
-      const bookingGroupId = validLines.length > 1 ? crypto.randomUUID() : '';
-      for (const line of validLines) {
-        const startAt = this.localDateTimeToIso(this.appointmentDate, line.startTime);
-        const endAt = this.localDateTimeToIso(this.appointmentDate, this.addMinutesToTime(line.startTime, line.durationMinutes || 30));
-        await this.postJson('/api/v1/appointments', {
-          client_id: this.selectedClientId,
+      const bookingGroupId = this.editingAppointmentId
+        ? this.editingBookingGroupId
+        : (validLines.length > 1 ? crypto.randomUUID() : '');
+      await this.postJson('/api/v1/appointments/batch', {
+        client_id: this.selectedClientId,
+        status: this.statusFromLabel(this.appointmentSettings.defaultStatus),
+        booking_group_id: bookingGroupId,
+        removed_appointment_ids: [...new Set(this.removedServiceAppointmentIds)],
+        recurrence_count: this.editingAppointmentId || this.recurrenceFrequency === 'none' ? 1 : Number(this.recurrenceCount),
+        recurrence_interval_days: this.recurrenceFrequency === 'fortnightly' ? 14 : this.recurrenceFrequency === 'monthly' ? 28 : 7,
+        lines: validLines.map((line) => ({
+          appointment_id: line.appointmentId,
           staff_id: line.staffId,
-          service_ids: [line.serviceId],
-          start_at: startAt,
-          end_at: endAt,
-          status: this.statusFromLabel(this.appointmentSettings.defaultStatus),
-          notes: this.bookingNotesFor(line),
-          booking_group_id: bookingGroupId,
+          service_id: line.serviceId,
+          start_at: this.localDateTimeToIso(this.appointmentDate, line.startTime),
+          end_at: this.localDateTimeToIso(
+            this.appointmentDate,
+            this.addMinutesToTime(line.startTime, line.durationMinutes || 30),
+          ),
           chair_room_id: line.chairRoomId,
-        });
-      }
+          notes: this.bookingNotesFor(line),
+          variant_id: line.variantId,
+          addon_ids: line.addonIds,
+        })),
+      });
 
       await this.loadAppointments();
       this.closeNewBooking();
@@ -937,10 +964,12 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   closeAppointmentDetail() {
+    this.closeNoShowDrawer();
     this.selectedAppointment = null;
     this.appointmentDetailTab = 'booking';
     this.appointmentNoteDraft = '';
     this.appointmentActionError = '';
+    this.appointmentActionMessage = '';
     this.statusSaving = '';
     this.activityRefreshError = '';
     this.stopActivityRefresh();
@@ -958,11 +987,35 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   async setAppointmentStatus(status: string) {
     if (!this.selectedAppointment) return;
-    if (this.statusSaving === status || this.selectedAppointment.status === status) return;
+    if (this.statusSaving === status || (status !== 'completed' && this.selectedAppointment.status === status)) return;
 
     const targetId = this.selectedAppointment.id;
+    if (status === 'no-show') {
+      this.openNoShowDrawer();
+      return;
+    }
     if (status === 'completed') {
-      await this.router.navigate(['/pos'], { queryParams: { appointmentId: targetId } });
+      this.appointmentActionError = '';
+      this.statusSaving = status;
+      try {
+        const result: any = await this.postJson(`/api/v1/appointments/${targetId}/convert-to-sale`, {});
+        const response = result?.data ?? result;
+        const sale = response?.sales_order ?? response?.salesOrder;
+        const saleId = String(sale?.sale_id ?? sale?.saleId ?? '');
+        if (!saleId) throw new Error('Appointment invoice was not created');
+        await this.loadAppointments();
+        if (sale?.status && sale.status !== 'draft') {
+          await this.router.navigate(['/pos/invoices']);
+        } else {
+          await this.router.navigate(['/pos'], { queryParams: { draft: saleId } });
+        }
+      } catch (error) {
+        this.appointmentActionError = this.errorMessage(error, 'Unable to create appointment invoice');
+        await this.loadAppointments().catch(() => {});
+        this.selectedAppointment = this.appointments.find((item) => item.id === targetId) || null;
+      } finally {
+        this.statusSaving = '';
+      }
       return;
     }
     this.appointmentActionError = '';
@@ -993,6 +1046,85 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.statusSaving = '';
+    }
+  }
+
+  openNoShowDrawer() {
+    if (!this.selectedAppointment) return;
+    this.appointmentActionError = '';
+    this.appointmentActionMessage = '';
+    this.noShowAmount = '';
+    this.noShowProvider = 'razorpay';
+    this.noShowDrawerOpen = true;
+  }
+
+  closeNoShowDrawer() {
+    this.noShowDrawerOpen = false;
+    this.noShowAmount = '';
+    this.noShowSaving = false;
+  }
+
+  async submitNoShow(createCharge: boolean) {
+    if (!this.selectedAppointment || this.noShowSaving) return;
+    const appointmentId = this.selectedAppointment.id;
+    const amountPaise = Math.round(Number(this.noShowAmount) * 100);
+    if (createCharge && (!Number.isFinite(amountPaise) || amountPaise <= 0)) {
+      this.appointmentActionError = 'No-show fee amount is required';
+      return;
+    }
+    this.noShowSaving = true;
+    this.appointmentActionError = '';
+    this.appointmentActionMessage = '';
+    try {
+      if (createCharge) {
+        const result: any = await this.postJson(`/api/v1/appointments/${appointmentId}/no-show-charge`, {
+          amountPaise,
+          provider: this.noShowProvider,
+          idempotencyKey: `no-show-${appointmentId}-${Date.now()}`,
+        });
+        const charge = (result?.data ?? result)?.charge;
+        const link = charge?.paymentLink?.url;
+        if (link) {
+          await navigator.clipboard.writeText(link).catch(() => undefined);
+          this.appointmentActionMessage = 'No-show invoice and payment link created';
+        } else if (charge?.activationRequired) {
+          this.appointmentActionMessage = 'No-show invoice created; provider activation pending';
+        } else {
+          this.appointmentActionMessage = 'No-show invoice created';
+        }
+      } else {
+        await this.postJson(`/api/v1/appointments/${appointmentId}/status`, {
+          status: 'no-show',
+          reason: 'no show',
+          apply_group: false,
+        });
+        this.appointmentActionMessage = 'Appointment marked no-show';
+      }
+      this.closeNoShowDrawer();
+      await this.loadAppointments();
+      this.selectedAppointment = null;
+    } catch (error) {
+      this.appointmentActionError = this.errorMessage(error, 'Unable to complete no-show action');
+      this.noShowSaving = false;
+    }
+  }
+
+  async saveAppointmentNotes() {
+    if (!this.selectedAppointment || this.notesSaving) return;
+    const targetId = this.selectedAppointment.id;
+    this.notesSaving = true;
+    this.appointmentActionError = '';
+    try {
+      await this.postJson(`/api/v1/appointments/${targetId}/notes`, {
+        notes: this.appointmentNoteDraft,
+      });
+      await this.loadAppointments();
+      const refreshed = this.appointments.find((item) => item.id === targetId);
+      if (refreshed) this.openAppointment(refreshed);
+    } catch (error) {
+      this.appointmentActionError = this.errorMessage(error, 'Unable to save appointment notes');
+    } finally {
+      this.notesSaving = false;
     }
   }
 
@@ -1078,24 +1210,54 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  private restoreScheduledStaffPreference() {
+    let saved: { selectedIds?: unknown; orderedIds?: unknown } = {};
+    try {
+      const raw = localStorage.getItem(this.scheduledStaffKey);
+      if (raw) saved = JSON.parse(raw);
+    } catch {
+      saved = {};
+    }
+    const orderedIds = Array.isArray(saved.orderedIds)
+      ? saved.orderedIds.filter((id): id is string => typeof id === 'string')
+      : [];
+    const selectedIds = Array.isArray(saved.selectedIds)
+      ? saved.selectedIds.filter((id): id is string => typeof id === 'string')
+      : this.staff.map((person) => person.id);
+    const byId = new Map(this.staff.map((person) => [person.id, person]));
+    const orderedStaff = orderedIds
+      .map((id) => byId.get(id))
+      .filter((person): person is StaffOption => !!person);
+    const restoredIds = new Set(orderedStaff.map((person) => person.id));
+    this.staff = [...orderedStaff, ...this.staff.filter((person) => !restoredIds.has(person.id))];
+    const selected = new Set(selectedIds);
+    this.scheduledStaffSelection = Object.fromEntries(
+      this.staff.map((person) => [person.id, selected.has(person.id)]),
+    );
+  }
+
   private async loadStaff() {
     try {
-      const result = await this.getJson<ApiList<any>>('/api/v1/staff');
+      const result = await this.getJson<ApiList<any>>('/api/v1/staff?active=true');
       this.staff = this.asArray(result).map((person) => {
         const firstName = person.firstName || person.first_name || '';
         const lastName = person.lastName || person.last_name || '';
         const displayName = person.appointmentDisplayName || person.appointment_display_name || '';
         const name = displayName || [firstName, lastName].filter(Boolean).join(' ');
+        const serviceIds = Array.isArray(person.serviceIds)
+          ? person.serviceIds
+          : Array.isArray(person.service_ids)
+            ? person.service_ids
+            : [];
         return {
           id: String(person.id || ''),
           initials: this.initials(firstName || name, lastName),
           name,
           role: person.jobTitle || person.job_title || 'All services',
+          serviceIds: serviceIds.map((id: unknown) => String(id)).filter(Boolean),
         };
       }).filter((person) => person.id);
-      this.scheduledStaffSelection = Object.fromEntries(
-        this.staff.map((person) => [person.id, this.scheduledStaffSelection[person.id] !== false]),
-      );
+      this.restoreScheduledStaffPreference();
       this.mapAppointmentCards();
     } catch {
       this.staff = [];
@@ -1113,6 +1275,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         durationMinutes: Number(service.durationMinutes ?? service.duration_minutes ?? 30) || 30,
         active: service.active !== false,
         priceText: this.priceText(service),
+        variants: Array.isArray(service.variants) ? service.variants : [],
+        addons: Array.isArray(service.addons) ? service.addons : [],
       })).filter((service) => service.id);
       this.mapAppointmentCards();
     } catch {
@@ -1152,6 +1316,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       this.blackouts = this.asArray(result).map((item) => ({
         id: String(item.id || ''),
         staffId: String(item.staffId || item.staff_id || ''),
+        blackoutGroupId: String(item.blackoutGroupId || item.blackout_group_id || ''),
         blackoutDate: String(item.blackoutDate || item.blackout_date || ''),
         blockedFrom: String(item.blockedFrom || item.blocked_from || ''),
         blockedUntil: String(item.blockedUntil || item.blocked_until || ''),
@@ -1186,12 +1351,20 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   blackoutLabel(entry: BlackoutEntry) {
-    return `${this.staffName(entry.staffId) || 'All staff'} · ${this.shortDate(entry.blockedFrom || entry.blackoutDate)} ${this.timeText(entry.blockedFrom)} - ${this.timeText(entry.blockedUntil)}`;
+    const groupedEntries = entry.blackoutGroupId
+      ? this.blackouts.filter((item) => item.blackoutGroupId === entry.blackoutGroupId)
+      : [entry];
+    const staffNames = groupedEntries
+      .map((item) => this.staffName(item.staffId) || 'All staff')
+      .filter((name, index, names) => names.indexOf(name) === index)
+      .join(', ');
+    return `${staffNames} · ${this.shortDate(entry.blockedFrom || entry.blackoutDate)} ${this.timeText(entry.blockedFrom)} - ${this.timeText(entry.blockedUntil)}`;
   }
 
   isBlackoutForColumn(entry: BlackoutEntry, column: CalendarColumn) {
     return Boolean(entry.blockedFrom)
-      && (this.activeView === 'Day' ? entry.staffId === column.staffId : entry.blockedFrom.slice(0, 10) === column.date);
+      && entry.blockedFrom.slice(0, 10) === column.date
+      && (this.activeView !== 'Day' || entry.staffId === column.staffId);
   }
 
   blackoutTop(entry: BlackoutEntry) {
@@ -1271,6 +1444,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.bookingClientSearch = '';
     this.bookingNotes = '';
     this.notifyStaff = true;
+    this.recurrenceFrequency = 'none';
+    this.recurrenceCount = '';
     this.bookingLines = [this.blankLine(staffId, this.timeToInput(time))];
   }
 
@@ -1289,6 +1464,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       staffRequested: false,
       serviceOpen: false,
       staffOpen: false,
+      variantId: '',
+      addonIds: [],
     };
   }
 

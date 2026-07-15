@@ -266,6 +266,8 @@
   font: inherit;
 }
 
+.invoice-detail select { min-height: 40px; padding: 0 12px; border: 1px solid #c8d7ea; border-radius: 8px; background: #fff; color: #102346; font: inherit; }
+
 .resend {
   width: 100%;
   margin-top: 10px;
@@ -352,6 +354,16 @@
 .payment-links button,
 .payment-links a { min-height: 30px; display: inline-grid; place-items: center; padding: 0 8px; border: 1px solid #c8d7ea; border-radius: 7px; background: #fff; color: #102346; font: inherit; font-size: 11px; font-weight: 600; text-decoration: none; cursor: pointer; }
 .reconciliation-result { display: grid; gap: 3px; margin-top: 10px; padding: 10px 12px; border: 1px solid #c8d7ea; border-radius: 8px; background: #f4f8ff; color: #102346; font-size: 12px; }
+.payment-compliance { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e8edf4; }
+.payment-compliance h3 { margin: 0 0 4px; font-size: 14px; }
+.payment-compliance article { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid #edf2f8; }
+.payment-compliance article div { display: grid; min-width: 0; gap: 2px; }
+.payment-compliance article span,
+.payment-compliance article small,
+.payment-compliance article time { color: var(--muted, #5d6b82); font-size: 11px; }
+.payment-compliance article button { min-height: 30px; padding: 0 9px; border: 1px solid #c8d7ea; border-radius: 7px; background: #fff; color: #102346; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.payment-compliance article button:hover { border-color: #2563eb; background: #f3f8ff; }
+.payment-compliance article button:disabled { cursor: not-allowed; opacity: .62; }
 
 .return-items:disabled,
 .confirm-return:disabled,
@@ -391,6 +403,10 @@
   padding-top: 14px;
   border-top: 1px solid #e8edf4;
 }
+
+.deliveries { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e8edf4; }
+.deliveries div { display: grid; gap: 3px; padding: 9px 0; border-bottom: 1px solid #edf2f8; font-size: 12px; }
+.deliveries span, .deliveries small { color: var(--muted, #5d6b82); }
 
 .history div {
   display: grid;

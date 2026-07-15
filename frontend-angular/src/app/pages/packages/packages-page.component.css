@@ -63,6 +63,7 @@ tbody tr:hover { background: #f1f6ff; }
 .service-row input { width: 100%; box-sizing: border-box; }
 .remove-row { min-height: 38px; color: #a51d2d; }
 .price-summary { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 10px; padding: 12px; border-radius: 9px; background: #f5f8fc; }
+.validity-control { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; }
 .price-summary > span { display: flex; min-height: 40px; align-items: center; justify-content: space-between; color: #53627a; font-size: 13px; }
 .visibility-settings { display: grid; gap: 8px; }
 .visibility-settings label { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 0 11px; border: 1px solid #d8e2ef; border-radius: 9px; font-size: 13px; }

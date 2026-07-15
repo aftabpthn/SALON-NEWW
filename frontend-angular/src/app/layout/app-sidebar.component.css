@@ -26,12 +26,17 @@
   border-radius: 6px;
   color: #d9ecff;
   text-decoration: none;
+  padding: 0;
   border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
 
 .brand-mark:hover,
 .rail-link:hover,
+.nav-group.menu-open > .rail-link,
 .nav-group.is-active > .rail-link {
   background: rgba(255, 255, 255, .12);
   color: #ffffff;
@@ -39,9 +44,13 @@
 }
 
 .brand-mark:focus-visible,
-.rail-link:focus-visible,
-.flyout-link:focus-visible {
+.rail-link:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.flyout-link:focus-visible {
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -61,15 +70,11 @@
   flex: 1;
   flex-direction: column;
   gap: 4px;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.nav-groups::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 .nav-group {
+  position: relative;
   width: 42px;
   flex: 0 0 auto;
 }
@@ -79,14 +84,59 @@
   line-height: 1;
 }
 
-.flyout {
-  position: fixed;
-  inset: 0 auto 0 54px;
-  width: 232px;
-  padding: 12px 10px;
-  background: var(--brand);
+.logout-group {
+  margin-top: auto;
+}
+
+.rail-tooltip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  z-index: 69;
+  padding: 7px 10px;
+  border-radius: 4px;
+  background: var(--text);
   color: #ffffff;
-  box-shadow: 12px 0 28px rgba(15, 35, 64, .2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition: opacity .12s ease, transform .12s ease, visibility .12s ease;
+}
+
+.rail-tooltip::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  border: 5px solid transparent;
+  border-right-color: var(--text);
+  transform: translateY(-50%);
+}
+
+.nav-group:not(.menu-open):hover > .rail-tooltip,
+.nav-group:not(.menu-open):focus-within > .rail-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(0, -50%);
+}
+
+.flyout {
+  position: absolute;
+  top: -10px;
+  left: calc(100% + 10px);
+  z-index: 70;
+  width: 250px;
+  padding: 0 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 12px 28px rgba(15, 35, 64, .18);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -94,8 +144,16 @@
   transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
 }
 
-.nav-group:hover > .flyout,
-.nav-group:focus-within > .flyout {
+.flyout::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -10px;
+  width: 10px;
+  content: '';
+}
+
+.nav-group.menu-open > .flyout {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -106,14 +164,20 @@
   min-height: 42px;
   display: flex;
   align-items: center;
-  padding: 0 10px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, .2);
+  margin: 0 -8px 8px;
+  padding: 0 18px;
+  border-radius: 10px 10px 0 0;
+  background: var(--brand);
+}
+
+.flyout:has(> .flyout-link:only-of-type) > header {
+  display: none;
 }
 
 .flyout h2 {
   margin: 0;
   color: #ffffff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -126,7 +190,7 @@
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #e8f3ff;
+  color: var(--text);
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -141,9 +205,23 @@
 
 .flyout-link:hover,
 .flyout-link.active-link {
-  border-color: rgba(255, 255, 255, .18);
-  background: rgba(3, 33, 72, .28);
-  color: #ffffff;
+  border-color: var(--line);
+  background: var(--bg);
+  color: var(--brand-strong);
+}
+
+@media (max-height: 850px) {
+  .sidebar {
+    padding-block: 6px;
+  }
+
+  .nav-groups {
+    gap: 1px;
+  }
+
+  .rail-link {
+    height: 39px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -164,7 +242,6 @@
   }
 
   .flyout {
-    left: 48px;
-    width: min(232px, calc(100vw - 48px));
+    width: min(250px, calc(100vw - 68px));
   }
 }

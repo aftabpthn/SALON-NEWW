@@ -1,0 +1,229 @@
+<section class="laundry-page">
+  <header class="page-header">
+    <div>
+      <h1>Laundry Tracker</h1>
+    </div>
+    <button class="primary-button" type="button" (click)="openCreate()">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+      New intake
+    </button>
+  </header>
+
+  <div class="summary-strip" aria-label="Laundry summary">
+    <div><span>Active</span><strong>{{ summary.activeOrders }}</strong></div>
+    <div><span>Due today</span><strong>{{ summary.dueToday }}</strong></div>
+    <div [class.alert-value]="summary.overdue > 0"><span>Overdue</span><strong>{{ summary.overdue }}</strong></div>
+    <div><span>Ready</span><strong>{{ summary.ready }}</strong></div>
+    <div [class.alert-value]="summary.openIssues > 0"><span>Open issues</span><strong>{{ summary.openIssues }}</strong></div>
+  </div>
+
+  <div class="alert error" *ngIf="error">{{ error }}</div>
+
+  <div class="toolbar">
+    <label class="search-field">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <input [(ngModel)]="query" (keyup.enter)="reload()" placeholder="Order, client or barcode" aria-label="Search laundry orders" />
+    </label>
+    <select [(ngModel)]="status" (ngModelChange)="reload()" aria-label="Filter by status">
+      <option *ngFor="let value of statuses" [value]="value">{{ label(value) }}</option>
+    </select>
+    <button class="utility-button" type="button" (click)="reload()" [disabled]="loading" aria-label="Reload laundry orders">
+      <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+    </button>
+    <div class="scan-field">
+      <i class="bi bi-upc-scan" aria-hidden="true"></i>
+      <input [(ngModel)]="scanValue" (keyup.enter)="scanBarcode()" placeholder="Scan barcode" aria-label="Laundry barcode" />
+      <button type="button" (click)="scanBarcode()" [disabled]="busy || !scanValue.trim()">Scan</button>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="loading-state" *ngIf="loading">Loading…</div>
+    <div class="empty-state" *ngIf="!loading && !orders.length">No laundry orders yet</div>
+    <div class="table-scroll" *ngIf="!loading && orders.length">
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Owner</th>
+            <th>Status</th>
+            <th>Items</th>
+            <th>Due</th>
+            <th>Vendor</th>
+            <th>Issues</th>
+            <th aria-label="Actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let order of orders" [class.overdue-row]="isOverdue(order)">
+            <td>
+              <button class="order-link" type="button" (click)="openDetail(order)">{{ order.orderNumber }}</button>
+              <small>{{ formatDate(order.intakeAt) }}</small>
+            </td>
+            <td>{{ order.ownerType === 'client' ? (order.clientName || 'Client') : 'Salon' }}</td>
+            <td><span class="status-chip" [attr.data-status]="order.status">{{ label(order.status) }}</span></td>
+            <td>{{ order.totalItems }}</td>
+            <td [class.overdue-text]="isOverdue(order)">{{ formatDate(order.dueAt) }}</td>
+            <td>{{ order.supplierName || '—' }}</td>
+            <td><span class="issue-count" [class.has-issues]="order.openIssues > 0">{{ order.openIssues }}</span></td>
+            <td><button class="utility-button" type="button" (click)="openDetail(order)" aria-label="Open order"><i class="bi bi-chevron-right"></i></button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="drawer-backdrop" *ngIf="drawer" (click)="closeDrawer()"></div>
+
+<aside class="drawer" *ngIf="drawer === 'create'" aria-label="New laundry intake">
+  <header class="drawer-header">
+    <h2>New laundry intake</h2>
+    <button class="utility-button" type="button" (click)="closeDrawer()" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </header>
+  <form class="drawer-form" (ngSubmit)="createOrder()">
+    <div class="drawer-body">
+      <section class="form-section">
+        <h3>Ownership</h3>
+        <div class="field-grid">
+          <label>Owner
+            <select [(ngModel)]="draft.ownerType" name="ownerType">
+              <option value="salon">Salon</option>
+              <option value="client">Client</option>
+            </select>
+          </label>
+          <div class="client-picker wide-field" *ngIf="draft.ownerType === 'client'">
+            <label>Find client
+              <div class="inline-search"><input [(ngModel)]="clientSearch" name="clientSearch" (keyup.enter)="$event.preventDefault(); searchClients()" placeholder="Name or phone" /><button class="utility-button" type="button" (click)="searchClients()" aria-label="Search clients"><i class="bi bi-search"></i></button></div>
+            </label>
+            <label>Client
+              <select [(ngModel)]="draft.clientId" name="clientId" required>
+                <option value="">Select client</option>
+                <option *ngFor="let client of clients" [value]="client.id">{{ clientName(client) }}</option>
+              </select>
+            </label>
+          </div>
+          <label>Vendor
+            <select [(ngModel)]="draft.supplierId" name="supplierId">
+              <option value="">In-house</option>
+              <option *ngFor="let supplier of suppliers" [value]="supplier.id">{{ supplier.name }}</option>
+            </select>
+          </label>
+          <label>Priority
+            <select [(ngModel)]="draft.priority" name="priority">
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h3>Schedule and cost</h3>
+        <div class="field-grid">
+          <label>Due date
+            <as-date-picker [(value)]="draft.dueDate" ariaLabel="Laundry due date"></as-date-picker>
+          </label>
+          <label>Due time<input type="time" [(ngModel)]="draft.dueTime" name="dueTime" /></label>
+          <label>Weight (kg)<input type="number" min="0.001" step="0.001" [(ngModel)]="draft.totalWeightKg" name="totalWeightKg" placeholder="Enter weight" /></label>
+          <label>Estimated cost<input type="number" min="0" step="0.01" [(ngModel)]="draft.estimatedCostRupees" name="estimatedCostRupees" placeholder="Enter amount" /></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="section-heading">
+          <h3>Items</h3>
+          <button class="secondary-button" type="button" (click)="addItem()"><i class="bi bi-plus-lg"></i> Add item</button>
+        </div>
+        <div class="item-card" *ngFor="let item of draft.items; let index = index">
+          <div class="item-heading"><strong>Item {{ index + 1 }}</strong><button class="utility-button" type="button" (click)="removeItem(index)" [disabled]="draft.items.length === 1" aria-label="Remove item"><i class="bi bi-trash3"></i></button></div>
+          <div class="field-grid item-grid">
+            <label class="wide-field">Item name<input [(ngModel)]="item.itemName" (ngModelChange)="item.itemName = titleCase($event)" [name]="'itemName' + index" maxlength="120" required /></label>
+            <label>Category
+              <select [(ngModel)]="item.category" [name]="'category' + index"><option *ngFor="let category of categories" [value]="category">{{ label(category) }}</option></select>
+            </label>
+            <label>Quantity<input type="number" min="1" max="1000" [(ngModel)]="item.quantity" [name]="'quantity' + index" required /></label>
+            <label>Barcode<input [(ngModel)]="item.barcode" [name]="'barcode' + index" maxlength="120" /></label>
+            <label>Color<input [(ngModel)]="item.color" (ngModelChange)="item.color = titleCase($event)" [name]="'color' + index" maxlength="120" /></label>
+            <label>Material<input [(ngModel)]="item.material" (ngModelChange)="item.material = titleCase($event)" [name]="'material' + index" maxlength="120" /></label>
+            <label class="wide-field">Condition at intake<input [(ngModel)]="item.conditionIn" [name]="'conditionIn' + index" maxlength="240" /></label>
+          </div>
+        </div>
+      </section>
+
+      <label class="notes-field">Notes<textarea [(ngModel)]="draft.notes" name="notes" rows="3" maxlength="2000"></textarea></label>
+    </div>
+    <footer class="drawer-footer">
+      <button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button>
+      <button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Create intake' }}</button>
+    </footer>
+  </form>
+</aside>
+
+<aside class="drawer detail-drawer" *ngIf="drawer === 'detail' && detail" aria-label="Laundry order detail">
+  <header class="drawer-header">
+    <div><h2>{{ detail.order.orderNumber }}</h2><span class="status-chip" [attr.data-status]="detail.order.status">{{ label(detail.order.status) }}</span></div>
+    <button class="utility-button" type="button" (click)="closeDrawer()" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+  </header>
+  <div class="drawer-body">
+    <dl class="detail-grid">
+      <div><dt>Owner</dt><dd>{{ detail.order.ownerType === 'client' ? (detail.order.clientName || 'Client') : 'Salon' }}</dd></div>
+      <div><dt>Vendor</dt><dd>{{ detail.order.supplierName || 'In-house' }}</dd></div>
+      <div><dt>Intake</dt><dd>{{ formatDate(detail.order.intakeAt) }}</dd></div>
+      <div><dt>Due</dt><dd>{{ formatDate(detail.order.dueAt) }}</dd></div>
+      <div><dt>Estimated</dt><dd>{{ money(detail.order.estimatedCostPaise) }}</dd></div>
+      <div><dt>Actual</dt><dd>{{ money(detail.order.actualCostPaise) }}</dd></div>
+    </dl>
+
+    <section class="detail-section" *ngIf="nextStatuses(detail.order.status).length">
+      <h3>Move workflow</h3>
+      <div class="field-grid">
+        <label>Transition note<input [(ngModel)]="transitionNote" maxlength="1000" /></label>
+        <label>Actual cost<input type="number" min="0" step="0.01" [(ngModel)]="actualCostRupees" placeholder="Enter amount" /></label>
+      </div>
+      <div class="action-row">
+        <button *ngFor="let next of nextStatuses(detail.order.status)" [class.danger-button]="next === 'cancelled'" [class.primary-button]="next !== 'cancelled'" type="button" (click)="moveTo(next)" [disabled]="busy">{{ label(next) }}</button>
+      </div>
+    </section>
+
+    <section class="detail-section">
+      <h3>Items</h3>
+      <div class="compact-table"><table><thead><tr><th>Item</th><th>Qty</th><th>Barcode</th><th>Condition</th></tr></thead><tbody><tr *ngFor="let item of detail.items"><td>{{ item.itemName }}<small>{{ label(item.category) }}</small></td><td>{{ item.quantity }}</td><td>{{ item.barcode || '—' }}</td><td>{{ item.conditionIn || '—' }}</td></tr></tbody></table></div>
+    </section>
+
+    <section class="detail-section">
+      <h3>Report issue</h3>
+      <div class="field-grid">
+        <label>Item<select [(ngModel)]="issueDraft.itemId"><option value="">Whole order</option><option *ngFor="let item of detail.items" [value]="item.id">{{ item.itemName }}</option></select></label>
+        <label>Type<select [(ngModel)]="issueDraft.issueType"><option value="stain">Stain</option><option value="damage">Damage</option><option value="lost">Lost</option><option value="shortage">Shortage</option><option value="other">Other</option></select></label>
+        <label>Severity<select [(ngModel)]="issueDraft.severity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+        <label>Charge<input type="number" min="0" step="0.01" [(ngModel)]="issueDraft.chargeRupees" placeholder="Enter amount" /></label>
+        <label class="wide-field">Description<input [(ngModel)]="issueDraft.description" maxlength="1000" /></label>
+      </div>
+      <button class="secondary-button" type="button" (click)="reportIssue()" [disabled]="busy || !issueDraft.description.trim()">Report issue</button>
+    </section>
+
+    <section class="detail-section" *ngIf="detail.issues.length">
+      <h3>Issues</h3>
+      <article class="issue-card" *ngFor="let issue of detail.issues">
+        <div class="issue-heading"><strong>{{ label(issue.issueType) }}</strong><span class="severity" [attr.data-severity]="issue.severity">{{ label(issue.severity) }}</span><span>{{ label(issue.status) }}</span></div>
+        <p>{{ issue.description }}</p>
+        <small *ngIf="issue.chargePaise">Charge: {{ money(issue.chargePaise) }}</small>
+        <div class="resolution-row" *ngIf="issue.status === 'open'">
+          <input [(ngModel)]="issueResolutions[issue.id]" maxlength="1000" placeholder="Resolution or waiver reason" />
+          <button class="secondary-button" type="button" (click)="resolveIssue(issue, 'waived')" [disabled]="busy || !issueResolutions[issue.id]">Waive</button>
+          <button class="primary-button" type="button" (click)="resolveIssue(issue, 'resolved')" [disabled]="busy || !issueResolutions[issue.id]">Resolve</button>
+        </div>
+        <small *ngIf="issue.status !== 'open'">{{ issue.resolution }}</small>
+      </article>
+    </section>
+
+    <section class="detail-section">
+      <h3>Custody history</h3>
+      <div class="empty-state compact" *ngIf="!detail.events.length">No events yet</div>
+      <ol class="timeline" *ngIf="detail.events.length">
+        <li *ngFor="let event of detail.events"><span class="timeline-dot"></span><div><strong>{{ label(event.eventType) }}</strong><p *ngIf="event.fromStatus || event.toStatus">{{ label(event.fromStatus) }} → {{ label(event.toStatus) }}</p><p *ngIf="event.note">{{ event.note }}</p><small>{{ formatDate(event.createdAt) }}</small></div></li>
+      </ol>
+    </section>
+  </div>
+</aside>

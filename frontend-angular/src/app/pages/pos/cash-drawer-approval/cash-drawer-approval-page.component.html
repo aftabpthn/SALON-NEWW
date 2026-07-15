@@ -1,0 +1,11 @@
+<main class="approval-shell">
+  <section class="approval-card">
+    <header><span>AURASHINE POS</span><h1>Cash drawer approval</h1></header>
+    <p class="state" *ngIf="loading">Loading...</p><p class="error" *ngIf="error">{{ error }}</p>
+    <ng-container *ngIf="request && !loading && !complete">
+      <dl><div><dt>Business date</dt><dd>{{ request.businessDate | date:'dd/MM/yyyy' }}</dd></div><div><dt>Expected cash</dt><dd>{{ money(request.expectedCashPaise) | currency:'INR' }}</dd></div><div><dt>Counted cash</dt><dd>{{ money(request.countedCashPaise) | currency:'INR' }}</dd></div><div><dt>Variance</dt><dd>{{ money(request.variancePaise) | currency:'INR' }}</dd></div></dl>
+      <form><label><span>Reviewer name</span><input [(ngModel)]="reviewerName" name="reviewerName" /></label><label><span>Review note</span><textarea [(ngModel)]="note" name="note" rows="3"></textarea></label><div class="actions"><button type="button" (click)="review('rejected')" [disabled]="busy">Reject</button><button class="primary" type="button" (click)="review('approved')" [disabled]="busy">Approve drawer</button></div></form>
+    </ng-container>
+    <section class="complete" *ngIf="complete"><h2>Decision recorded</h2><p>You can close this page.</p></section>
+  </section>
+</main>

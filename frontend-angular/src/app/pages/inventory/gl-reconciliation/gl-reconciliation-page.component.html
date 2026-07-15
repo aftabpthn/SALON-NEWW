@@ -1,0 +1,117 @@
+<section class="reconciliation-page">
+  <header class="command-bar">
+    <div class="title-row">
+      <h1>Inventory GL Reconciliation</h1>
+      <span class="live-badge" [class.error]="!!error"><i class="bi bi-circle-fill" aria-hidden="true"></i>{{ loading ? 'Running' : error ? 'Unavailable' : 'Live' }}</span>
+    </div>
+    <span></span>
+    <as-date-picker [(value)]="asOf" ariaLabel="Reconciliation date"></as-date-picker>
+    <select aria-label="Branch" disabled>
+      <option>{{ result?.rows?.[0]?.branchName || 'Current branch' }}</option>
+    </select>
+    <button class="primary-button" type="button" [disabled]="loading" (click)="runReconciliation()">
+      {{ loading ? 'Running…' : 'Run reconciliation' }}
+    </button>
+  </header>
+
+  <nav class="tabs" aria-label="Reconciliation views">
+    <button
+      type="button"
+      *ngFor="let tab of tabs"
+      [class.active]="activeTab === tab.id"
+      (click)="activeTab = tab.id"
+    >{{ tab.label }}</button>
+  </nav>
+
+  <div class="message error" *ngIf="error">{{ error }}</div>
+
+  <section class="metrics" *ngIf="result">
+    <article>
+      <i class="bi bi-currency-rupee metric-icon blue" aria-hidden="true"></i>
+      <div><span>Inventory value</span><strong>{{ money(result.summary.inventoryValuePaise) }}</strong></div>
+    </article>
+    <article class="gl-card">
+      <i class="bi bi-journal-check metric-icon amber" aria-hidden="true"></i>
+      <div><span>GL stock balance</span><strong>{{ money(result.summary.glValuePaise) }}</strong></div>
+    </article>
+    <article class="difference-card">
+      <i class="bi bi-arrows-expand-vertical metric-icon teal" aria-hidden="true"></i>
+      <div><span>Difference</span><strong>{{ money(result.summary.differencePaise) }}</strong></div>
+    </article>
+    <article class="status-card">
+      <i class="bi bi-exclamation-lg metric-icon green" aria-hidden="true"></i>
+      <div><span>Unreconciled</span><strong>{{ result.summary.unreconciled }}</strong></div>
+    </article>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'summary'">
+    <header>
+      <h2>Inventory to general-ledger comparison</h2>
+      <div class="panel-actions">
+        <button type="button" [disabled]="!result" (click)="exportCsv()">Export CSV</button>
+        <button type="button" [disabled]="!result" (click)="exportEvidence()">Export evidence</button>
+      </div>
+    </header>
+    <div class="loading-state" *ngIf="loading">Loading reconciliation…</div>
+    <div class="table-scroll" *ngIf="!loading && result">
+      <table>
+        <thead><tr><th>Branch</th><th>Products</th><th>Inventory value</th><th>GL stock value</th><th>Difference</th><th>Status</th><th>Exceptions</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of result.rows">
+            <td><strong>{{ row.branchName }}</strong></td>
+            <td>{{ row.productCount }}</td>
+            <td>{{ money(row.inventoryValuePaise) }}</td>
+            <td>{{ money(row.glValuePaise) }}</td>
+            <td [class.negative]="row.differencePaise !== 0">{{ money(row.differencePaise) }}</td>
+            <td><span class="status" [class.matched]="row.status === 'matched'">{{ row.status }}</span></td>
+            <td>{{ row.missingCostProducts + (row.differencePaise === 0 ? 0 : 1) }}</td>
+            <td><button type="button" (click)="reviewExceptions()">Review</button></td>
+          </tr>
+          <tr *ngIf="!result.rows.length"><td class="empty-state" colspan="8">No records yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-panel" *ngIf="!loading && !result && !error"><i class="bi bi-journal-check" aria-hidden="true"></i><strong>No reconciliation run</strong></div>
+    <footer *ngIf="result"><span>{{ result.accountCode }}</span><span>{{ result.valuationMethod }}</span></footer>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'exceptions'">
+    <header><h2>Exceptions</h2></header>
+    <div class="loading-state" *ngIf="loading">Loading reconciliation…</div>
+    <div class="table-scroll" *ngIf="!loading && result">
+      <table>
+        <thead><tr><th>Severity</th><th>Exception</th><th>Evidence</th><th>Difference</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of result.exceptionRows">
+            <td><span class="status severity" [class.warning]="row.severity === 'warning'">{{ row.severity }}</span></td>
+            <td><strong>{{ row.title }}</strong></td>
+            <td>{{ row.detail }}</td>
+            <td>{{ money(row.amountPaise) }}</td>
+            <td><a [routerLink]="row.route">Open</a></td>
+          </tr>
+          <tr *ngIf="!result.exceptionRows.length"><td class="empty-state" colspan="5">No exceptions</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'audit'">
+    <header><h2>Inventory GL audit trail</h2></header>
+    <div class="loading-state" *ngIf="loading">Loading reconciliation…</div>
+    <div class="table-scroll" *ngIf="!loading && result">
+      <table>
+        <thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>Memo</th><th>Inventory asset movement</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let row of result.auditRows">
+            <td>{{ dateTime(row.createdAt) }}</td>
+            <td>{{ row.sourceType }}</td>
+            <td>{{ row.sourceId }}</td>
+            <td>{{ row.memo || '—' }}</td>
+            <td>{{ money(row.amountPaise) }}</td>
+          </tr>
+          <tr *ngIf="!result.auditRows.length"><td class="empty-state" colspan="5">No records yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

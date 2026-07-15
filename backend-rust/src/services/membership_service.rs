@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use serde_json::{json, Value};
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool, Postgres, Row, Transaction};
 
 use crate::{
     models::common::AppError,
@@ -12,6 +14,8 @@ use crate::{
     repositories::{clients_repository, membership_advanced_repository},
 };
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MembershipCheckoutIntent {
     pub client_id: String,
     pub plan_id: String,
@@ -26,6 +30,19 @@ pub struct MembershipClient360 {
     pub memberships: Vec<ActiveMembershipRecord>,
     pub wallet: Vec<membership_lifecycle_repository::MembershipWalletCreditRecord>,
     pub ledger: Vec<membership_lifecycle_repository::LifecycleLedgerRecord>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct RewardAdjustmentResult {
+    pub id: String,
+    pub client_id: String,
+    pub transaction_type: String,
+    pub points: i32,
+    pub balance_after: i32,
+    pub staff_id: String,
+    pub note: String,
+    pub created_at: DateTime<Utc>,
 }
 
 pub async fn active_memberships(
@@ -203,6 +220,10 @@ pub async fn renewal_checkout_intent(
         intent.plan_name = target.name;
         intent.price_paise = target.price_paise;
         intent.reference_id = change.id;
+        intent.source = "membership_plan_change";
+    } else {
+        intent.source = "membership_renewal";
+        intent.reference_id = client_membership_id.to_string();
     }
     Ok(intent)
 }
@@ -365,14 +386,36 @@ pub async fn create_self_service_request(
     request_type: &str,
     target_membership_id: Option<&str>,
     reason: &str,
+    credit_delta: i32,
+    service_id: &str,
+    payment_reference: &str,
 ) -> Result<membership_lifecycle_repository::SelfServiceRequestRecord, AppError> {
-    if !matches!(request_type, "renew" | "cancel" | "upgrade" | "downgrade") {
+    if !matches!(
+        request_type,
+        "renew"
+            | "cancel"
+            | "upgrade"
+            | "downgrade"
+            | "payment_method_update"
+            | "credit_adjustment"
+    ) {
         return Err(AppError::validation("invalid requestType"));
     }
     if matches!(request_type, "upgrade" | "downgrade")
         && target_membership_id.unwrap_or("").is_empty()
     {
         return Err(AppError::validation("targetMembershipId is required"));
+    }
+    if request_type == "credit_adjustment" && (credit_delta == 0 || service_id.trim().is_empty()) {
+        return Err(AppError::validation(
+            "serviceId and non-zero creditDelta are required",
+        ));
+    }
+    if request_type == "payment_method_update" && payment_reference.trim().is_empty() {
+        return Err(AppError::validation("paymentReference is required"));
+    }
+    if payment_reference.trim().len() > 200 {
+        return Err(AppError::validation("paymentReference is too long"));
     }
     membership_lifecycle_repository::create_self_service_request(
         db,
@@ -382,6 +425,9 @@ pub async fn create_self_service_request(
         request_type,
         target_membership_id,
         reason.trim(),
+        credit_delta,
+        service_id.trim(),
+        payment_reference.trim(),
     )
     .await
     .map_err(|_| AppError::validation("active membership or target plan was not found"))
@@ -457,6 +503,20 @@ pub async fn auto_renew_attempts(
         .map_err(|_| AppError::internal("failed to list auto-renew attempts"))
 }
 
+pub async fn process_due_auto_renewals(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Value, AppError> {
+    let due = auto_renew_queue(db, tenant_id, branch_id, 0).await?;
+    let mut attempts = Vec::with_capacity(due.len());
+    for membership in due {
+        let (attempt, intent) = retry_auto_renew(db, tenant_id, branch_id, &membership.id).await?;
+        attempts.push(json!({"attempt":attempt,"checkout":intent}));
+    }
+    Ok(json!({"processed":attempts.len(),"attempts":attempts}))
+}
+
 fn prorated_amounts(
     old_price: i64,
     new_price: i64,
@@ -469,8 +529,17 @@ fn prorated_amounts(
         .map(|expiry| ((expiry - now).num_seconds().max(0) + 86_399) / 86_400)
         .unwrap_or(0)
         .min(validity);
-    let delta = (new_price - old_price).saturating_mul(remaining) / validity;
+    let raw_delta = (new_price - old_price).saturating_mul(remaining);
+    let delta = rounded_div(raw_delta, validity);
     (remaining as i32, delta.max(0), (-delta).max(0))
+}
+
+fn rounded_div(value: i64, divisor: i64) -> i64 {
+    if divisor <= 0 || value == 0 {
+        return 0;
+    }
+    let sign = value.signum();
+    ((value.abs() + (divisor / 2)) / divisor) * sign
 }
 
 pub async fn client_360(
@@ -620,12 +689,11 @@ pub async fn membership_settings(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Value, AppError> {
-    Ok(
-        membership_advanced_repository::get_settings(db, tenant_id, branch_id)
-            .await
-            .map_err(|_| AppError::internal("failed to load membership settings"))?
-            .unwrap_or_else(default_membership_settings),
-    )
+    let saved = membership_advanced_repository::get_settings(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load membership settings"))?
+        .unwrap_or_else(|| json!({}));
+    Ok(merge_known_settings(&default_membership_settings(), &saved))
 }
 
 pub async fn save_membership_settings(
@@ -638,6 +706,7 @@ pub async fn save_membership_settings(
         return Err(AppError::validation("settings must be an object"));
     }
     let settings = merge_known_settings(&default_membership_settings(), input);
+    validate_retention_settings(&settings)?;
     membership_advanced_repository::save_settings(db, tenant_id, branch_id, &settings)
         .await
         .map_err(|_| AppError::internal("failed to save membership settings"))
@@ -835,6 +904,187 @@ pub async fn rewards_ledger(
         .map_err(|_| AppError::internal("failed to load rewards ledger"))
 }
 
+pub async fn adjust_reward_balance(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    points: i32,
+    note: &str,
+    idempotency_key: &str,
+    actor: &str,
+) -> Result<RewardAdjustmentResult, AppError> {
+    let client_id = required_text(Some(client_id), "clientId is required")?;
+    let note = required_text(Some(note), "note is required")?;
+    let key = required_text(Some(idempotency_key), "idempotencyKey is required")?;
+    if points == 0 || !(-1_000_000..=1_000_000).contains(&points) {
+        return Err(AppError::validation(
+            "points must be between -1000000 and 1000000 and cannot be 0",
+        ));
+    }
+    if note.len() > 500 {
+        return Err(AppError::validation("note must be at most 500 characters"));
+    }
+    if key.len() < 8
+        || key.len() > 120
+        || !key
+            .bytes()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, b'-' | b'_'))
+    {
+        return Err(AppError::validation(
+            "idempotencyKey must be 8-120 letters, numbers, hyphens, or underscores",
+        ));
+    }
+
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start reward adjustment"))?;
+    let client_exists = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to lock reward client"))?;
+    if client_exists.is_none() {
+        return Err(AppError::not_found("client not found"));
+    }
+    if let Some(existing) = load_reward_adjustment(&mut tx, tenant_id, branch_id, key).await? {
+        if existing.client_id != client_id || existing.points != points || existing.note != note {
+            return Err(AppError::conflict(
+                "idempotencyKey is already used by another reward adjustment",
+            ));
+        }
+        return Ok(existing);
+    }
+
+    let balance = reward_balance(&mut tx, tenant_id, branch_id, client_id).await?;
+    let next_balance = balance
+        .checked_add(points)
+        .filter(|value| *value >= 0)
+        .ok_or_else(|| AppError::validation("reward adjustment exceeds available balance"))?;
+    let inserted = sqlx::query_as::<_, RewardAdjustmentResult>(
+        "INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) VALUES ($1,$2,$3,'adjusted',$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id,client_id,transaction_type,points,balance_after,staff_id,note,created_at",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .bind(points)
+    .bind(next_balance)
+    .bind(actor)
+    .bind(note)
+    .bind(key)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to post reward adjustment"))?;
+    let result = if let Some(inserted) = inserted {
+        inserted
+    } else {
+        let existing = load_reward_adjustment(&mut tx, tenant_id, branch_id, key)
+            .await?
+            .ok_or_else(|| AppError::conflict("reward adjustment could not be replayed"))?;
+        if existing.client_id != client_id || existing.points != points || existing.note != note {
+            return Err(AppError::conflict(
+                "idempotencyKey is already used by another reward adjustment",
+            ));
+        }
+        existing
+    };
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit reward adjustment"))?;
+    Ok(result)
+}
+
+pub async fn reverse_rewards_for_refund(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    sale_id: &str,
+    refund_id: &str,
+    cumulative_refund_paise: i64,
+    sale_total_paise: i64,
+) -> Result<(), AppError> {
+    if client_id.is_empty() || cumulative_refund_paise <= 0 || sale_total_paise <= 0 {
+        return Ok(());
+    }
+    sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(client_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to lock refund reward balance"))?;
+    if sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND source_refund_id=$3)")
+        .bind(tenant_id).bind(branch_id).bind(refund_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to validate reward refund replay"))?
+    {
+        return Ok(());
+    }
+    let (earned, redeemed) = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT COALESCE(SUM(CASE WHEN transaction_type='earned' THEN points ELSE 0 END),0)::BIGINT, COALESCE(SUM(CASE WHEN transaction_type='redeemed' THEN points ELSE 0 END),0)::BIGINT FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .bind(sale_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load sale rewards"))?;
+    let net_sale_points = earned.saturating_sub(redeemed);
+    if net_sale_points == 0 {
+        return Ok(());
+    }
+    let refunded = cumulative_refund_paise.min(sale_total_paise);
+    let target = if refunded == sale_total_paise {
+        net_sale_points.saturating_neg()
+    } else {
+        (net_sale_points.saturating_mul(refunded) / sale_total_paise).saturating_neg()
+    };
+    let reversed = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(points),0)::BIGINT FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 AND transaction_type='reversed'")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to load prior reward reversals"))?;
+    let balance = reward_balance(tx, tenant_id, branch_id, client_id).await?;
+    let delta = target
+        .saturating_sub(reversed)
+        .clamp(-i64::from(balance), i64::from(i32::MAX - balance)) as i32;
+    if delta == 0 {
+        return Ok(());
+    }
+    sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,source_refund_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,$5,'reversed',$6,$7,$8,'POS refund reward reversal') ON CONFLICT DO NOTHING")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(refund_id)
+        .bind(delta).bind(balance + delta).bind(staff_id).execute(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to post refund reward reversal"))?;
+    Ok(())
+}
+
+async fn reward_balance(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<i32, AppError> {
+    sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(&mut **tx).await
+        .map(|value| value.unwrap_or(0)).map_err(|_| AppError::internal("failed to load reward balance"))
+}
+
+async fn load_reward_adjustment(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    key: &str,
+) -> Result<Option<RewardAdjustmentResult>, AppError> {
+    sqlx::query_as::<_, RewardAdjustmentResult>("SELECT id,client_id,transaction_type,points,balance_after,staff_id,note,created_at FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
+        .bind(tenant_id).bind(branch_id).bind(key).fetch_optional(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to load reward adjustment replay"))
+}
+
 pub async fn rewards_roi(db: &PgPool, tenant_id: &str, branch_id: &str) -> Result<Value, AppError> {
     let ledger = rewards_ledger(db, tenant_id, branch_id).await?;
     let revenue = membership_advanced_repository::reward_revenue(db, tenant_id, branch_id)
@@ -927,14 +1177,93 @@ pub async fn create_status_link(
     .map_err(|_| AppError::validation("client or membership was not found"))
 }
 
-pub async fn public_status(
-    db: &PgPool,
-    token: &str,
-) -> Result<membership_advanced_repository::PublicMembershipStatusRecord, AppError> {
-    membership_advanced_repository::public_status(db, token)
+pub async fn public_status(db: &PgPool, token: &str) -> Result<Value, AppError> {
+    let status = membership_advanced_repository::public_status(db, token)
         .await
         .map_err(|_| AppError::internal("failed to load membership status"))?
-        .ok_or_else(|| AppError::not_found("membership status link is invalid or expired"))
+        .ok_or_else(|| AppError::not_found("membership status link is invalid or expired"))?;
+    let credits = membership_lifecycle_repository::client_wallet(
+        db,
+        &status.tenant_id,
+        &status.branch_id,
+        &status.client_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load membership credits"))?;
+    Ok(json!({
+        "token":status.token,
+        "clientId":status.client_id,
+        "clientName":status.client_name,
+        "clientMembershipId":status.client_membership_id,
+        "membershipName":status.membership_name,
+        "status":status.status,
+        "expiresAt":status.expires_at,
+        "tokenExpiresAt":status.token_expires_at,
+        "credits":credits
+    }))
+}
+
+pub async fn public_renew_request(
+    db: &PgPool,
+    token: &str,
+) -> Result<membership_lifecycle_repository::SelfServiceRequestRecord, AppError> {
+    let status = membership_advanced_repository::public_status(db, token)
+        .await
+        .map_err(|_| AppError::internal("failed to load membership status"))?
+        .ok_or_else(|| AppError::not_found("membership status link is invalid or expired"))?;
+    let membership_id = status
+        .client_membership_id
+        .ok_or_else(|| AppError::validation("active membership is required"))?;
+    create_self_service_request(
+        db,
+        &status.tenant_id,
+        &status.branch_id,
+        &membership_id,
+        "renew",
+        None,
+        "Requested from self-service link",
+        0,
+        "",
+        "",
+    )
+    .await
+}
+
+pub async fn public_self_service_request(
+    db: &PgPool,
+    token: &str,
+    request_type: &str,
+    reason: &str,
+    credit_delta: i32,
+    service_id: &str,
+    payment_reference: &str,
+) -> Result<membership_lifecycle_repository::SelfServiceRequestRecord, AppError> {
+    if !matches!(
+        request_type,
+        "renew" | "cancel" | "payment_method_update" | "credit_adjustment"
+    ) {
+        return Err(AppError::validation("invalid public requestType"));
+    }
+    let status = membership_advanced_repository::public_status(db, token)
+        .await
+        .map_err(|_| AppError::internal("failed to load membership status"))?
+        .ok_or_else(|| AppError::not_found("membership status link is invalid or expired"))?;
+    let membership_id = status
+        .client_membership_id
+        .ok_or_else(|| AppError::validation("active membership is required"))?;
+    create_self_service_request(
+        db,
+        &status.tenant_id,
+        &status.branch_id,
+        &membership_id,
+        request_type,
+        None,
+        reason,
+        credit_delta,
+        service_id,
+        payment_reference,
+    )
+    .await
 }
 
 pub async fn proration_preview(
@@ -990,19 +1319,47 @@ pub async fn enterprise_report(
                     .is_some_and(|expiry| expiry >= now && (expiry - now).num_days() <= 30)
         })
         .count();
+    let customer_sales = sqlx::query("SELECT ps.client_id,COALESCE(NULLIF(CONCAT_WS(' ',c.first_name,c.last_name),''),ps.client_id) client_name,COUNT(DISTINCT ps.id)::BIGINT sale_count,COALESCE(SUM(psl.line_total_paise),0)::BIGINT revenue_paise FROM pos_sale_lines psl JOIN pos_sales ps ON ps.id=psl.sale_id AND ps.tenant_id=psl.tenant_id AND ps.branch_id=psl.branch_id LEFT JOIN clients c ON c.id=ps.client_id AND c.tenant_id=ps.tenant_id AND c.branch_id=ps.branch_id WHERE psl.tenant_id=$1 AND psl.branch_id=$2 AND psl.line_type='membership' AND ps.status NOT IN ('draft','cancelled','voided') GROUP BY ps.client_id,c.first_name,c.last_name ORDER BY revenue_paise DESC")
+        .bind(tenant_id).bind(branch_id).fetch_all(db).await
+        .map_err(|_| AppError::internal("failed to load membership customer sales"))?
+        .into_iter().map(|row| json!({"clientId":row.get::<String,_>("client_id"),"clientName":row.get::<String,_>("client_name"),"saleCount":row.get::<i64,_>("sale_count"),"revenuePaise":row.get::<i64,_>("revenue_paise")})).collect::<Vec<_>>();
+    let redemption = sqlx::query("SELECT pmr.client_id,COALESCE(NULLIF(CONCAT_WS(' ',c.first_name,c.last_name),''),pmr.client_id) client_name,pmr.membership_name,pmr.service_name,COALESCE(SUM(pmr.quantity),0)::BIGINT quantity,COUNT(DISTINCT pmr.sale_id)::BIGINT visit_count FROM pos_membership_redemptions pmr LEFT JOIN clients c ON c.id=pmr.client_id AND c.tenant_id=pmr.tenant_id AND c.branch_id=pmr.branch_id WHERE pmr.tenant_id=$1 AND pmr.branch_id=$2 GROUP BY pmr.client_id,c.first_name,c.last_name,pmr.membership_name,pmr.service_name ORDER BY quantity DESC")
+        .bind(tenant_id).bind(branch_id).fetch_all(db).await
+        .map_err(|_| AppError::internal("failed to load membership redemption report"))?
+        .into_iter().map(|row| json!({"clientId":row.get::<String,_>("client_id"),"clientName":row.get::<String,_>("client_name"),"membershipName":row.get::<String,_>("membership_name"),"serviceName":row.get::<String,_>("service_name"),"quantity":row.get::<i64,_>("quantity"),"visitCount":row.get::<i64,_>("visit_count")})).collect::<Vec<_>>();
+    let profitability =
+        membership_advanced_repository::profitability_rows(db, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load membership profitability"))?;
+    let service_cost_paise = profitability
+        .iter()
+        .map(|row| row.service_cost_paise)
+        .sum::<i64>();
+    let redeemed_value_paise = profitability
+        .iter()
+        .map(|row| row.redeemed_value_paise)
+        .sum::<i64>();
+    let net_profit_paise = profitability
+        .iter()
+        .map(|row| row.net_profit_paise)
+        .sum::<i64>();
+    let contribution_paise = net_profit_paise;
     Ok(
-        json!({"metrics":{"activeMembers":summary.active_members,"expiredMembers":summary.expired_members,"cancelledMembers":summary.cancelled_members,"membershipSalesPaise":summary.membership_sales_paise,"creditLiability":summary.credit_liability,"redeemedCredits":summary.redeemed_credits,"expiringSoon":expiring},"memberships":memberships.into_iter().map(|item|json!({"id":item.id,"clientId":item.client_id,"clientName":item.client_name,"membershipId":item.membership_id,"membershipName":item.membership_name,"assignedAt":item.assigned_at,"expiresAt":item.expires_at,"active":item.active,"remainingCredits":item.remaining_credits,"autoRenewStatus":item.auto_renew_status})).collect::<Vec<_>>(),"ledger":ledger,"commission":commission,"risk":risk,"reminders":reminders,"autoRenew":auto_renew}),
+        json!({"metrics":{"activeMembers":summary.active_members,"expiredMembers":summary.expired_members,"cancelledMembers":summary.cancelled_members,"membershipSalesPaise":summary.membership_sales_paise,"commissionPaise":summary.commission_paise,"serviceCostPaise":service_cost_paise,"redeemedValuePaise":redeemed_value_paise,"netProfitPaise":net_profit_paise,"contributionPaise":contribution_paise,"creditLiability":summary.credit_liability,"redeemedCredits":summary.redeemed_credits,"expiringSoon":expiring},"memberships":memberships.into_iter().map(|item|json!({"id":item.id,"clientId":item.client_id,"clientName":item.client_name,"membershipId":item.membership_id,"membershipName":item.membership_name,"assignedAt":item.assigned_at,"expiresAt":item.expires_at,"active":item.active,"remainingCredits":item.remaining_credits,"autoRenewStatus":item.auto_renew_status})).collect::<Vec<_>>(),"ledger":ledger,"commission":commission,"risk":risk,"reminders":reminders,"autoRenew":auto_renew,"customerSales":customer_sales,"redemption":redemption,"profitability":profitability}),
     )
 }
 
 fn default_membership_settings() -> Value {
     json!({
         "membershipCatalog":{"membershipSalesEnabled":true,"visibleInPos":true,"visibleOnline":true,"freeMembershipEnabled":true,"paidMembershipEnabled":true},
-        "creditsBenefits":{"serviceCreditsEnabled":true,"walletCreditsEnabled":true,"rewardPointsEnabled":true,"discountBenefitsEnabled":true,"allowBenefitStacking":false},
+        "creditsBenefits":{"serviceCreditsEnabled":true,"walletCreditsEnabled":true,"rewardPointsEnabled":true,"rewardPointsPer100Rupees":0,"rewardPointValuePaise":100,"discountBenefitsEnabled":true,"allowBenefitStacking":false},
         "renewalExpiry":{"autoRenewEnabled":false,"expiryDaysEnabled":true,"defaultValidityDays":365,"renewalReminderDays":30,"expiredBenefitAction":"block"},
         "paymentBilling":{"allowDueOnMembershipSale":true,"membershipTaxApplicable":true,"taxInclusiveMembershipPrice":false,"invoiceMembershipSnapshot":true},
         "redemptionRules":{"blockRedemptionWhenExpired":true,"requireStaffConfirmation":true,"allowPartialCredits":true,"allowFamilySharing":true},
+        "crossLocation":{"enabled":false,"acceptInbound":false,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true},
         "notificationsRisk":{"renewalReminder":true,"lowCreditReminder":true,"ownerAlertForHighBalance":true,"highBalanceThreshold":1000000},
+        "loyaltyTiers":{"enabled":true,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
+        "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
         "defaults":{"defaultStatus":"active","defaultMembershipType":"paid"}
     })
 }
@@ -1027,8 +1384,70 @@ fn merge_known_settings(defaults: &Value, input: &Value) -> Value {
         {
             input.clone()
         }
+        (Value::Array(defaults), Value::Array(input)) if !defaults.is_empty() => Value::Array(
+            input
+                .iter()
+                .filter(|value| value.is_object())
+                .take(10)
+                .map(|value| merge_known_settings(&defaults[0], value))
+                .collect(),
+        ),
         _ => defaults.clone(),
     }
+}
+
+fn validate_retention_settings(settings: &Value) -> Result<(), AppError> {
+    let cross_location_scope = settings
+        .pointer("/crossLocation/scope")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !matches!(
+        cross_location_scope,
+        "tenant" | "region" | "zone" | "cluster"
+    ) {
+        return Err(AppError::validation("invalid cross-location scope"));
+    }
+    let tiers = settings
+        .pointer("/loyaltyTiers/tiers")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::validation("loyalty tiers are required"))?;
+    if tiers.is_empty() {
+        return Err(AppError::validation(
+            "at least one loyalty tier is required",
+        ));
+    }
+    let mut codes = HashSet::new();
+    for tier in tiers {
+        let code = tier
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let name = tier
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        if code.is_empty()
+            || code.len() > 32
+            || !code
+                .chars()
+                .all(|value| value.is_ascii_alphanumeric() || value == '_')
+        {
+            return Err(AppError::validation(
+                "loyalty tier code must be 1-32 letters, numbers, or underscores",
+            ));
+        }
+        if name.is_empty() || name.len() > 64 {
+            return Err(AppError::validation(
+                "loyalty tier name must be 1-64 characters",
+            ));
+        }
+        if !codes.insert(code.to_ascii_lowercase()) {
+            return Err(AppError::validation("loyalty tier codes must be unique"));
+        }
+    }
+    Ok(())
 }
 
 fn required_text<'a>(value: Option<&'a str>, message: &'static str) -> Result<&'a str, AppError> {
@@ -1075,9 +1494,13 @@ fn price_paise(price: Option<i64>, price_paise: Option<i64>) -> Result<i64, AppE
 
 #[cfg(test)]
 mod tests {
-    use super::{default_membership_settings, merge_known_settings, prorated_amounts};
+    use super::{
+        adjust_reward_balance, default_membership_settings, merge_known_settings, prorated_amounts,
+        reverse_rewards_for_refund, validate_retention_settings,
+    };
     use chrono::{Duration, Utc};
     use serde_json::json;
+    use sqlx::PgPool;
 
     #[test]
     fn proration_returns_charge_or_credit_for_remaining_term() {
@@ -1090,17 +1513,120 @@ mod tests {
             prorated_amounts(20_000, 10_000, 30, Some(now + Duration::days(15)), now),
             (15, 0, 5_000)
         );
+        assert_eq!(
+            prorated_amounts(10_000, 20_000, 3, Some(now + Duration::days(2)), now),
+            (2, 6_667, 0)
+        );
+        assert_eq!(
+            prorated_amounts(20_000, 10_000, 3, Some(now + Duration::days(2)), now),
+            (2, 0, 6_667)
+        );
     }
 
     #[test]
     fn membership_settings_keep_known_typed_values_only() {
         let merged = merge_known_settings(
             &default_membership_settings(),
-            &json!({"renewalExpiry":{"defaultValidityDays":90,"autoRenewEnabled":true,"unknown":true},"creditsBenefits":"invalid"}),
+            &json!({"renewalExpiry":{"defaultValidityDays":90,"autoRenewEnabled":true,"unknown":true},"creditsBenefits":"invalid","crossLocation":{"enabled":true,"scope":"zone"}}),
         );
         assert_eq!(merged["renewalExpiry"]["defaultValidityDays"], 90);
         assert_eq!(merged["renewalExpiry"]["autoRenewEnabled"], true);
+        assert_eq!(merged["creditsBenefits"]["rewardPointValuePaise"], 100);
         assert!(merged["renewalExpiry"].get("unknown").is_none());
         assert!(merged["creditsBenefits"].is_object());
+        assert_eq!(merged["crossLocation"]["enabled"], true);
+        assert_eq!(merged["crossLocation"]["scope"], "zone");
+        assert!(validate_retention_settings(&merged).is_ok());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn reward_adjustment_and_refund_reversal_are_idempotent(pool: PgPool) {
+        for statement in [
+            "CREATE TABLE clients (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL)",
+            "CREATE TABLE membership_reward_ledger (id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL, client_id TEXT NOT NULL REFERENCES clients(id), source_sale_id TEXT NOT NULL DEFAULT '', transaction_type TEXT NOT NULL CHECK (transaction_type IN ('earned','redeemed','reversed','adjusted')), points INTEGER NOT NULL, balance_after INTEGER NOT NULL CHECK (balance_after >= 0), expires_at DATE, staff_id TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            "CREATE UNIQUE INDEX idx_membership_reward_ledger_sale_type ON membership_reward_ledger (tenant_id,branch_id,source_sale_id,transaction_type) WHERE source_sale_id <> ''",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0086_loyalty_ledger_writers.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO clients VALUES ('client-1','tenant-1','branch-1')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after) VALUES ('tenant-1','branch-1','client-1','sale-1','earned',100,100)")
+            .execute(&pool).await.unwrap();
+
+        let adjustment = adjust_reward_balance(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            25,
+            "Service recovery",
+            "adjust-001",
+            "owner-1",
+        )
+        .await
+        .unwrap();
+        let replay = adjust_reward_balance(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            25,
+            "Service recovery",
+            "adjust-001",
+            "owner-1",
+        )
+        .await
+        .unwrap();
+        assert_eq!(adjustment.id, replay.id);
+
+        for (refund_id, cumulative) in [
+            ("refund-1", 5_000),
+            ("refund-1", 5_000),
+            ("refund-2", 10_000),
+        ] {
+            let mut tx = pool.begin().await.unwrap();
+            reverse_rewards_for_refund(
+                &mut tx, "tenant-1", "branch-1", "client-1", "staff-1", "sale-1", refund_id,
+                cumulative, 10_000,
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+        }
+
+        assert_eq!(
+            sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE client_id='client-1' ORDER BY created_at DESC,id DESC LIMIT 1")
+                .fetch_one(&pool).await.unwrap(),
+            25
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM membership_reward_ledger WHERE transaction_type='reversed'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            2
+        );
+        assert!(adjust_reward_balance(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            -30,
+            "Invalid deduction",
+            "adjust-002",
+            "owner-1",
+        )
+        .await
+        .is_err());
     }
 }
