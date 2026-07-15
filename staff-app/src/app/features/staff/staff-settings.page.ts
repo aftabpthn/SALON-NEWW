@@ -49,6 +49,7 @@ import { StaffAppService, StaffDashboard } from "../../core/staff-app.service";
                 (click)="toggleBiometric()"
               ><span aria-hidden="true"></span></button>
             </div>
+            <div class="biometric-meta"><span>Device support</span><strong>{{ staff.biometricSupported() ? 'Available' : 'Not available' }}</strong></div>
           </article>
         </section>
 
@@ -67,6 +68,8 @@ import { StaffAppService, StaffDashboard } from "../../core/staff-app.service";
     .biometric-panel { padding: 12px 14px; border-radius: 16px; }
     .biometric-panel .panel-title { min-height: 24px; margin: 0; align-items: center; }
     .biometric-panel .panel-title h2 { font-size: .92rem; }
+    .biometric-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 5px; color: var(--staff-text-secondary); font-size: .72rem; }
+    .biometric-meta strong { color: inherit; font-weight: 650; }
     .biometric-switch { position: relative; width: 36px; height: 20px; flex: 0 0 36px; padding: 0; border: 1px solid var(--staff-border-accent); border-radius: 999px; background: var(--staff-surface-secondary); cursor: pointer; transition: background-color 180ms ease, border-color 180ms ease; }
     .biometric-switch span { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--staff-text-secondary); transition: transform 180ms ease, background-color 180ms ease; }
     .biometric-switch[aria-checked="true"] { border-color: var(--staff-primary); background: var(--staff-primary); }
