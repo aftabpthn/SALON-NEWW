@@ -40,6 +40,9 @@ export class AppSidebarComponent {
     { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false, links: [
       { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false },
     ] },
+    { label: 'Finance', icon: 'bi-bank', route: '/finance', exact: false, links: [
+      { label: 'Balance Sheet', icon: 'bi-bank', route: '/finance', exact: false },
+    ] },
     { label: 'Notifications', icon: 'bi-bell', route: '/notifications', exact: false, links: [
       { label: 'Notifications', icon: 'bi-bell', route: '/notifications', exact: false },
     ] },

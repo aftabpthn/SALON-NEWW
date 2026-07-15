@@ -1,5 +1,13 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{FromRow, PgPool};
+
+#[derive(Debug, Clone, FromRow)]
+pub struct InventoryGlSnapshot {
+    pub product_count: i64,
+    pub inventory_value_paise: i64,
+    pub gl_value_paise: i64,
+    pub missing_cost_products: i64,
+}
 
 #[derive(Debug, Clone, FromRow)]
 pub struct InventoryRecord {
@@ -208,4 +216,60 @@ fn select_sql(where_clause: &str) -> String {
         {where_clause}
         "#,
     )
+}
+
+pub async fn gl_reconciliation_snapshot(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    as_of: NaiveDate,
+    account_code: &str,
+) -> Result<InventoryGlSnapshot, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH item_values AS (
+          SELECT
+            item.id,
+            item.unit_cost_paise,
+            CASE WHEN item.created_at < ($3::date + INTERVAL '1 day') THEN
+              item.stock_quantity::BIGINT
+              - COALESCE(SUM(ledger.quantity_delta::BIGINT)
+                  FILTER (WHERE ledger.created_at >= ($3::date + INTERVAL '1 day')), 0)::BIGINT
+            ELSE 0 END AS quantity_as_of,
+            CASE WHEN item.created_at < ($3::date + INTERVAL '1 day') THEN
+              item.stock_quantity::BIGINT * item.unit_cost_paise
+              - COALESCE(SUM(ledger.quantity_delta::BIGINT * ledger.unit_cost_paise)
+                  FILTER (WHERE ledger.created_at >= ($3::date + INTERVAL '1 day')), 0)::BIGINT
+            ELSE 0 END AS value_as_of
+          FROM inventory_items item
+          LEFT JOIN inventory_stock_ledger ledger
+            ON ledger.tenant_id = item.tenant_id
+           AND ledger.branch_id = item.branch_id
+           AND ledger.inventory_item_id = item.id
+          WHERE item.tenant_id = $1 AND item.branch_id = $2
+          GROUP BY item.id
+        )
+        SELECT
+          COUNT(*) FILTER (WHERE quantity_as_of <> 0)::BIGINT AS product_count,
+          COALESCE(SUM(value_as_of), 0)::BIGINT AS inventory_value_paise,
+          COALESCE((
+            SELECT SUM(line.debit_paise - line.credit_paise)::BIGINT
+            FROM accounting_journal_entries entry
+            JOIN accounting_journal_lines line ON line.journal_entry_id = entry.id
+            WHERE entry.tenant_id = $1
+              AND entry.branch_id = $2
+              AND entry.created_at < ($3::date + INTERVAL '1 day')
+              AND line.account_code = $4
+          ), 0)::BIGINT AS gl_value_paise,
+          COUNT(*) FILTER (WHERE quantity_as_of > 0 AND unit_cost_paise <= 0)::BIGINT
+            AS missing_cost_products
+        FROM item_values
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(as_of)
+    .bind(account_code)
+    .fetch_one(db)
+    .await
 }

@@ -1,5 +1,6 @@
 pub mod accounting_service;
 pub mod auth_service;
+pub mod balance_sheet_service;
 pub mod cash_drawer_service;
 pub mod inventory_transfer_service;
 pub mod invoice_delivery;

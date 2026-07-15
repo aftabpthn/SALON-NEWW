@@ -14,6 +14,7 @@ pub mod appointment_activity;
 pub mod appointments;
 pub mod auth;
 pub mod availability;
+pub mod balance_sheet;
 pub mod booking_extensions;
 pub mod booking_portal;
 pub mod booking_portal_v2;
@@ -51,6 +52,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(booking_extensions::public_router());
 
     let protected_api = Router::new()
+        .merge(balance_sheet::router())
         .merge(clients::router())
         .merge(staff::router())
         .merge(staff_schedule::router())

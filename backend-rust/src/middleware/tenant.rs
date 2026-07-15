@@ -78,7 +78,7 @@ const MANAGEMENT_WRITE_PREFIXES: &[&str] = &[
     "/staff-schedule",
 ];
 const INVENTORY_WRITE_PREFIXES: &[&str] = &["/inventory", "/purchases"];
-const FINANCE_WRITE_PREFIXES: &[&str] = &["/reports", "/wallets"];
+const FINANCE_WRITE_PREFIXES: &[&str] = &["/balance-sheet", "/reports", "/wallets"];
 const PLATFORM_PREFIXES: &[&str] = &["/platform", "/super-admin"];
 
 const PLATFORM_METHODS: &[Method] = &[

@@ -54,6 +54,17 @@ export const routes: Routes = [
   { path: 'appointment-reports', component: AppointmentReportsPageComponent, canActivate: [authGuard] },
   { path: 'reports/staff-bookings', component: StaffBookingsReportPageComponent, canActivate: [authGuard] },
   { path: 'reports/invoices', component: InvoiceReportsPageComponent, canActivate: [authGuard] },
+  {
+    path: 'finance',
+    loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent),
+    canActivate: [authGuard],
+    data: {
+      roles: ['owner', 'admin', 'manager', 'analyst', 'accountant'],
+      permissions: ['finance.read', 'reports.read', 'tenant.read'],
+      deniedRedirect: '/dashboard',
+    },
+  },
+  { path: 'finance/fixed-assets', loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent), canActivate: [authGuard], data: { financeTab: 'fixedAssets' } },
   { path: 'notifications', component: NotificationsPageComponent, canActivate: [authGuard] },
   { path: 'settings', component: SettingsPageComponent, canActivate: [authGuard] },
   { path: 'settings/invoice', component: InvoiceSettingsPageComponent, canActivate: [authGuard] },

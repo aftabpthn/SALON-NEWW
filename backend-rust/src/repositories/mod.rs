@@ -1,5 +1,6 @@
 pub mod auth_repository;
 pub mod availability_repository;
+pub mod balance_sheet_repository;
 pub mod cash_drawer_repository;
 pub mod clients_repository;
 pub mod inventory_repository;
