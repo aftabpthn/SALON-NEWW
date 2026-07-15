@@ -1316,7 +1316,16 @@ export class StaffOsService {
       LEFT JOIN staff_categories sc ON sc.tenant_id = sm.tenant_id AND sc.id = sca.category_id
       LEFT JOIN tenant_users tu ON tu.tenantId = sm.tenant_id AND tu.staffId = sm.id
       WHERE sm.id = ? AND sm.tenant_id = ?`).get(id, access.tenantId);
-    if (!row) throw notFound("Staff record not found");
+    if (!row) {
+      const legacy = db.prepare(`SELECT s.*, tu.id AS login_user_id, tu.loginId AS login_id, tu.email AS login_email,
+          tu.status AS login_status, CASE WHEN COALESCE(tu.passwordHash, '') != '' THEN 1 ELSE 0 END AS login_password_set
+        FROM staff s
+        LEFT JOIN tenant_users tu ON tu.tenantId = s.tenantId AND tu.staffId = s.id
+        WHERE s.id = @id AND s.tenantId = @tenantId`).get({ id, tenantId: access.tenantId });
+      if (!legacy) throw notFound("Staff record not found");
+      if (["staff", "frontDesk"].includes(access.role)) tenantService.assertBranchAccess(access, legacy.branchId);
+      return rowToLegacyStaff(legacy);
+    }
     if (["staff", "frontDesk"].includes(access.role)) tenantService.assertBranchAccess(access, row.branch_id);
     return { ...rowToStaff(row), employeeDetails: this.getStaffEmployeeDetails(id, access, true) };
   }
