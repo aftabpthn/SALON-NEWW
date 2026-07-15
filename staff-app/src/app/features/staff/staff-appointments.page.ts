@@ -107,6 +107,9 @@ function istDateKey(value: string | Date): string {
     .appointment-list-item[open] .expand-indicator::after { transform: none; }
     .appointment-list-expanded { padding: 8px 0 12px; border-top: 1px solid var(--staff-border); }
     .appointment-list-expanded .row-actions { justify-content: flex-start; }
+    @media (max-width: 900px) {
+      .detail-drawer { top: var(--staff-header-height); padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+    }
   `]
 })
 export class StaffAppointmentsPage implements OnInit {

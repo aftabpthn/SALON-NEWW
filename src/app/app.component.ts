@@ -1070,6 +1070,7 @@ export class AppComponent implements OnDestroy {
       icon: 'ST',
       primaryPath: '/staff-os/staff-list',
       items: [
+        { path: '/staff-chat', label: 'Team Chat', icon: 'TC', keywords: 'staff team private owner chat conversation message' },
         {
           path: '/staff-os/staff-list',
           label: 'Staff Setup',

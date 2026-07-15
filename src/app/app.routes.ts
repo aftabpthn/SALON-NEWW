@@ -17,6 +17,7 @@ export const routes: Routes = [
   { path: 'customer-care-ai', loadComponent: () => import('./pages/customer-care-ai.component').then(m => m.CustomerCareAiComponent), title: 'Customer Care AI' },
   { path: 'analytics', loadComponent: () => import('./pages/analytics-engine.component').then(m => m.AnalyticsEngineComponent), title: 'Advanced Analytics' },
   { path: 'engagement', loadComponent: () => import('./pages/engagement-command-center.component').then(m => m.EngagementCommandCenterComponent), title: 'Engagement Command Center' },
+  { path: 'staff-chat', loadComponent: () => import('./pages/team-chat.component').then(m => m.TeamChatComponent), title: 'Team Chat', canActivate: [permissionGuard], data: { permission: 'read:staff' } },
   { path: 'smart-booking', loadComponent: () => import('./pages/smart-booking.component').then(m => m.SmartBookingComponent), title: 'Smart Booking System' },
   { path: 'security', loadComponent: () => import('./pages/security-layer.component').then(m => m.SecurityLayerComponent), title: 'Enterprise Security' },
   { path: 'enterprise-security-shield', loadComponent: () => import('./pages/enterprise-security-shield.component').then(m => m.EnterpriseSecurityShieldComponent), title: 'Enterprise Security Shield' },
