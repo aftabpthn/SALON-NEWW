@@ -613,7 +613,7 @@ export class StaffAppService {
     return this.get<StaffAttendance[]>("/staff-os/attendance", {
       from: start.toISOString().slice(0, 10),
       to,
-      limit: "100"
+      limit: "500"
     });
   }
 
