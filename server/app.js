@@ -113,6 +113,7 @@ import { customerCareAiRouter } from "./routes/customer-care-ai.routes.js";
 import { customerMarketplaceRouter } from "./routes/customer-marketplace.routes.js";
 import { clientReportsRouter } from "./routes/client-reports.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
+import { ownerOperationsRouter } from "./routes/owner-operations.routes.js";
 import { commissionRouter } from "./routes/commission.routes.js";
 import { statutoryComplianceRouter } from "./routes/compliance.routes.js";
 import { corporateBillingRouter } from "./routes/corporate-billing.routes.js";
@@ -417,6 +418,7 @@ export function createApp() {
     res.json(getSchemaMigrationHealth());
   });
   app.use("/api/v1", dashboardRouter);
+  app.use("/api/v1", ownerOperationsRouter);
   app.use("/api/v1", bookingAnalyticsRouter);
   app.use("/api/v1", bookingIntelligenceRouter);
   app.use("/api/v1", appointmentActivityRouter);

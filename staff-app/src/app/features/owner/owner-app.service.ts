@@ -22,7 +22,7 @@ import {
 } from "./owner-appointments.models";
 import { OwnerAttendance, OwnerLeave, OwnerLeaveDetail, OwnerListResponse, OwnerPayroll, OwnerPayrollDetail, OwnerStaff, OwnerStaffDetail, OwnerStaffWrite } from "./owner-people.models";
 import { OwnerExportFile, OwnerFinanceDrilldown, OwnerFinanceOverview, OwnerFinanceQuery, OwnerReportCatalogue, OwnerReportData } from "./owner-finance-reports.models";
-import { OwnerCampaign, OwnerChatConversation, OwnerChatMessage, OwnerChatMessagesResponse, OwnerClient, OwnerClientDetail, OwnerInventoryDetail, OwnerInventoryResponse, OwnerNotification, OwnerNotificationReceipt, OwnerOperationsQuery, OwnerOperationsResponse } from "./owner-operations.models";
+import { OwnerCampaign, OwnerChatConversation, OwnerChatMessage, OwnerChatMessagesResponse, OwnerChatReceiptResponse, OwnerClient, OwnerClientDetail, OwnerInventoryDetail, OwnerInventoryResponse, OwnerNotification, OwnerNotificationReceipt, OwnerOperationsQuery, OwnerOperationsResponse } from "./owner-operations.models";
 import { OwnerAccessAdministration, OwnerAdministrationRole, OwnerAdministrationUser, OwnerBranchCatalogue, OwnerBranchMutation, OwnerBranchWrite, OwnerRoleWrite, OwnerSettingsResponse, OwnerUserWrite } from "./owner-administration.models";
 
 export type OwnerUser = {
@@ -120,6 +120,15 @@ export class OwnerAppService {
   securitySummary(): Promise<OwnerRecord> { return this.read("security/summary"); }
   userManagement(): Promise<OwnerRecord> { return this.read("security/user-management", { includeAllBranches: true }); }
   dashboard(params: { branchId: string; range: string; from?: string; to?: string }): Promise<OwnerDashboardResponse> { return this.get("/owner-console/dashboard", params); }
+  async realtimeSocketTicketUrl(branchId = ""): Promise<string> {
+    const response = await this.post<{ ticket: string }>("/realtime/ticket", { branchId: branchId === "all" ? "" : branchId }, true);
+    const base = this.baseUrl.startsWith("http") ? new URL(this.baseUrl) : new URL(this.baseUrl, window.location.origin);
+    base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
+    base.pathname = `${base.pathname.replace(/\/$/, "")}/realtime`;
+    base.searchParams.set("ticket", response.ticket);
+    if (branchId && branchId !== "all") base.searchParams.set("branchId", branchId);
+    return base.toString();
+  }
   financeOverview(params: OwnerFinanceQuery): Promise<OwnerFinanceOverview> { return this.get("/owner-console/finance/overview", this.ownerFinanceParams(params)); }
   financeDrilldown(type: string, params: OwnerFinanceQuery): Promise<OwnerFinanceDrilldown> { return this.get("/owner-console/finance/drilldown", { ...this.ownerFinanceParams(params), type }); }
   reportsCatalogue(params: OwnerFinanceQuery): Promise<OwnerReportCatalogue> { return this.get("/owner-console/reports/catalogue", this.ownerFinanceParams(params)); }
@@ -184,7 +193,9 @@ export class OwnerAppService {
   markAllOwnerNotificationsRead(branchId: string): Promise<{ updated: number; readAt: string }> { return this.post("/owner-console/operations/notifications/mark-all-read", { branchId }); }
   ownerChats(params: OwnerOperationsQuery): Promise<OwnerOperationsResponse<OwnerChatConversation>> { return this.get("/owner-console/operations/chats", this.operationsParams(params)); }
   ownerChatMessages(id: string, branchId: string): Promise<OwnerChatMessagesResponse> { return this.get(`/owner-console/operations/chats/${encodeURIComponent(id)}/messages`, { branchId }); }
+  createOwnerPrivateChat(branchId: string, staffId: string, idempotencyKey: string): Promise<OwnerChatConversation> { return this.post("/owner-console/operations/chats/private", { branchId, staffId }, false, new HttpHeaders({ "Idempotency-Key": idempotencyKey })); }
   sendOwnerChatMessage(id: string, branchId: string, body: string, idempotencyKey: string): Promise<OwnerChatMessage> { return this.post(`/owner-console/operations/chats/${encodeURIComponent(id)}/messages`, { branchId, body }, false, new HttpHeaders({ "Idempotency-Key": idempotencyKey })); }
+  markOwnerChatReceipts(id: string, branchId: string, messageIds: string[], status: "delivered" | "read"): Promise<OwnerChatReceiptResponse> { return this.post(`/owner-console/operations/chats/${encodeURIComponent(id)}/receipts`, { branchId, messageIds, status }); }
   administrationBranches(): Promise<OwnerBranchCatalogue> { return this.get("/owner-console/administration/branches"); }
   createAdministrationBranch(payload: OwnerBranchWrite): Promise<OwnerBranchMutation> { return this.post("/owner-console/administration/branches", payload); }
   updateAdministrationBranch(id: string, payload: OwnerBranchWrite): Promise<OwnerBranchMutation> { return this.patch(`/owner-console/administration/branches/${encodeURIComponent(id)}`, payload); }
