@@ -38,6 +38,15 @@
 :host-context(html[data-staff-theme="dark"]) .detail-backdrop,:host-context(html[data-staff-theme="dark"]) .drawer-backdrop{background:var(--staff-overlay)}
 :host-context(html[data-staff-theme="dark"]) .detail-drawer{box-shadow:var(--staff-shadow-elevated)}
 
+/* Pull-to-refresh indicator — reused by AuraPullRefresh directive */
+.aura-pull-refresh{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;width:100%;height:0;overflow:hidden;opacity:0;pointer-events:none;transition:height 180ms ease,opacity 180ms ease}
+.aura-pull-refresh.visible{pointer-events:auto}
+.aura-pull-refresh i{display:block;width:22px;height:22px;border:2.5px solid var(--staff-border);border-top-color:var(--staff-primary);border-radius:50%;transition:transform 180ms ease}
+.aura-pull-refresh.spinning i{animation:aura-pull-spin .7s linear infinite}
+.aura-pull-refresh small{color:var(--staff-text-secondary);font-size:.72rem;font-weight:650;white-space:nowrap}
+@keyframes aura-pull-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.aura-pull-refresh{transition:none}.aura-pull-refresh.spinning i{animation:none}}
+
 /* Enterprise mobile foundation: shared rhythm, density, states and touch ergonomics. */
 .page{gap:var(--staff-space-3)}
 .page-head{min-height:64px;align-items:center}

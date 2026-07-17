@@ -2175,6 +2175,8 @@ const schema = [
   )`,
   `CREATE TABLE IF NOT EXISTS campaigns (
     id TEXT PRIMARY KEY,
+    tenantId TEXT DEFAULT '${DEFAULT_TENANT_ID}',
+    branchId TEXT DEFAULT '',
     name TEXT NOT NULL,
     channel TEXT NOT NULL,
     segmentRule TEXT DEFAULT '{}',
@@ -2694,6 +2696,14 @@ function migrateTenantColumns() {
 }
 
 migrateTenantColumns();
+
+function migrateBranchColumns() {
+  for (const table of tenantScopedTables) {
+    ensureColumn(table, "branchId", "TEXT DEFAULT ''");
+  }
+}
+
+migrateBranchColumns();
 
 function migrateTenantSettingsKey() {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get();
@@ -4141,6 +4151,8 @@ export function seedDatabase() {
   seedIfEmpty("campaigns", [
     {
       id: "camp_birthday",
+      tenantId: DEFAULT_TENANT_ID,
+      branchId: "",
       name: "Birthday Glow Offer",
       channel: "WhatsApp",
       segmentRule: { occasion: "birthday", daysAhead: 7 },
@@ -4154,6 +4166,8 @@ export function seedDatabase() {
     },
     {
       id: "camp_inactive",
+      tenantId: DEFAULT_TENANT_ID,
+      branchId: "",
       name: "Inactive Client Win-back",
       channel: "SMS",
       segmentRule: { tag: "inactive", minDaysSinceVisit: 45 },

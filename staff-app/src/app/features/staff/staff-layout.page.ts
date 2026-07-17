@@ -2,6 +2,7 @@ import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, comp
 import { FormsModule } from "@angular/forms";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import { Subscription } from "rxjs";
+import { AuraPullRefresh } from "../../core/aura-pull-refresh.directive";
 import { StaffAppService, StaffEnterpriseOs, StaffWorkspacePreferences } from "../../core/staff-app.service";
 import { StaffPushService } from "../../core/staff-push.service";
 import { resolveStaffIdentity } from "./staff-role-label";
@@ -12,7 +13,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet, AuraPullRefresh],
   template: `
     <section class="staff-app-shell" [class.staff-compact]="preferences().interface.compactMode">
       <button type="button" class="drawer-backdrop" [class.open]="menuOpen()" (click)="closeMenu()" aria-label="Close menu"></button>
@@ -48,7 +49,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
         <button type="button" class="nav-logout" (click)="logout()">Logout</button>
       </aside>
 
-       <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
+       <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null" [auraPullRefresh]="refreshChildPage.bind(this)">
         <header class="staff-topbar">
            <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu" [attr.aria-expanded]="menuOpen()" #menuButton><span></span><span></span><span></span></button>
            <a class="staff-identity" routerLink="/staff/profile" [attr.aria-label]="'Open my profile — ' + identitySubtitle()"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div></a>
@@ -67,7 +68,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
         </header>
          <main class="staff-content">
           @if (preferences().defaults.staffHints && staffHintVisible() && !isDashboard()) { <p class="staff-policy-hint"><span>Tip: use search to quickly open permitted staff tools and appointments.</span><button type="button" aria-label="Dismiss tip" (click)="dismissStaffHint()">×</button></p> }
-          <router-outlet />
+           <router-outlet />
         </main>
       </div>
 
@@ -595,6 +596,20 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     this.closeMenu();
     await this.staff.logout();
     await this.router.navigateByUrl("/staff/login");
+  }
+
+  async refreshChildPage(): Promise<void> {
+    try {
+      let route = this.router.routerState.snapshot.root;
+      while (route.firstChild) route = route.firstChild;
+      const componentType = route.component;
+      if (componentType && (this.router as any).injector) {
+        const instance = (this.router as any).injector.get(componentType, null);
+        if (instance && typeof instance.load === "function") await instance.load();
+      }
+    } catch { /* component not injectable */ }
+    window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
+    await this.loadShellData();
   }
 
   private async loadShellData() {

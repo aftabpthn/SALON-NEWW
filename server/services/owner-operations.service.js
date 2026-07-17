@@ -145,10 +145,12 @@ function marketing(access, query = {}) {
   if (search) { where.push("(name LIKE @search OR channel LIKE @search)"); params.search = `%${search}%`; }
   if (query.status) { where.push("status=@status"); params.status = text(query.status); }
   if (query.channel) { where.push("channel=@channel"); params.channel = text(query.channel); }
+  if (context.branchIds.length && query.branchId && query.branchId !== "all") { where.push("branchId=@branchId"); params.branchId = text(query.branchId); }
   const whereSql = where.join(" AND ");
   const total = Number(db.prepare(`SELECT COUNT(*) AS count FROM campaigns WHERE ${whereSql}`).get(params)?.count || 0);
-  const items = db.prepare(`SELECT id,name,channel,segmentRule,status,scheduledAt,sentCount,createdAt,updatedAt FROM campaigns WHERE ${whereSql} ORDER BY updatedAt DESC,id LIMIT @limit OFFSET @offset`).all(params).map((row) => ({ ...row, audience: jsonArray(row.segmentRule), branchId: null, branchName: "Tenant-wide", scope: "tenant-wide", sentCount: Number(row.sentCount || 0) }));
-  return response(items, total, pageInfo, { partial: text(query.branchId || "all") !== "all", unavailableSources: ["authoritative campaign branch mapping", "delivery failure and engagement counts"], scopeNote: "Legacy marketing records are tenant-wide." });
+  const names = branchMap(context);
+  const items = db.prepare(`SELECT id,name,channel,segmentRule,status,scheduledAt,sentCount,branchId,createdAt,updatedAt FROM campaigns WHERE ${whereSql} ORDER BY updatedAt DESC,id LIMIT @limit OFFSET @offset`).all(params).map((row) => ({ ...row, audience: jsonArray(row.segmentRule), branchName: row.branchId ? (names.get(row.branchId) || "Assigned branch") : "Tenant-wide", scope: row.branchId ? "branch" : "tenant-wide", sentCount: Number(row.sentCount || 0) }));
+  return response(items, total, pageInfo, { partial: text(query.branchId || "all") !== "all", unavailableSources: ["delivery failure and engagement counts"], scopeNote: "Campaigns can be tenant-wide or branch-scoped." });
 }
 
 function notificationCategory(row) {

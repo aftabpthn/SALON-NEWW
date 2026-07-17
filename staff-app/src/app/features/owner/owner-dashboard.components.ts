@@ -23,7 +23,7 @@ export class OwnerStatusBadgeComponent {
   imports: [DecimalPipe, PaiseInrPipe],
   template: `
     <button type="button" class="card" [attr.data-trend]="metric().trend" [disabled]="!metric().availability.available" (click)="activate.emit()" [attr.aria-label]="label() + ', ' + valueLabel() + (metric().availability.available ? '. Open details' : '')">
-      <span class="top"><span class="label">{{ label() }}</span><span class="arrow" aria-hidden="true">→</span></span>
+      <span class="top"><span class="label">{{ label() }}</span></span>
       @if (metric().availability.available && metric().current !== null) {
         <strong>{{ metric().unit === 'paise' ? (metric().current | paiseInr) : (metric().current | number:'1.0-0') }}</strong>
         <span class="comparison">
@@ -68,7 +68,6 @@ export class OwnerKpiCardComponent {
       <span class="item-main"><strong>{{ title() }}</strong><span>{{ meta() }}</span></span>
       @if (value()) { <b>{{ value() }}</b> }
       <owner-status-badge [label]="badge()" [tone]="tone()" />
-      <span class="item-arrow" aria-hidden="true">→</span>
     </button>
   `,
   styles: [`

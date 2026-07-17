@@ -3,6 +3,7 @@ import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, comp
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import { Subscription } from "rxjs";
+import { AuraPullRefresh } from "../../core/aura-pull-refresh.directive";
 import { OwnerAppService, OwnerRecord } from "./owner-app.service";
 import { OwnerContextService, OwnerPeriod } from "./owner-context.service";
 
@@ -95,12 +96,12 @@ export class OwnerLoginPage implements OnInit {
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet, AuraPullRefresh],
   template: `
     <section class="owner-shell" [class.owner-compact]="context.compactMode()">
       <aside class="owner-sidebar owner-desktop-sidebar" [class.is-collapsed]="sidebarCollapsed()" [attr.inert]="overlay() ? '' : null" aria-label="Owner navigation">
         <div class="owner-brand"><span>A</span><div><strong>{{ context.workspaceName() }}</strong><small>Owner office</small></div></div>
-        <button class="owner-collapse" type="button" (click)="toggleSidebar()" [attr.aria-label]="sidebarCollapsed() ? 'Expand owner sidebar' : 'Collapse owner sidebar'" [attr.aria-expanded]="!sidebarCollapsed()">{{ sidebarCollapsed() ? '›' : '‹' }}</button>
+        <button class="owner-collapse" type="button" (click)="toggleSidebar()" [attr.aria-label]="sidebarCollapsed() ? 'Expand owner sidebar' : 'Collapse owner sidebar'" [attr.aria-expanded]="!sidebarCollapsed()"></button>
         <nav aria-label="Owner sections">
           @for (group of navGroups(); track group) {
             <p>{{ group }}</p>
@@ -115,7 +116,7 @@ export class OwnerLoginPage implements OnInit {
         </nav>
         <div class="owner-side-footer"><span><i></i> Owner access</span><small>{{ context.workspaceName() }}</small></div>
       </aside>
-      <div class="owner-main owner-shell-frame" [attr.inert]="overlay() ? '' : null">
+      <div class="owner-main owner-shell-frame" [attr.inert]="overlay() ? '' : null" [auraPullRefresh]="refreshChildPage.bind(this)">
         <header class="owner-topbar">
           <button type="button" class="owner-menu" (click)="openOverlay('navigation', $event)" aria-label="Open owner navigation"><span></span><span></span><span></span></button>
           <div class="owner-location"><span>Owner workspace</span><strong>{{ currentLabel() }}</strong></div>
@@ -327,6 +328,19 @@ export class OwnerLayoutPage implements OnInit, OnDestroy {
     if (index >= 0 && next) void this.router.navigateByUrl(next);
   }
   async logout(): Promise<void> { this.closeOverlay(false); await this.owner.logout(); await this.router.navigateByUrl("/owner/login"); }
+
+  async refreshChildPage(): Promise<void> {
+    try {
+      let route = this.router.routerState.snapshot.root;
+      while (route.firstChild) route = route.firstChild;
+      const componentType = route.component;
+      if (componentType && (this.router as any).injector) {
+        const instance = (this.router as any).injector.get(componentType, null);
+        if (instance && typeof instance.load === "function") await instance.load();
+      }
+    } catch { /* component not injectable */ }
+    this.context.markSuccessfulRefresh();
+  }
 }
 
 @Component({
@@ -377,7 +391,7 @@ export class OwnerLayoutPage implements OnInit, OnDestroy {
         }
         @if (['settings','branches','roles-permissions'].includes(module())) { <section class="owner-capability-note"><div><strong>Review-only in Owner Mobile</strong><p>{{ module() === 'settings' ? 'The general settings read contract is available, but this isolated owner section does not have a validated save form for every nested setting.' : module() === 'branches' ? 'Branch records are available here; branch creation and editing remain unavailable in this owner surface.' : 'Effective users and permissions are visible. Role and user mutations remain unavailable in this owner surface.' }}</p></div><button type="button" disabled>Editing unavailable</button></section> }
         @if (module() === 'dashboard') {
-          <section class="owner-paths" aria-label="Owner quick actions"><div class="owner-section-head"><div><p class="owner-kicker">Quick actions</p><h2>Open an owner module</h2></div></div><div>@for (item of navLinks; track item.path) { <a [routerLink]="item.path"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="item.icon"></path></svg><span><strong>{{ item.label }}</strong><small>View live records</small></span><b aria-hidden="true">→</b></a> }</div></section>
+          <section class="owner-paths" aria-label="Owner quick actions"><div class="owner-section-head"><div><p class="owner-kicker">Quick actions</p><h2>Open an owner module</h2></div></div><div>@for (item of navLinks; track item.path) { <a [routerLink]="item.path"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="item.icon"></path></svg><span><strong>{{ item.label }}</strong><small>View live records</small></span></a> }</div></section>
         }
       }
     </article>
