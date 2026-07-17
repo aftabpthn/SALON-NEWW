@@ -27,16 +27,28 @@ const MIGRATION_COLUMNS = [
 
 const RECOVERY_COLUMNS = {
   services: [
-    ["membershipPricePaise", "INTEGER NOT NULL DEFAULT 0"]
+    ["membershipPricePaise", "INTEGER NOT NULL DEFAULT 0"],
+    ["membershipPriceRecorded", "INTEGER NOT NULL DEFAULT 0"]
   ],
   products: [
     ["legacyIssueQuantity", "REAL NOT NULL DEFAULT 0"],
     ["legacyIssueRecorded", "INTEGER NOT NULL DEFAULT 0"],
+    ["sourceQrCode", "TEXT NOT NULL DEFAULT ''"],
     ["qrCode", "TEXT NOT NULL DEFAULT ''"]
   ],
   memberships: [
     ["soldByStaffId", "TEXT NOT NULL DEFAULT ''"],
     ["soldByStaffName", "TEXT NOT NULL DEFAULT ''"]
+  ],
+  sales: [
+    ["recoveryDuplicateOf", "TEXT NOT NULL DEFAULT ''"],
+    ["recoveryOriginalTotalPaise", "INTEGER NOT NULL DEFAULT 0"],
+    ["recoveryVoidReason", "TEXT NOT NULL DEFAULT ''"]
+  ],
+  invoices: [
+    ["recoveryDuplicateOf", "TEXT NOT NULL DEFAULT ''"],
+    ["recoveryOriginalTotalPaise", "INTEGER NOT NULL DEFAULT 0"],
+    ["recoveryVoidReason", "TEXT NOT NULL DEFAULT ''"]
   ],
   gift_cards: [
     ["branchId", "TEXT NOT NULL DEFAULT ''"],
@@ -119,5 +131,27 @@ export function ensureMigrationTargetMetadataSchema() {
   }
   db.prepare("CREATE INDEX IF NOT EXISTS idx_gift_cards_recovery_source ON gift_cards (tenantId, branchId, originalRecordId)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_products_qr_code ON products (tenantId, branchId, qrCode)").run();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS client_communication_consents (
+      id TEXT PRIMARY KEY,
+      tenantId TEXT NOT NULL,
+      branchId TEXT NOT NULL,
+      clientId TEXT NOT NULL,
+      sourceSystem TEXT NOT NULL DEFAULT '',
+      sourceRecordId TEXT NOT NULL DEFAULT '',
+      transactionalSms INTEGER NOT NULL DEFAULT 0,
+      promotionalSms INTEGER NOT NULL DEFAULT 0,
+      transactionalEmail INTEGER NOT NULL DEFAULT 0,
+      promotionalEmail INTEGER NOT NULL DEFAULT 0,
+      transactionalWhatsapp INTEGER NOT NULL DEFAULT 0,
+      promotionalWhatsapp INTEGER NOT NULL DEFAULT 0,
+      raw TEXT NOT NULL DEFAULT '{}',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      UNIQUE(tenantId, branchId, sourceSystem, sourceRecordId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_communication_consents_client
+      ON client_communication_consents (tenantId, branchId, clientId);
+  `);
   ensured = true;
 }

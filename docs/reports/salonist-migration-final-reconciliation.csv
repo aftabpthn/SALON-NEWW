@@ -1,0 +1,67 @@
+SUMMARY
+Metric,Value
+generatedAt,2026-07-16T14:00:09.718Z
+tenantId,tenant_salonist
+branchId,branch_363bdc6b-2
+source,16980
+imported,13270
+autoFixed,3706
+needsReview,4
+failed,0
+silentSkipped,0
+sheetEquationsPassed,true
+financialPassed,true
+customerPassed,true
+inventoryPassed,true
+businessFlowsPassed,true
+
+SHEET RECONCILIATION
+Workbook,Sheet,Source Rows,Imported,Auto-fixed,Needs Review,Failed,Equation Match
+DINGG DATA TO SALONIST.xlsx,clint ,4109,4105,3,1,0,PASS
+DINGG DATA TO SALONIST.xlsx,clint unpadie,43,39,4,0,0,PASS
+DINGG DATA TO SALONIST.xlsx,invoice,716,713,3,0,0,PASS
+DINGG EXCEL.xlsx,Miscellaneous,6,6,0,0,0,PASS
+DINGG EXCEL.xlsx,Staff,12,12,0,0,0,PASS
+DINGG EXCEL.xlsx,Services,377,376,1,0,0,PASS
+DINGG EXCEL.xlsx,Products,1513,1513,0,0,0,PASS
+DINGG EXCEL.xlsx,Customers,3559,22,3537,0,0,PASS
+DINGG EXCEL.xlsx,Service History,6218,6062,156,0,0,PASS
+DINGG EXCEL.xlsx,Membership,414,414,0,0,0,PASS
+DINGG EXCEL.xlsx,Auto Consumption,0,0,0,0,0,PASS
+DINGG EXCEL.xlsx,Daily reports ,4,0,1,3,0,PASS
+DINGG EXCEL.xlsx,Prepaid  Voucher,1,0,1,0,0,PASS
+DINGG EXCEL.xlsx,Package Balance,8,8,0,0,0,PASS
+
+FINANCIAL RECONCILIATION
+Metric,Excel,Database,Difference,Unit,Status
+Total Sales,6432149.24,6432149.24,0,INR,PASS
+Total Payments,1635703,1635703,0,INR,PASS
+Outstanding Balance,89162.02,89162.02,0,INR,PASS
+Membership Sales,221085,221085,0,INR,PASS
+Gift Card Balance,8558,8558,0,INR,PASS
+
+CUSTOMER RECONCILIATION
+Metric,Excel,Database,Difference,Unit,Status,Note
+Total Customers,4131,4131,0,records,PASS,Includes 3 customers referenced only by history/membership sources
+Active Memberships,423,423,0,records,PASS,
+Loyalty Points,0,0,0,points,PASS,
+Wallet Balance,0,0,0,INR,PASS,
+Visit Count,22597,22597,0,visits,PASS,
+
+INVENTORY RECONCILIATION
+Metric,Excel,Database,Difference,Unit,Status
+Opening Stock,2090,2090,0,units,PASS
+Current Stock,2090,2090,0,units,PASS
+Product Issues,792,792,0,units,PASS
+Purchase Entries,0,0,0,records,PASS
+Consumption,0,0,0,records,PASS
+
+BUSINESS FLOW TESTS
+Flow,Status,Evidence
+Customer opens,PASS,Customer 360 opened recovered WALIKIN
+Invoice opens,PASS,Billing flow opened recovered zero-total invoice with tenant/branch aliases
+Membership redeem,PASS,Package credits 5 to 4 in rollback test; state restored
+Gift card redeem,PASS,825800 to 825799 paise in rollback test; state restored
+QR code scan,PASS,5/5 unique system QR codes resolved exact products in both scan services
+Product issue history,PASS,Historical issue visible in product in/out report
+Service history timeline,PASS,6218/6218 source rows stored; busiest client 146/146 timeline events visible

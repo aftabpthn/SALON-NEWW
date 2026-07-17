@@ -173,6 +173,7 @@ import { localizationPreferenceRouter } from "./routes/localization-preference.r
 import { liveConsultationRouter } from "./routes/live-consultation.routes.js";
 import { membershipEnterpriseRouter } from "./routes/membership-enterprise.routes.js";
 import { migrationRouter } from "./routes/migration.routes.js";
+import { migratedDataVisibilityRouter } from "./routes/migrated-data-visibility.routes.js";
 import { migrationService } from "./services/migration.service.js";
 import { mobileRouter } from "./routes/mobile.routes.js";
 import { offlineRouter } from "./routes/offline.routes.js";
@@ -528,6 +529,7 @@ export function createApp() {
   app.use("/api/v1", authenticateJwt(), deploymentRouter);
   app.use("/api/v1", authenticateJwt(), ecosystemRouter);
   app.use("/api/v1", authenticateJwt(), analyticsRouter);
+  app.use(["/api/v1", "/api"], authenticateJwt(), migratedDataVisibilityRouter);
   app.use("/api/v1", authenticateJwt(), migrationRouter);
   app.use("/api/v1", authenticateJwt(), aiRouter);
   app.use("/api/v1", authenticateJwt(), aiMarketingRouter);

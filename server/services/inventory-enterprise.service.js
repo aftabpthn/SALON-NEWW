@@ -2546,8 +2546,9 @@ export class InventoryEnterpriseService {
     if (!branchId || !code) throw badRequest("branchId and code are required");
     assertBranch(access, branchId);
     const lowered = code.toLowerCase();
-    const product = repositories.products.list({ branchId, limit: 10000 }, scope(access, branchId))
-      .find((item) => [item.sku, item.barcode, item.name].some((value) => String(value || "").toLowerCase() === lowered || String(value || "").toLowerCase().includes(lowered)));
+    const products = repositories.products.list({ branchId, limit: 10000 }, scope(access, branchId));
+    const product = products.find((item) => [item.qrCode, item.barcode, item.sku].some((value) => String(value || "").toLowerCase() === lowered))
+      || products.find((item) => String(item.name || "").toLowerCase() === lowered);
     const event = insertSnake("barcode_scan_events", {
       id: makeId("scan"),
       tenant_id: access.tenantId,

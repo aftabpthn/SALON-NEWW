@@ -79,6 +79,7 @@ export class DataMigrationStore {
   message = signal('');
   summary = signal<MigrationSummary | null>(null);
   previewRows = signal<any[]>([]);
+  persistedNeedsReviewRows = signal<any[]>([]);
   jobs = signal<any[]>([]);
   onboarding = signal<any | null>(null);
   adapters = signal<Record<string, SourceAdapter>>({});
@@ -246,7 +247,31 @@ export class DataMigrationStore {
     ];
   });
 
-  constructor(private readonly api: ApiService) {}
+  constructor(private readonly api: ApiService) {
+    void this.loadPersistedNeedsReview();
+  }
+
+  async loadPersistedNeedsReview(page = 1): Promise<void> {
+    try {
+      const response = await firstValueFrom(this.api.list<{ rows?: any[]; total?: number }>('migration/large-jobs/migrec_salonist_missing_v1/staging-rows', { page, limit: 25, status: 'needs_review' }));
+      const persisted = (response.rows || []).map((row) => ({
+        ...row,
+        entity: row.resource || 'record',
+        status: 'warning',
+        message: [...(Array.isArray(row.warnings) ? row.warnings : []), ...(Array.isArray(row.errors) ? row.errors : [])]
+          .map((item) => typeof item === 'string' ? item : item?.message || JSON.stringify(item))
+          .filter(Boolean)
+          .join(' · ') || `Persisted migration row status: ${row.status || 'needs review'}`,
+        persistedStatus: row.status || 'pending',
+        persistedNeedsReview: true
+      }));
+      this.persistedNeedsReviewRows.set(persisted);
+      const current = this.previewRows().filter((row) => !row.persistedNeedsReview);
+      this.previewRows.set([...persisted, ...current]);
+    } catch {
+      this.persistedNeedsReviewRows.set([]);
+    }
+  }
 
   ngOnInit(): void {
     this.loadIntelligence();

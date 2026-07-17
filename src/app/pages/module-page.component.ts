@@ -57,7 +57,7 @@ type ServiceProductLockDraft = {
           </div>
           <label class="zenoti-search">
             <span>{{ zenotiSearchLabel() }}</span>
-            <input [(ngModel)]="query" [placeholder]="zenotiSearchPlaceholder()" />
+            <input [(ngModel)]="query" (ngModelChange)="onQueryChange($event)" [placeholder]="zenotiSearchPlaceholder()" />
           </label>
         </div>
 
@@ -134,7 +134,7 @@ type ServiceProductLockDraft = {
         <div class="table-toolbar">
           <label class="search-field">
             <span>Search</span>
-            <input [(ngModel)]="query" placeholder="Search records" />
+            <input [(ngModel)]="query" (ngModelChange)="onQueryChange($event)" placeholder="Search records" />
           </label>
           <div class="service-gst-tools" *ngIf="isServicesPage()">
             <label class="field compact">
@@ -216,6 +216,14 @@ type ServiceProductLockDraft = {
                   </tbody>
                 </table>
               </div>
+              <footer class="service-pager" aria-label="Services pagination">
+                <span>Showing {{ servicePageStart() }}-{{ servicePageEnd() }} of {{ serviceTotal }}</span>
+                <div>
+                  <button class="ghost-button mini" type="button" (click)="changeServicePage(-1)" [disabled]="servicePage <= 1 || loading">Previous</button>
+                  <span>Page {{ servicePage }} of {{ servicePageCount() }}</span>
+                  <button class="ghost-button mini" type="button" (click)="changeServicePage(1)" [disabled]="servicePage >= servicePageCount() || loading">Next</button>
+                </div>
+              </footer>
             </main>
           </div>
         </ng-container>
@@ -253,6 +261,9 @@ type ServiceProductLockDraft = {
       gap: 10px;
       margin-left: auto;
     }
+
+    .service-pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 14px; color: var(--muted); font-size: .86rem; }
+    .service-pager div { display: flex; align-items: center; gap: 10px; }
 
     .service-product-lock {
       grid-column: 1 / -1;
@@ -705,10 +716,14 @@ export class ModulePageComponent implements OnInit, OnDestroy {
   activeGstRate = '';
   bulkGstRate = 18;
   actionMessage = '';
+  servicePage = 1;
+  serviceLimit = 50;
+  serviceTotal = 0;
   serviceProductLocks: ServiceProductLockDraft[] = [];
   readonly serviceUnits = ['ml', 'gm', 'g', 'kg', 'l', 'pcs', 'tube', 'pack', 'box', 'nos'];
   form: UntypedFormGroup = this.fb.group({});
   private readonly subscription = new Subscription();
+  private queryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly api: ApiService,
@@ -729,6 +744,7 @@ export class ModulePageComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscription.unsubscribe();
+    if (this.queryTimer) clearTimeout(this.queryTimer);
   }
 
   get viewRows(): ApiRecord[] {
@@ -1033,9 +1049,15 @@ export class ModulePageComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.error = '';
     if (this.isServicesPage()) this.loadServiceProducts();
-    this.api.list<ApiRecord[]>(this.config.entity, { branchId: this.api.selectedBranchId() }).subscribe({
-      next: (rows) => {
-        this.rows = rows || [];
+    const resource = this.isServicesPage() ? 'visibility/services' : this.config.entity;
+    const params = this.isServicesPage()
+      ? { branchId: this.api.selectedBranchId(), page: this.servicePage, limit: this.serviceLimit, q: this.query.trim() }
+      : { branchId: this.api.selectedBranchId() };
+    this.api.list<ApiRecord[] | { rows: ApiRecord[]; total: number }>(resource, params).subscribe({
+      next: (response) => {
+        const paged = !Array.isArray(response) ? response : null;
+        this.rows = paged?.rows || response as ApiRecord[] || [];
+        if (paged) this.serviceTotal = Number(paged.total || 0);
         this.loading = false;
       },
       error: (error) => {
@@ -1044,6 +1066,27 @@ export class ModulePageComponent implements OnInit, OnDestroy {
       }
     });
   }
+
+  onQueryChange(value: string): void {
+    this.query = value;
+    if (!this.isServicesPage()) return;
+    if (this.queryTimer) clearTimeout(this.queryTimer);
+    this.queryTimer = setTimeout(() => {
+      this.servicePage = 1;
+      this.load();
+    }, 300);
+  }
+
+  changeServicePage(delta: number): void {
+    const next = Math.min(this.servicePageCount(), Math.max(1, this.servicePage + delta));
+    if (next === this.servicePage) return;
+    this.servicePage = next;
+    this.load();
+  }
+
+  servicePageCount(): number { return Math.max(1, Math.ceil(this.serviceTotal / this.serviceLimit)); }
+  servicePageStart(): number { return this.serviceTotal ? (this.servicePage - 1) * this.serviceLimit + 1 : 0; }
+  servicePageEnd(): number { return Math.min(this.serviceTotal, (this.servicePage - 1) * this.serviceLimit + this.rows.length); }
 
   private roleScopedRows(rows: ApiRecord[]): ApiRecord[] {
     if (this.config?.entity !== 'notifications') return rows;
@@ -1121,6 +1164,10 @@ export class ModulePageComponent implements OnInit, OnDestroy {
   value(row: ApiRecord, column: ColumnConfig): string {
     const cell = row[column.key];
     if (this.isServicesPage() && column.key === 'gstRate') return this.formatGstRate(cell);
+    if (this.isServicesPage() && column.key === 'membershipPricePaise') {
+      if (!row.membershipPriceRecorded && !Number(cell || 0)) return 'Not recorded';
+      return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(cell || 0) / 100);
+    }
     if (column.type === 'currency') return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(cell || 0));
     if (column.type === 'date' && cell) return new Intl.DateTimeFormat('en-IN').format(new Date(cell));
     if (column.type === 'json') return JSON.stringify(cell);

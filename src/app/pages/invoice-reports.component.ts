@@ -1027,8 +1027,8 @@ export class InvoiceReportsComponent implements OnInit {
   readonly serviceTrendOptions = computed(() => this.uniqueServiceTrendOption('serviceName'));
   readonly serviceGstRateOptions = computed(() => this.uniqueServiceTrendOption('gstRate', (value) => `${this.money(Number(value || 0))}%`));
 
-  from = this.monthStart();
-  to = this.today();
+  from = '';
+  to = '';
   status = '';
   query = '';
   clientFilter = '';
@@ -1199,9 +1199,9 @@ export class InvoiceReportsComponent implements OnInit {
     this.error.set('');
     this.notice.set('');
     forkJoin({
-      invoices: this.safeList('invoices', { limit: 5000 }),
-      sales: this.safeList('sales', { limit: 5000 }),
-      payments: this.safeList('payments', { limit: 5000 }),
+      invoices: this.safeList('invoices', { limit: 10000 }),
+      sales: this.safeList('sales', { limit: 10000 }),
+      payments: this.safeList('payments', { limit: 10000 }),
       clients: this.safeList('clients', { limit: 5000 }),
       products: this.safeList('products', { limit: 10000 }),
       staff: this.safeList('staff', { limit: 5000 }),

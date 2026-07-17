@@ -21,7 +21,7 @@ function scopedLookup(table, tenantId, code) {
   const columns = safeColumns(table);
   if (!columns.length) return null;
   const tenantColumn = columns.includes("tenant_id") ? "tenant_id" : columns.includes("tenantId") ? "tenantId" : "";
-  const candidates = ["barcode", "sku", "code", "membership_no", "package_no"].filter((column) => columns.includes(column));
+  const candidates = ["qrCode", "barcode", "sku", "code", "membership_no", "package_no"].filter((column) => columns.includes(column));
   if (!tenantColumn || !candidates.length) return null;
   const where = candidates.map((column) => `${column} = @code`).join(" OR ");
   return db.prepare(`SELECT * FROM ${table} WHERE ${tenantColumn} = @tenantId AND (${where}) LIMIT 1`).get({ tenantId, code }) || null;
@@ -147,19 +147,24 @@ export class PrintDeviceService {
     const id = makeId("bscan");
     db.prepare(
       `INSERT INTO barcode_scan_events
-        (id, tenant_id, branch_id, terminal_id, scanned_code, resolved_entity_type, resolved_entity_id, status, created_at)
+        (id, tenant_id, branch_id, terminal_id, scanned_code, resolved_entity_type, resolved_entity_id,
+         code, scan_type, matched_product_id, result_json, status, created_at)
        VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
-    ).run(
+        (@id, @tenantId, @branchId, @terminalId, @scannedCode, @resolvedType, @resolvedId,
+         @code, 'lookup', @matchedProductId, @resultJson, @status, CURRENT_TIMESTAMP)`
+    ).run({
       id,
-      access.tenantId,
-      payload.branch_id || payload.branchId || access.branchId || "",
-      payload.terminal_id || payload.terminalId || "",
+      tenantId: access.tenantId,
+      branchId: payload.branch_id || payload.branchId || access.branchId || "",
+      terminalId: payload.terminal_id || payload.terminalId || "",
+      scannedCode: code,
+      resolvedType: resolved?.type || "",
+      resolvedId: resolved?.id || "",
       code,
-      resolved?.type || "",
-      resolved?.id || "",
+      matchedProductId: resolved?.type === "product" ? resolved.id : "",
+      resultJson: JSON.stringify({ matched: Boolean(resolved), type: resolved?.type || "", id: resolved?.id || "" }),
       status
-    );
+    });
     return { status, resolved, scanId: id };
   }
 }

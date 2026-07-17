@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError } from 'rxjs';
+import { catchError, forkJoin } from 'rxjs';
 import { AuthSessionService } from '../core/auth-session.service';
 import { grantsAllow, staticGrantsForRole } from '../core/permission.guard';
 import { routePermissionForPath } from '../core/access-rules';
@@ -57,6 +57,7 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
               <div><span>Price</span><strong>{{ membershipProfile().price | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Plan type</span><strong>{{ label(wallet().activeMembership?.planType || wallet().memberships?.[0]?.planType || currentPlan().benefitRules?.planType) }}</strong></div>
               <div><span>Business label</span><strong>{{ wallet().businessLabel || wallet().memberships?.[0]?.businessLabel || '-' }}</strong></div>
+              <div><span>Sold by</span><strong>{{ membership().soldByStaffName || membership().soldByStaffId || 'Not recorded' }}</strong></div>
             </div>
           </section>
 
@@ -251,13 +252,14 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
           <div class="section-title"><h2>Sold client memberships</h2></div>
           <div class="table-wrap inner-table-wrap">
             <table>
-              <thead><tr><th>Client</th><th>Plan</th><th>Status</th><th>Credits</th><th>Expiry</th><th>Price</th><th>360</th></tr></thead>
+              <thead><tr><th>Client</th><th>Plan</th><th>Status</th><th>Credits</th><th>Sold by</th><th>Expiry</th><th>Price</th><th>360</th></tr></thead>
               <tbody>
                 <tr *ngFor="let membership of memberships()">
-                  <td>{{ membership.clientId }}</td>
+                  <td>{{ clientLabel(membership.clientId, membership.clientName) }}</td>
                   <td>{{ membership.planName }}</td>
                   <td><span class="badge">{{ membership.status }}</span></td>
                   <td>{{ membership.creditsRemaining || 0 }} / {{ membership.planCredits || 0 }}</td>
+                  <td>{{ membership.soldByStaffName || membership.soldByStaffId || 'Not recorded' }}</td>
                   <td>{{ membership.validityDate || '-' }}</td>
                   <td>{{ membership.price | auraMoney:'1.0-0' }}</td>
                   <td><a [routerLink]="['/memberships', membership.id]">Open</a></td>
@@ -380,6 +382,7 @@ export class Membership360Component implements OnInit {
   readonly data = signal<ApiRecord | null>(null);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly clientLabels = signal<ApiRecord[]>([]);
 
   constructor(
     private readonly api: ApiService,
@@ -399,11 +402,15 @@ export class Membership360Component implements OnInit {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id') || '';
-    this.api.list<ApiRecord>(`membership-enterprise/memberships/${id}/360`).pipe(
-      catchError(() => this.api.list<ApiRecord>(`membership-enterprise/plans/${id}/360`))
-    ).subscribe({
-      next: (data) => {
+    forkJoin({
+      data: this.api.list<ApiRecord>(`membership-enterprise/memberships/${id}/360`).pipe(
+        catchError(() => this.api.list<ApiRecord>(`membership-enterprise/plans/${id}/360`))
+      ),
+      labels: this.api.list<ApiRecord[]>('visibility/membership-client-labels')
+    }).subscribe({
+      next: ({ data, labels }) => {
         this.data.set(data);
+        this.clientLabels.set(labels || []);
         this.loading.set(false);
       },
       error: (error) => {
@@ -438,6 +445,15 @@ export class Membership360Component implements OnInit {
 
   wallet(): ApiRecord {
     return (this.data()?.['wallet'] as ApiRecord) || {};
+  }
+
+  clientLabel(clientId: unknown, fallback: unknown = ''): string {
+    const id = String(clientId || '');
+    return String(fallback || this.clientLabels().find((client) => String(client.id) === id)?.name || id || 'Client');
+  }
+
+  membership(): ApiRecord {
+    return (this.data()?.['membership'] as ApiRecord) || {};
   }
 
   paymentHistory(): ApiRecord[] {

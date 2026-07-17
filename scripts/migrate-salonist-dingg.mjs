@@ -282,7 +282,7 @@ const datasets = [
 ].filter(([, rows]) => rows.length);
 
 function payloadFor(resource, rows) {
-  const mapping = Object.fromEntries(Object.keys(rows[0] || {}).map((key) => [key, key]));
+  const mapping = Object.fromEntries(Array.from(new Set(rows.flatMap((row) => Object.keys(row || {})))).map((key) => [key, key]));
   return {
     rows,
     resource,

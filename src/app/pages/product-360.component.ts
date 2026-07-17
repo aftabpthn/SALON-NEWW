@@ -45,6 +45,9 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
               <div><span>Branch</span><strong>{{ branchName(item.branchId) }}</strong></div>
               <div><span>Unit cost</span><strong>{{ (item.unitCost || 0) | auraMoney:'1.0-0' }}</strong></div>
               <div><span>Selling price</span><strong>{{ (item.price || 0) | auraMoney:'1.0-0' }}</strong></div>
+              <div><span>Legacy issue quantity</span><strong>{{ item.legacyIssueRecorded ? (item.legacyIssueQuantity || 0) : 'Not recorded' }}</strong></div>
+              <div><span>Source QR</span><strong class="code-value">{{ item.sourceQrCode || 'Not recorded' }}</strong></div>
+              <div><span>System QR</span><strong class="code-value">{{ item.qrCode || item.sku || 'Not generated' }}</strong></div>
             </div>
           </section>
 
@@ -101,15 +104,18 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
               <div><span>POS sold</span><strong>{{ productSaleUsage(item.id) }}</strong></div>
               <div><span>Service used</span><strong>{{ productServiceUsage(item.id) }}</strong></div>
               <div><span>Waste/write-off</span><strong>{{ wasteUsage(item.id) }}</strong></div>
-              <div><span>Movement rows</span><strong>{{ productMovements().length }}</strong></div>
+               <div><span>Movement rows</span><strong>{{ movementMeta().total }}</strong></div>
             </div>
             <div class="timeline mini">
-              <article *ngFor="let row of productMovements().slice(0, 8)">
+               <article *ngFor="let row of productMovements()">
                 <strong>{{ row.type }}</strong>
                 <span>{{ row.quantity }} units · {{ row.reason || row.referenceType || 'movement' }}</span>
                 <small>{{ row.createdAt | auraDate:'date' }}</small>
-              </article>
-            </div>
+               </article>
+             </div>
+             <button class="ghost-button mini movement-more" type="button" *ngIf="movementMeta().hasMore" (click)="loadMoreMovements()" [disabled]="movementLoading()">
+               {{ movementLoading() ? 'Loading...' : 'Load older movements' }}
+             </button>
           </section>
         </div>
 
@@ -341,6 +347,9 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
       margin-top: 3px;
     }
 
+    .code-value { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .86rem; }
+    .movement-more { margin-top: 10px; }
+
     .control-ledger-panel {
       display: grid;
       gap: 14px;
@@ -527,6 +536,8 @@ export class Product360Component implements OnInit {
   readonly intelligence = signal<ApiRecord | null>(null);
   readonly productConsumeReport = signal<ApiRecord | null>(null);
   readonly backbarProductReport = signal<ApiRecord | null>(null);
+  readonly movementMeta = signal({ total: 0, page: 1, limit: 30, hasMore: false });
+  readonly movementLoading = signal(false);
   readonly loading = signal(true);
   readonly error = signal('');
 
@@ -576,19 +587,20 @@ export class Product360Component implements OnInit {
       firstValueFrom(this.api.list<ApiRecord[]>('branches', { limit: 1000 })),
       firstValueFrom(this.api.list<ApiRecord[]>('suppliers', { limit: 1000 })),
       firstValueFrom(this.api.list<ApiRecord[]>('inventoryBatches', { limit: 1000 })),
-      firstValueFrom(this.api.list<ApiRecord[]>('inventory', { limit: 1000 })),
+      firstValueFrom(this.api.list<{ rows: ApiRecord[]; total: number; page: number; limit: number; hasMore: boolean }>(`visibility/products/${productId}/movements`, { page: 1, limit: 30 })),
       firstValueFrom(this.api.list<ApiRecord[]>('sales', { limit: 1000 })),
       firstValueFrom(this.api.list<ApiRecord[]>('services', { limit: 1000 })),
       firstValueFrom(this.api.list<ApiRecord>('inventory-intelligence/summary', { branchId: this.api.selectedBranchId() })),
       firstValueFrom(this.api.list<ApiRecord>(`inventory-intelligence/product-consume-report/${productId}`, { limit: 1000 })),
       firstValueFrom(this.api.list<ApiRecord>(`inventory-intelligence/backbar-products/${productId}/report`, { branchId: this.api.selectedBranchId(), limit: 200 }))
-    ]).then(([product, products, branches, suppliers, batches, transactions, sales, services, intelligence, consumeReport, backbarReport]) => {
+    ]).then(([product, products, branches, suppliers, batches, movementPage, sales, services, intelligence, consumeReport, backbarReport]) => {
       this.product.set(product);
       this.products.set(products || []);
       this.branches.set(branches || []);
       this.suppliers.set(suppliers || []);
       this.batches.set(batches || []);
-      this.transactions.set(transactions || []);
+      this.transactions.set(movementPage?.rows || []);
+      this.movementMeta.set({ total: Number(movementPage?.total || 0), page: Number(movementPage?.page || 1), limit: Number(movementPage?.limit || 30), hasMore: Boolean(movementPage?.hasMore) });
       this.sales.set(sales || []);
       this.services.set(services || []);
       this.intelligence.set(intelligence || null);
@@ -598,6 +610,24 @@ export class Product360Component implements OnInit {
     }).catch((error) => {
       this.error.set(error?.error?.error || error?.message || 'Unable to load Product 360');
       this.loading.set(false);
+    });
+  }
+
+  loadMoreMovements(): void {
+    const productId = this.product()?.id;
+    const meta = this.movementMeta();
+    if (!productId || !meta.hasMore || this.movementLoading()) return;
+    this.movementLoading.set(true);
+    this.api.list<{ rows: ApiRecord[]; total: number; page: number; limit: number; hasMore: boolean }>(`visibility/products/${productId}/movements`, { page: meta.page + 1, limit: meta.limit }).subscribe({
+      next: (page) => {
+        this.transactions.set([...this.transactions(), ...(page.rows || [])]);
+        this.movementMeta.set({ total: page.total, page: page.page, limit: page.limit, hasMore: page.hasMore });
+        this.movementLoading.set(false);
+      },
+      error: (error) => {
+        this.error.set(this.api.errorText(error, 'Unable to load product movements'));
+        this.movementLoading.set(false);
+      }
     });
   }
 

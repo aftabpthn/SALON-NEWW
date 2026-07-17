@@ -1169,6 +1169,11 @@ export class PosInvoicesComponent implements OnInit {
     this.route.queryParamMap.subscribe((params) => {
       const filter = params.get('filter');
       this.viewFilter = filter === 'received-due' || filter === 'due' || filter === 'wallet' ? filter : 'all';
+      if (this.viewFilter === 'due' || this.viewFilter === 'received-due') {
+        this.datePreset = 'all';
+        this.dateRange = rangeForPreset('all', this.dateRange);
+        this.selectedDate = '';
+      }
     });
     this.load();
   }

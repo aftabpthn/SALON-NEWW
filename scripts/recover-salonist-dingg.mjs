@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import XLSX from "xlsx";
 import { db } from "../server/db.js";
+import { balanceSheetService } from "../server/services/balance-sheet.service.js";
 import { ensureMigrationTargetMetadataSchema } from "../server/services/migration-target-metadata-schema.service.js";
 import { migrationService } from "../server/services/migration.service.js";
 
@@ -213,7 +214,11 @@ const recoveryTx = db.transaction(() => {
       .run({ gender: clean(row.Gender), updatedAt: stamp, id: target.id, tenantId: TENANT_ID });
     genderMerged++;
   }
-  result.autoFixed.customerGenderMerged = genderMerged;
+  result.autoFixed.customerGenderMerged = customersSource.filter((row) => {
+    const original = sourceClientByPhone.get(phone(row.Mobile));
+    if (!original || clean(original.Gender) || !clean(row.Gender)) return false;
+    return clean(clientByPhoneOrName(row.Mobile, row.Name)?.gender).toLowerCase() === clean(row.Gender).toLowerCase();
+  }).length;
 
   let consentUpdated = 0;
   for (const row of clientsSource) {
@@ -238,10 +243,40 @@ const recoveryTx = db.transaction(() => {
     };
     db.prepare("UPDATE clients SET communicationPreferences=@preferences, updatedAt=@updatedAt WHERE id=@id AND tenantId=@tenantId")
       .run({ preferences: JSON.stringify(preferences), updatedAt: stamp, id: target.id, tenantId: TENANT_ID });
+    db.prepare(`
+      INSERT INTO client_communication_consents (
+        id, tenantId, branchId, clientId, sourceSystem, sourceRecordId,
+        transactionalSms, promotionalSms, transactionalEmail, promotionalEmail,
+        transactionalWhatsapp, promotionalWhatsapp, raw, createdAt, updatedAt
+      ) VALUES (
+        @id, @tenantId, @branchId, @clientId, 'dingg', @sourceRecordId,
+        @transactionalSms, @promotionalSms, @transactionalEmail, @promotionalEmail,
+        @transactionalWhatsapp, @promotionalWhatsapp, @raw, @createdAt, @updatedAt
+      ) ON CONFLICT(tenantId, branchId, sourceSystem, sourceRecordId) DO UPDATE SET
+        clientId=excluded.clientId, transactionalSms=excluded.transactionalSms,
+        promotionalSms=excluded.promotionalSms, transactionalEmail=excluded.transactionalEmail,
+        promotionalEmail=excluded.promotionalEmail, transactionalWhatsapp=excluded.transactionalWhatsapp,
+        promotionalWhatsapp=excluded.promotionalWhatsapp, raw=excluded.raw, updatedAt=excluded.updatedAt
+    `).run({
+      id: idFor("consentrec", clean(row.Code) || `clint:${consentUpdated + 2}`),
+      tenantId: TENANT_ID,
+      branchId: BRANCH_ID,
+      clientId: target.id,
+      sourceRecordId: clean(row.Code) || `clint:${consentUpdated + 2}`,
+      transactionalSms: preferences.transactional.sms ? 1 : 0,
+      promotionalSms: preferences.promotional.sms ? 1 : 0,
+      transactionalEmail: preferences.transactional.email ? 1 : 0,
+      promotionalEmail: preferences.promotional.email ? 1 : 0,
+      transactionalWhatsapp: preferences.transactional.whatsapp ? 1 : 0,
+      promotionalWhatsapp: preferences.promotional.whatsapp ? 1 : 0,
+      raw: JSON.stringify(row),
+      createdAt: stamp,
+      updatedAt: stamp
+    });
     consentUpdated++;
   }
   result.imported.customerConsentPreferences = consentUpdated;
-  result.storedFields.push("clients.communicationPreferences", "clients.gender");
+  result.storedFields.push("clients.communicationPreferences", "clients.gender", "client_communication_consents.*");
 
   const serviceByName = new Map(db.prepare("SELECT * FROM services WHERE tenantId=@tenantId").all({ tenantId: TENANT_ID }).map((row) => [key(row.name), row]));
   let membershipPrices = 0;
@@ -250,7 +285,7 @@ const recoveryTx = db.transaction(() => {
     if (!target) throw new Error(`Service target missing for source row ${index + 2}`);
     const sourceExternalId = `Services:${index + 2}`;
     if (sourceExternalId === "Services:159") continue;
-    db.prepare("UPDATE services SET membershipPricePaise=@price, updatedAt=@updatedAt WHERE id=@id AND tenantId=@tenantId")
+    db.prepare("UPDATE services SET membershipPricePaise=@price, membershipPriceRecorded=1, updatedAt=@updatedAt WHERE id=@id AND tenantId=@tenantId")
       .run({ price: paise(row["membership price"]), updatedAt: stamp, id: target.id, tenantId: TENANT_ID });
     membershipPrices++;
   }
@@ -285,6 +320,11 @@ const recoveryTx = db.transaction(() => {
   const products = db.prepare("SELECT * FROM products WHERE tenantId=@tenantId AND branchId=@branchId").all({ tenantId: TENANT_ID, branchId: BRANCH_ID });
   const productBySource = new Map(products.map((row) => [clean(row.originalRecordId), row]));
   const seenProductSkus = new Set();
+  const sourceQrCounts = productSource.reduce((counts, row) => {
+    const sourceQrCode = clean(row["QR Code"]);
+    if (sourceQrCode) counts.set(sourceQrCode, (counts.get(sourceQrCode) || 0) + 1);
+    return counts;
+  }, new Map());
   let issueValues = 0, issueTransactions = 0, qrCodes = 0;
   for (const [index, row] of productSource.entries()) {
     if (!clean(row["Product Name"])) continue;
@@ -331,15 +371,18 @@ const recoveryTx = db.transaction(() => {
       }
     }
     if (clean(row["QR Code"])) {
-      db.prepare("UPDATE products SET qrCode=@qrCode, updatedAt=@updatedAt WHERE id=@id AND tenantId=@tenantId")
-        .run({ qrCode: clean(row["QR Code"]), updatedAt: stamp, id: target.id, tenantId: TENANT_ID });
+      const sourceQrCode = clean(row["QR Code"]);
+      const qrCode = sourceQrCounts.get(sourceQrCode) > 1 ? `DINGG-${rowNumber}-${sourceQrCode}` : sourceQrCode;
+      db.prepare("UPDATE products SET sourceQrCode=@sourceQrCode, qrCode=@qrCode, updatedAt=@updatedAt WHERE id=@id AND tenantId=@tenantId")
+        .run({ sourceQrCode, qrCode, updatedAt: stamp, id: target.id, tenantId: TENANT_ID });
       qrCodes++;
     }
   }
   result.imported.productIssueValues = issueValues;
   result.imported.historicalIssueTransactions = issueTransactions;
   result.imported.productQrCodes = qrCodes;
-  result.storedFields.push("products.legacyIssueQuantity", "products.legacyIssueRecorded", "products.qrCode", "inventory_transactions.quantity");
+  result.autoFixed.duplicateQrCodesDisambiguated = [...sourceQrCounts.values()].filter((count) => count > 1).reduce((sum, count) => sum + count, 0);
+  result.storedFields.push("products.legacyIssueQuantity", "products.legacyIssueRecorded", "products.sourceQrCode", "products.qrCode", "inventory_transactions.quantity");
 
   const liveStaff = db.prepare("SELECT * FROM staff WHERE tenantId=@tenantId AND branchId=@branchId").all({ tenantId: TENANT_ID, branchId: BRANCH_ID });
   const exactStaff = new Map(liveStaff.map((row) => [key(row.name), row]));
@@ -405,6 +448,56 @@ const recoveryTx = db.transaction(() => {
     WHERE tenantId=@tenantId AND originalSystem='dingg' AND originalRecordId LIKE 'Membership Staff:%'
   `).get({ tenantId: TENANT_ID }).count;
   result.storedFields.push("memberships.soldByStaffId", "memberships.soldByStaffName");
+
+  let packageCreditsRecovered = 0;
+  for (const [index, row] of rowsFor(salonist, "Package Balance").entries()) {
+    if (!clean(row.CustomerName)) continue;
+    const originalRecordId = `Package Balance:${index + 2}`;
+    const updated = db.prepare(`
+      UPDATE memberships SET
+        planCredits=@planCredits, creditsRemaining=@creditsRemaining, updatedAt=@updatedAt
+      WHERE tenantId=@tenantId AND originalSystem='dingg' AND originalRecordId=@originalRecordId
+    `).run({
+      planCredits: Math.round(amount(row["Origna Mnts"])),
+      creditsRemaining: Math.round(amount(row["Remaingi Balance"])),
+      updatedAt: stamp,
+      tenantId: TENANT_ID,
+      originalRecordId
+    });
+    if (updated.changes !== 1) throw new Error(`Package membership target missing for ${originalRecordId}`);
+    packageCreditsRecovered++;
+  }
+  result.autoFixed.packageCreditBalancesRecovered = packageCreditsRecovered;
+  result.storedFields.push("memberships.planCredits", "memberships.creditsRemaining");
+
+  const visitCountByClient = new Map();
+  for (const row of clientsSource) {
+    const target = clean(row.Code) === "SKA3668"
+      ? walikin
+      : db.prepare("SELECT * FROM clients WHERE tenantId=@tenantId AND originalSystem='dingg' AND originalRecordId=@originalRecordId LIMIT 1")
+        .get({ tenantId: TENANT_ID, originalRecordId: clean(row.Code) }) || clientByPhoneOrName(row.Mobile, row.Name);
+    if (!target) throw new Error(`Visit-count target missing for ${clean(row.Code) || clean(row.Name)}`);
+    visitCountByClient.set(target.id, (visitCountByClient.get(target.id) || 0) + Math.round(amount(row.Visit)));
+  }
+  db.prepare("UPDATE clients SET visitCount=0, updatedAt=@updatedAt WHERE tenantId=@tenantId AND originalSystem='dingg'")
+    .run({ updatedAt: stamp, tenantId: TENANT_ID });
+  const updateVisitCount = db.prepare("UPDATE clients SET visitCount=@visitCount, updatedAt=@updatedAt WHERE tenantId=@tenantId AND id=@id");
+  for (const [id, visitCount] of visitCountByClient) updateVisitCount.run({ visitCount, updatedAt: stamp, tenantId: TENANT_ID, id });
+  result.autoFixed.customerVisitCountsReconciled = clientsSource.length;
+  result.storedFields.push("clients.visitCount");
+
+  const syncInvoiceAliases = db.prepare(`
+    UPDATE invoices SET
+      tenant_id=@tenantId, branch_id=branchId, customer_id=clientId, invoice_no=invoiceNumber,
+      payment_status=status, paid_amount=paid, due_amount=balance, discount_total=discount,
+      grand_total=total, created_at=createdAt, updated_at=@updatedAt,
+      subtotal_paise=ROUND(subtotal * 100), discount_total_paise=ROUND(discount * 100),
+      tax_total_paise=ROUND(gstAmount * 100), grand_total_paise=ROUND(total * 100),
+      paid_amount_paise=ROUND(paid * 100), due_amount_paise=ROUND(balance * 100)
+    WHERE tenantId=@tenantId
+  `);
+  result.autoFixed.invoiceEnterpriseAliasesSynced = syncInvoiceAliases.run({ tenantId: TENANT_ID, updatedAt: stamp }).changes;
+  result.storedFields.push("invoices.tenant_id", "invoices.branch_id", "invoices.invoice_no", "invoices.*_paise");
 
   const miscRows = XLSX.utils.sheet_to_json(salonist.Sheets.Miscellaneous, { header: 1, defval: "", raw: true, blankrows: false });
   const misc = Object.fromEntries(miscRows.map(([label, value]) => [key(label), clean(value)]));
@@ -503,9 +596,14 @@ const zeroInvoices = unpaidInvoiceSource.map((row, index) => ({ row, rowNumber: 
 });
 
 function importRecoveryRows(resource, rows, fileName) {
-  const mapping = Object.fromEntries(Object.keys(rows[0] || {}).map((field) => [field, field]));
+  const table = resource === "invoices" ? "invoices" : "sales";
+  const missingRows = rows.filter((row) => !db.prepare(`
+    SELECT id FROM ${table} WHERE tenantId=@tenantId AND originalSystem='dingg' AND originalRecordId=@originalRecordId LIMIT 1
+  `).get({ tenantId: TENANT_ID, originalRecordId: row.originalRecordId }));
+  if (!missingRows.length) return { alreadyImported: true, summary: { importedRows: rows.length, errorRows: 0 } };
+  const mapping = Object.fromEntries(Object.keys(missingRows[0] || {}).map((field) => [field, field]));
   return migrationService.import({
-    rows,
+    rows: missingRows,
     resource,
     mapping,
     sourceSoftware: "dingg",
@@ -519,10 +617,131 @@ function importRecoveryRows(resource, rows, fileName) {
 
 const salesImport = importRecoveryRows("sales", recoveredSalesRows, "salonist-dingg-recovery-service-history.xlsx");
 const invoiceImport = importRecoveryRows("invoices", zeroInvoices, "salonist-dingg-recovery-zero-invoices.xlsx");
+
+function neutralizeDuplicateRecoveryRows() {
+  const sourceIds = [...recoveredSalesRows.map((row) => row.originalRecordId), ...zeroInvoices.map((row) => row.originalRecordId)];
+  let duplicateSalesVoided = 0;
+  let duplicateInvoicesVoided = 0;
+  let duplicateJournalsReversed = 0;
+  for (const originalRecordId of sourceIds) {
+    const sales = db.prepare(`
+      SELECT * FROM sales
+      WHERE tenantId=@tenantId AND originalSystem='dingg' AND originalRecordId=@originalRecordId
+      ORDER BY importedAt ASC, id ASC
+    `).all({ tenantId: TENANT_ID, originalRecordId });
+    const canonicalSale = sales[0];
+    for (const duplicate of sales.slice(1)) {
+      if (duplicate.status === "voided_recovery_duplicate") continue;
+      const journal = db.prepare(`
+        SELECT * FROM journalEntries
+        WHERE tenantId=@tenantId AND sourceType='migration.sale.recorded' AND sourceId=@sourceId
+        ORDER BY createdAt DESC LIMIT 1
+      `).get({ tenantId: TENANT_ID, sourceId: duplicate.id });
+      if (journal?.status === "posted") {
+        balanceSheetService.reverseJournal(journal.id, { reason: `Recovery duplicate neutralized: ${originalRecordId}` }, access);
+        duplicateJournalsReversed++;
+      }
+      db.prepare(`
+        UPDATE sales SET
+          status='voided_recovery_duplicate', recoveryDuplicateOf=@canonicalId,
+          recoveryOriginalTotalPaise=@originalTotalPaise,
+          recoveryVoidReason='Idempotency rerun duplicate; canonical source record retained',
+          subtotal=0, discount=0, gstAmount=0, total=0, updatedAt=@updatedAt
+        WHERE tenantId=@tenantId AND id=@id
+      `).run({
+        canonicalId: canonicalSale.id,
+        originalTotalPaise: paise(duplicate.total),
+        updatedAt: stamp,
+        tenantId: TENANT_ID,
+        id: duplicate.id
+      });
+      if (duplicate.clientId && duplicate.clientId !== unknownClient.id) {
+        const client = db.prepare("SELECT * FROM clients WHERE tenantId=@tenantId AND id=@id").get({ tenantId: TENANT_ID, id: duplicate.clientId });
+        if (client) {
+          let purchaseHistory;
+          try { purchaseHistory = JSON.parse(client.purchaseHistory || "[]"); } catch { purchaseHistory = []; }
+          const index = purchaseHistory.findLastIndex((item) => clean(item.date) === clean(duplicate.createdAt) && amount(item.amount) === amount(duplicate.total));
+          if (index >= 0) purchaseHistory.splice(index, 1);
+          db.prepare(`
+            UPDATE clients SET visitCount=@visitCount, purchaseHistory=@purchaseHistory, updatedAt=@updatedAt
+            WHERE tenantId=@tenantId AND id=@id
+          `).run({
+            visitCount: Math.max(0, Number(client.visitCount || 0) - 1),
+            purchaseHistory: JSON.stringify(purchaseHistory),
+            updatedAt: stamp,
+            tenantId: TENANT_ID,
+            id: client.id
+          });
+        }
+      }
+      duplicateSalesVoided++;
+    }
+
+    const invoices = db.prepare(`
+      SELECT * FROM invoices
+      WHERE tenantId=@tenantId AND originalSystem='dingg' AND originalRecordId=@originalRecordId
+      ORDER BY importedAt ASC, id ASC
+    `).all({ tenantId: TENANT_ID, originalRecordId });
+    const canonicalInvoice = invoices[0];
+    for (const duplicate of invoices.slice(1)) {
+      if (duplicate.status === "voided_recovery_duplicate") continue;
+      db.prepare(`
+        UPDATE invoices SET
+          status='voided_recovery_duplicate', recoveryDuplicateOf=@canonicalId,
+          recoveryOriginalTotalPaise=@originalTotalPaise,
+          recoveryVoidReason='Idempotency rerun duplicate; canonical source record retained',
+          subtotal=0, discount=0, gstAmount=0, total=0, paid=0, balance=0, updatedAt=@updatedAt
+        WHERE tenantId=@tenantId AND id=@id
+      `).run({
+        canonicalId: canonicalInvoice.id,
+        originalTotalPaise: paise(duplicate.total),
+        updatedAt: stamp,
+        tenantId: TENANT_ID,
+        id: duplicate.id
+      });
+      duplicateInvoicesVoided++;
+    }
+  }
+
+  const canonicalUnknownSales = db.prepare(`
+    SELECT createdAt, total FROM sales
+    WHERE tenantId=@tenantId AND clientId=@clientId AND originalSystem='dingg'
+      AND originalRecordId IN ('Service History:1322', 'Service History:1323')
+      AND status<>'voided_recovery_duplicate'
+    ORDER BY createdAt, originalRecordId
+  `).all({ tenantId: TENANT_ID, clientId: unknownClient.id });
+  db.prepare(`
+    UPDATE clients SET totalSpend=@totalSpend, visitCount=@visitCount,
+      purchaseHistory=@purchaseHistory, lastVisitAt=@lastVisitAt, updatedAt=@updatedAt
+    WHERE tenantId=@tenantId AND id=@id
+  `).run({
+    totalSpend: canonicalUnknownSales.reduce((sum, row) => sum + amount(row.total), 0),
+    visitCount: 0,
+    purchaseHistory: JSON.stringify(canonicalUnknownSales.map((row) => ({ date: row.createdAt, invoice: "Imported", amount: row.total }))),
+    lastVisitAt: canonicalUnknownSales.at(-1)?.createdAt || "",
+    updatedAt: stamp,
+    tenantId: TENANT_ID,
+    id: unknownClient.id
+  });
+  return { duplicateSalesVoided, duplicateInvoicesVoided, duplicateJournalsReversed };
+}
+
+neutralizeDuplicateRecoveryRows();
 result.imported.remainingServiceHistoryRows = Number(salesImport.summary?.importedRows || (salesImport.alreadyImported ? recoveredSalesRows.length : 0));
 result.autoFixed.blankCustomerHistoryLinkedToUnknown = recoveredSalesRows.filter((row) => row.clientId === unknownClient.id && !clean(row.clientPhone)).length;
 result.imported.zeroAmountHistoryRows = recoveredSalesRows.filter((row) => amount(row.total) === 0).length;
 result.imported.zeroTotalInvoices = Number(invoiceImport.summary?.importedRows || (invoiceImport.alreadyImported ? zeroInvoices.length : 0));
+result.autoFixed.duplicateRecoverySalesVoided = db.prepare(`
+  SELECT COUNT(*) AS count FROM sales WHERE tenantId=@tenantId AND status='voided_recovery_duplicate'
+`).get({ tenantId: TENANT_ID }).count;
+result.autoFixed.duplicateRecoveryInvoicesVoided = db.prepare(`
+  SELECT COUNT(*) AS count FROM invoices WHERE tenantId=@tenantId AND status='voided_recovery_duplicate'
+`).get({ tenantId: TENANT_ID }).count;
+result.autoFixed.duplicateRecoveryJournalsReversed = db.prepare(`
+  SELECT COUNT(*) AS count FROM journalEntries
+  WHERE tenantId=@tenantId AND status='reversed' AND sourceType='migration.sale.recorded'
+    AND sourceId IN (SELECT id FROM sales WHERE tenantId=@tenantId AND status='voided_recovery_duplicate')
+`).get({ tenantId: TENANT_ID }).count;
 
 const voucherTx = db.transaction(() => {
   const vouchers = [];
@@ -658,15 +877,24 @@ result.storedFields.push("gift_cards.initialValuePaise", "gift_cards.balancePais
 
 const scalar = (sql, params = {}) => db.prepare(sql).get({ tenantId: TENANT_ID, branchId: BRANCH_ID, ...params });
 result.verification = {
+  recoveredConsentSourceRows: scalar("SELECT COUNT(*) AS count FROM client_communication_consents WHERE tenantId=@tenantId AND branchId=@branchId AND sourceSystem='dingg'").count,
   clientsWithRecoveredConsent: scalar("SELECT COUNT(*) AS count FROM clients WHERE tenantId=@tenantId AND json_extract(communicationPreferences, '$.source')='dingg'").count,
-  servicesWithMembershipPrice: scalar("SELECT COUNT(*) AS count FROM services WHERE tenantId=@tenantId AND membershipPricePaise>0").count,
+  servicesWithMembershipPrice: scalar("SELECT COUNT(*) AS count FROM services WHERE tenantId=@tenantId AND membershipPriceRecorded=1").count,
   productsWithIssueValue: scalar("SELECT COUNT(*) AS count FROM products WHERE tenantId=@tenantId AND legacyIssueRecorded=1").count,
   historicalIssueTransactions: scalar("SELECT COUNT(*) AS count FROM inventory_transactions WHERE tenantId=@tenantId AND referenceType='migration_recovery'").count,
   productsWithQrCode: scalar("SELECT COUNT(*) AS count FROM products WHERE tenantId=@tenantId AND qrCode<>''").count,
   membershipsWithSellingStaff: scalar("SELECT COUNT(*) AS count FROM memberships WHERE tenantId=@tenantId AND soldByStaffId<>''").count,
+  packageMembershipsWithCredits: scalar("SELECT COUNT(*) AS count FROM memberships WHERE tenantId=@tenantId AND originalRecordId LIKE 'Package Balance:%' AND planCredits>0").count,
+  totalClientVisitCount: scalar("SELECT SUM(visitCount) AS value FROM clients WHERE tenantId=@tenantId").value,
+  invoicesWithEnterpriseTenant: scalar("SELECT COUNT(*) AS count FROM invoices WHERE tenantId=@tenantId AND tenant_id=@tenantId AND status<>'voided_recovery_duplicate'").count,
   recoveredGiftCards: scalar("SELECT COUNT(*) AS count FROM gift_cards WHERE tenantId=@tenantId AND importBatchId=@batchId", { batchId: RECOVERY_BATCH_ID }).count,
-  zeroAmountHistorySales: scalar("SELECT COUNT(*) AS count FROM sales WHERE tenantId=@tenantId AND originalRecordId LIKE 'Service History:%' AND total=0").count,
-  recoveredZeroInvoices: scalar("SELECT COUNT(*) AS count FROM invoices WHERE tenantId=@tenantId AND invoiceNumber IN ('V/2025-26/0451','V/2024-25/7817','V/2024-25/7709','V/2025-26/0091')").count,
+  zeroAmountHistorySales: scalar("SELECT COUNT(*) AS count FROM sales WHERE tenantId=@tenantId AND originalRecordId IN ('Service History:5969','Service History:6000','Service History:6071','Service History:6092','Service History:6093','Service History:6119','Service History:6132','Service History:6136') AND status<>'voided_recovery_duplicate'").count,
+  recoveredZeroInvoices: scalar("SELECT COUNT(*) AS count FROM invoices WHERE tenantId=@tenantId AND originalRecordId IN ('V/2025-26/0451','V/2024-25/7817','V/2024-25/7709','V/2025-26/0091') AND status<>'voided_recovery_duplicate'").count,
+  activeRecoverySaleDuplicates: scalar("SELECT COUNT(*) AS count FROM (SELECT originalRecordId FROM sales WHERE tenantId=@tenantId AND status<>'voided_recovery_duplicate' AND (originalRecordId LIKE 'Service History:%' OR originalRecordId LIKE 'V/%') GROUP BY originalRecordId HAVING COUNT(*)>1)").count,
+  activeRecoveryInvoiceDuplicates: scalar("SELECT COUNT(*) AS count FROM (SELECT originalRecordId FROM invoices WHERE tenantId=@tenantId AND status<>'voided_recovery_duplicate' AND originalRecordId IN ('V/2025-26/0451','V/2024-25/7817','V/2024-25/7709','V/2025-26/0091') GROUP BY originalRecordId HAVING COUNT(*)>1)").count,
+  voidedRecoverySales: scalar("SELECT COUNT(*) AS count FROM sales WHERE tenantId=@tenantId AND status='voided_recovery_duplicate'").count,
+  voidedRecoveryInvoices: scalar("SELECT COUNT(*) AS count FROM invoices WHERE tenantId=@tenantId AND status='voided_recovery_duplicate'").count,
+  reversedDuplicateJournals: scalar("SELECT COUNT(*) AS count FROM journalEntries WHERE tenantId=@tenantId AND status='reversed' AND sourceType='migration.sale.recorded' AND sourceId IN (SELECT id FROM sales WHERE tenantId=@tenantId AND status='voided_recovery_duplicate')").count,
   needsReviewRows: scalar("SELECT COUNT(*) AS count FROM migration_staging_rows WHERE tenantId=@tenantId AND jobId=@jobId AND status='needs_review'", { jobId: RECOVERY_JOB_ID }).count,
   autoFixedRows: scalar("SELECT COUNT(*) AS count FROM migration_staging_rows WHERE tenantId=@tenantId AND jobId=@jobId AND status='auto_fixed'", { jobId: RECOVERY_JOB_ID }).count,
   membershipStaffOrphans: scalar("SELECT COUNT(*) AS count FROM memberships m LEFT JOIN staff s ON s.tenantId=m.tenantId AND s.id=m.soldByStaffId WHERE m.tenantId=@tenantId AND m.soldByStaffId<>'' AND s.id IS NULL").count,

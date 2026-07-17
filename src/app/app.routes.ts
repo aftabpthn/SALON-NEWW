@@ -113,6 +113,7 @@ export const routes: Routes = [
         { key: 'name', label: 'Service' },
         { key: 'category', label: 'Category' },
         { key: 'price', label: 'Price', type: 'currency' },
+        { key: 'membershipPricePaise', label: 'Member price', type: 'currency' },
         { key: 'durationMinutes', label: 'Duration' },
         { key: 'gstRate', label: 'GST %' },
         { key: 'status', label: 'Status', type: 'badge' }

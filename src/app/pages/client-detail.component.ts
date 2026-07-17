@@ -684,6 +684,19 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               </div>
               <span class="badge">{{ filteredClientInvoices().length }} shown</span>
             </div>
+            <div class="history-progress" *ngIf="serviceHistoryMeta().total">
+              <span>Loaded {{ sales().length }} of {{ serviceHistoryMeta().total }} client-specific service history rows.</span>
+              <button class="ghost-button mini" type="button" *ngIf="serviceHistoryMeta().hasMore" (click)="loadMoreServiceHistory()" [disabled]="serviceHistoryLoading()">
+                {{ serviceHistoryLoading() ? 'Loading...' : 'Load older history' }}
+              </button>
+            </div>
+            <div class="activity-list compact-history service-history-list" *ngIf="serviceHistoryTimeline().length">
+              <article *ngFor="let event of serviceHistoryTimeline(); trackBy: trackApiRecord">
+                <strong>{{ event.title }}</strong>
+                <span>{{ event.body || 'Saved service purchase' }}</span>
+                <small>{{ dateTimeLabel(event.createdAt) }}</small>
+              </article>
+            </div>
             <div class="state success" *ngIf="invoiceMessage()">{{ invoiceMessage() }}</div>
             <div class="history-filter-grid">
               <label class="field">
@@ -1011,6 +1024,16 @@ type ClientNoteFocus = 'frontDesk' | 'internal' | 'followUp';
               <input [(ngModel)]="personalDetails.tagsText" placeholder="VIP, inactive, bridal, due, sensitive skin" />
             </label>
           </div>
+          <section class="consent-panel" aria-label="Communication consent flags">
+            <div class="section-title compact"><div><h3>Communication consent</h3></div><span class="badge">Migrated source</span></div>
+            <div class="info-grid consent-grid">
+              <div *ngFor="let consent of communicationConsentFlags(client); trackBy: trackConsent">
+                <span>{{ consent.label }}</span>
+                <strong [class.danger-text]="!consent.allowed">{{ consent.allowed ? 'Allowed' : 'Not allowed' }}</strong>
+              </div>
+            </div>
+            <small class="muted">Transactional and promotional permissions are separate. “Not allowed” is the safe default when a source flag was not recorded.</small>
+          </section>
         </section>
 
         <section class="panel" [hidden]="activeHistoryTab() !== 'packages'">
@@ -2701,6 +2724,10 @@ export class ClientDetailComponent implements OnInit {
   readonly packages = signal<ApiRecord[]>([]);
   readonly memberships = signal<ApiRecord[]>([]);
   readonly staff = signal<ApiRecord[]>([]);
+  readonly communicationConsents = signal<ApiRecord[]>([]);
+  readonly serviceHistoryTimeline = signal<ApiRecord[]>([]);
+  readonly serviceHistoryMeta = signal({ total: 0, returned: 0, page: 1, limit: 40, hasMore: false });
+  readonly serviceHistoryLoading = signal(false);
   readonly loading = signal(true);
   readonly error = signal('');
   readonly profileSaving = signal(false);
@@ -2875,27 +2902,26 @@ export class ClientDetailComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id') || '';
     this.error.set('');
     forkJoin({
-      client: this.api.get<ApiRecord>('clients', id),
+      related: this.api.list<ApiRecord>(`visibility/clients/${id}/related`),
+      serviceHistory: this.api.list<ApiRecord>(`customer-360/clients/${id}/service-history`, { page: 1, limit: 40 }),
       clients: this.safeList('clients', { limit: 1000 }),
-      invoices: this.safeList('invoices', { limit: 1000 }),
-      sales: this.safeList('sales', { limit: 1000 }),
-      payments: this.safeList('payments', { limit: 1000 }),
-      appointments: this.safeList('appointments', { limit: 1000 }),
-      walletTransactions: this.safeList('walletTransactions', { limit: 1000 }),
       packages: this.safeList('packages', { limit: 1000 }),
-      memberships: this.safeList('memberships', { limit: 1000 }),
       staff: this.safeList('staff', { limit: 1000 })
     }).subscribe({
-      next: ({ client, clients, invoices, sales, payments, appointments, walletTransactions, packages, memberships, staff }) => {
+      next: ({ related, serviceHistory, clients, packages, staff }) => {
+        const client = (related['client'] || {}) as ApiRecord;
         this.client.set(client);
         this.clients.set(clients || []);
-        this.invoices.set(invoices || []);
-        this.sales.set(sales || []);
-        this.payments.set(payments || []);
-        this.appointments.set(appointments || []);
-        this.walletTransactions.set(walletTransactions || []);
+        this.invoices.set((related['invoices'] as ApiRecord[]) || []);
+        this.sales.set((serviceHistory['sales'] as ApiRecord[]) || []);
+        this.serviceHistoryTimeline.set((serviceHistory['serviceHistoryTimeline'] as ApiRecord[]) || []);
+        this.payments.set((related['payments'] as ApiRecord[]) || []);
+        this.appointments.set((related['appointments'] as ApiRecord[]) || []);
+        this.walletTransactions.set((related['walletTransactions'] as ApiRecord[]) || []);
         this.packages.set(packages || []);
-        this.memberships.set(memberships || []);
+        this.memberships.set((related['memberships'] as ApiRecord[]) || []);
+        this.communicationConsents.set((related['communicationConsents'] as ApiRecord[]) || []);
+        this.serviceHistoryMeta.set((serviceHistory['timelineMeta'] as { total: number; returned: number; page: number; limit: number; hasMore: boolean }) || { total: 0, returned: 0, page: 1, limit: 40, hasMore: false });
         this.staff.set(staff || []);
         const noteForm = this.noteFormFromClient(client);
         this.notes = noteForm.notes;
@@ -2920,6 +2946,46 @@ export class ClientDetailComponent implements OnInit {
 
   private safeList(resource: string, params: ApiRecord = {}) {
     return this.api.list<ApiRecord[]>(resource, params).pipe(catchError(() => of([] as ApiRecord[])));
+  }
+
+  loadMoreServiceHistory(): void {
+    const clientId = this.client()?.id;
+    const meta = this.serviceHistoryMeta();
+    if (!clientId || !meta.hasMore || this.serviceHistoryLoading()) return;
+    this.serviceHistoryLoading.set(true);
+    this.api.list<ApiRecord>(`customer-360/clients/${clientId}/service-history`, { page: meta.page + 1, limit: meta.limit }).subscribe({
+      next: (response) => {
+        const incoming = (response['sales'] as ApiRecord[]) || [];
+        const known = new Set(this.sales().map((sale) => String(sale.id)));
+        this.sales.set([...this.sales(), ...incoming.filter((sale) => !known.has(String(sale.id)))]);
+        const timeline = (response['serviceHistoryTimeline'] as ApiRecord[]) || [];
+        const knownTimeline = new Set(this.serviceHistoryTimeline().map((event) => String(event.id)));
+        this.serviceHistoryTimeline.set([...this.serviceHistoryTimeline(), ...timeline.filter((event) => !knownTimeline.has(String(event.id)))]);
+        this.serviceHistoryMeta.set((response['timelineMeta'] as typeof meta) || { ...meta, hasMore: false });
+        this.serviceHistoryLoading.set(false);
+      },
+      error: (error) => {
+        this.error.set(this.api.errorText(error, 'Unable to load older client service history'));
+        this.serviceHistoryLoading.set(false);
+      }
+    });
+  }
+
+  communicationConsentFlags(client: ApiRecord): Array<{ id: string; label: string; allowed: boolean }> {
+    const preferences = this.readJson(client.communicationPreferences);
+    const persisted = this.communicationConsents()[0] || {};
+    const flag = (key: string, ...aliases: string[]) => {
+      const value = persisted[key] ?? aliases.map((alias) => preferences[alias]).find((item) => item !== undefined);
+      return value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
+    };
+    return [
+      { id: 'transactionalWhatsapp', label: 'WhatsApp · transactional', allowed: flag('transactionalWhatsapp', 'transactionalWhatsapp', 'whatsappTransactional') },
+      { id: 'promotionalWhatsapp', label: 'WhatsApp · promotional', allowed: flag('promotionalWhatsapp', 'promotionalWhatsapp', 'whatsappPromotional') },
+      { id: 'transactionalSms', label: 'SMS · transactional', allowed: flag('transactionalSms', 'transactionalSms', 'smsTransactional') },
+      { id: 'promotionalSms', label: 'SMS · promotional', allowed: flag('promotionalSms', 'promotionalSms', 'smsPromotional') },
+      { id: 'transactionalEmail', label: 'Email · transactional', allowed: flag('transactionalEmail', 'transactionalEmail', 'emailTransactional') },
+      { id: 'promotionalEmail', label: 'Email · promotional', allowed: flag('promotionalEmail', 'promotionalEmail', 'emailPromotional') }
+    ];
   }
 
   private isHistoryTab(tabId: string): boolean {
@@ -2948,6 +3014,10 @@ export class ClientDetailComponent implements OnInit {
 
   trackValue(_: number, value: unknown): string {
     return String(value ?? _);
+  }
+
+  trackConsent(_: number, item: { id: string }): string {
+    return item.id;
   }
 
   trackHistoryRow(index: number, item: ApiRecord | ClientPackageRow | ClientMembershipRow | ClientWalletLedgerRow | ClientPackageRedemption | ClientNoteHistoryRow | ClientConsultationHistoryRow): string {
@@ -3862,7 +3932,7 @@ export class ClientDetailComponent implements OnInit {
   }
 
   totalVisits(): number {
-    return Math.max(this.clientAppointments().length, this.clientInvoices().length);
+    return Math.max(Number(this.client()?.visitCount || 0), this.clientAppointments().length, this.clientInvoices().length);
   }
 
   serviceSalesTotal(): number {

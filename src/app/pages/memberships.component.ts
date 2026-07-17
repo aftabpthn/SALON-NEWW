@@ -339,15 +339,29 @@ type PlanLifecycleDialog = {
             <button class="primary-button" type="submit" [disabled]="giftForm.invalid || saving()">Create gift card</button>
           </form>
           <div class="quick-grid">
-            <article class="action-card" *ngFor="let card of giftCards()">
+            <article class="action-card selectable-card" *ngFor="let card of giftCards()" (click)="selectGiftCard(card)" tabindex="0" (keydown.enter)="selectGiftCard(card)">
               <strong>{{ card.code }}</strong>
-              <span>{{ card.balance | auraMoney:'1.0-0' }} balance Â· expires {{ card.expiryDate }}</span>
+              <span>{{ giftCardBalance(card) | auraMoney:'1.0-0' }} balance · expires {{ card.expiryDate || card['expiry_date'] || 'not set' }}</span>
+              <small>{{ card.originalSystem || 'Aura' }} · {{ card.status || 'active' }}</small>
             </article>
             <article class="action-card" *ngIf="!giftCards().length">
               <strong>No gift card yet.</strong>
               <span>Create gift card from this same page.</span>
             </article>
           </div>
+          <section class="giftcard-detail" *ngIf="selectedGiftCard() as detail">
+            <div class="section-title compact-title"><div><h3>{{ detail['card']?.code }} transaction history</h3></div><span class="badge">{{ giftCardTransactions().length }} row(s)</span></div>
+            <div class="mini-stats">
+              <article><span>Recovered initial value</span><strong>{{ giftCardInitialValue(detail['card']) | auraMoney:'1.0-0' }}</strong></article>
+              <article><span>Current balance</span><strong>{{ giftCardBalance(detail['card']) | auraMoney:'1.0-0' }}</strong></article>
+              <article><span>Source</span><strong>{{ detail['card']?.originalSystem || 'Aura' }}</strong></article>
+            </div>
+            <div class="table-wrap inner-table-wrap">
+              <table><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Balance after</th><th>Invoice / source</th></tr></thead>
+                <tbody><tr *ngFor="let tx of giftCardTransactions()"><td>{{ tx['createdAt'] | auraDate:'date' }}</td><td>{{ tx['type'] }}</td><td>{{ giftCardTransactionAmount(tx) | auraMoney:'1.0-0' }}</td><td>{{ giftCardTransactionBalance(tx) | auraMoney:'1.0-0' }}</td><td>{{ tx['invoiceId'] || tx['originalRecordId'] || '-' }}</td></tr></tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -509,6 +523,7 @@ type PlanLifecycleDialog = {
                 <th>Discount</th>
                 <th>Auto-renew</th>
                 <th>Price</th>
+                <th>Sold by</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -527,6 +542,7 @@ type PlanLifecycleDialog = {
                 <td>{{ membershipDiscount(membership) }}%</td>
                 <td>{{ membership.autoRenew ? 'Yes' : 'No' }}</td>
                 <td>{{ membership.price | auraMoney:'1.0-0' }}</td>
+                <td>{{ membership.soldByStaffName || staffName(membership.soldByStaffId) || 'Not recorded' }}</td>
                 <td>
                   <div class="inline-actions">
                     <button class="ghost-button mini" type="button" (click)="renewMembership(membership)">Renew</button>
@@ -538,7 +554,7 @@ type PlanLifecycleDialog = {
                 </td>
               </tr>
               <tr *ngIf="!visibleMemberships().length">
-                <td class="empty-row" colspan="10">No memberships found for selected KPI.</td>
+                <td class="empty-row" colspan="11">No memberships found for selected KPI.</td>
               </tr>
             </tbody>
           </table>
@@ -2744,6 +2760,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
   readonly clients = signal<ApiRecord[]>([]);
   readonly staffMembers = signal<ApiRecord[]>([]);
   readonly giftCards = signal<ApiRecord[]>([]);
+  readonly selectedGiftCard = signal<ApiRecord | null>(null);
   readonly ledger = signal<ApiRecord[]>([]);
   readonly reminders = signal<ApiRecord[]>([]);
   readonly autoRenewQueue = signal<ApiRecord[]>([]);
@@ -2971,6 +2988,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       packages: this.safeList<ApiRecord[]>('packages', { limit: 1000, includeAllBranches: true }),
       memberships: this.safeList<ApiRecord[]>('memberships', { limit: 1000 }),
       clients: this.safeList<ApiRecord[]>('clients', { limit: 1000 }),
+      membershipLabels: this.safeList<ApiRecord[]>('visibility/membership-client-labels'),
       staff: this.quietList<ApiRecord[]>('staff', { limit: 1000 }),
       giftCards: this.safeList<ApiRecord[]>('giftCards', { limit: 1000 }),
       ledger: this.safeList<ApiRecord[]>('membership-enterprise/ledger', this.auditLedgerParams()),
@@ -2984,7 +3002,7 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       rewardsRoi: this.safeList<ApiRecord>('membership-enterprise/rewards/roi', this.rewardFilterParams()),
       rewardsExpiring: this.safeList<ApiRecord[]>('membership-enterprise/rewards/expiring', this.rewardFilterParams()),
       rewardsAbuse: this.safeList<ApiRecord[]>('membership-enterprise/rewards/abuse-alerts', this.rewardFilterParams())
-    }).subscribe(({ plans, packages, memberships, clients, staff, giftCards, ledger, reminders, autoRenew, report, commission, risk, enterpriseReport, rewardsLedger, rewardsRoi, rewardsExpiring, rewardsAbuse }) => {
+    }).subscribe(({ plans, packages, memberships, clients, membershipLabels, staff, giftCards, ledger, reminders, autoRenew, report, commission, risk, enterpriseReport, rewardsLedger, rewardsRoi, rewardsExpiring, rewardsAbuse }) => {
       const livePlans = (plans || []).map((plan) => this.normalizePlan(plan));
       if (livePlans.length) {
         this.membershipPlans.set(livePlans);
@@ -2994,7 +3012,8 @@ export class MembershipsComponent implements OnInit, OnDestroy {
       this.packageRecords.set(livePackages);
       if (!this.selectedPackageId() && livePackages.length) this.selectedPackageId.set(String(livePackages[0].id || livePackages[0]['packageId'] || ''));
       this.memberships.set(memberships || []);
-      this.clients.set(clients || []);
+      const clientMap = new Map([...(clients || []), ...(membershipLabels || [])].map((client) => [String(client.id), client]));
+      this.clients.set([...clientMap.values()]);
       this.staffMembers.set(staff || []);
       this.giftCards.set(giftCards || []);
       this.ledger.set(ledger || []);
@@ -3790,7 +3809,8 @@ export class MembershipsComponent implements OnInit, OnDestroy {
     if (this.giftForm.invalid) return;
     this.saving.set(true);
     const value = this.giftForm.value;
-    this.api.create('giftCards', { ...value, balance: value.initialValue, redeemHistory: [] }).subscribe({
+    const initialValuePaise = Math.round(Number(value.initialValue || 0) * 100);
+    this.api.create('giftCards', { ...value, balance: value.initialValue, initialValuePaise, balancePaise: initialValuePaise, redeemHistory: [] }).subscribe({
       next: () => {
         this.saving.set(false);
         this.message.set('Gift card saved.');
@@ -3801,6 +3821,37 @@ export class MembershipsComponent implements OnInit, OnDestroy {
         this.saving.set(false);
       }
     });
+  }
+
+  selectGiftCard(card: ApiRecord): void {
+    const id = String(card.id || card.code || '');
+    if (!id) return;
+    this.api.list<ApiRecord>(`visibility/gift-cards/${encodeURIComponent(id)}`, { limit: 100 }).subscribe({
+      next: (detail) => this.selectedGiftCard.set(detail),
+      error: (error) => this.error.set(this.api.errorText(error, 'Unable to load gift card history'))
+    });
+  }
+
+  giftCardTransactions(): ApiRecord[] {
+    return (this.selectedGiftCard()?.['transactions'] as ApiRecord[]) || [];
+  }
+
+  giftCardBalance(card: ApiRecord | null | undefined): number {
+    if (!card) return 0;
+    return card['balancePaise'] !== undefined && (Number(card['balancePaise']) !== 0 || card['originalSystem']) ? Number(card['balancePaise']) / 100 : Number(card['balance'] || 0);
+  }
+
+  giftCardInitialValue(card: ApiRecord | null | undefined): number {
+    if (!card) return 0;
+    return card['initialValuePaise'] !== undefined && (Number(card['initialValuePaise']) !== 0 || card['originalSystem']) ? Number(card['initialValuePaise']) / 100 : Number(card['initialValue'] || card['initial_value'] || 0);
+  }
+
+  giftCardTransactionAmount(transaction: ApiRecord): number {
+    return transaction['amountPaise'] !== undefined && (Number(transaction['amountPaise']) !== 0 || transaction['originalSystem']) ? Number(transaction['amountPaise']) / 100 : Number(transaction['amount'] || 0);
+  }
+
+  giftCardTransactionBalance(transaction: ApiRecord): number {
+    return transaction['balanceAfterPaise'] !== undefined && (Number(transaction['balanceAfterPaise']) !== 0 || transaction['originalSystem']) ? Number(transaction['balanceAfterPaise']) / 100 : Number(transaction['balanceAfter'] || 0);
   }
 
   activeMembershipPlans(): PosMembershipPlan[] {

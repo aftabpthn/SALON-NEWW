@@ -1,0 +1,125 @@
+{
+  "generatedAt": "2026-07-16T14:52:30.732Z",
+  "passed": false,
+  "desktop": [
+    {
+      "key": "client",
+      "path": "/clients/clientrec_0bf234ffb34ee4f6",
+      "pass": false,
+      "expected": [
+        "WALIKIN",
+        "Communication consent",
+        "Visits"
+      ],
+      "missing": [
+        "WALIKIN",
+        "Communication consent",
+        "Visits"
+      ],
+      "browserErrors": [],
+      "currentUrl": "/dashboard",
+      "title": "Aurashine OS | Salon OS",
+      "textSample": "AS\nAurashine OS\n⌂\nbranch_363bdc6b-2\n▾\n◆\nWORKSPACE · OWNER\ntenant_salonist\n▾\nFast POS\n🔔\nSO\nTODAY'S COMMAND CENTER\nGood evening\n\nTrack revenue, bookings, payments, clients, and alerts from one operational view.\n\nExport\nNew Booking\nKey Metrics\n16 July 2026\nREVENUE TODAY\n₹75,291\nREVENUE THIS MONTH\n₹75,291\nTOTAL BOOKINGS\n0\nRECEIVED DUE\n₹0\nPENDING PAYMENTS\n₹89,162\nNEW CLIENTS\n4131\nCLIENT RETENTION\n0%\nQuick access\nExecutive dashboard\nAll reports\nBK\n0 bookings\nOpen calendar\nPOS\n₹0 received due\n₹89,162 "
+    },
+    {
+      "key": "services",
+      "path": "/services",
+      "pass": true,
+      "expected": [
+        "Services, Add-ons & Packages",
+        "Member price",
+        "376"
+      ],
+      "missing": [],
+      "browserErrors": [],
+      "currentUrl": "/services",
+      "title": "Aurashine OS | Salon OS",
+      "textSample": "AS\n←\nAurashine OS\n⌂\nbranch_363bdc6b-2\n▾\n◆\nWORKSPACE · OWNER\ntenant_salonist\n▾\nFast POS\n🔔\nSO\nSER\nBOM\nFF\nPC\nIF\nIR\nSC\nStock Control\nCU\nCatalog & Usage\nServices, Add-ons & Packages\nAdd service\nSEARCH\nGST %\nUpdate category GST\nUpdate filtered GST\nRefresh\nService groups\n20\nAll categories\n50\nCLASSIC MANICURE\n1\nCLASSIC PEDICURE\n1\nCOLOURS\n4\nFACE MASQUE\n2\nHAIR SPA\n8\nLUXURY MANICURE\n2\nLUXURY PEDICURE\n2\nMassage\n1\nMens Services\n5\nNAIL ARTS\n1\nNAIL ENHANCEMANT\n1\nNAILS RE-FILLINGS\n3\nPREMIUM MANICURE\n1\nPREMIUM "
+    },
+    {
+      "key": "product",
+      "path": "/inventory/products/prod_3441a400-0",
+      "pass": false,
+      "expected": [
+        "Wella Fusion Mask -150ml",
+        "Legacy issue quantity",
+        "Source QR",
+        "System QR",
+        "Movement rows"
+      ],
+      "missing": [
+        "Wella Fusion Mask -150ml",
+        "Legacy issue quantity",
+        "Source QR",
+        "System QR",
+        "Movement rows"
+      ],
+      "browserErrors": [],
+      "currentUrl": "/dashboard",
+      "title": "Aurashine OS | Salon OS",
+      "textSample": "AS\nAurashine OS\n⌂\nbranch_363bdc6b-2\n▾\n◆\nWORKSPACE · OWNER\ntenant_salonist\n▾\nFast POS\n🔔\nSO\nTODAY'S COMMAND CENTER\nGood evening\n\nTrack revenue, bookings, payments, clients, and alerts from one operational view.\n\nExport\nNew Booking\nKey Metrics\n16 July 2026\nREVENUE TODAY\n₹75,291\nREVENUE THIS MONTH\n₹75,291\nTOTAL BOOKINGS\n0\nRECEIVED DUE\n₹0\nPENDING PAYMENTS\n₹89,162\nNEW CLIENTS\n4131\nCLIENT RETENTION\n0%\nQuick access\nExecutive dashboard\nAll reports\nBK\n0 bookings\nOpen calendar\nPOS\n₹0 received due\n₹89,162 "
+    },
+    {
+      "key": "membership",
+      "path": "/memberships/memb_0031f6cd-2",
+      "pass": false,
+      "expected": [
+        "MS",
+        "Sold by",
+        "Darlene",
+        "Credits"
+      ],
+      "missing": [
+        "MS",
+        "Sold by",
+        "Darlene",
+        "Credits"
+      ],
+      "browserErrors": [],
+      "currentUrl": "/dashboard",
+      "title": "Aurashine OS | Salon OS",
+      "textSample": "AS\nAurashine OS\n⌂\nbranch_363bdc6b-2\n▾\n◆\nWORKSPACE · OWNER\ntenant_salonist\n▾\nFast POS\n🔔\nSO\nTODAY'S COMMAND CENTER\nGood evening\n\nTrack revenue, bookings, payments, clients, and alerts from one operational view.\n\nExport\nNew Booking\nKey Metrics\n16 July 2026\nREVENUE TODAY\n₹75,291\nREVENUE THIS MONTH\n₹75,291\nTOTAL BOOKINGS\n0\nRECEIVED DUE\n₹0\nPENDING PAYMENTS\n₹89,162\nNEW CLIENTS\n4131\nCLIENT RETENTION\n0%\nQuick access\nExecutive dashboard\nAll reports\nBK\n0 bookings\nOpen calendar\nPOS\n₹0 received due\n₹89,162 "
+    },
+    {
+      "key": "invoices",
+      "path": "/pos/invoices?range=all",
+      "pass": false,
+      "expected": [
+        "Invoices",
+        "All dates"
+      ],
+      "missing": [
+        "Invoices",
+        "All dates"
+      ],
+      "browserErrors": [],
+      "currentUrl": "/dashboard",
+      "title": "Aurashine OS | Salon OS",
+      "textSample": "AS\nAurashine OS\n⌂\nbranch_363bdc6b-2\n▾\n◆\nWORKSPACE · OWNER\ntenant_salonist\n▾\nFast POS\n🔔\nSO\nTODAY'S COMMAND CENTER\nGood evening\n\nTrack revenue, bookings, payments, clients, and alerts from one operational view.\n\nExport\nNew Booking\nKey Metrics\n16 July 2026\nREVENUE TODAY\n₹75,291\nREVENUE THIS MONTH\n₹75,291\nTOTAL BOOKINGS\n0\nRECEIVED DUE\n₹0\nPENDING PAYMENTS\n₹89,162\nNEW CLIENTS\n4131\nCLIENT RETENTION\n0%\nQuick access\nExecutive dashboard\nAll reports\nBK\n0 bookings\nOpen calendar\nPOS\n₹0 received due\n₹89,162 "
+    },
+    {
+      "key": "migration-review",
+      "path": "/data-migration/validation",
+      "pass": false,
+      "expected": [
+        "Validation",
+        "Needs review",
+        "4"
+      ],
+      "missing": [
+        "Validation",
+        "Needs review"
+      ],
+      "browserErrors": [],
+      "currentUrl": "/dashboard",
+      "title": "Aurashine OS | Salon OS",
+      "textSample": "AS\nAurashine OS\n⌂\nbranch_363bdc6b-2\n▾\n◆\nWORKSPACE · OWNER\ntenant_salonist\n▾\nFast POS\n🔔\nSO\nTODAY'S COMMAND CENTER\nGood evening\n\nTrack revenue, bookings, payments, clients, and alerts from one operational view.\n\nExport\nNew Booking\nKey Metrics\n16 July 2026\nREVENUE TODAY\n₹75,291\nREVENUE THIS MONTH\n₹75,291\nTOTAL BOOKINGS\n0\nRECEIVED DUE\n₹0\nPENDING PAYMENTS\n₹89,162\nNEW CLIENTS\n4131\nCLIENT RETENTION\n0%\nQuick access\nExecutive dashboard\nAll reports\nBK\n0 bookings\nOpen calendar\nPOS\n₹0 received due\n₹89,162 "
+    }
+  ],
+  "mobile": {
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "bodyText": 962
+  },
+  "evidenceDir": "C:\\aura-salon-crm-pos-full-20260622-152001\\docs\\reports\\frontend-visibility"
+}

@@ -381,6 +381,7 @@ export class Customer360Service {
       wallet.balance > 0 ? `Wallet balance INR ${wallet.balance} is available for retention offers.` : "No wallet balance is currently linked.",
       membershipSummary.activeMembership ? `Active membership: ${membershipSummary.activeMembership.planName || membershipSummary.activeMembership.name || membershipSummary.activeMembership.id}.` : "No active membership linked."
     ];
+    const completeTimeline = includeTimeline ? this.timeline(client, sales, invoices, appointments, access, { walletTransactions, loyaltyTransactions, reviews, memberships }, { limit: 0 }) : [];
     const result = {
       client,
       metrics: {
@@ -446,12 +447,14 @@ export class Customer360Service {
         reviews: reviews.slice(0, 10)
       },
       visitHistory,
-      timeline: includeTimeline ? this.timeline(client, sales, invoices, appointments, access, { walletTransactions, loyaltyTransactions, reviews, memberships }) : []
+      timeline: completeTimeline.slice(0, 80),
+      serviceHistoryTimeline: completeTimeline.filter((event) => event.type === "purchase"),
+      timelineMeta: { total: completeTimeline.length, returned: Math.min(80, completeTimeline.length), hasMore: completeTimeline.length > 80 }
     };
     return maskProfileContacts(result, access);
   }
 
-  timeline(client, sales, invoices, appointments, access, linked = {}) {
+  timeline(client, sales, invoices, appointments, access, linked = {}, options = {}) {
     const events = repositories.customerTimelineEvents.list({ branchId: client.branchId || "", limit: 100 }, scope(access, client.branchId || "")).filter((item) => item.clientId === client.id);
     const appointmentEvents = appointments.map((appointment) => ({
       id: `appt-${appointment.id}`,
@@ -501,7 +504,8 @@ export class Customer360Service {
       createdAt: membership.createdAt || membership.startDate || membership.validityDate,
       metadata: { membershipId: membership.id }
     }));
-    return [...events, ...appointmentEvents, ...saleEvents, ...invoiceEvents, ...walletEvents, ...reviewEvents, ...membershipEvents].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 80);
+    const timeline = [...events, ...appointmentEvents, ...saleEvents, ...invoiceEvents, ...walletEvents, ...reviewEvents, ...membershipEvents].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    return Number(options.limit || 0) > 0 ? timeline.slice(0, Number(options.limit)) : timeline;
   }
 
   nextBestAction({ client, lifetimeValue, inactiveDays, riskScore, favoriteService, memberships, wallet, reviews }) {
