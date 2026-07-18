@@ -19,14 +19,6 @@ import { StaffAppService } from "../../core/staff-app.service";
           @if (staff.error()) {
             <div class="notice">{{ staff.error() }}</div>
           }
-          @if (staff.loginDebug().length) {
-            <details class="debug-box">
-              <summary>🐛 Debug log ({{ staff.loginDebug().length }} steps)</summary>
-              @for (line of staff.loginDebug(); track $index) {
-                <div class="debug-line">{{ line }}</div>
-              }
-            </details>
-          }
           @if (message()) {
             <div class="notice success">{{ message() }}</div>
           }
