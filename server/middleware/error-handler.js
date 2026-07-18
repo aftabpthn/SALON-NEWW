@@ -1,6 +1,7 @@
 import { logger } from "../utils/logger.js";
 
 export function notFoundHandler(req, _res, next) {
+  console.log("NOT FOUND =", req.method, req.originalUrl);
   const error = new Error(`Route not found: ${req.method} ${req.originalUrl}`);
   error.status = 404;
   next(error);
@@ -14,6 +15,14 @@ export function errorHandler(err, req, res, _next) {
     requestId: req.requestId
   };
   if (err.details) response.details = err.details;
+
+  console.error("=== ERROR HANDLER ===");
+  console.error("METHOD =", req.method);
+  console.error("PATH =", req.originalUrl);
+  console.error("STATUS =", status);
+  console.error("MESSAGE =", err.message);
+  console.error("STACK =", err.stack);
+  console.error("=== END ERROR HANDLER ===");
 
   logger.error("request_error", {
     requestId: req.requestId,

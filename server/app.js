@@ -1,7 +1,11 @@
 import cors from "cors";
 import express from "express";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import { dataDir } from "./db.js";
 import { ensureHappyHoursInvoiceColumns } from "./migrations/add-happy-hours-to-invoices.js";
 import { ensureSecurityEphemeralGrantsSchema } from "./migrations/create-security-ephemeral-grants.js";
@@ -315,19 +319,70 @@ export function createApp() {
   app.disable("x-powered-by");
   app.set("etag", false);
   if (env.trustProxy) app.set("trust proxy", 1);
-  app.use(
-    cors({
-      credentials: true,
-      origin: (origin, callback) => {
-        if (!origin || env.allowedOrigins.includes(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error("Origin not allowed by CORS"));
+
+  const clientDist = resolveClientDist();
+
+  console.log("=== HOSTINGER DEBUG STARTUP ===");
+  console.log("cwd =", process.cwd());
+  console.log("__dirname =", __dirname);
+  console.log("clientDist =", clientDist || "(EMPTY STRING)");
+  console.log("clientDist exists =", clientDist ? existsSync(clientDist) : false);
+  if (clientDist && existsSync(clientDist)) {
+    console.log("index.html exists =", existsSync(join(clientDist, "index.html")));
+    console.log("main-GXH73XHD.js exists =", existsSync(join(clientDist, "main-GXH73XHD.js")));
+    console.log("polyfills-5CFQRCPP.js exists =", existsSync(join(clientDist, "polyfills-5CFQRCPP.js")));
+    try { console.log("clientDist files =", readdirSync(clientDist)); } catch (e) { console.log("readdirSync ERROR =", e.message); }
+  } else {
+    console.log("WARNING: clientDist does not exist or is empty — static files WILL NOT be served by express.static");
+  }
+  console.log("=== HOSTINGER DEBUG END ===");
+
+  app.use((req, _res, next) => {
+    console.log("REQUEST =", req.method, req.originalUrl);
+    next();
+  });
+
+  if (clientDist) {
+    app.use((req, _res, next) => {
+      const cleanUrl = req.originalUrl.split("?")[0];
+      const filename = cleanUrl.split("/").pop();
+      if (filename) {
+        const fullPath = join(clientDist, filename);
+        const fileExists = existsSync(fullPath);
+        console.log("STATIC CHECK =", filename, "| PATH =", fullPath, "| EXISTS =", fileExists);
       }
-    })
-  );
+      next();
+    });
+    app.use(express.static(clientDist));
+    app.get(/^(?!\/api).*/, (_req, res) => {
+      const indexPath = join(clientDist, "index.html");
+      console.log("ANGULAR FALLBACK =", _req.originalUrl, "| sending =", indexPath, "| exists =", existsSync(indexPath));
+      res.sendFile(indexPath);
+    });
+  }
+
   app.use("/uploads", express.static(join(dataDir, "uploads"), { maxAge: "7d" }));
+
+  const corsOptions = {
+    credentials: true,
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      const allowedOrigins = [
+        ...env.allowedOrigins,
+        "https://aurashinesalonwellness.in",
+        "https://www.aurashinesalonwellness.in"
+      ];
+      const isLocalhost = /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) || /^http:\/\/localhost:\d+$/.test(origin);
+      if (allowedOrigins.includes(origin) || isLocalhost) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    }
+  };
+  app.use("/api", cors(corsOptions));
+  app.use("/api/v1", cors(corsOptions));
   const migrationJsonParser = express.json({
     limit: "96mb",
     verify: (req, _res, buf) => {
@@ -793,14 +848,6 @@ export function createApp() {
   app.use("/api", profitIntelligenceRouter);
   app.use("/api", messageHistoryReportRouter);
   app.use("/api", messageTemplateStudioRouter);
-
-  const clientDist = resolveClientDist();
-  if (clientDist) {
-    app.use(express.static(clientDist));
-    app.get(/^(?!\/api).*/, (_req, res) => {
-      res.sendFile(join(clientDist, "index.html"));
-    });
-  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);
