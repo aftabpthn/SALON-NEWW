@@ -434,6 +434,7 @@ export class StaffAppService {
   private readonly tabId = crypto.randomUUID();
   readonly loading = signal(false);
   readonly error = signal("");
+  readonly loginDebug = signal<string[]>([]);
   readonly user = signal<StaffUser | null>(null);
   readonly profile = signal<StaffDashboard["staff"] | null>(null);
   readonly biometricEnabled = signal(!!this.readBiometricHint());
@@ -488,9 +489,14 @@ export class StaffAppService {
   async login(payload: { tenantId: string; loginId: string; password: string; branchId?: string }): Promise<StaffUser> {
     this.loading.set(true);
     this.error.set("");
+    const debug: string[] = [];
+    const push = (msg: string) => { debug.push(msg); this.loginDebug.set([...debug]); };
     try {
       const tenantId = payload.tenantId.trim() || "tenant_aura";
       const loginId = payload.loginId.trim();
+      push(`1. POST ${this.baseUrl}/auth/login tenantId=${tenantId} loginId=${loginId}`);
+      push(`2. withCredentials=true, body has device info`);
+      push(`3. Awaiting response... (request goes through csrfInterceptor → GET /auth/csrf first, then POST)`);
       const response = await firstValueFrom(this.http.post<StaffLoginResponse | ApiEnvelope<StaffLoginResponse>>(`${this.baseUrl}/auth/login`, {
         tenantId,
         loginId,
@@ -499,18 +505,36 @@ export class StaffAppService {
         branchId: payload.branchId?.trim() || undefined,
         device: { type: "staff-app", name: "Aura Staff App", platform: "web" }
       }, { withCredentials: true }));
+      push(`4. Response received. typeof=${typeof response} isArray=${Array.isArray(response)} keys=${Object.keys(response as object).join(",")}`);
+      try { push(`4a. JSON preview=${JSON.stringify(response).slice(0, 200)}`); } catch {}
       const session = this.unwrap(response);
-      if (String(session.user?.role || "").trim().toLowerCase() === "owner") return session.user;
+      push(`5. unwrap OK. has accessToken=${!!session.accessToken} has user=${!!(session as any).user} role=${(session as any).user?.role}`);
+      if (String(session.user?.role || "").trim().toLowerCase() === "owner") { push(`6. → owner dashboard`); return session.user; }
       if (!session.user?.staffId) throw new Error("This login is not linked with a staff profile.");
       if (!this.isStaffRole(session.user.role)) throw new Error("Use a staff login, not an owner/admin login.");
+      push(`6. saving session...`);
       this.saveSession(session, tenantId);
+      push(`7. done. redirecting.`);
       return session.user;
     } catch (error) {
+      push(`❌ CATCH BLOCK`);
+      if (error instanceof HttpErrorResponse) {
+        push(`   status=${error.status} ${error.statusText}`);
+        push(`   url=${error.url}`);
+        push(`   headers=${error.headers?.keys()?.join(",") || "none"}`);
+        try { push(`   body=${JSON.stringify(error.error).slice(0, 300)}`); } catch { push(`   body=[non-serializable: ${typeof error.error}]`); }
+        push(`   message=${error.message?.slice(0, 200)}`);
+      } else if (error instanceof Error) {
+        push(`   name=${error.name} message=${error.message}`);
+      } else {
+        push(`   type=${typeof error} value=${String(error).slice(0, 200)}`);
+      }
       const message = this.errorMessage(error, "Unable to login staff.");
       this.error.set(message);
       throw error;
     } finally {
       this.loading.set(false);
+      push(`8. finally done. loading=false`);
     }
   }
 

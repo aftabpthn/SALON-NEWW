@@ -19,6 +19,14 @@ import { StaffAppService } from "../../core/staff-app.service";
           @if (staff.error()) {
             <div class="notice">{{ staff.error() }}</div>
           }
+          @if (staff.loginDebug().length) {
+            <details class="debug-box">
+              <summary>🐛 Debug log ({{ staff.loginDebug().length }} steps)</summary>
+              @for (line of staff.loginDebug(); track $index) {
+                <div class="debug-line">{{ line }}</div>
+              }
+            </details>
+          }
           @if (message()) {
             <div class="notice success">{{ message() }}</div>
           }
@@ -108,6 +116,9 @@ import { StaffAppService } from "../../core/staff-app.service";
     .biometric-button { border-color: var(--staff-border-accent); background: var(--staff-primary-light); color: var(--staff-primary-hover); }
     .notice { margin: 18px 0; padding: 14px 16px; border: 1px solid var(--staff-error-border); border-radius: 16px; color: var(--staff-error-text); background: var(--staff-error-surface); font-weight: 650; }
     .success { border-color: var(--staff-success-border); color: var(--staff-success-text); background: var(--staff-success-surface); }
+    .debug-box { margin: 10px 0; padding: 10px 14px; border: 1px dashed #94a3b8; border-radius: 12px; background: #1e293b; color: #e2e8f0; font-family: monospace; font-size: 11px; line-height: 1.6; }
+    .debug-box summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #94a3b8; }
+    .debug-line { white-space: pre-wrap; word-break: break-all; }
     @media (max-width: 820px) { .login-grid { width: calc(100% - 40px); padding: 20px 0; } .staff-card { padding: 20px; } }
     @media (prefers-reduced-motion: reduce) { .floating-field input, .floating-field label, .floating-field > svg, .floating-field input::placeholder { transition: none; } }
   `]
