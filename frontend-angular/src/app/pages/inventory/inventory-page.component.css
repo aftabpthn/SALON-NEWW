@@ -90,3 +90,13 @@ textarea { min-height:72px; resize:vertical; }
 as-date-picker { display:block; }
 @media (max-width:1000px) { .register-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }.register-kpis,.order-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:760px) { .page-head { align-items:flex-start; flex-direction:column; }.head-actions { width:100%; justify-content:flex-start; }.head-actions input,.head-actions select,.head-actions as-date-picker { width:100%; }.page-head.order-head { display:grid; }.order-head .head-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }.order-head .head-actions input,.order-head .head-actions select { min-width:0; }.order-stages { border-radius:0; padding:0 4px; }.order-stages button { min-width:116px; }.order-kpis { gap:8px; }.order-kpis article { min-height:84px; padding:10px; }.register-filters,.register-kpis,.form-grid,.product-detail-grid,.stocktake-form { grid-template-columns:1fr; }.span-2 { grid-column:auto; }.entry-line { grid-template-columns:1fr 1fr; }.entry-line label:first-child { grid-column:1/-1; }.drawer { width:100vw; } }
+
+.order-event-timeline { display: grid; gap: 12px; }
+.order-event-timeline > header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid #d9e3ef; }
+.order-event-timeline > header div, .order-event-timeline article div { display: grid; gap: 3px; }
+.order-event-timeline article { display: grid; grid-template-columns: 12px 1fr; gap: 10px; }
+.order-event-timeline article i { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #216ed1; }
+.order-event-timeline article strong { text-transform: capitalize; }
+.order-event-timeline article span, .order-event-timeline article small, .order-event-timeline header span { color: #62738a; }
+
+.supplier-governance{display:grid;gap:10px;padding:12px;border-top:1px solid #d6e0ec}.supplier-governance h3{margin:0;font-size:14px}.governance-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.governance-summary span{display:flex;justify-content:space-between;padding:9px;border:1px solid #d6e0ec;border-radius:6px}.governance-form{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:8px}.governance-form input,.governance-form select{min-height:38px;border:1px solid #c8d5e5;border-radius:6px;padding:0 9px}@media(max-width:720px){.governance-form{grid-template-columns:1fr}.governance-summary{grid-template-columns:1fr}}

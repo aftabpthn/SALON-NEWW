@@ -109,6 +109,12 @@ async fn main() -> Result<()> {
                 {
                     tracing::warn!("custom report delivery cycle failed");
                 }
+                if services::inventory_governance_service::process_due_communications(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("inventory supplier communication cycle failed");
+                }
             }
         });
     }

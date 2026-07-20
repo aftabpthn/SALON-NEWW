@@ -27,6 +27,7 @@
     <select [(ngModel)]="status" (ngModelChange)="reload()" aria-label="Filter by status">
       <option *ngFor="let value of statuses" [value]="value">{{ label(value) }}</option>
     </select>
+    <button class="utility-button" type="button" (click)="exportCsv()" [disabled]="!orders.length">CSV</button><button class="utility-button" type="button" (click)="printRegister()" [disabled]="!orders.length">Print</button>
     <button class="utility-button" type="button" (click)="reload()" [disabled]="loading" aria-label="Reload laundry orders">
       <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
     </button>

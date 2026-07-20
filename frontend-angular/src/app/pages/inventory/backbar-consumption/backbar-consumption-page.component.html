@@ -18,6 +18,7 @@
     <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">Variance</button>
     <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">Approvals</button>
     <button type="button" [class.active]="activeTab === 'audit'" (click)="activeTab = 'audit'">Audit</button>
+    <button type="button" [class.active]="activeTab === 'containers'" (click)="activeTab = 'containers'">Containers</button>
   </nav>
 
   <section class="kpis" *ngIf="!loading">
@@ -27,7 +28,22 @@
     <article class="green"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Pending approvals</span><strong>{{ pendingApprovals }}</strong></article>
   </section>
 
-  <section class="table-card" *ngIf="!loading">
+
+  <section class="table-card container-card" *ngIf="!loading && activeTab === 'containers'">
+    <header><h2>Open bottle lifecycle</h2></header>
+    <div class="container-form">
+      <select [(ngModel)]="containerDraft.inventoryItemId" aria-label="Container product"><option value="">Select product</option><option *ngFor="let row of items" [value]="row.id">{{ row.name }}</option></select>
+      <input [(ngModel)]="containerDraft.barcode" placeholder="Container barcode" aria-label="Container barcode" />
+      <input type="number" min="1" [(ngModel)]="containerDraft.capacityQuantity" placeholder="Capacity" aria-label="Container capacity" />
+      <input [(ngModel)]="containerDraft.unit" placeholder="Unit" aria-label="Container unit" />
+      <button type="button" [disabled]="saving" (click)="createContainer()">Add sealed container</button>
+    </div>
+    <div class="table-scroll" *ngIf="containers.length; else noContainers"><table><thead><tr><th>Product</th><th>Barcode</th><th>State</th><th>Remaining</th><th>Opened</th><th>Action</th></tr></thead><tbody>
+      <tr *ngFor="let row of containers"><td><strong>{{ row.productName }}</strong></td><td>{{ row.barcode }}</td><td><span class="status">{{ row.status }}</span></td><td>{{ quantity(row.remainingQuantity, row.unit) }} / {{ quantity(row.capacityQuantity, row.unit) }}</td><td>{{ row.openedAt ? date(row.openedAt) : '—' }}</td><td><div class="row-actions"><button *ngIf="row.status === 'sealed'" type="button" (click)="openContainer(row)">Open</button><ng-container *ngIf="row.status === 'open'"><input class="consume-input" type="number" min="1" [max]="row.remainingQuantity" [(ngModel)]="containerQuantity[row.id]" aria-label="Usage quantity" /><button type="button" (click)="consumeContainer(row)">Use</button><button type="button" (click)="requestOverride(row)">Correct</button></ng-container><ng-container *ngIf="row.pendingOverrideId && canReview"><button type="button" (click)="reviewOverride(row,'approve')">Approve</button><button class="danger" type="button" (click)="reviewOverride(row,'reject')">Reject</button></ng-container></div></td></tr>
+    </tbody></table></div>
+    <ng-template #noContainers><div class="empty-state">No containers yet</div></ng-template>
+  </section>
+  <section class="table-card" *ngIf="!loading && activeTab !== 'containers'">
     <header><h2>{{ tableTitle }}</h2><div><select aria-label="Filter workflow" [(ngModel)]="workflow"><option value="">All workflows</option><option value="recorded">Manual</option><option value="pending_approval">Pending approval</option><option value="rejected">Rejected</option><option value="auto_consumed">Automatic</option></select><button type="button" [disabled]="!visibleUsage.length" (click)="exportCsv()">Export CSV</button></div></header>
     <div class="table-scroll" *ngIf="visibleUsage.length; else empty"><table><thead><tr><th>Date</th><th>Product</th><th>Invoice / Source</th><th>Service</th><th>Staff</th><th>Expected</th><th>Actual</th><th>Variance</th><th>Status</th><th *ngIf="activeTab === 'audit'">Notes</th><th *ngIf="activeTab === 'approvals' && canReview">Actions</th></tr></thead>
       <tbody><tr *ngFor="let row of visibleUsage"><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.source }}</td><td>{{ row.serviceName || '—' }}</td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td><td *ngIf="activeTab === 'audit'">{{ row.reviewNote || row.notes || '—' }}</td><td *ngIf="activeTab === 'approvals' && canReview"><div class="row-actions"><button type="button" [disabled]="saving" (click)="review(row, 'approve')">Approve</button><button class="danger" type="button" [disabled]="saving" (click)="review(row, 'reject')">Reject</button></div></td></tr></tbody>

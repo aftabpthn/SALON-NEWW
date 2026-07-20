@@ -74,6 +74,12 @@
           <label *ngIf="workflow === 'transfer'">Destination item ID
             <input name="destinationInventoryItemId" [(ngModel)]="destinationInventoryItemId" required />
           </label>
+          <label *ngIf="workflow === 'count'" class="wide">Stock audit session
+            <select name="auditSessionId" [(ngModel)]="auditSessionId" required>
+              <option value="">Select active count session</option>
+              <option *ngFor="let audit of audits" [value]="audit.id">{{ audit.name }}</option>
+            </select>
+          </label>
           <label class="wide">Notes
             <input name="notes" [(ngModel)]="notes" />
           </label>

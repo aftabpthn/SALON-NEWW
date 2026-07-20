@@ -1,0 +1,459 @@
+use serde::Deserialize;
+use serde_json::{json, Value};
+use sqlx::PgPool;
+
+use crate::{
+    models::common::AppError, repositories::inventory_governance_repository as repo,
+    services::invoice_delivery, state::AppState,
+};
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PolicyWrite {
+    pub negative_stock_rule: String,
+    pub valuation_method: String,
+    pub expiry_window_days: i32,
+    pub count_variance_threshold_bps: i32,
+    pub approval_matrix: Value,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PriceWrite {
+    pub supplier_id: String,
+    pub inventory_item_id: String,
+    pub unit_cost_paise: i64,
+    pub effective_from: String,
+    pub effective_to: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommunicationWrite {
+    pub supplier_id: String,
+    pub purchase_order_id: Option<String>,
+    pub channel: String,
+    pub destination: String,
+    #[serde(default)]
+    pub subject: String,
+    pub message: String,
+    pub idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContainerWrite {
+    pub inventory_item_id: String,
+    pub barcode: String,
+    pub batch_id: Option<String>,
+    pub capacity_quantity: i32,
+    pub unit: String,
+    pub idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContainerAction {
+    pub idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConsumeWrite {
+    pub quantity: i32,
+    pub idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OverrideWrite {
+    pub requested_remaining: i32,
+    pub reason: String,
+    pub idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OverrideReview {
+    pub decision: String,
+    #[serde(default)]
+    pub review_note: String,
+    pub idempotency_key: String,
+}
+
+fn db_error(error: sqlx::Error, message: &str) -> AppError {
+    match error {
+        sqlx::Error::RowNotFound => AppError::validation(message),
+        sqlx::Error::Database(ref e) if e.is_unique_violation() => AppError::conflict(message),
+        sqlx::Error::Protocol(ref value) if value.contains("maker cannot") => {
+            AppError::forbidden("requester cannot approve their own override")
+        }
+        _ => AppError::internal(message),
+    }
+}
+fn text(value: &str, name: &str, max: usize) -> Result<String, AppError> {
+    let value = value.trim();
+    if value.is_empty() || value.chars().count() > max {
+        return Err(AppError::validation(format!("{name} is invalid")));
+    }
+    Ok(value.to_owned())
+}
+
+pub async fn policy(db: &PgPool, t: &str, b: &str) -> Result<Value, AppError> {
+    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
+}
+pub async fn save_policy(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    actor: &str,
+    p: PolicyWrite,
+) -> Result<Value, AppError> {
+    if !matches!(
+        p.negative_stock_rule.as_str(),
+        "block" | "approval_required"
+    ) {
+        return Err(AppError::validation("negative stock rule is invalid"));
+    }
+    if !matches!(p.valuation_method.as_str(), "weighted_average" | "fifo") {
+        return Err(AppError::validation("valuation method is invalid"));
+    }
+    if !(1..=3650).contains(&p.expiry_window_days)
+        || !(0..=10000).contains(&p.count_variance_threshold_bps)
+        || !p.approval_matrix.is_object()
+    {
+        return Err(AppError::validation("inventory policy values are invalid"));
+    }
+    repo::save_policy(
+        db,
+        t,
+        b,
+        actor,
+        &p.negative_stock_rule,
+        &p.valuation_method,
+        p.expiry_window_days,
+        p.count_variance_threshold_bps,
+        &p.approval_matrix,
+    )
+    .await
+    .map_err(|e| db_error(e, "failed to save inventory policy"))
+}
+pub async fn supplier_governance(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    s: Option<&str>,
+) -> Result<Value, AppError> {
+    repo::supplier_governance(db, t, b, s)
+        .await
+        .map_err(|e| db_error(e, "failed to load supplier governance"))
+}
+pub async fn save_price(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    p: PriceWrite,
+) -> Result<Value, AppError> {
+    if p.unit_cost_paise < 0
+        || chrono::NaiveDate::parse_from_str(&p.effective_from, "%Y-%m-%d").is_err()
+        || p.effective_to
+            .as_deref()
+            .is_some_and(|v| chrono::NaiveDate::parse_from_str(v, "%Y-%m-%d").is_err())
+    {
+        return Err(AppError::validation("supplier price values are invalid"));
+    }
+    repo::save_price(
+        db,
+        t,
+        b,
+        a,
+        &text(&p.supplier_id, "supplierId", 100)?,
+        &text(&p.inventory_item_id, "inventoryItemId", 100)?,
+        p.unit_cost_paise,
+        &p.effective_from,
+        p.effective_to.as_deref(),
+    )
+    .await
+    .map_err(|e| db_error(e, "supplier price could not be saved"))
+}
+pub async fn queue_communication(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    p: CommunicationWrite,
+) -> Result<Value, AppError> {
+    if !matches!(p.channel.as_str(), "email" | "whatsapp") {
+        return Err(AppError::validation(
+            "supplier communication channel is invalid",
+        ));
+    }
+    repo::queue_communication(
+        db,
+        t,
+        b,
+        a,
+        &text(&p.supplier_id, "supplierId", 100)?,
+        p.purchase_order_id.as_deref(),
+        &p.channel,
+        &text(&p.destination, "destination", 254)?,
+        &p.subject.trim().chars().take(200).collect::<String>(),
+        &text(&p.message, "message", 4000)?,
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "supplier communication could not be queued"))
+}
+pub async fn containers(db: &PgPool, t: &str, b: &str) -> Result<Vec<Value>, AppError> {
+    repo::containers(db, t, b)
+        .await
+        .map_err(|e| db_error(e, "failed to load backbar containers"))
+}
+pub async fn create_container(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    p: ContainerWrite,
+) -> Result<Value, AppError> {
+    if !(1..=10_000_000).contains(&p.capacity_quantity) {
+        return Err(AppError::validation("container capacity is invalid"));
+    }
+    repo::create_container(
+        db,
+        t,
+        b,
+        a,
+        &text(&p.inventory_item_id, "inventoryItemId", 100)?,
+        &text(&p.barcode, "barcode", 160)?,
+        p.batch_id.as_deref(),
+        p.capacity_quantity,
+        &text(&p.unit, "unit", 24)?,
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "backbar container could not be created"))
+}
+pub async fn open_container(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    id: &str,
+    p: ContainerAction,
+) -> Result<Value, AppError> {
+    repo::open_container(
+        db,
+        t,
+        b,
+        a,
+        id,
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "sealed container or available stock was not found"))
+}
+pub async fn consume_container(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    id: &str,
+    p: ConsumeWrite,
+) -> Result<Value, AppError> {
+    if p.quantity <= 0 {
+        return Err(AppError::validation(
+            "consumption quantity must be positive",
+        ));
+    }
+    repo::consume_container(
+        db,
+        t,
+        b,
+        a,
+        id,
+        p.quantity,
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "container has insufficient remaining quantity"))
+}
+pub async fn request_override(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    id: &str,
+    p: OverrideWrite,
+) -> Result<Value, AppError> {
+    if p.requested_remaining < 0 {
+        return Err(AppError::validation(
+            "requested remaining quantity is invalid",
+        ));
+    }
+    repo::request_override(
+        db,
+        t,
+        b,
+        a,
+        id,
+        p.requested_remaining,
+        &text(&p.reason, "reason", 1000)?,
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "container override could not be requested"))
+}
+pub async fn review_override(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    id: &str,
+    p: OverrideReview,
+) -> Result<Value, AppError> {
+    if !matches!(p.decision.as_str(), "approve" | "reject") {
+        return Err(AppError::validation("override decision is invalid"));
+    }
+    if p.decision == "reject" && p.review_note.trim().is_empty() {
+        return Err(AppError::validation(
+            "review note is required for rejection",
+        ));
+    }
+    repo::review_override(
+        db,
+        t,
+        b,
+        a,
+        id,
+        p.decision == "approve",
+        p.review_note.trim(),
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "container override could not be reviewed"))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NegativeStockWrite {
+    pub inventory_item_id: String,
+    pub requested_stock_quantity: i32,
+    pub reason: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NegativeStockReview {
+    pub decision: String,
+    #[serde(default)]
+    pub review_note: String,
+}
+
+pub async fn negative_stock_requests(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+) -> Result<Vec<Value>, AppError> {
+    repo::negative_stock_requests(db, t, b)
+        .await
+        .map_err(|e| db_error(e, "failed to load negative stock requests"))
+}
+pub async fn request_negative_stock(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    p: NegativeStockWrite,
+) -> Result<Value, AppError> {
+    if p.requested_stock_quantity >= 0 {
+        return Err(AppError::validation(
+            "requested stock quantity must be negative",
+        ));
+    }
+    repo::request_negative_stock(
+        db,
+        t,
+        b,
+        a,
+        &text(&p.inventory_item_id, "inventoryItemId", 100)?,
+        p.requested_stock_quantity,
+        &text(&p.reason, "reason", 1000)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "negative stock approval could not be requested"))
+}
+pub async fn review_negative_stock(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    a: &str,
+    id: &str,
+    p: NegativeStockReview,
+) -> Result<Value, AppError> {
+    if !matches!(p.decision.as_str(), "approve" | "reject") {
+        return Err(AppError::validation("negative stock decision is invalid"));
+    }
+    if p.decision == "reject" && p.review_note.trim().is_empty() {
+        return Err(AppError::validation(
+            "review note is required for rejection",
+        ));
+    }
+    repo::review_negative_stock(
+        db,
+        t,
+        b,
+        a,
+        id,
+        p.decision == "approve",
+        p.review_note.trim(),
+    )
+    .await
+    .map_err(|e| db_error(e, "negative stock request could not be reviewed"))
+}
+pub async fn retry_communication(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<Value, AppError> {
+    repo::retry_communication(db, tenant, branch, id)
+        .await
+        .map_err(|error| db_error(error, "failed supplier communication was not found"))
+}
+
+pub async fn operations_health(db: &PgPool, tenant: &str, branch: &str) -> Result<Value, AppError> {
+    repo::operations_health(db, tenant, branch)
+        .await
+        .map_err(|error| db_error(error, "inventory operations health could not be loaded"))
+}
+
+pub async fn process_due_communications(state: &AppState) -> Result<usize, AppError> {
+    let rows = repo::claim_due_communications(&state.db, 50)
+        .await
+        .map_err(|error| db_error(error, "supplier communications could not be claimed"))?;
+    let mut sent = 0usize;
+    for row in rows {
+        let payload = json!({
+            "channel": row.channel,
+            "recipient": row.destination,
+            "subject": row.subject,
+            "message": row.message,
+            "templateKind": "conversation",
+            "correlationId": row.correlation_id,
+        });
+        match invoice_delivery::deliver(&state.settings, &payload).await {
+            Ok(provider_id) => {
+                repo::mark_communication_sent(&state.db, &row.id, &provider_id)
+                    .await
+                    .map_err(|error| {
+                        db_error(error, "supplier communication could not be completed")
+                    })?;
+                sent += 1;
+                tracing::info!(job_id=%row.id, tenant_id=%row.tenant_id, branch_id=%row.branch_id, correlation_id=%row.correlation_id, attempts=row.attempts, "supplier communication sent");
+            }
+            Err(error) => {
+                repo::mark_communication_failed(&state.db, &row, &format!("{error:?}"))
+                    .await
+                    .map_err(|db| {
+                        db_error(db, "supplier communication could not be rescheduled")
+                    })?;
+                tracing::warn!(job_id=%row.id, tenant_id=%row.tenant_id, branch_id=%row.branch_id, correlation_id=%row.correlation_id, attempts=row.attempts, max_attempts=row.max_attempts, "supplier communication delivery failed");
+            }
+        }
+    }
+    Ok(sent)
+}

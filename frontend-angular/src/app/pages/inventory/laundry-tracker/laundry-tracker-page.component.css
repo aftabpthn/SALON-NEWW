@@ -110,3 +110,5 @@ label { display: grid; align-content: start; gap: 5px; color: #3c526c; font-size
   .resolution-row { align-items: stretch; flex-wrap: wrap; }
   .resolution-row input { flex-basis: 100%; }
 }
+
+@media print{.page-header button,.toolbar,.drawer,.drawer-backdrop{display:none!important}.laundry-page{padding:0}.table-card{box-shadow:none;border:1px solid #999}}

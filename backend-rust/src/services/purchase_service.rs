@@ -4,9 +4,12 @@ use chrono::{Duration, NaiveDate, Utc};
 
 use crate::{
     models::common::AppError,
-    repositories::purchase_repository::{
-        self, PurchaseOrderLineRecord, PurchaseOrderRecord, PurchaseReceipt, PurchaseReceiptLine,
-        SupplierPaymentRecord,
+    repositories::{
+        purchase_order_event_repository,
+        purchase_repository::{
+            self, PurchaseOrderLineRecord, PurchaseOrderRecord, PurchaseReceipt,
+            PurchaseReceiptLine, SupplierPaymentRecord,
+        },
     },
     services::{accounting_service, inventory_adjustment_service},
     state::AppState,
@@ -382,6 +385,20 @@ pub async fn receive(
         purchase_repository::refresh_order_status(&mut tx, tenant_id, branch_id, order_id)
             .await
             .map_err(|_| AppError::internal("failed to refresh purchase order status"))?;
+        purchase_order_event_repository::add(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            order_id,
+            "received",
+            "",
+            "",
+            "GRN received",
+            actor_user_id,
+            &serde_json::json!({"purchaseReceiptId":receipt.id}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write purchase order receipt event"))?;
     }
     accounting_service::post_purchase_grn(
         &mut tx,
@@ -498,6 +515,20 @@ pub async fn create_order(
             return Err(AppError::not_found("active inventory item was not found"));
         }
     }
+    purchase_order_event_repository::add(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        &order_id,
+        "created",
+        "",
+        "draft",
+        "",
+        actor,
+        &serde_json::json!({}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write purchase order event"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit purchase order"))?;
@@ -533,17 +564,46 @@ pub async fn transition_order(
         .await
         .map_err(|_| AppError::internal("failed to load purchase order"))?
         .ok_or_else(|| AppError::not_found("purchase order was not found"))?;
-    let (from, to) = match action {
-        "submit" => ("draft", "pending_approval"),
-        "approve" => ("pending_approval", "approved"),
-        "reject" => ("pending_approval", "rejected"),
-        _ => return Err(AppError::validation("unsupported purchase order action")),
-    };
-    if current.status != from {
-        return Err(AppError::conflict(
-            "purchase order status changed; reload and try again",
-        ));
+    if action == "send" {
+        let mut tx = state
+            .db
+            .begin()
+            .await
+            .map_err(|_| AppError::internal("failed to start purchase order send"))?;
+        if !purchase_order_event_repository::mark_sent(&mut tx, tenant_id, branch_id, id)
+            .await
+            .map_err(|_| AppError::internal("failed to mark purchase order sent"))?
+        {
+            return Err(AppError::conflict(
+                "only approved purchase orders can be sent",
+            ));
+        }
+        purchase_order_event_repository::add(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "sent",
+            &current.status,
+            &current.status,
+            note,
+            actor,
+            &serde_json::json!({}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write purchase order send event"))?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::internal("failed to commit purchase order send"))?;
+        return order_details(state, tenant_id, branch_id, id).await;
     }
+    let has_receipts =
+        purchase_order_event_repository::has_receipts(&state.db, tenant_id, branch_id, id)
+            .await
+            .map_err(|_| AppError::internal("failed to inspect purchase order receipts"))?;
+    let to = transition_target(&current.status, action, has_receipts).ok_or_else(|| {
+        AppError::conflict("purchase order action is not allowed in its current state")
+    })?;
     if matches!(action, "approve" | "reject") && current.created_by == actor {
         return Err(AppError::conflict(
             "purchase order creator cannot approve or reject the same order",
@@ -559,7 +619,7 @@ pub async fn transition_order(
         tenant_id,
         branch_id,
         id,
-        from,
+        &current.status,
         to,
         actor,
         note.trim(),
@@ -571,12 +631,42 @@ pub async fn transition_order(
             "purchase order status changed; reload and try again",
         ));
     }
+    purchase_order_event_repository::set_timestamp(&mut tx, tenant_id, branch_id, id, to)
+        .await
+        .map_err(|_| AppError::internal("failed to timestamp purchase order action"))?;
+    purchase_order_event_repository::add(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        action,
+        &current.status,
+        to,
+        note.trim(),
+        actor,
+        &serde_json::json!({}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write purchase order event"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit purchase order action"))?;
     order_details(state, tenant_id, branch_id, id).await
 }
 
+fn transition_target(current: &str, action: &str, has_receipts: bool) -> Option<&'static str> {
+    match (current, action) {
+        ("draft", "submit") => Some("pending_approval"),
+        ("pending_approval", "approve") => Some("approved"),
+        ("pending_approval", "reject") => Some("rejected"),
+        ("approved" | "partially_received", "close") => Some("closed"),
+        ("draft" | "pending_approval" | "approved", "cancel") => Some("cancelled"),
+        ("rejected" | "cancelled", "reopen") => Some("draft"),
+        ("closed", "reopen") if has_receipts => Some("partially_received"),
+        ("closed", "reopen") => Some("approved"),
+        _ => None,
+    }
+}
 pub async fn create_return(
     state: &AppState,
     tenant_id: &str,
@@ -940,10 +1030,27 @@ fn parse_optional_date(
 
 #[cfg(test)]
 mod tests {
-    use super::{remaining_weighted_cost, return_tax_breakdown, weighted_cost};
+    use super::{remaining_weighted_cost, return_tax_breakdown, transition_target, weighted_cost};
     #[test]
     fn weighted_cost_uses_received_quantity() {
         assert_eq!(weighted_cost(10, 100, 10, 200), 150);
+    }
+
+    #[test]
+    fn purchase_order_completion_transitions_are_explicit() {
+        assert_eq!(
+            transition_target("approved", "close", false),
+            Some("closed")
+        );
+        assert_eq!(
+            transition_target("cancelled", "reopen", false),
+            Some("draft")
+        );
+        assert_eq!(
+            transition_target("closed", "reopen", true),
+            Some("partially_received")
+        );
+        assert_eq!(transition_target("received", "cancel", true), None);
     }
 
     #[test]

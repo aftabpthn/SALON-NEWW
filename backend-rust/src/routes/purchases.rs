@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
-    repositories::purchase_repository,
+    repositories::{purchase_order_event_repository, purchase_repository},
     routes::context::tenant_branch,
     services::{
         auth_service::AuthClaims,
@@ -44,6 +44,23 @@ pub fn router() -> Router<AppState> {
             "/purchases/orders/:id/reject",
             axum::routing::post(reject_order),
         )
+        .route(
+            "/purchases/orders/:id/send",
+            axum::routing::post(send_order),
+        )
+        .route(
+            "/purchases/orders/:id/close",
+            axum::routing::post(close_order),
+        )
+        .route(
+            "/purchases/orders/:id/cancel",
+            axum::routing::post(cancel_order),
+        )
+        .route(
+            "/purchases/orders/:id/reopen",
+            axum::routing::post(reopen_order),
+        )
+        .route("/purchases/orders/:id/events", get(order_events))
         .route("/purchases/grn", get(list_receipts).post(receive))
         .route("/purchases/grn/:id", get(get_receipt))
         .route("/purchases/returns", get(list_returns).post(create_return))
@@ -296,6 +313,55 @@ async fn reject_order(
 ) -> ApiResult<OrderDetails> {
     require_approver(&claims)?;
     order_action(state, claims, headers, id, "reject", payload).await
+}
+
+async fn send_order(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<OrderDetails> {
+    order_action(state, claims, headers, id, "send", payload).await
+}
+async fn close_order(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<OrderDetails> {
+    order_action(state, claims, headers, id, "close", payload).await
+}
+async fn cancel_order(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<OrderDetails> {
+    order_action(state, claims, headers, id, "cancel", payload).await
+}
+async fn reopen_order(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<OrderDetails> {
+    order_action(state, claims, headers, id, "reopen", payload).await
+}
+async fn order_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<purchase_order_event_repository::PurchaseOrderEventRecord>> {
+    let (t, b) = tenant_branch(&headers)?;
+    purchase_service::order_details(&state, &t, &b, &id).await?;
+    let rows = purchase_order_event_repository::list(&state.db, &t, &b, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order events"))?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn order_action(

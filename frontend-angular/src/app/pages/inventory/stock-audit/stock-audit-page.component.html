@@ -1,0 +1,36 @@
+<section class="audit-page">
+  <header class="page-head">
+    <div><h1>Enterprise Stock Audit</h1><span class="data-pill">{{ loading ? 'Loading' : sessions.length + ' sessions' }}</span></div>
+    <button type="button" (click)="load()" [disabled]="loading">Refresh</button>
+  </header>
+  <p class="message error" *ngIf="error" role="alert">{{ error }}</p>
+  <p class="message success" *ngIf="notice">{{ notice }}</p>
+
+  <section class="workspace">
+    <aside class="sessions-card">
+      <h2>New count session</h2>
+      <form (ngSubmit)="create()" class="create-form">
+        <label>Name<input name="name" [(ngModel)]="createForm.name" required maxlength="160" /></label>
+        <label>Counters<select name="counters" [(ngModel)]="createForm.requiredCounters"><option *ngFor="let count of [1,2,3,4,5]" [ngValue]="count">{{ count }}</option></select></label>
+        <label>Recount threshold<input type="number" min="0" step="1" name="threshold" [(ngModel)]="createForm.recountThreshold" /></label>
+        <label class="checkbox"><input type="checkbox" name="blind" [(ngModel)]="createForm.blindCounting" /> Blind count</label>
+        <button class="primary" type="submit" [disabled]="saving">Create session</button>
+      </form>
+      <h2>Sessions</h2>
+      <button class="session" *ngFor="let row of sessions" type="button" [class.selected]="selected?.session?.id === row.id" (click)="select(row)"><strong>{{ row.name }}</strong><span>{{ row.status.replace('_', ' ') }} · {{ row.createdAt | date:'dd/MM/yyyy' }}</span></button>
+      <p class="empty" *ngIf="!sessions.length && !loading">No audit sessions yet</p>
+    </aside>
+
+    <main class="audit-card" *ngIf="selected as detail; else noSelection">
+      <header class="detail-head"><div><h2>{{ detail.session.name }}</h2><span>{{ detail.session.status.replace('_', ' ') }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span></div><div class="actions"><button *ngIf="canCount()" type="button" (click)="action('close-counting')" [disabled]="saving">Close counting</button><button *ngIf="canReview()" type="button" (click)="action('submit')" [disabled]="saving">Submit approval</button><button *ngIf="canApprove()" class="primary" type="button" (click)="action('approve')" [disabled]="saving">Approve & post</button></div></header>
+
+      <form *ngIf="canCount()" class="count-form" (ngSubmit)="submitCount()"><label>Product<select name="countItem" [(ngModel)]="countForm.inventoryItemId"><option value="">Select product</option><option *ngFor="let item of detail.items" [value]="item.inventoryItemId">{{ item.itemName }} · {{ item.sku }}</option></select></label><label>Counted quantity<input type="number" name="quantity" [(ngModel)]="countForm.quantity" min="0" step="1" required /></label><button class="primary" type="submit" [disabled]="saving">Save count</button></form>
+
+      <div class="table-wrap"><table><thead><tr><th>Product</th><th *ngIf="!detail.session.blindCounting || !canCount()">Expected</th><th>Approved count</th><th>Variance</th><th>Counter entries</th><th>Reason</th></tr></thead><tbody><tr *ngFor="let item of detail.items"><td><strong>{{ item.itemName }}</strong><small>{{ item.sku }} · {{ item.unit }}</small></td><td *ngIf="!detail.session.blindCounting || !canCount()">{{ item.expectedQuantity ?? 'Hidden' }}</td><td>{{ item.approvedQuantity ?? '—' }}</td><td [class.variance]="item.varianceQuantity">{{ item.varianceQuantity ?? '—' }}</td><td>{{ countFor(item) }}</td><td><div *ngIf="canReview() && item.varianceQuantity"><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" placeholder="Required for variance" /><button type="button" (click)="saveReason(item)" [disabled]="saving">Save</button></div><span *ngIf="!canReview() || !item.varianceQuantity">{{ item.varianceReason || '—' }}</span></td></tr><tr *ngIf="!detail.items.length"><td colspan="6">No inventory items in this session</td></tr></tbody></table></div>
+
+      <section class="review-grid"><form *ngIf="canReview()" (ngSubmit)="addFinding()"><h3>Variance finding</h3><label>Item<select name="findingItem" [(ngModel)]="findingForm.itemId"><option value="">Select item</option><option *ngFor="let item of detail.items" [value]="item.inventoryItemId">{{ item.itemName }}</option></select></label><label>Finding<select name="findingType" [(ngModel)]="findingForm.findingType"><option value="variance">Variance</option><option value="leakage">Leakage</option><option value="theft">Theft</option></select></label><label>Notes<input name="findingNotes" [(ngModel)]="findingForm.notes" /></label><label>Evidence reference<input name="evidenceReference" [(ngModel)]="findingForm.evidenceReference" placeholder="Required for leakage/theft" /></label><button type="submit" [disabled]="saving">Record finding</button></form><form *ngIf="canApprove()" (ngSubmit)="reject()"><h3>Reject audit</h3><label>Reason<input name="rejectionReason" [(ngModel)]="rejectionReason" required /></label><button type="submit" [disabled]="saving">Reject</button></form></section>
+      <section class="findings" *ngIf="detail.findings.length"><h3>Recorded findings</h3><p *ngFor="let finding of detail.findings"><strong>{{ finding.findingType }}</strong> · {{ finding.notes || 'No notes' }}</p></section>
+    </main>
+    <ng-template #noSelection><main class="empty-panel"><strong>Select a session</strong><span>Start a count session to capture an immutable stock snapshot.</span></main></ng-template>
+  </section>
+</section>

@@ -40,6 +40,12 @@ export class ApiService {
     return this.http.post<T>(this.url(path), body, { headers });
   }
 
+  postBytes<T>(path: string, body: Blob, headers: Record<string, string> = {}): Observable<T> {
+    return this.http.post<T>(this.url(path), body, {
+      headers: { 'Content-Type': body.type || 'application/octet-stream', ...headers },
+    });
+  }
+
   patch<T>(path: string, body: unknown): Observable<T> {
     return this.http.patch<T>(this.url(path), body);
   }

@@ -497,11 +497,22 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         });
     }
     if path_starts_with(path, "/inventory") {
-        if path_starts_with(path, "/inventory/backbar-usage")
+        if (path_starts_with(path, "/inventory/backbar-usage")
+            || path_starts_with(path, "/inventory/backbar-overrides")
+            || path_starts_with(path, "/inventory/negative-stock-requests"))
             && path.ends_with("/review")
             && !is_read_method(method)
         {
             return Some(access(OWNER_ROLES, &["inventory.approve"]));
+        }
+        if path_starts_with(path, "/inventory/supplier-governance/communications")
+            && path.ends_with("/retry")
+            && !is_read_method(method)
+        {
+            return Some(access(
+                INVENTORY_WRITE_ROLES,
+                &["inventory.manage", "inventory.write"],
+            ));
         }
         return Some(if is_read_method(method) {
             access(
@@ -926,6 +937,21 @@ mod tests {
                 "/api/v1/inventory/backbar-usage/1/review",
                 Method::PATCH,
                 "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/backbar-overrides/1/review",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/negative-stock-requests/1/review",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/supplier-governance/communications/1/retry",
+                Method::POST,
+                "inventory.manage",
             ),
             (
                 "/api/v1/purchases/1/approve",

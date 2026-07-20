@@ -172,6 +172,7 @@ pub async fn advanced_controls(
     tenant_id: &str,
     branch_id: &str,
     dead_stock_days: i64,
+    expiry_window_days: i64,
     limit: usize,
 ) -> Result<AdvancedControlsResponse, AppError> {
     let (items, counts, batches) = tokio::try_join!(
@@ -187,6 +188,7 @@ pub async fn advanced_controls(
         batches,
         Utc::now(),
         dead_stock_days,
+        expiry_window_days,
         limit,
     ))
 }
@@ -302,6 +304,7 @@ fn build_response(
     batches: Vec<InventoryBatchRecord>,
     now: DateTime<Utc>,
     dead_stock_days: i64,
+    expiry_window_days: i64,
     limit: usize,
 ) -> AdvancedControlsResponse {
     let mut exception_rows = Vec::new();
@@ -311,7 +314,7 @@ fn build_response(
         .filter_map(|batch| {
             let expiry = batch.expiry_date?;
             let days = (expiry - now.date_naive()).num_days();
-            (batch.quantity > 0 && days <= 90).then_some(ExpiryControlRow {
+            (batch.quantity > 0 && days <= expiry_window_days).then_some(ExpiryControlRow {
                 product_id: batch.inventory_item_id,
                 product_name: batch.product_name,
                 batch_number: batch.batch_number,

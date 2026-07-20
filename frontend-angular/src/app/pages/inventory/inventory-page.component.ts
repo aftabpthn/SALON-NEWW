@@ -8,14 +8,17 @@ import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { filterPurchaseOrders, openPurchaseOrderValue, PurchaseOrderStage } from './purchase-order-register';
 
 type Tab = 'products' | 'batches' | 'ledger' | 'reorder' | 'valuation' | 'suppliers' | 'orders' | 'grn' | 'returns' | 'payables' | 'transfers';
-type Drawer = 'product' | 'kit' | 'supplier' | 'order' | 'grn' | 'return' | 'payment' | 'transfer' | null;
+type Drawer = 'product' | 'kit' | 'supplier' | 'order' | 'orderHistory' | 'grn' | 'return' | 'payment' | 'transfer' | null;
 type Supplier = { id: string; code: string; name: string; gstin: string; contactName: string; phone: string; email: string; address: string; paymentTermsDays: number; active: boolean };
+type InventoryPolicy = { valuationMethod: 'weighted_average' | 'fifo'; negativeStockRule: 'block' | 'approval_required' };
+type SupplierGovernance = { priceLists: Array<{ id:string; supplierId:string; productName:string; unitCostPaise:number; effectiveFrom:string }>; terms: Array<{ supplierId:string; inventoryItemId:string; leadTimeDays:number; minimumOrderQuantity:number; packSize:number }>; scorecards: Array<{ supplierId:string; purchaseOrders:number; receivedOrders:number; onTimeRateBps?:number; fillRateBps?:number; lastReceiptDate?:string }>; communications: Array<{ id:string; supplierId:string; channel:string; status:string; createdAt:string }> };
 type SupplierDraft = Omit<Supplier, 'paymentTermsDays'> & { paymentTermsDays: number | null };
 type Item = { id: string; sku: string; name: string; category: string; unit: string; stockQuantity: number; reorderPoint: number; unitCostPaise: number; hsnCode: string; gstPercent: number; barcode: string; batchTracked: boolean; active: boolean; createdAt: string; updatedAt?: string };
 type KitComponent = { componentInventoryItemId: string; componentName: string; quantity: number };
 type Product360 = { product: Item; stockInQuantity: number; stockOutQuantity: number; lastMovementAt?: string; lastReceiptDate?: string; lastSupplier?: string; recipeCount: number; consumedQuantity: number; kitComponents: KitComponent[] };
 type Order = { id: string; orderNumber: string; supplierId: string; supplierName: string; status: string; expectedDate?: string; notes: string; totalPaise: number; lineCount: number; createdAt: string };
 type OrderLine = { id: string; inventoryItemId: string; itemName: string; quantity: number; receivedQuantity: number; unitCostPaise: number; gstPercent: number; totalPaise: number };
+type OrderEvent = { id: string; eventType: string; fromStatus: string; toStatus: string; note: string; actorUserId: string; details: Record<string, unknown>; createdAt: string };
 type Receipt = { id: string; supplierName: string; supplierGstin: string; supplierInvoiceNumber: string; receivedDate: string; taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; totalPaise: number; createdAt: string };
 type ReceiptLine = { id: string; inventoryItemId: string; quantity: number; unitCostPaise: number; gstPercent: number; totalPaise: number };
 type PurchaseReturn = { id: string; purchaseReceiptId: string; supplierName: string; reason: string; totalPaise: number; createdAt: string };
@@ -24,7 +27,8 @@ type Transfer = { id: string; sourceBranchId: string; destinationBranchId: strin
 type EntryLine = { inventoryItemId: string; quantity: number | null; unitCostRupees: number | null; gstPercent: number | null; batchNumber?: string; batchBarcode?: string; expiryDate?: string; sourceLineId?: string; maxQuantity?: number };
 type Batch = { id: string; inventoryItemId: string; productName: string; batchNumber: string; barcode: string; expiryDate?: string; receivedDate: string; quantity: number; unitCostPaise: number };
 type LedgerRow = { id: string; inventoryItemId: string; itemName: string; movementType: string; quantityDelta: number; unitCostPaise: number; valuePaise: number; stockAfterQuantity?: number; source: string; createdAt: string };
-type ReorderRow = { productId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; priority: string; reason: string; estimatedValuePaise: number };
+type ReorderRow = { id?: string; productId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; priority: string; reason: string; estimatedValuePaise: number; confidenceBps?: number; status?: string };
+type ReorderForecast = { run: { id: string; modelVersion: string; createdAt: string }; recommendations: Array<{ id: string; inventoryItemId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; unitCostPaise: number; confidenceBps: number; status: string; explanation: Record<string, unknown> }> };
 type ValuationRow = { inventoryItemId: string; productName: string; category: string; stockQuantity: number; unitCostPaise: number; stockValuePaise: number; reorderPoint: number };
 
 const CODE39: Record<string, string> = {
@@ -65,8 +69,15 @@ export class InventoryPageComponent implements OnInit {
   error = '';
   notice = '';
   suppliers: Supplier[] = [];
+  inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block' };
+  supplierGovernance: SupplierGovernance = { priceLists: [], terms: [], scorecards: [], communications: [] };
+  supplierTermsDraft = { inventoryItemId: '', leadTimeDays: null as number | null, minimumOrderQuantity: null as number | null, packSize: null as number | null, safetyStockDays: 7 };
+  supplierPriceDraft = { inventoryItemId: '', unitCostRupees: null as number | null, effectiveFrom: new Date().toISOString().slice(0,10) };
+  supplierCommunicationDraft = { channel: 'email', destination: '', subject: '', message: '' };
   items: Item[] = [];
   orders: Order[] = [];
+  orderHistoryOrder: Order | null = null;
+  orderEvents: OrderEvent[] = [];
   orderQuery = '';
   orderStatus = '';
   orderSupplier = '';
@@ -82,6 +93,7 @@ export class InventoryPageComponent implements OnInit {
   batches: Batch[] = [];
   ledgerRows: LedgerRow[] = [];
   reorderRows: ReorderRow[] = [];
+  reorderRun: ReorderForecast['run'] | null = null;
   valuationRows: ValuationRow[] = [];
   productQuery = '';
   productCategory = '';
@@ -118,13 +130,13 @@ export class InventoryPageComponent implements OnInit {
   async reload() {
     this.loading = true; this.error = '';
     try {
-      const [suppliers, items, orders, receipts, returns, payables, transfers, batches] = await Promise.all([
+      const [suppliers, items, orders, receipts, returns, payables, transfers, batches, governance, policy] = await Promise.all([
         this.get<Supplier[]>('/purchases/suppliers'), this.get<Item[]>('/inventory?pageSize=200'),
         this.get<Order[]>('/purchases/orders'), this.get<Receipt[]>('/purchases/grn'),
-        this.get<PurchaseReturn[]>('/purchases/returns'), this.get<Payable[]>('/purchases/payables'), this.get<Transfer[]>('/inventory/transfers'), this.get<Batch[]>('/inventory/batches'),
+        this.get<PurchaseReturn[]>('/purchases/returns'), this.get<Payable[]>('/purchases/payables'), this.get<Transfer[]>('/inventory/transfers'), this.get<Batch[]>('/inventory/batches'), this.get<SupplierGovernance>('/inventory/supplier-governance'), this.get<InventoryPolicy>('/inventory/policy'),
       ]);
       this.suppliers = suppliers; this.items = items; this.orders = orders;
-      this.receipts = receipts; this.returns = returns; this.payables = payables; this.transfers = transfers; this.batches = batches;
+      this.receipts = receipts; this.returns = returns; this.payables = payables; this.transfers = transfers; this.batches = batches; this.supplierGovernance = governance; this.inventoryPolicy = policy;
       await this.loadOperationalTab();
     } catch (error) { this.error = this.message(error, 'Procurement data could not be loaded'); }
     finally { this.loading = false; }
@@ -143,6 +155,10 @@ export class InventoryPageComponent implements OnInit {
     const ids = new Set(this.filteredReceipts.map((row) => row.id));
     return this.payables.filter((row) => ids.has(row.purchaseReceiptId)).reduce((sum, row) => sum + row.balancePaise, 0);
   }
+  supplierScorecard(id: string) { return this.supplierGovernance.scorecards.find((row) => row.supplierId === id); }
+  supplierTerms(id: string) { return this.supplierGovernance.terms.filter((row) => row.supplierId === id); }
+  supplierPrices(id: string) { return this.supplierGovernance.priceLists.filter((row) => row.supplierId === id); }
+
   get receiptSuppliers() { return [...new Set(this.receipts.map((row) => row.supplierName))].sort((a, b) => a.localeCompare(b)); }
   get heading() {
     if (this.pageTitle) return this.pageTitle;
@@ -203,7 +219,24 @@ export class InventoryPageComponent implements OnInit {
     this.ledgerRows = await this.get<LedgerRow[]>(`/inventory/ledger?${query}`);
   }
 
-  async loadReorder() { this.reorderRows = await this.get<ReorderRow[]>('/inventory/reorder-suggestions'); }
+  async loadReorder() {
+    const forecast = await this.get<ReorderForecast | null>('/inventory/reorder-forecasts');
+    this.reorderRun = forecast?.run ?? null;
+    this.reorderRows = forecast?.recommendations.map((row) => ({ id: row.id, productId: row.inventoryItemId, productName: row.productName, sku: row.sku, currentStock: row.currentStock, reorderLevel: row.reorderLevel, suggestedQuantity: row.suggestedQuantity, priority: row.confidenceBps >= 7500 ? 'high' : 'medium', reason: `AI forecast · ${Math.round(row.confidenceBps / 100)}% confidence`, estimatedValuePaise: row.suggestedQuantity * row.unitCostPaise, confidenceBps: row.confidenceBps, status: row.status })) ?? [];
+  }
+  async generateReorder() {
+    this.saving = true; this.clearFeedback();
+    try { await firstValueFrom(this.api.post('/inventory/reorder-forecasts', {})); await this.loadReorder(); this.notice = 'AI reorder forecast generated'; }
+    catch (error) { this.error = this.message(error, 'Reorder forecast could not be generated'); }
+    finally { this.saving = false; }
+  }
+  async approveReorder(row: ReorderRow) {
+    if (!row.id) { this.createOrderFromSuggestion(row); return; }
+    this.saving = true; this.clearFeedback();
+    try { await firstValueFrom(this.api.post(`/inventory/reorder-recommendations/${row.id}/approve`, {})); await this.reload(); this.notice = 'Approved recommendation converted to a PO draft'; }
+    catch (error) { this.error = this.message(error, 'Recommendation could not be approved'); }
+    finally { this.saving = false; }
+  }
   async loadValuation() { this.valuationRows = await this.get<ValuationRow[]>(`/inventory/valuation?asOf=${this.valuationAsOf}`); }
 
   exportLedger() {
@@ -351,18 +384,18 @@ export class InventoryPageComponent implements OnInit {
     const product = this.productDetail?.product;
     const stockQuantity = Number(this.stocktakeDraft.stockQuantity);
     const reason = this.stocktakeDraft.reason.trim();
-    if (!product || this.stocktakeDraft.stockQuantity === null || !Number.isInteger(stockQuantity) || stockQuantity < 0 || !reason) {
+    if (!product || this.stocktakeDraft.stockQuantity === null || !Number.isInteger(stockQuantity) || (stockQuantity < 0 && this.inventoryPolicy.negativeStockRule !== 'approval_required') || !reason) {
       this.error = 'Actual stock and adjustment reason are required'; return;
     }
     this.saving = true; this.clearFeedback();
     try {
-      await firstValueFrom(this.api.patch<ApiEnvelope<Item>>(`/inventory/${product.id}`, {
-        stockQuantity, adjustmentReason: reason, idempotencyKey: crypto.randomUUID(),
-      }));
-      await this.reload();
-      await this.loadProduct(product.id);
-      this.stocktakeDraft = { stockQuantity: null, reason: '' };
-      this.notice = 'Stocktake posted';
+      if (stockQuantity < 0) {
+        await firstValueFrom(this.api.post('/inventory/negative-stock-requests', { inventoryItemId: product.id, requestedStockQuantity: stockQuantity, reason }));
+        this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = 'Negative stock exception sent for owner approval';
+      } else {
+        await firstValueFrom(this.api.patch<ApiEnvelope<Item>>(`/inventory/${product.id}`, { stockQuantity, adjustmentReason: reason, idempotencyKey: crypto.randomUUID() }));
+        await this.reload(); await this.loadProduct(product.id); this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = 'Stocktake posted';
+      }
     } catch (error) { this.error = this.message(error, 'Stocktake could not be posted'); }
     finally { this.saving = false; }
   }
@@ -370,6 +403,9 @@ export class InventoryPageComponent implements OnInit {
   openSupplier(row?: Supplier) {
     this.supplierId = row?.id ?? '';
     this.supplierDraft = row ? { ...row } : this.emptySupplier();
+    this.supplierTermsDraft = { inventoryItemId: '', leadTimeDays: null, minimumOrderQuantity: null, packSize: null, safetyStockDays: 7 };
+    this.supplierPriceDraft = { inventoryItemId: '', unitCostRupees: null, effectiveFrom: new Date().toISOString().slice(0,10) };
+    this.supplierCommunicationDraft = { channel: 'email', destination: row?.email || '', subject: '', message: '' };
     this.drawer = 'supplier'; this.clearFeedback();
   }
 
@@ -432,15 +468,38 @@ export class InventoryPageComponent implements OnInit {
     await this.mutate(this.supplierId ? this.api.patch<ApiEnvelope<Supplier>>(`/purchases/suppliers/${this.supplierId}`, payload) : this.api.post<ApiEnvelope<Supplier>>('/purchases/suppliers', payload), 'Supplier saved');
   }
 
+  async saveSupplierTerms() {
+    const draft = this.supplierTermsDraft;
+    if (!this.supplierId || !draft.inventoryItemId || draft.leadTimeDays === null || draft.minimumOrderQuantity === null || draft.packSize === null) return;
+    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/reorder-supplier-terms', { supplierId: this.supplierId, ...draft })); await this.reload(); this.notice = 'Supplier terms saved'; } catch (error) { this.error = this.message(error, 'Supplier terms could not be saved'); } finally { this.saving = false; }
+  }
+  async saveSupplierPrice() {
+    if (!this.supplierId || !this.supplierPriceDraft.inventoryItemId || this.supplierPriceDraft.unitCostRupees === null) return;
+    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/prices', { supplierId: this.supplierId, inventoryItemId: this.supplierPriceDraft.inventoryItemId, unitCostPaise: Math.round(Number(this.supplierPriceDraft.unitCostRupees) * 100), effectiveFrom: this.supplierPriceDraft.effectiveFrom, effectiveTo: null })); await this.reload(); this.notice = 'Supplier price saved'; } catch (error) { this.error = this.message(error, 'Supplier price could not be saved'); } finally { this.saving = false; }
+  }
+  async queueSupplierCommunication() {
+    if (!this.supplierId || !this.supplierCommunicationDraft.destination.trim() || !this.supplierCommunicationDraft.message.trim()) return;
+    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/communications', { supplierId: this.supplierId, purchaseOrderId: null, ...this.supplierCommunicationDraft, idempotencyKey: crypto.randomUUID() })); await this.reload(); this.notice = 'Supplier communication queued'; } catch (error) { this.error = this.message(error, 'Supplier communication could not be queued'); } finally { this.saving = false; }
+  }
   async saveOrder() {
     const lines = this.validLines(this.orderDraft.lines, false);
     if (!this.orderDraft.supplierId || !lines.length) { this.error = 'Supplier and at least one valid line are required'; return; }
     await this.mutate(this.api.post('/purchases/orders', { supplierId: this.orderDraft.supplierId, expectedDate: this.orderDraft.expectedDate || null, notes: this.orderDraft.notes, lines }), 'Purchase order created');
   }
 
-  async orderAction(order: Order, action: 'submit' | 'approve' | 'reject') {
-    if (action === 'reject' && !confirm('Reject this purchase order?')) return;
-    await this.mutate(this.api.post(`/purchases/orders/${order.id}/${action}`, { note: '' }), `Purchase order ${action === 'submit' ? 'submitted' : `${action}d`}`, false);
+  async orderAction(order: Order, action: 'submit' | 'approve' | 'reject' | 'send' | 'close' | 'cancel' | 'reopen') {
+    if (['reject', 'close', 'cancel', 'reopen'].includes(action) && !confirm(`${action[0].toUpperCase()}${action.slice(1)} purchase order ${order.orderNumber}?`)) return;
+    const labels: Record<string, string> = { submit: 'submitted', approve: 'approved', reject: 'rejected', send: 'sent', close: 'closed', cancel: 'cancelled', reopen: 'reopened' };
+    await this.mutate(this.api.post(`/purchases/orders/${order.id}/${action}`, { note: '' }), `Purchase order ${labels[action]}`, false);
+  }
+
+  async openOrderHistory(order: Order) {
+    this.clearFeedback();
+    try {
+      this.orderEvents = await this.get<OrderEvent[]>(`/purchases/orders/${order.id}/events`);
+      this.orderHistoryOrder = order;
+      this.drawer = 'orderHistory';
+    } catch (error) { this.error = this.message(error, 'Purchase order timeline could not be loaded'); }
   }
 
   async saveGrn() {

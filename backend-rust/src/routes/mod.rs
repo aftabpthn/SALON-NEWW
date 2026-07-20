@@ -31,6 +31,8 @@ pub mod customer_portal;
 pub mod health;
 pub mod integrations;
 pub mod inventory;
+pub mod inventory_governance;
+pub mod inventory_reorder_forecasts;
 pub mod inventory_transfers;
 pub mod invoice_webhooks;
 pub mod laundry;
@@ -42,6 +44,7 @@ pub mod packages;
 pub mod pos;
 pub mod pos_enterprise;
 pub mod pos_legacy_completion;
+pub mod purchase_bill_drafts;
 pub mod purchases;
 pub mod realtime;
 pub mod reports;
@@ -58,6 +61,7 @@ pub mod staff_leave;
 pub mod staff_operations;
 pub mod staff_payroll;
 pub mod staff_schedule;
+pub mod stock_audit;
 pub mod wallets;
 
 pub fn build_router(state: AppState) -> Router {
@@ -104,8 +108,12 @@ pub fn build_router(state: AppState) -> Router {
         .merge(pos_enterprise::router())
         .merge(pos_legacy_completion::router())
         .merge(purchases::router())
+        .merge(purchase_bill_drafts::router())
         .merge(cash_drawer::router())
         .merge(inventory::router())
+        .merge(inventory_governance::router())
+        .merge(inventory_reorder_forecasts::router())
+        .merge(stock_audit::router())
         .merge(inventory_transfers::router())
         .merge(memberships::router())
         .merge(membership_enterprise::router())

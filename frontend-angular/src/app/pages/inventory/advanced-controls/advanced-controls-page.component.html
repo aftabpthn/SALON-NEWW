@@ -10,7 +10,7 @@
     <button class="primary-button" type="button" [disabled]="loading" (click)="reload()">Refresh controls</button>
   </header>
 
-  <p class="message error" *ngIf="error">{{ error }}</p>
+  <p class="message error" *ngIf="error">{{ error }}</p><p class="message success" *ngIf="notice">{{ notice }}</p>
 
   <nav class="tabs" aria-label="Inventory advanced control sections">
     <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab === tab.id" (click)="activeTab = tab.id">{{ tab.label }}</button>
@@ -71,6 +71,35 @@
     <div class="table-scroll"><table><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Inactive days</th><th>Value</th><th>Last outbound</th></tr></thead><tbody>
       <tr *ngFor="let row of controls.deadStockRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.sku || '—' }}</td><td>{{ row.stockQuantity }}</td><td>{{ row.inactiveDays }}</td><td>{{ money(row.valuePaise) }}</td><td>{{ date(row.lastOutboundAt) }}</td></tr>
       <tr *ngIf="!controls.deadStockRows.length"><td class="empty-state" colspan="6">No records yet</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'policy'">
+    <header><h2>Inventory Policy</h2><button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">{{ savingPolicy ? 'Saving…' : 'Save policy' }}</button></header>
+    <div class="policy-grid">
+      <label>Negative stock<select [(ngModel)]="policy.negativeStockRule"><option value="block">Block</option><option value="approval_required">Approval required</option></select></label>
+      <label>Valuation method<select [(ngModel)]="policy.valuationMethod"><option value="weighted_average">Weighted average</option><option value="fifo">FIFO</option></select></label>
+      <label>Expiry window (days)<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
+      <label>Count variance threshold (bps)<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
+      <label>Negative stock approver<input [(ngModel)]="policy.approvalMatrix['negativeStock']" /></label>
+      <label>Stock count approver<input [(ngModel)]="policy.approvalMatrix['stockCount']" /></label>
+      <label>Backbar override approver<input [(ngModel)]="policy.approvalMatrix['backbarOverride']" /></label>
+    </div>
+    <div class="table-scroll" *ngIf="negativeStockRequests.length"><table><thead><tr><th>Product</th><th>Requested stock</th><th>Reason</th><th>Requester</th><th>Status</th><th>Action</th></tr></thead><tbody><tr *ngFor="let row of negativeStockRequests"><td><strong>{{ row.productName }}</strong></td><td>{{ row.requestedStockQuantity }}</td><td>{{ row.reason }}</td><td>{{ row.requestedBy }}</td><td><span class="status">{{ row.status }}</span></td><td><div class="panel-actions" *ngIf="row.status === 'pending'"><button type="button" (click)="reviewNegativeStock(row,'approve')">Approve</button><button type="button" (click)="reviewNegativeStock(row,'reject')">Reject</button></div></td></tr></tbody></table></div>  </section>
+
+  <section class="panel" *ngIf="activeTab === 'operations'">
+    <header><h2>Production Operations</h2><button class="icon-button" type="button" aria-label="Refresh operations" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
+    <div class="operations-grid">
+      <article><span>Queued</span><strong>{{ operations.queue.queued }}</strong></article>
+      <article><span>Processing</span><strong>{{ operations.queue.processing }}</strong></article>
+      <article><span>Retry scheduled</span><strong>{{ operations.queue.retryScheduled }}</strong></article>
+      <article><span>Terminal failed</span><strong>{{ operations.queue.terminalFailed }}</strong></article>
+      <article><span>Ledger mismatch</span><strong>{{ operations.invariants.ledgerStockMismatch }}</strong></article>
+      <article><span>Negative stock</span><strong>{{ operations.invariants.negativeStock }}</strong></article>
+    </div>
+    <div class="table-scroll"><table><thead><tr><th>Channel</th><th>Destination</th><th>Attempts</th><th>Last error</th><th>Updated</th><th>Action</th></tr></thead><tbody>
+      <tr *ngFor="let row of operations.failedJobs"><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry' }}</button></td></tr>
+      <tr *ngIf="!operations.failedJobs.length"><td class="empty-state" colspan="6">No failed jobs</td></tr>
     </tbody></table></div>
   </section>
 </section>

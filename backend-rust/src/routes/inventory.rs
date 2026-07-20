@@ -348,11 +348,19 @@ async fn advanced_controls(
     Query(query): Query<AdvancedControlsQuery>,
 ) -> ApiResult<inventory_controls_service::AdvancedControlsResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let policy =
+        crate::services::inventory_governance_service::policy(&state.db, &tenant_id, &branch_id)
+            .await?;
+    let expiry_window = policy
+        .get("expiryWindowDays")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(30);
     let response = inventory_controls_service::advanced_controls(
         &state,
         &tenant_id,
         &branch_id,
         query.dead_stock_days.unwrap_or(90).clamp(7, 730),
+        expiry_window.clamp(1, 3650),
         query.limit.unwrap_or(80).clamp(1, 250),
     )
     .await?;
@@ -436,9 +444,22 @@ async fn valuation(
     if as_of > today {
         return Err(AppError::validation("asOf cannot be in the future"));
     }
-    let rows = inventory_repository::valuation(&state.db, &tenant_id, &branch_id, as_of)
+    let policy =
+        crate::services::inventory_governance_service::policy(&state.db, &tenant_id, &branch_id)
+            .await?;
+    let fifo = policy
+        .get("valuationMethod")
+        .and_then(serde_json::Value::as_str)
+        == Some("fifo");
+    let rows = if fifo {
+        crate::repositories::inventory_governance_repository::fifo_valuation(
+            &state.db, &tenant_id, &branch_id, as_of,
+        )
         .await
-        .map_err(|_| AppError::internal("failed to load inventory valuation"))?;
+    } else {
+        inventory_repository::valuation(&state.db, &tenant_id, &branch_id, as_of).await
+    }
+    .map_err(|_| AppError::internal("failed to load inventory valuation"))?;
     Ok(Json(ApiResponse::ok(rows)))
 }
 
