@@ -140,6 +140,5 @@ export class InventoryZenotiChromeComponent {
     { label: 'Service Recipes', href: '/inventory/recipes' },
     { label: 'FIFO Batches', href: '/inventory/fifo' },
     { label: 'Stock Audit', href: '/inventory/stock-audit' },
-    { label: 'Scanner', href: '/inventory/scanner' },
     { label: 'Product Consume', href: '/inventory/product-consume' }];
 }

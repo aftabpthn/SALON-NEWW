@@ -19,7 +19,6 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
         </div>
         <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/inventory">Back to inventory</a>
-          <a class="primary-button" routerLink="/inventory/purchase-orders">Create PO draft</a>
         </div>
       </div>
 
@@ -59,7 +58,6 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
               <strong>{{ rec.recommendedQty || 0 }} units suggested</strong>
               <span>{{ rec.reason || 'Demand or low-stock rule' }} · stockout {{ rec.predictedStockoutDate || 'not projected' }}</span>
               <small>{{ rec.estimatedCost | auraMoney:'1.0-0' }} estimated cost · approval required before supplier order</small>
-              <a class="primary-button" routerLink="/inventory/purchase-orders">Open purchase order</a>
             </div>
             <ng-template #noRecommendation>
               <div class="empty-state"><strong>No active reorder risk</strong><span>Low stock, expiry or demand-based signals will appear here.</span></div>

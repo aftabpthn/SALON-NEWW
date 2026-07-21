@@ -1037,13 +1037,11 @@ export class AppComponent implements OnDestroy {
             { path: '/inventory/purchase-bill-entry', label: 'Purchase Bill Entry', icon: 'PB', keywords: 'purchase bill vendor paid unpaid record payment' },
             { path: '/inventory/purchase-bill-register', label: 'Purchase Bill Register', icon: 'BR', keywords: 'saved purchase bill find vendor payment unpaid paid' },
             { path: '/inventory/purchase-bill-drafts', label: 'AI Bill Drafts', icon: 'AI', keywords: 'ai purchase bill scanner draft invoice receiving' },
-            { path: '/inventory/purchase-orders', label: 'Purchase Orders', icon: 'PO', keywords: 'purchase order po vendor' },
             { path: '/inventory/reorder', label: 'AI Reorder', icon: 'AR', keywords: 'low stock reorder purchase prediction approval' },
             { path: '/inventory/laundry-entry', label: 'Laundry Entry', icon: 'LE', keywords: 'laundry inward outward towel linen' },
             { path: '/inventory/laundry-report', label: 'Laundry Report', icon: 'LR', keywords: 'laundry report inward outward saved entries' },
             { path: '/suppliers', label: 'Suppliers', icon: 'SP', keywords: 'supplier vendor gst purchase' },
-            { path: '/inventory/stock-audit', label: 'Stock Audit', icon: 'SA', keywords: 'audit count stock' },
-            { path: '/inventory/scanner', label: 'Inventory Scanner', icon: 'QR', keywords: 'barcode scanner qr' }
+            { path: '/inventory/stock-audit', label: 'Stock Audit', icon: 'SA', keywords: 'audit count stock' }
           ]
         },
         {

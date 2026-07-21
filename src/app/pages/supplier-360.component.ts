@@ -19,7 +19,6 @@ import { AuraDatePipe } from '../shared/pipes/aura-date.pipe';
         </div>
         <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/suppliers">Back to suppliers</a>
-          <a class="primary-button" routerLink="/inventory/purchase-orders">Open purchase orders</a>
         </div>
       </div>
 

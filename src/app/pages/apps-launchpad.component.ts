@@ -90,11 +90,9 @@ const SUITE_GROUPS: SuiteGroup[] = [
     apps: [
       { path: '/inventory', label: 'Products & Inventory', description: 'Product master, stock, low-stock alerts, valuation and movement visibility.', icon: 'IV', tone: 'teal', status: 'Live', tags: ['inventory', 'products'] },
       { path: '/inventory/purchase-bill-drafts', label: 'Bill Drafts', description: 'Review purchase bill drafts before stock confirmation.', icon: 'AI', tone: 'violet', status: 'AI', tags: ['purchase', 'ocr', 'draft'] },
-      { path: '/inventory/purchase-orders', label: 'Purchase Orders', description: 'Supplier purchase orders, receiving and procurement tracking.', icon: 'PO', tone: 'blue', status: 'Ready', tags: ['purchase', 'supplier'] },
       { path: '/suppliers', label: 'Suppliers', description: 'Vendor profiles, GST details, purchasing contact and supplier health.', icon: 'SP', tone: 'neutral', status: 'Ready', tags: ['vendor', 'supplier'] },
       { path: '/inventory/recipes', label: 'Service Recipes', description: 'Service consumption recipes for internal product deduction and costing.', icon: 'RC', tone: 'green', status: 'Ready', tags: ['bom', 'services'] },
       { path: '/inventory/stock-audit', label: 'Stock Audit', description: 'Branch stock counts, variance review and inventory controls.', icon: 'SA', tone: 'amber', status: 'Ready', tags: ['audit', 'stock'] },
-      { path: '/inventory/scanner', label: 'Scanner', description: 'Barcode-ready inventory intake and product lookup workflow.', icon: 'QR', tone: 'blue', status: 'Ready', tags: ['barcode', 'scanner'] },
       { path: '/services', label: 'Services Catalog', description: 'Service menu, pricing, duration, GST, staff assignment and product usage.', icon: 'SV', tone: 'teal', status: 'Admin', tags: ['services', 'catalog'] }
     ]
   },

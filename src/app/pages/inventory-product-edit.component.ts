@@ -21,7 +21,6 @@ import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
         <div class="hero-actions inner-action-bar">
           <a class="ghost-button" routerLink="/inventory">Back to products</a>
           <a class="ghost-button" [routerLink]="product360Link()">Open 360</a>
-          <a class="primary-button" routerLink="/inventory/purchase-orders">Purchase orders</a>
         </div>
       </div>
 

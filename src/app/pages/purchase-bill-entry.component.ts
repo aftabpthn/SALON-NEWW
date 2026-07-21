@@ -46,7 +46,6 @@ type PurchaseBillLine = {
         <div zenoti-actions class="entry-actions">
           <button type="button" (click)="printPage()">Print</button>
           <a routerLink="/inventory/purchase-bill-register">Find</a>
-          <a routerLink="/inventory/purchase-orders">PO/GRN Match</a>
           <button type="button" (click)="clearForm()">Clear</button>
           <button type="button" class="danger" (click)="clearForm()">Reverse</button>
           <a class="soft" routerLink="/transactions/outgoing-funds" [queryParams]="paymentQuery()">Record Payment</a>

@@ -101,7 +101,6 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
           </div>
           <div class="zenoti-grid-actions inner-action-bar">
             <a class="zenoti-mini-button" routerLink="/inventory/reports">Reports</a>
-            <a class="zenoti-mini-button" routerLink="/inventory/purchase-orders">Purchase Orders</a>
             <button class="zenoti-mini-button" type="button" (click)="openNewProductForm()">Add Product</button>
           </div>
         </div>
@@ -162,7 +161,6 @@ type InventoryDesk = '' | 'stock' | 'product' | 'supplier' | 'batch' | 'waste';
           <a routerLink="/inventory/recipes">Service Recipes</a>
           <a routerLink="/inventory/fifo">FIFO Batches</a>
           <a routerLink="/inventory/stock-audit">Stock Audit</a>
-          <a routerLink="/inventory/scanner">Scanner</a>
           <a routerLink="/inventory/product-consume">Product Consume</a>
         </div>
       </section>

@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiRecord, ApiService } from '../core/api.service';
 import { InventoryZenotiChromeComponent } from '../shared/ui/inventory-zenoti-chrome/inventory-zenoti-chrome.component';
@@ -10,7 +9,7 @@ import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
 @Component({
   selector: 'app-inventory-reorder',
   standalone: true,
-  imports: [AuraMoneyPipe, CommonModule, RouterLink, InventoryZenotiChromeComponent, StateComponent],
+  imports: [AuraMoneyPipe, CommonModule, InventoryZenotiChromeComponent, StateComponent],
   template: `
     <section class="page-stack separated-inventory-page inner-page-shell">
       <app-inventory-zenoti-chrome
@@ -52,7 +51,6 @@ import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
                 <th>Order qty</th>
                 <th>Estimated PO</th>
                 <th>Priority</th>
-                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -69,10 +67,9 @@ import { AuraMoneyPipe } from '../shared/pipes/aura-money.pipe';
                 <td>{{ row.recommendedQty || row.quantity || 0 }} units</td>
                 <td>{{ row.estimatedCost | auraMoney:'1.0-0' }}</td>
                 <td><span class="priority-chip" [class.critical]="isCritical(row)">{{ priorityLabel(row) }}</span></td>
-                <td><a class="zenoti-mini-button" routerLink="/inventory/purchase-orders">Create PO</a></td>
               </tr>
               <tr *ngIf="!suggestions().length">
-                <td colspan="10" class="empty-cell">No urgent reorder. Run autopilot after live stock changes or purchase receiving.</td>
+                <td colspan="9" class="empty-cell">No urgent reorder. Run autopilot after live stock changes or purchase receiving.</td>
               </tr>
             </tbody>
           </table>
