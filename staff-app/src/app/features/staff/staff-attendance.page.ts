@@ -40,7 +40,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               <div class="overtime-grid"><article><span>Expected shift end</span><strong>—</strong><small>Available after shift timing is confirmed</small></article><article><span>Actual clock out</span><strong>{{ activeOrLatestAttendance()?.clockOutAt ? (activeOrLatestAttendance()?.clockOutAt | date:'shortTime') : '—' }}</strong><small>Recorded attendance time</small></article><article><span>Overtime started</span><strong>—</strong><small>After adjusted shift end</small></article><article><span>Overtime worked</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Recorded by the attendance policy</small></article><article><span>Overtime overview</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Current recorded value</small></article></div>
             </section>
           }
-          <button class="monthly-glance" type="button" (click)="view.set('monthly')" aria-label="Open this month summary"><span class="glance-title"><small>Monthly overview</small><b>{{ currentMonthLabel() }}</b></span><span><strong>{{ monthlyStats().presentDays }}</strong><small>Present</small></span><span><strong>{{ formatMinutes(monthlyStats().workedMinutes) }}</strong><small>Worked</small></span>@if (overtimeEnabled()) { <span><strong>{{ overtimeWorkedLabel() }}</strong><small>Overtime</small></span> }<i aria-hidden="true">›</i></button>
+          <button class="monthly-glance" type="button" (click)="view.set('monthly')" aria-label="Open this month summary"><span class="glance-title"><small>Monthly overview</small><b>{{ currentMonthLabel() }}</b></span><span><strong>{{ monthlyStats().presentDays }}</strong><small>Present</small></span><span><strong>{{ formatMinutes(monthlyStats().workedMinutes) }}</strong><small>Worked</small></span>@if (overtimeEnabled()) { <span><strong>{{ monthlyOvertimeLabel() }}</strong><small>Overtime</small></span> }<i aria-hidden="true">›</i></button>
         }
 
         @if (view() === 'history') {
@@ -53,7 +53,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         @if (view() === 'monthly') {
           <section class="monthly-panel">
             <div class="section-heading"><div><p class="eyebrow">Monthly attendance</p><h2>{{ currentMonthLabel() }}</h2></div><span>Recorded attendance</span></div>
-            @if (monthlyStats().recordedRows) { <div class="monthly-stats"><article class="present"><span>Present days</span><strong>{{ monthlyStats().presentDays }}</strong><small>Clock-in recorded</small></article><article class="late"><span>Late days</span><strong>{{ monthlyStats().lateDays }}</strong><small>Marked late</small></article><article class="absent"><span>Absent days</span><strong>{{ monthlyStats().absentDays }}</strong><small>Recorded absent</small></article><article><span>Leave days</span><strong>{{ monthlyStats().leaveDays }}</strong><small>Approved or recorded</small></article><article><span>Half days</span><strong>{{ monthlyStats().halfDays }}</strong><small>Half-day status</small></article><article><span>Average working hours</span><strong>{{ formatMinutes(monthlyStats().averageMinutes) }}</strong><small>Per present day</small></article><article><span>Total worked hours</span><strong>{{ formatMinutes(monthlyStats().workedMinutes) }}</strong><small>Current month</small></article>@if (overtimeEnabled()) { <article class="overtime"><span>Overtime</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Current recorded value</small></article> }</div> } @else { <div class="monthly-stats placeholder-stats" aria-label="Monthly statistics not yet available"><article class="present"><span>Present</span><strong>—</strong><small>After first clock-out</small></article><article class="late"><span>Late</span><strong>—</strong><small>After first attendance</small></article><article><span>Leave</span><strong>—</strong><small>When leave is recorded</small></article><article><span>Worked hours</span><strong>—</strong><small>After first clock-out</small></article>@if (overtimeEnabled()) { <article class="overtime"><span>Overtime</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Current recorded value</small></article> }</div><div class="attendance-empty"><span aria-hidden="true">—</span><strong>No monthly attendance yet</strong><p>After your first attendance record, this overview will show present, late, leave, and worked-hour totals.</p></div> }
+            @if (monthlyStats().recordedRows) { <div class="monthly-stats"><article class="present"><span>Present days</span><strong>{{ monthlyStats().presentDays }}</strong><small>Clock-in recorded</small></article><article class="late"><span>Late days</span><strong>{{ monthlyStats().lateDays }}</strong><small>Marked late</small></article><article class="absent"><span>Absent days</span><strong>{{ monthlyStats().absentDays }}</strong><small>Recorded absent</small></article><article><span>Leave days</span><strong>{{ monthlyStats().leaveDays }}</strong><small>Approved or recorded</small></article><article><span>Half days</span><strong>{{ monthlyStats().halfDays }}</strong><small>Half-day status</small></article><article><span>Average working hours</span><strong>{{ formatMinutes(monthlyStats().averageMinutes) }}</strong><small>Per present day</small></article><article><span>Total worked hours</span><strong>{{ formatMinutes(monthlyStats().workedMinutes) }}</strong><small>Current month</small></article>@if (overtimeEnabled()) { <article class="overtime"><span>Overtime</span><strong>{{ monthlyOvertimeLabel() }}</strong><small>Current recorded value</small></article> }</div> } @else { <div class="monthly-stats placeholder-stats" aria-label="Monthly statistics not yet available"><article class="present"><span>Present</span><strong>—</strong><small>After first clock-out</small></article><article class="late"><span>Late</span><strong>—</strong><small>After first attendance</small></article><article><span>Leave</span><strong>—</strong><small>When leave is recorded</small></article><article><span>Worked hours</span><strong>—</strong><small>After first clock-out</small></article>@if (overtimeEnabled()) { <article class="overtime"><span>Overtime</span><strong>{{ monthlyOvertimeLabel() }}</strong><small>Current recorded value</small></article> }</div><div class="attendance-empty"><span aria-hidden="true">—</span><strong>No monthly attendance yet</strong><p>After your first attendance record, this overview will show present, late, leave, and worked-hour totals.</p></div> }
           </section>
         }
       }
@@ -91,18 +91,18 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly selectedDays = signal<30 | 90 | 180 | 365>(30);
   readonly historyRanges = [{ days: 30, label: "30 days", rangeLabel: "Last 30 days" }, { days: 90, label: "3 months", rangeLabel: "Last 3 months" }, { days: 180, label: "6 months", rangeLabel: "Last 6 months" }, { days: 365, label: "12 months", rangeLabel: "Last 12 months" }] as const;
   readonly activeRangeLabel = computed(() => this.historyRanges.find((option) => option.days === this.selectedDays())?.rangeLabel || "Last 30 days");
-  readonly overtimeEnabled = computed(() => {
-    const row = this.activeOrLatestAttendance() || this.attendance()[0];
-    const status = String(row?.overtimeCalculationStatus || "").toLowerCase();
-    return !!row?.overtimePolicyVersion && !["disabled", "not_enabled", "not_applicable"].includes(status);
-  });
+  readonly overtimeEnabled = computed(() => this.attendance().some((row) => {
+    const status = String(row.overtimeCalculationStatus || "").toLowerCase();
+    return !!row.overtimePolicyVersion && !["disabled", "not_enabled", "not_applicable"].includes(status);
+  }));
   readonly monthlyStats = computed(() => {
     const monthKey = String(this.today()?.date || "").slice(0, 7);
     const rows = this.attendance().filter((row) => row.businessDate.startsWith(monthKey));
     const hasStatus = (row: StaffAttendance, value: string) => String(row.status || "").toLowerCase().includes(value);
     const presentDays = rows.filter((row) => !!row.clockInAt).length;
     const workedMinutes = rows.reduce((total, row) => total + Number(row.totalWorkedMinutes || 0), 0);
-    return { recordedRows: rows.length, presentDays, lateDays: rows.filter((row) => hasStatus(row, "late")).length, absentDays: rows.filter((row) => hasStatus(row, "absent")).length, leaveDays: rows.filter((row) => hasStatus(row, "leave")).length, halfDays: rows.filter((row) => hasStatus(row, "half")).length, workedMinutes, averageMinutes: presentDays ? Math.round(workedMinutes / presentDays) : 0 };
+    const overtimeMinutes = rows.reduce((total, row) => total + Number(row.overtimeMinutes || 0), 0);
+    return { recordedRows: rows.length, presentDays, lateDays: rows.filter((row) => hasStatus(row, "late")).length, absentDays: rows.filter((row) => hasStatus(row, "absent")).length, leaveDays: rows.filter((row) => hasStatus(row, "leave")).length, halfDays: rows.filter((row) => hasStatus(row, "half")).length, workedMinutes, averageMinutes: presentDays ? Math.round(workedMinutes / presentDays) : 0, overtimeMinutes };
   });
   readonly message = signal("");
   readonly localError = signal("");
@@ -137,11 +137,12 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
     if (attendance.clockOutAt) return "Shift ended";
     const todayDate = String(this.today()?.date || businessDate());
     const endMs = new Date(`${todayDate}T${shift.endTime}:00`).getTime();
-    const diff = endMs - now;
+    const diff = endMs - Date.now();
     if (diff <= 0) return "Overtime";
     return this.formatMinutes(Math.floor(diff / 60000));
   }
   overtimeWorkedLabel(): string { const minutes = this.activeOrLatestAttendance()?.overtimeMinutes; return minutes === null || minutes === undefined ? "—" : this.formatMinutes(minutes); }
+  monthlyOvertimeLabel(): string { return this.formatMinutes(this.monthlyStats().overtimeMinutes); }
   formatMinutes(value: number | null | undefined): string { const minutes = Math.max(0, Number(value || 0)); return `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
   currentMonthLabel(): string { const key = String(this.today()?.date || "").slice(0, 7); return /^\d{4}-\d{2}$/.test(key) ? this.monthLabel(key) : "Current month"; }
   private monthLabel(key: string): string { const [year, month] = key.split("-").map(Number); return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(Date.UTC(year, month - 1, 1))); }

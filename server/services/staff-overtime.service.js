@@ -40,17 +40,19 @@ export function minutesBetween(start, end) {
   return Math.floor((endAt - startAt) / 60000);
 }
 
-export function calculateOvertime({ grossMinutes = 0, completedBreakMinutes = 0, scheduledShiftMinutes = 0, hasSchedule = true } = {}) {
+export function calculateOvertime({ grossMinutes = 0, completedBreakMinutes = 0, scheduledShiftMinutes = 0, hasSchedule = true, minimumOtDurationMinutes = 0 } = {}) {
   const gross = wholeMinutes(grossMinutes);
   const breaks = wholeMinutes(completedBreakMinutes);
   const scheduled = wholeMinutes(scheduledShiftMinutes);
   const worked = Math.max(0, gross - breaks);
+  const rawOvertime = hasSchedule ? Math.max(0, worked - scheduled) : 0;
+  const minOt = wholeMinutes(minimumOtDurationMinutes);
   return {
     grossMinutes: gross,
     completedBreakMinutes: breaks,
     workedMinutes: worked,
     scheduledMinutes: scheduled,
-    overtimeMinutes: hasSchedule ? Math.max(0, worked - scheduled) : 0
+    overtimeMinutes: minOt > 0 && rawOvertime > 0 && rawOvertime < minOt ? 0 : rawOvertime
   };
 }
 
@@ -150,17 +152,23 @@ class StaffOvertimeService {
   completeSnapshot({ tenantId, attendanceSource, attendanceId, clockInAt, clockOutAt, completedBreakMinutes = 0 } = {}) {
     const snapshot = this.snapshot(tenantId, attendanceSource, attendanceId);
     if (!snapshot) return null;
+    const category = db.prepare(`SELECT * FROM staff_attendance_category_master
+      WHERE tenant_id = ? AND branch_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`)
+      .get(tenantId, snapshot.branchId || "");
+    const overtimeApplicable = category ? Number(category.overtime_applicable || 0) === 1 : true;
+    const minimumOtDurationMinutes = category ? Number(category.minimum_ot_duration_minutes || 0) : 0;
     const grossMinutes = minutesBetween(clockInAt, clockOutAt);
     const validWindow = Boolean(clockInAt && clockOutAt && (grossMinutes > 0 || String(clockInAt) === String(clockOutAt)));
-    const hasSchedule = Boolean(snapshot.scheduleId) && validWindow;
+    const hasSchedule = Boolean(snapshot.scheduleId) && validWindow && overtimeApplicable;
     const result = calculateOvertime({
       grossMinutes,
       completedBreakMinutes,
       scheduledShiftMinutes: snapshot.scheduledMinutes,
-      hasSchedule
+      hasSchedule,
+      minimumOtDurationMinutes
     });
-    const calculationStatus = hasSchedule ? "completed" : "review_required";
-    const reviewReason = !validWindow ? "invalid_time_window" : (snapshot.scheduleId ? "" : "missing_schedule");
+    const calculationStatus = !overtimeApplicable ? "disabled" : (hasSchedule ? "completed" : "review_required");
+    const reviewReason = !overtimeApplicable ? "not_applicable" : (!validWindow ? "invalid_time_window" : (snapshot.scheduleId ? "" : "missing_schedule"));
     db.prepare(`UPDATE staffAttendanceOvertimeSnapshots SET
       grossMinutes = @grossMinutes,
       completedBreakMinutes = @completedBreakMinutes,
